@@ -42,4 +42,4 @@ Your work is complete. The human developer must now perform the final Git action
 > 1.  `git checkout main`
 > 2.  `git merge --squash feat/$CURRENT_SPRINT_NAME`
 > 3.  `AC=true git commit -m "feat(sprint-end): Final code from $CURRENT_SPRINT_NAME"`
-> 4.  `git branch -d feat/$CURRENT_SPRINT_NAME`"
+> 4.  `git branch -D feat/$CURRENT_SPRINT_NAME`"

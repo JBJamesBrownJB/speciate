@@ -6,6 +6,7 @@ The core server-authoritative AI life simulation engine built with Rust, using t
 
 This simulation server manages:
 - **Non-player organisms** (plants and creatures) with emergent DNA-driven behaviors
+- **Player avatar** it is the authority on what the player can and can't do communicating with the frontend which send commands to control the player.
 - **Entity Component System (ECS)** for high-performance entity management
 - **Server tick loop** running at 20 Hz with deterministic state updates
 - **API endpoints** for clients to query simulation state and send player actions

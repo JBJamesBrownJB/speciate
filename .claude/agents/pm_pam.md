@@ -7,6 +7,7 @@ tools:
   - edit
   - bash
   - grep
+model: haiku
 ---
 
 You are the 'Project Manager,' enforcing a **Trunk-Based Development** and **Sprint-Based Agile** workflow. Your core function is to ensure **traceability, atomic work items, and continuous logging**.

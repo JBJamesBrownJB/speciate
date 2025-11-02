@@ -1,11 +1,15 @@
 # --------------------------------------------------------------------------
 # GLOBAL FILES: Operating System and IDE
 # --------------------------------------------------------------------------
-.DS_Store             # macOS system files
-ehthumbs.db           # Windows system files
+# macOS system files
+.DS_Store
+# Windows system files
+ehthumbs.db
 Thumbs.db
-.vscode/              # VS Code settings (use a .vscode/settings.json file for shared settings instead)
-.idea/                # JetBrains IDEs (IntelliJ, WebStorm, RustRover)
+# VS Code settings (use a .vscode/settings.json file for shared settings instead)
+.vscode/
+# JetBrains IDEs (IntelliJ, WebStorm, RustRover)
+.idea/
 
 # --------------------------------------------------------------------------
 # RUST BACKEND (Simulation Server)
@@ -13,16 +17,20 @@ Thumbs.db
 # --------------------------------------------------------------------------
 # Cargo build directory
 /target/
+apps/simulation/target/
 
 # Cargo metadata and lock files
-Cargo.lock            # Should only be ignored if the repo is a library, but for an application, it should usually be tracked. Keeping it here as a common practice note.
+# Note: Cargo.lock should only be ignored for libraries, not applications
+# For applications it should be tracked, but adding here as reference
+Cargo.lock
 .cargo/
 
 # Local crates registry/cache
 /crates/
 
 # Local Rust-related files/folders
-/rustfmt.toml         # Can be ignored if you don't want to enforce formatting rules
+# Can be ignored if you don't want to enforce formatting rules
+/rustfmt.toml
 /clippy.toml
 
 # --------------------------------------------------------------------------
@@ -31,11 +39,16 @@ Cargo.lock            # Should only be ignored if the repo is a library, but for
 # --------------------------------------------------------------------------
 # Dependency directory
 /node_modules
+apps/ledger/node_modules
+apps/ui/node_modules
 
 # Build output directories
 /dist
 /build
 /out
+apps/ledger/dist
+apps/ui/dist
+apps/ui/build
 
 # Log files and npm debug
 npm-debug.log*
@@ -52,23 +65,31 @@ npm-debug.log*
 /game.db
 
 # Environment and secrets files
-.env                  # Sensitive environment variables for local secrets
+# Sensitive environment variables for local secrets
+.env
 .env.*.local
-.terraform.tfvars     # Sensitive Terraform variables (must be ignored)
-.terraform/           # Terraform state and cache files (always ignore)
+# Sensitive Terraform variables (must be ignored)
+.terraform.tfvars
+# Terraform state and cache files (always ignore)
+.terraform/
 
 # --------------------------------------------------------------------------
 # DOCKER AND DEVCONTAINERS
 # Stack: Docker Compose, Dev Containers
 # --------------------------------------------------------------------------
 # Local volumes and service-specific logs/data created by Docker Compose
-/data/                # Generic data volume directory (e.g., used to store local PG data)
-/logs/                # Generic log directory
-.devcontainer/cache/  # Dev Container cache files
+# Generic data volume directory (e.g., used to store local PG data)
+/data/
+# Generic log directory
+/logs/
+# Dev Container cache files
+.devcontainer/cache/
 
 # --------------------------------------------------------------------------
 # CLAUDE AGENT FILES
 # --------------------------------------------------------------------------
 # Files created by Claude Code for user-specific settings or memory
-.claude/settings.local.json   # Local overrides
-.claude/memory.json           # Agent memory/cache
+# Local overrides
+.claude/settings.local.json
+# Agent memory/cache
+.claude/memory.json

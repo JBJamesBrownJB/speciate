@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace:cached
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/workspace/target
+    command: sleep infinity
+    environment:
+      - RUST_BACKTRACE=1
+    ports:
+      - "8080:8080"
+
+volumes:
+  cargo-cache:
+  target-cache:

@@ -2,7 +2,7 @@
 description: "Usage: /pm <prompt...>. Forwards your request directly to the 'project-manager' (pm-pam) agent."
 allowed-tools:
   - Bash
-model: haiku # Use Haiku for fast dispatching
+model: haiku
 ---
 
 # Dispatching to Project Manager

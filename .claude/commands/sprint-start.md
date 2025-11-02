@@ -37,5 +37,5 @@ Once all checks pass:
 
 1.  **Create Branch:** Execute `!git checkout -b feat/$SPRINT_NAME`.
 2.  **Placeholder Plan:** Create a new file, **SPRINT_DOCS/SPRINT_PLAN_$SPRINT_NAME.md**, and populate it with a header, the elicited Goal, Outcomes, and Constraints.
-3.  **Backlog Initialization:** Update **SPRINT_BACKLOG.md** by adding a new section header for the sprint.
-4.  **Log:** Log the successful branch creation and folder initialization in **SESSION_LOG.md**.
+3.  **Backlog Initialization:** Update **SPRINT_DOCS/SPRINT_BACKLOG.md** by adding a new section header for the sprint.
+4.  **Log:** Log the successful branch creation and folder initialization in **SPRINT_DOCS/SESSION_LOG.md**.

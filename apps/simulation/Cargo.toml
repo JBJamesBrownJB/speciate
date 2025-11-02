@@ -1,0 +1,39 @@
+[package]
+name = "speciate"
+version = "0.1.0"
+edition = "2021"
+authors = ["Speciate Team"]
+description = "Server-authoritative AI life simulation with player-driven economy"
+license = "MIT"
+repository = "https://github.com/anthropics/speciate"
+
+[dependencies]
+# Bevy ECS Framework
+bevy_ecs = "0.14"
+bevy_app = "0.14"
+
+# Async Runtime
+tokio = { version = "1", features = ["full"] }
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Utility
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Testing utilities
+criterion = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = true
+
+[profile.dev]
+opt-level = 0
+
+[[bin]]
+name = "speciate"
+path = "src/main.rs"

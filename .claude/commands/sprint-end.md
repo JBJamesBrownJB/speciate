@@ -4,7 +4,7 @@ allowed-tools:
   - Bash
   - Read
   - Write
-model: haiku # Use Haiku for fast coordination and documentation tasks
+model: haiku
 ---
 
 # Sprint Closure Workflow: Documentation and Tidy Up
@@ -27,7 +27,7 @@ You have been called to finalize the sprint. **ASSUME ALL CODE REVIEW (QA) IS CO
 
 ## 3. 🧹 Final Cleanup
 
-1.  **Log:** Log the successful closure in **SESSION_LOG.md**.
+1.  **Log:** Log the successful closure in **SPRINT_DOCS/SESSION_LOG.md**.
 2.  **Remove Sprint Docs:** Execute `!rm -rf SPRINT_DOCS` to ensure no planning documents are left in the main workspace.
 
 ## 4. 🌲 Next Action: Human Hand-off

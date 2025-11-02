@@ -15,13 +15,22 @@
         "esbenp.prettier-vscode",
         "ms-azuretools.vscode-docker",
         "eamodio.gitlens",
-        "github.copilot"
+        "github.copilot",
+        "ms-vscode.vscode-typescript-next"
       ],
       "settings": {
-        "rust-analyzer.checkOnSave.command": "clippy",
+        "rust-analyzer.linkedProjects": [
+          "apps/simulation/Cargo.toml"
+        ],
         "rust-analyzer.cargo.features": "all",
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.checkOnSave": true,
         "[rust]": {
           "editor.defaultFormatter": "rust-lang.rust-analyzer",
+          "editor.formatOnSave": true
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
           "editor.formatOnSave": true
         },
         "[javascript]": {
@@ -43,7 +52,7 @@
     }
   },
 
-  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && sudo chown -R vscode:vscode /usr/local/cargo",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   
   "remoteUser": "vscode",
   "features": {

@@ -1,9 +1,7 @@
 # Base image with Rust pre-installed
 FROM mcr.microsoft.com/devcontainers/rust:1-bullseye
 
-# NOTE: Node.js will be added when ledger/ui apps are implemented
-# Use Node.js v24.11.0 LTS (Codenamed 'Krypton') when needed
-
+# NOTE: Node.js v24 is provided via devcontainer features
 # NOTE: PostgreSQL client tools will be added when database integration is needed
 # postgresql-client, libpq-dev
 

@@ -8,7 +8,7 @@ services:
     volumes:
       - ..:/workspace:cached
       - cargo-cache:/usr/local/cargo/registry
-      - target-cache:/workspace/target
+      - simulation-target-cache:/workspace/apps/simulation/target
     command: sleep infinity
     environment:
       - RUST_BACKTRACE=1
@@ -17,4 +17,4 @@ services:
 
 volumes:
   cargo-cache:
-  target-cache:
+  simulation-target-cache:

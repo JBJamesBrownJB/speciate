@@ -36,7 +36,7 @@ You are responsible for creating the playable experience for the "Influencer" av
 
 ---
 
-## 3. 🏃 Server-Client Reconciliation (The 10-20 Hz Challenge)
+## Server-Client Reconciliation (The 10-20 Hz Challenge)
 
 The **Rust Simulation Server** only sends updates for position and orientation at a low frequency (**10-20 Hz**). Your application must turn this sparse data into a fluid visual experience.
 
@@ -45,7 +45,7 @@ The **Rust Simulation Server** only sends updates for position and orientation a
 
 ---
 
-## 4. Pixi.js Performance Contract (Mandatory)
+## Pixi.js Performance Contract (Mandatory)
 
 Optimization is non-negotiable for rendering hundreds of thousands of agents.
 

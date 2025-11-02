@@ -1,0 +1,74 @@
+# --------------------------------------------------------------------------
+# GLOBAL FILES: Operating System and IDE
+# --------------------------------------------------------------------------
+.DS_Store             # macOS system files
+ehthumbs.db           # Windows system files
+Thumbs.db
+.vscode/              # VS Code settings (use a .vscode/settings.json file for shared settings instead)
+.idea/                # JetBrains IDEs (IntelliJ, WebStorm, RustRover)
+
+# --------------------------------------------------------------------------
+# RUST BACKEND (Simulation Server)
+# Stack: Rust, Cargo, Bevy ECS, Axum, Tokio
+# --------------------------------------------------------------------------
+# Cargo build directory
+/target/
+
+# Cargo metadata and lock files
+Cargo.lock            # Should only be ignored if the repo is a library, but for an application, it should usually be tracked. Keeping it here as a common practice note.
+.cargo/
+
+# Local crates registry/cache
+/crates/
+
+# Local Rust-related files/folders
+/rustfmt.toml         # Can be ignored if you don't want to enforce formatting rules
+/clippy.toml
+
+# --------------------------------------------------------------------------
+# NODE.JS/TYPESCRIPT (Frontend Client & Economy Microservice)
+# Stack: Node.js, npm/Yarn, TypeScript, Pixi.js, Vite
+# --------------------------------------------------------------------------
+# Dependency directory
+/node_modules
+
+# Build output directories
+/dist
+/build
+/out
+
+# Log files and npm debug
+npm-debug.log*
+.eslintcache
+
+# Vite-specific cache/temp files
+.vite/
+
+# --------------------------------------------------------------------------
+# DATABASE AND SECURITY
+# Stack: PostgreSQL, SQLx, Local Dev Data
+# --------------------------------------------------------------------------
+# Local database file (if using a local non-Docker instance)
+/game.db
+
+# Environment and secrets files
+.env                  # Sensitive environment variables for local secrets
+.env.*.local
+.terraform.tfvars     # Sensitive Terraform variables (must be ignored)
+.terraform/           # Terraform state and cache files (always ignore)
+
+# --------------------------------------------------------------------------
+# DOCKER AND DEVCONTAINERS
+# Stack: Docker Compose, Dev Containers
+# --------------------------------------------------------------------------
+# Local volumes and service-specific logs/data created by Docker Compose
+/data/                # Generic data volume directory (e.g., used to store local PG data)
+/logs/                # Generic log directory
+.devcontainer/cache/  # Dev Container cache files
+
+# --------------------------------------------------------------------------
+# CLAUDE AGENT FILES
+# --------------------------------------------------------------------------
+# Files created by Claude Code for user-specific settings or memory
+.claude/settings.local.json   # Local overrides
+.claude/memory.json           # Agent memory/cache

@@ -1,5 +1,5 @@
 ---
-name: backend_ledger_larry
+name: backend-ledger-larry
 description: MUST BE USED for all implementation and maintenance of the Node.js/TypeScript Economy Ledger Microservice API and its persistence layer (PostgreSQL).
 tools:
   - read

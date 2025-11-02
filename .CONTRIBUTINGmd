@@ -1,0 +1,21 @@
+# Contributing to Speciate
+
+## Mandatory Git Workflow
+
+**NEVER commit directly to `main` branch. Always follow this workflow:**
+
+### BEFORE: Create Sprint Branch
+- Check that there are no uncommited changes and STOP if there are!
+```bash
+git checkout -b sprint-0-[description]
+# Examples:
+#   sprint-0-setup-local-env
+```
+- Ensure there is a /SPRINT_DOCS folder and it is empty
+- All sprint based plans, progress and documentation goes into the /SPRINT_DOCS folder.
+- First define the sprint plan in a SPRINT_PLAN.md file (in /SPRINT_DOCS folder), concisely defining the plan, goals and tasks for the sprint.
+- Files required to track and plan the sprint should be stored in the /SPRINT_DOCS folder.
+- Completing a spring MUST only leave behind the sprint summary in the /sprint_summaries folder
+
+### DURING: Log sprint updates to /SPRINT_DOCS
+- Don't commit ever to git, humans do that!

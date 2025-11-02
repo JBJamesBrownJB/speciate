@@ -19,7 +19,7 @@ This is a **Headless Server / Thin Client / Microservice** architecture with thr
 - **Testing**: Follows Chicago School TDD (Outside-In); tests MUST be written first
 - **ECS Philosophy**:
   - Systems are small, stateless, single-responsibility
-  - Components are simple data structs (e.g., `Velocity`, `Dna`, `Energy`)
+  - Components are simple data structs (e.g., `Velocity`, `DNA`, `Energy`)
   - Logic is decoupled using events or marker components
 - **Database**: For persistence ONLY via `sqlx`/`SQLite`; gameplay uses in-memory ECS components
 

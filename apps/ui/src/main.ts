@@ -1,5 +1,6 @@
 import { PixiApp } from '@/rendering/PixiApp';
 import { EntityRenderer } from '@/rendering/EntityRenderer';
+import { DiagnosticOverlay } from '@/rendering/DiagnosticOverlay';
 import { WebSocketClient } from '@/core/WebSocketClient';
 import { StateManager } from '@/core/StateManager';
 import { GameLoop } from '@/core/GameLoop';
@@ -73,6 +74,7 @@ class HUDController {
 class SimulationApp {
   private pixiApp: PixiApp;
   private entityRenderer: EntityRenderer | null = null;
+  private diagnosticOverlay: DiagnosticOverlay | null = null;
   private wsClient: WebSocketClient;
   private stateManager: StateManager;
   private gameLoop: GameLoop;
@@ -93,11 +95,32 @@ class SimulationApp {
       await this.pixiApp.init();
       const stage = this.pixiApp.getStage();
       const { width, height } = this.pixiApp.getDimensions();
+
+      // Initialize renderer
       this.entityRenderer = new EntityRenderer(stage, width, height);
+
+      // Initialize diagnostic overlay
+      this.diagnosticOverlay = new DiagnosticOverlay(stage);
+
+      // Draw world boundary and grid
+      const bounds = this.entityRenderer.getWorldBoundsScreen();
+      this.diagnosticOverlay.drawWorldBoundary(bounds.x, bounds.y, bounds.width, bounds.height);
+      this.diagnosticOverlay.drawGrid(bounds.x, bounds.y, bounds.width, bounds.height, 50);
+
+      // Setup keyboard shortcut to toggle diagnostics (D key)
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'd' || e.key === 'D') {
+          this.diagnosticOverlay?.toggle();
+        }
+      });
+
       this.setupWebSocketHandlers();
       this.setupGameLoop();
       this.wsClient.connect();
       this.gameLoop.start();
+
+      console.log('[SimulationApp] Started successfully');
+      console.log('[SimulationApp] Press "D" to toggle diagnostic overlay');
     } catch (error) {
       console.error('[SimulationApp] Failed to start:', error);
       throw error;
@@ -107,6 +130,11 @@ class SimulationApp {
   private setupWebSocketHandlers(): void {
     this.wsClient.onMessage((message: SimulationStateMessage) => {
       this.stateManager.updateFromServer(message);
+
+      // Directly update renderer with creature data
+      if (message.creatures && this.entityRenderer) {
+        this.entityRenderer.updateCreatures(message.creatures);
+      }
     });
     this.wsClient.onConnectionStateChange((state: ConnectionState) => {
       this.hud.updateConnectionState(state);
@@ -119,16 +147,30 @@ class SimulationApp {
 
   private setupGameLoop(): void {
     this.gameLoop.onUpdate(() => {
-      const entityIds = this.stateManager.getEntityIds();
-      for (const entityId of entityIds) {
-        const position = this.stateManager.getInterpolatedPosition(entityId);
-        if (position && this.entityRenderer) {
-          this.entityRenderer.updateEntityPosition(entityId, position);
-        }
+      // Interpolated rendering every frame for smooth movement
+      if (this.entityRenderer) {
+        this.entityRenderer.render();
       }
-      this.hud.updateFPS(this.gameLoop.getFPS());
-      this.hud.updateTick(this.stateManager.getCurrentTick());
-      this.hud.updatePing(this.wsClient.getPing());
+
+      // Update HUD
+      const fps = this.gameLoop.getFPS();
+      const tick = this.stateManager.getCurrentTick();
+      const ping = this.wsClient.getPing();
+
+      this.hud.updateFPS(fps);
+      this.hud.updateTick(tick);
+      this.hud.updatePing(ping);
+
+      // Update diagnostic overlay
+      if (this.diagnosticOverlay) {
+        this.diagnosticOverlay.update({
+          fps,
+          ping,
+          tick,
+          creatureCount: 0, // TODO: get from renderer
+          worldBounds: { width: 180, height: 130 },
+        });
+      }
     });
   }
 

@@ -11,23 +11,32 @@ use futures::{sink::SinkExt, stream::StreamExt};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-use super::messages::SimulationStateMessage;
-
 const BROADCAST_CAPACITY: usize = 100;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub tx: broadcast::Sender<SimulationStateMessage>,
+    pub tx: broadcast::Sender<String>,
+    _rx: std::sync::Arc<tokio::sync::broadcast::Receiver<String>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AppState {
     pub fn new() -> Self {
-        let (tx, _rx) = broadcast::channel(BROADCAST_CAPACITY);
-        Self { tx }
+        let (tx, rx) = broadcast::channel(BROADCAST_CAPACITY);
+        Self {
+            tx,
+            _rx: std::sync::Arc::new(rx),
+        }
     }
 
-    pub fn broadcast(&self, message: SimulationStateMessage) -> Result<usize, String> {
-        self.tx.send(message).map_err(|e| e.to_string())
+    pub fn broadcast<T: serde::Serialize>(&self, message: T) -> Result<usize, String> {
+        let json = serde_json::to_string(&message).map_err(|e| e.to_string())?;
+        self.tx.send(json).map_err(|e| e.to_string())
     }
 }
 
@@ -43,11 +52,9 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     let mut rx = state.tx.subscribe();
 
     let mut send_task = tokio::spawn(async move {
-        while let Ok(msg) = rx.recv().await {
-            if let Ok(json) = serde_json::to_string(&msg) {
-                if sender.send(Message::Text(json.into())).await.is_err() {
-                    break;
-                }
+        while let Ok(json) = rx.recv().await {
+            if sender.send(Message::Text(json.into())).await.is_err() {
+                break;
             }
         }
     });
@@ -71,6 +78,7 @@ mod tests {
     #[test]
     fn test_app_state_creation() {
         let state = AppState::new();
-        assert_eq!(state.tx.receiver_count(), 0);
+        // AppState keeps one receiver alive to prevent channel closure
+        assert_eq!(state.tx.receiver_count(), 1);
     }
 }

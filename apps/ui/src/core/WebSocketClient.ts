@@ -79,6 +79,8 @@ export class WebSocketClient {
         const parsed: unknown = JSON.parse(event.data);
         if (isSimulationStateMessage(parsed)) {
           this.messageHandlers.forEach(handler => handler(parsed));
+        } else {
+          console.warn('[WebSocket] Message validation failed. Received:', typeof parsed, Object.keys(parsed as any));
         }
       } catch (error) {
         console.error('[WebSocket] Parse error:', error);

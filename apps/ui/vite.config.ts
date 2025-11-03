@@ -13,6 +13,10 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     host: '0.0.0.0',
+    hmr: {
+      clientPort: 3000,
+      host: 'localhost',
+    },
   },
   build: {
     outDir: 'dist',
@@ -22,5 +26,10 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['pixi.js'],
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test-setup.ts',
   },
 });

@@ -1,93 +1,108 @@
-//! Speciate - Hello World Simulation
+//! Speciate - Unified Simulation Server
 //!
-//! A simple demonstration of the Speciate simulation engine running a basic
-//! ECS-based simulation with entities moving in 2D space.
+//! Server-authoritative simulation with WebSocket broadcasting
 
+mod simulation;
+mod network;
+mod state;
+
+use axum::{routing::get, Router};
 use log::info;
-use speciate::components::{Health, Position, Velocity};
-use speciate::Simulation;
-use std::time::Instant;
+use simulation::{Health, Position, Velocity, Simulation};
+use network::{ws_handler, AppState, EntityState, SimulationStateMessage};
+use std::sync::Arc;
+use tower_http::cors::CorsLayer;
 
-fn main() {
+async fn health_check() -> &'static str {
+    "OK"
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    info!("=== Speciate: Hello World Simulation ===");
-    info!("Starting simulation engine...\n");
+    info!("🦀 Speciate Simulation Server Starting...");
+    info!("Starting server...\n");
 
-    // Create simulation
+    // Initialize simulation
     let mut simulation = Simulation::new();
 
-    // Spawn some demo entities
-    info!("Spawning 5 demo entities...");
-    for i in 0..5 {
-        let x = (i as f32) * 10.0;
-        let vx = 1.0 + (i as f32) * 0.5;
-        let vy = -0.5 - (i as f32) * 0.2;
-
-        let position = Position::new(x, 0.0);
-        let velocity = Velocity::new(vx, vy);
-        let health = Health::new(100.0);
-
-        let id = simulation.spawn_entity(position, velocity, health);
-        info!(
-            "  Entity #{} spawned at ({:.1}, {:.1}) with velocity ({:.1}, {:.1})",
-            id.0, x, 0.0, vx, vy
-        );
-    }
-
-    info!("\nRunning simulation for 100 ticks (5 seconds at 20Hz)...\n");
-
-    // Run simulation
-    let start = Instant::now();
-
-    for _ in 0..100 {
-        simulation.update();
-
-        // Log every 20 ticks (1 second)
-        if simulation.tick() % 20 == 0 {
-            let elapsed = start.elapsed().as_secs_f32();
-            info!(
-                "Tick: {:3} | Time: {:.2}s | Entities: {}",
-                simulation.tick(),
-                elapsed,
-                simulation.entity_count()
-            );
-
-            // Print sample entity positions
-            for (idx, entity) in simulation.get_entities().enumerate() {
-                if idx < 2 {
-                    info!(
-                        "  Entity #{}: pos=({:7.2}, {:7.2}) vel=({:5.2}, {:5.2})",
-                        entity.id.0, entity.position.x, entity.position.y, entity.velocity.vx,
-                        entity.velocity.vy
-                    );
-                }
-            }
-        }
-    }
-
-    let elapsed = start.elapsed();
-    info!("\n=== Simulation Complete ===");
-    info!(
-        "Final State: {} ticks executed in {:.3} seconds",
-        simulation.tick(),
-        elapsed.as_secs_f32()
+    // Spawn a test entity
+    info!("Spawning demo entity...");
+    simulation.spawn_entity(
+        Position::new(0.0, 0.0),
+        Velocity::new(0.1, 0.05),
+        Health::new(100.0),
     );
-    info!("Active entities: {}", simulation.entity_count());
-    info!("Simulation tick rate: 20 Hz (0.05s per tick)");
-    info!("Average wall time per tick: {:.4} ms\n", {
-        elapsed.as_secs_f64() / simulation.tick() as f64 * 1000.0
+
+    // Initialize WebSocket state
+    let ws_state = Arc::new(AppState::new());
+    let ws_state_clone = ws_state.clone();
+
+    // Create HTTP router with CORS and WebSocket support
+    let app = Router::new()
+        .route("/health", get(health_check))
+        .route(
+            "/ws",
+            get(|ws, state| async move { ws_handler(ws, state).await }),
+        )
+        .layer(CorsLayer::permissive())
+        .with_state(ws_state);
+
+    // Spawn WebSocket server task
+    tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
+            .await
+            .expect("Failed to bind to port 8080");
+        info!("🌐 WebSocket server listening on ws://localhost:8080/ws");
+        info!("❤️  Health check available at http://localhost:8080/health\n");
+        axum::serve(listener, app)
+            .await
+            .expect("Server failed");
     });
 
-    // Print final entity states
-    info!("Final entity positions:");
-    for entity in simulation.get_entities() {
-        info!(
-            "  Entity #{:2}: pos=({:8.2}, {:8.2})",
-            entity.id.0, entity.position.x, entity.position.y
-        );
+    // Main simulation loop
+    let mut tick: u64 = 0;
+    let tick_duration = std::time::Duration::from_millis(100); // 10 TPS
+
+    info!("⏱️  Starting simulation loop (10 TPS)...\n");
+
+    loop {
+        // Run simulation tick
+        simulation.update();
+
+        // Broadcast state to connected clients
+        if let Some(entity) = simulation.get_entities().next() {
+            let state_msg = SimulationStateMessage {
+                tick,
+                entity: EntityState {
+                    x: entity.position.x,
+                    y: entity.position.y,
+                    z: 0.0, // 2D for now
+                },
+                server_time: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis() as u64,
+            };
+
+            // Broadcast (ignore error if no clients connected)
+            let _ = ws_state_clone.broadcast(state_msg);
+        }
+
+        tick += 1;
+        if tick % 10 == 0 {
+            info!(
+                "Tick {}: Position ({:.2}, {:.2})",
+                tick,
+                simulation.get_entities().next().unwrap().position.x,
+                simulation.get_entities().next().unwrap().position.y
+            );
+        }
+
+        tokio::time::sleep(tick_duration).await;
     }
 }

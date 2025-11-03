@@ -2,8 +2,10 @@
 //!
 //! This library provides the core ECS-based simulation engine for the Speciate project.
 
-pub mod components;
 pub mod simulation;
+pub mod network;
+pub mod state;
 
-pub use components::*;
-pub use simulation::*;
+// Re-export commonly used types
+pub use simulation::{components::*, systems::*};
+pub use network::{AppState, ws_handler};

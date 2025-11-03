@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulation Viewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 100vw; height: 100vh; overflow: hidden;
+      background: #000; color: #fff;
+      font-family: 'Courier New', monospace;
+    }
+    #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+    #hud {
+      position: fixed; top: 10px; right: 10px;
+      padding: 12px 16px; background: rgba(0,0,0,0.7);
+      border: 1px solid rgba(0,255,255,0.3); border-radius: 4px;
+      font-size: 14px; z-index: 1000; min-width: 180px;
+    }
+    #hud .stat { display: flex; justify-content: space-between; margin-bottom: 6px; gap: 20px; }
+    #hud .stat:last-child { margin-bottom: 0; }
+    #hud .label { color: #888; font-weight: bold; }
+    #hud .value { color: #0ff; }
+    #hud .value.connected { color: #0f0; }
+    #hud .value.disconnected { color: #f00; }
+    #hud .value.reconnecting { color: #ff0; }
+    #connection-overlay {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      padding: 30px 50px; background: rgba(0,0,0,0.9);
+      border: 2px solid #f00; border-radius: 8px;
+      text-align: center; z-index: 2000; display: none;
+    }
+    #connection-overlay.visible { display: block; }
+    #connection-overlay h2 { color: #f00; margin-bottom: 10px; font-size: 24px; }
+    #connection-overlay p { color: #fff; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="hud">
+    <div class="stat"><span class="label">FPS:</span><span class="value" id="fps-value">0</span></div>
+    <div class="stat"><span class="label">Tick:</span><span class="value" id="tick-value">0</span></div>
+    <div class="stat"><span class="label">Ping:</span><span class="value" id="ping-value">0ms</span></div>
+    <div class="stat"><span class="label">Status:</span><span class="value" id="status-value">Connecting...</span></div>
+  </div>
+  <div id="connection-overlay">
+    <h2>Connection Lost</h2>
+    <p>Attempting to reconnect...</p>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

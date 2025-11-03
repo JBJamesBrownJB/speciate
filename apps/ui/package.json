@@ -1,0 +1,20 @@
+{
+  "name": "@simulation/ui",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pixi.js": "^8.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.0"
+  }
+}

@@ -13,10 +13,11 @@ This frontend provides:
 
 ## Technology Stack
 
-- **React** or **Vue** - UI framework (TBD)
+- **Vanilla TypeScript + Vite** - Currently using vanilla TypeScript for simplicity (planned migration to React in future sprint)
 - **TypeScript** - Type-safe JavaScript
 - **Pixi.js** - High-performance 2D rendering library
 - **Vite** - Modern build tool with fast HMR
+- **WebSocket** - Real-time bidirectional communication with Rust simulation server
 - **Vitest/Jest** - Testing framework
 
 ## Prerequisites

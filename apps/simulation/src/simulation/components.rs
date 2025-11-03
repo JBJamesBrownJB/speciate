@@ -40,14 +40,17 @@ impl Health {
         Self { current: max, max }
     }
 
+    #[allow(dead_code)] // Will be used in Phase 2
     pub fn damage(&mut self, amount: f32) {
         self.current = (self.current - amount).max(0.0);
     }
 
+    #[allow(dead_code)] // Will be used in Phase 2
     pub fn heal(&mut self, amount: f32) {
         self.current = (self.current + amount).min(self.max);
     }
 
+    #[allow(dead_code)] // Will be used in Phase 2
     pub fn is_alive(&self) -> bool {
         self.current > 0.0
     }
@@ -96,7 +99,7 @@ mod tests {
         assert_eq!(health.current, 75.0);
         assert!(health.is_alive());
 
-        health.damage(100.0); // Damage more than current health
+        health.damage(100.0);
         assert_eq!(health.current, 0.0);
         assert!(!health.is_alive());
     }
@@ -108,7 +111,7 @@ mod tests {
         health.heal(30.0);
         assert_eq!(health.current, 80.0);
 
-        health.heal(50.0); // Heal beyond max
+        health.heal(50.0);
         assert_eq!(health.current, 100.0);
     }
 

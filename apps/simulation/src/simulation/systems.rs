@@ -1,14 +1,16 @@
-//! Core simulation engine with ECS systems
+//! Simulation systems and core engine logic
 
-use crate::components::{EntityId, Health, Position, Velocity};
+use super::components::{EntityId, Health, Position, Velocity};
 use std::collections::HashMap;
 
 /// Simple entity data structure to hold component data
 #[derive(Clone, Debug)]
 pub struct Entity {
+    #[allow(dead_code)] // Will be used in Phase 2
     pub id: EntityId,
     pub position: Position,
     pub velocity: Velocity,
+    #[allow(dead_code)] // Will be used in Phase 2
     pub health: Health,
 }
 
@@ -75,16 +77,19 @@ impl Simulation {
     }
 
     /// Get entity count
+    #[allow(dead_code)] // Will be used in Phase 2
     pub fn entity_count(&self) -> usize {
         self.entities.len()
     }
 
     /// Get current simulation tick
+    #[allow(dead_code)] // Will be used in Phase 2
     pub fn tick(&self) -> u64 {
         self.tick
     }
 
     /// Get simulation timestep in seconds
+    #[allow(dead_code)] // Will be used in Phase 2
     pub fn timestep(&self) -> f32 {
         self.timestep
     }
@@ -105,7 +110,7 @@ mod tests {
         let sim = Simulation::new();
         assert_eq!(sim.tick(), 0);
         assert_eq!(sim.entity_count(), 0);
-        assert!(sim.timestep > 0.04 && sim.timestep < 0.06); // ~0.05 for 20Hz
+        assert!(sim.timestep > 0.04 && sim.timestep < 0.06);
     }
 
     #[test]
@@ -139,7 +144,7 @@ mod tests {
     fn test_movement_update() {
         let mut sim = Simulation::new();
         let pos = Position::new(0.0, 0.0);
-        let vel = Velocity::new(10.0, 5.0); // 10 units/sec in x, 5 units/sec in y
+        let vel = Velocity::new(10.0, 5.0);
         let health = Health::new(100.0);
 
         sim.spawn_entity(pos, vel, health);
@@ -148,7 +153,6 @@ mod tests {
         let entities: Vec<_> = sim.get_entities().collect();
         assert_eq!(entities.len(), 1);
 
-        // After one tick (0.05s) at 10 units/sec, should move 0.5 units
         let moved_x = entities[0].position.x;
         let moved_y = entities[0].position.y;
         assert!((moved_x - 0.5).abs() < 0.0001);

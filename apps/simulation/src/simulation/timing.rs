@@ -47,19 +47,6 @@ impl TickTimer {
     pub fn current_duration(&self) -> Option<Duration> {
         self.recent_durations.back().copied()
     }
-
-    /// Format timing statistics for logging
-    pub fn format_stats(&self) -> String {
-        let avg = self.average_duration()
-            .map(|d| format!("{:.2}ms", d.as_secs_f64() * 1000.0))
-            .unwrap_or_else(|| "N/A".to_string());
-
-        let current = self.current_duration()
-            .map(|d| format!("{:.2}ms", d.as_secs_f64() * 1000.0))
-            .unwrap_or_else(|| "N/A".to_string());
-
-        format!("[Tick {}] Avg: {}, Current: {}", self.tick_count, avg, current)
-    }
 }
 
 #[cfg(test)]
@@ -152,29 +139,5 @@ mod tests {
         timer.record_tick(Duration::from_millis(15));
 
         assert_eq!(timer.current_duration(), Some(Duration::from_millis(15)));
-    }
-
-    #[test]
-    fn test_format_stats() {
-        let mut timer = TickTimer::new(100, 60);
-
-        timer.record_tick(Duration::from_millis(8));
-        timer.record_tick(Duration::from_millis(9));
-        timer.record_tick(Duration::from_millis(10));
-
-        let stats = timer.format_stats();
-        assert!(stats.contains("[Tick 3]"));
-        assert!(stats.contains("Avg:"));
-        assert!(stats.contains("Current:"));
-        assert!(stats.contains("ms"));
-    }
-
-    #[test]
-    fn test_empty_timer_format() {
-        let timer = TickTimer::new(100, 60);
-        let stats = timer.format_stats();
-
-        assert!(stats.contains("[Tick 0]"));
-        assert!(stats.contains("N/A"));
     }
 }

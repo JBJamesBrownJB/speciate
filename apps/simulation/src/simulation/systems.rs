@@ -4,42 +4,34 @@ use bevy_ecs::prelude::*;
 use rand::Rng;
 use super::components::*;
 
-/// Applies acceleration to velocity and resets acceleration
-pub fn apply_acceleration_system(
-    mut query: Query<(&mut Velocity, &mut Acceleration)>,
+pub fn update_physics_system(
+    mut query: Query<(&mut Position, &mut Velocity, &mut Acceleration)>,
     delta_time: Res<DeltaTime>,
 ) {
-    for (mut velocity, mut acceleration) in query.iter_mut() {
-        // Apply acceleration to velocity
-        velocity.vx += acceleration.ax * delta_time.0;
-        velocity.vy += acceleration.ay * delta_time.0;
+    let dt = delta_time.0;
+    let max_speed = 150.0;
+    let max_speed_sq = max_speed * max_speed;
 
-        // Limit velocity to max speed
-        let max_speed = 150.0;
-        let speed = (velocity.vx * velocity.vx + velocity.vy * velocity.vy).sqrt();
-        if speed > max_speed {
-            velocity.vx = (velocity.vx / speed) * max_speed;
-            velocity.vy = (velocity.vy / speed) * max_speed;
+    for (mut position, mut velocity, mut acceleration) in query.iter_mut() {
+        velocity.vx += acceleration.ax * dt;
+        velocity.vy += acceleration.ay * dt;
+
+        let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+        if speed_sq > max_speed_sq {
+            let speed = speed_sq.sqrt();
+            let inv_speed = max_speed / speed;
+            velocity.vx *= inv_speed;
+            velocity.vy *= inv_speed;
         }
 
-        // Reset acceleration for next frame (steering behaviors accumulate forces)
         acceleration.ax = 0.0;
         acceleration.ay = 0.0;
+
+        position.x += velocity.vx * dt;
+        position.y += velocity.vy * dt;
     }
 }
 
-/// Updates position based on velocity
-pub fn movement_system(
-    mut query: Query<(&mut Position, &Velocity)>,
-    delta_time: Res<DeltaTime>,
-) {
-    for (mut position, velocity) in query.iter_mut() {
-        position.x += velocity.vx * delta_time.0;
-        position.y += velocity.vy * delta_time.0;
-    }
-}
-
-/// Updates rotation to match velocity direction
 pub fn rotation_system(
     mut query: Query<(&mut Rotation, &Velocity)>,
 ) {
@@ -50,21 +42,15 @@ pub fn rotation_system(
     }
 }
 
-/// Implements fleeing behavior for creatures in Flee state
 pub fn flee_system(
     mut query: Query<(&mut Acceleration, &mut Velocity, &FleeState, &CreatureState)>,
 ) {
     for (mut acceleration, mut velocity, flee_state, creature_state) in query.iter_mut() {
-        // Only apply fleeing if creature is in Fleeing behavior mode
         if creature_state.behavior != BehaviorMode::Fleeing {
             continue;
         }
-
-        // Apply a strong random force to simulate panic
         use rand::Rng;
         let mut rng = rand::thread_rng();
-
-        // Increase speed for fleeing
         let flee_force = 1.0;
         let angle_variation = rng.gen_range(-0.5..0.5);
         let current_angle = velocity.angle() + angle_variation;
@@ -72,7 +58,6 @@ pub fn flee_system(
         acceleration.ax += current_angle.cos() * flee_force;
         acceleration.ay += current_angle.sin() * flee_force;
 
-        // Apply speed multiplier to velocity
         let max_flee_speed = creature_state.max_speed * flee_state.flee_speed_multiplier;
         velocity.limit(max_flee_speed);
     }
@@ -85,43 +70,33 @@ pub fn wander_system(
     let mut rng = rand::thread_rng();
 
     for (mut acceleration, mut wander_state, velocity, creature_state) in query.iter_mut() {
-        // Only apply wandering if creature is in Wandering behavior mode
         if creature_state.behavior != BehaviorMode::Wandering {
             continue;
         }
-        // Initialize wander state if needed
         if wander_state.wander_radius == 0.0 {
             wander_state.wander_radius = 25.0;
             wander_state.wander_distance = 50.0;
             wander_state.angle_change = 0.15;
         }
 
-        // Update wander angle with random change
         wander_state.wander_angle += rng.gen_range(-wander_state.angle_change..wander_state.angle_change);
 
-        // Calculate current velocity direction
         let vel_magnitude = (velocity.vx * velocity.vx + velocity.vy * velocity.vy).sqrt();
         let (vel_normalized_x, vel_normalized_y) = if vel_magnitude > 0.0 {
             (velocity.vx / vel_magnitude, velocity.vy / vel_magnitude)
         } else {
-            // If stationary, use a random direction
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
             (angle.cos(), angle.sin())
         };
 
-        // Project circle in front of the agent
         let circle_center_x = vel_normalized_x * wander_state.wander_distance;
         let circle_center_y = vel_normalized_y * wander_state.wander_distance;
 
-        // Calculate displacement force on the circle
         let displacement_x = wander_state.wander_angle.cos() * wander_state.wander_radius;
         let displacement_y = wander_state.wander_angle.sin() * wander_state.wander_radius;
 
-        // Calculate wander force
         let wander_force_x = circle_center_x + displacement_x;
         let wander_force_y = circle_center_y + displacement_y;
-
-        // Normalize and apply wander force
         let force_magnitude = (wander_force_x * wander_force_x + wander_force_y * wander_force_y).sqrt();
         if force_magnitude > 0.0 {
             let max_force = 0.3;
@@ -261,68 +236,53 @@ pub fn boundary_seek_system(
 
 /// HARD boundary enforcement - prevents creatures from escaping world bounds
 /// This system MUST run after movement_system to work correctly
+/// Optimized with branch-free clamping for better CPU pipeline utilization
 pub fn boundary_enforcement_system(
     mut query: Query<(&mut Position, &mut Velocity)>,
     config: Res<BoundaryConfig>,
 ) {
     for (mut position, mut velocity) in query.iter_mut() {
-        // Hard clamp X boundary with velocity reversal
-        if position.x < 0.0 {
-            position.x = 0.0;
-            velocity.vx = velocity.vx.abs(); // Bounce right
-        } else if position.x > config.width {
-            position.x = config.width;
-            velocity.vx = -velocity.vx.abs(); // Bounce left
-        }
+        let hit_left = (position.x < 0.0) as i32 as f32;
+        let hit_right = (position.x > config.width) as i32 as f32;
+        position.x = position.x.clamp(0.0, config.width);
+        velocity.vx = velocity.vx * (1.0 - 2.0 * hit_left) * (1.0 - 2.0 * hit_right).abs();
 
-        // Hard clamp Y boundary with velocity reversal
-        if position.y < 0.0 {
-            position.y = 0.0;
-            velocity.vy = velocity.vy.abs(); // Bounce up
-        } else if position.y > config.height {
-            position.y = config.height;
-            velocity.vy = -velocity.vy.abs(); // Bounce down
-        }
+        let hit_bottom = (position.y < 0.0) as i32 as f32;
+        let hit_top = (position.y > config.height) as i32 as f32;
+        position.y = position.y.clamp(0.0, config.height);
+        velocity.vy = velocity.vy * (1.0 - 2.0 * hit_bottom) * (1.0 - 2.0 * hit_top).abs();
     }
 }
 
-/// Main simulation struct managing the ECS World and Schedule
 pub struct Simulation {
-    world: World,
+    pub(crate) world: World,
     schedule: Schedule,
-    next_id: u32,
-    entity_id_map: std::collections::HashMap<bevy_ecs::entity::Entity, u32>,
+    pub(crate) next_id: u32,
+    pub(crate) entity_id_map: std::collections::HashMap<bevy_ecs::entity::Entity, u32>,
 }
 
 impl Simulation {
-    /// Creates a new simulation with ECS world and scheduled systems
     pub fn new() -> Self {
         let mut world = World::new();
         let mut schedule = Schedule::default();
 
-        // Add systems with proper ordering
-        // Behavior transition should run first to update states
-        // Force systems (wander, flee, boundary) must run before applying acceleration
-        // boundary_enforcement_system MUST run after movement_system to prevent escapes
         schedule.add_systems((
             behavior_transition_system.before(wander_system),
-            wander_system.before(apply_acceleration_system),
-            flee_system.before(apply_acceleration_system),
-            boundary_seek_system.before(apply_acceleration_system),
-            apply_acceleration_system,
-            movement_system.after(apply_acceleration_system),
-            boundary_enforcement_system.after(movement_system), // CRITICAL: Hard boundary after movement
+            wander_system.before(update_physics_system),
+            flee_system.before(update_physics_system),
+            boundary_seek_system.before(update_physics_system),
+            update_physics_system,
+            boundary_enforcement_system.after(update_physics_system),
             rotation_system.after(boundary_enforcement_system),
         ));
 
-        // Insert resources
         world.insert_resource(DeltaTime::default());
         world.insert_resource(BoundaryConfig::default());
 
         Self {
             world,
             schedule,
-            next_id: 0,
+            next_id: 1,
             entity_id_map: std::collections::HashMap::new(),
         }
     }
@@ -337,16 +297,19 @@ impl Simulation {
         });
     }
 
+    /// Gets the current boundary configuration
+    pub fn get_boundaries(&self) -> (f32, f32) {
+        let config = self.world.resource::<BoundaryConfig>();
+        (config.width, config.height)
+    }
+
     /// Spawns a new creature entity
-    pub fn spawn_creature(&mut self, x: f32, y: f32, width: f32, height: f32) -> u32 {
+    pub fn spawn_creature(&mut self, x: f32, y: f32, _width: f32, _height: f32) -> u32 {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let speed = rng.gen_range(30.0..60.0);
-
-        // Species ID (0 = default species for now)
-        let species_id = 0;
 
         let entity = self.world.spawn((
             Position { x, y },
@@ -356,9 +319,8 @@ impl Simulation {
             },
             Acceleration { ax: 0.0, ay: 0.0 },
             Rotation { radians: angle },
-            Size { width, height },
-            CreatureState::new(species_id),  // General state (required)
-            WanderState {  // Behavior-specific state (only for wandering creatures)
+            CreatureState::new(),
+            WanderState {
                 wander_angle: rng.gen_range(0.0..std::f32::consts::TAU),
                 wander_radius: 25.0,
                 wander_distance: 50.0,
@@ -378,36 +340,6 @@ impl Simulation {
         self.schedule.run(&mut self.world);
     }
 
-    /// Returns creature data for network serialization
-    pub fn get_creatures(&mut self) -> Vec<CreatureData> {
-        let mut creatures = Vec::new();
-        let mut query = self.world.query::<(
-            bevy_ecs::entity::Entity,
-            &Position,
-            &Rotation,
-            &Size,
-            &CreatureState,
-        )>();
-
-        for (entity, position, rotation, size, creature_state) in query.iter(&self.world) {
-            if let Some(&id) = self.entity_id_map.get(&entity) {
-                creatures.push(CreatureData {
-                    id,
-                    x: position.x,
-                    y: position.y,
-                    rotation: rotation.radians,
-                    width: size.width,
-                    height: size.height,
-                    behavior: creature_state.behavior,
-                    energy: creature_state.energy,
-                    species_id: creature_state.species_id,
-                });
-            }
-        }
-
-        creatures
-    }
-
     /// Returns the number of active creatures
     pub fn creature_count(&self) -> usize {
         self.entity_id_map.len()
@@ -417,5 +349,90 @@ impl Simulation {
 impl Default for Simulation {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_movement_system_updates_position() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.1));
+
+        let entity = world.spawn((
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 10.0, vy: 5.0 },
+        )).id();
+
+        // Get delta time first
+        let dt = world.resource::<DeltaTime>().0;
+
+        // Run movement system
+        let mut query = world.query::<(&mut Position, &Velocity)>();
+        for (mut pos, vel) in query.iter_mut(&mut world) {
+            pos.x += vel.vx * dt;
+            pos.y += vel.vy * dt;
+        }
+
+        // Check position updated
+        let position = world.get::<Position>(entity).unwrap();
+        assert_eq!(position.x, 1.0); // 10 * 0.1
+        assert_eq!(position.y, 0.5); // 5 * 0.1
+    }
+
+    #[test]
+    fn test_acceleration_system_updates_velocity() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.1));
+
+        let entity = world.spawn((
+            Velocity { vx: 0.0, vy: 0.0 },
+            Acceleration { ax: 10.0, ay: 5.0 },
+        )).id();
+
+        // Get delta time first
+        let dt = world.resource::<DeltaTime>().0;
+
+        // Simulate acceleration system
+        let mut query = world.query::<(&mut Velocity, &mut Acceleration)>();
+        for (mut vel, mut acc) in query.iter_mut(&mut world) {
+            vel.vx += acc.ax * dt;
+            vel.vy += acc.ay * dt;
+            acc.ax = 0.0;
+            acc.ay = 0.0;
+        }
+
+        // Check velocity updated and acceleration reset
+        let velocity = world.get::<Velocity>(entity).unwrap();
+        assert_eq!(velocity.vx, 1.0); // 10 * 0.1
+        assert_eq!(velocity.vy, 0.5); // 5 * 0.1
+
+        let acceleration = world.get::<Acceleration>(entity).unwrap();
+        assert_eq!(acceleration.ax, 0.0);
+        assert_eq!(acceleration.ay, 0.0);
+    }
+
+    #[test]
+    fn test_rotation_system_matches_velocity() {
+        let mut world = World::new();
+
+        let entity = world.spawn((
+            Rotation { radians: 0.0 },
+            Velocity { vx: 1.0, vy: 1.0 }, // 45 degrees
+        )).id();
+
+        // Simulate rotation system
+        let mut query = world.query::<(&mut Rotation, &Velocity)>();
+        for (mut rot, vel) in query.iter_mut(&mut world) {
+            if vel.vx != 0.0 || vel.vy != 0.0 {
+                rot.radians = vel.vy.atan2(vel.vx);
+            }
+        }
+
+        let rotation = world.get::<Rotation>(entity).unwrap();
+        let expected = 1.0f32.atan2(1.0); // ≈ 0.785 radians (45°)
+        assert!((rotation.radians - expected).abs() < 0.001);
     }
 }

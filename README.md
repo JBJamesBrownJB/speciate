@@ -1,40 +1,72 @@
 # Speciate - AI Life Simulation
 
-A server-authoritative AI life simulation game with a player-driven economy, built with Rust, TypeScript, and Node.js.
+A server-authoritative artificial life simulation with emergent DNA-driven behaviors and a player-driven economy.
 
-> **Reminder:** Use `claude --dangerously-skip-permissions` to bypass permission prompts during development.
+> See [Project_Spec.md](Project_Spec.md) for the complete technical specification.
 
-## Overview
+## Architecture
 
-Speciate is a simulation where:
-- **Non-player organisms** (plants and creatures) exhibit emergent DNA-driven behaviors
-- **Players** participate as avatars in the ecosystem, gathering resources and crafting
-- **Economy** is managed by a separate secure ledger service with ACID guarantees
-- **Simulation** runs at 10 TPS on the server with client-side interpolation for smooth 60 FPS rendering
+The system uses a microservices architecture with clean separation of concerns:
 
-## Project Architecture
+![Architecture Diagram](Architecture_High.png).
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Frontend (UI)                     │
-│     TypeScript, Pixi.js 8.x, Vite 7, WebSocket      │
-│         Real-time rendering at 60 FPS               │
-│              (apps/ui/)                             │
-└──────────────────┬──────────────────────────────────┘
-                   │ WebSocket
-                   │ (10 TPS updates)
-      ┌────────────┴────────────┐
-      │                         │
-┌─────▼─────────────┐   ┌──────▼──────────────┐
-│  Simulation       │   │  Ledger             │
-│  Server           │   │  Microservice       │
-│  (Rust)           │   │  (Node.js)          │
-│  Custom ECS,      │   │  Express,           │
-│  Tokio,           │   │  PostgreSQL         │
-│  WebSocket        │   │  (Planned)          │
-│ (apps/simulation/)│   │ (apps/ledger/)      │
-└───────────────────┘   └─────────────────────┘
-```
+This means that we only need context, tools, strategies that match the specific concern of each part of the system.
+
+### Components
+
+#### Portal (React + PixiJS)
+[TODO: Add details]
+
+Client-side rendering at 60 FPS with interpolation, WebSocket connection management, and player interaction.
+
+**Location:** `apps/ui/` | [Details →](apps/ui/README.md)
+
+#### Player Commander (Node.js)
+
+Authentication, input validation, command routing to simulation. Stateless gateway for player actions.
+This microservice's job is to recieve and orchestrate commands and actions from players and negotiate valid commands to the simulation server which is the ultimate source of truth for the players avatar.
+
+**Status:** Planned
+
+#### Broadcaster
+[TODO: Add details]
+
+Real-time WebSocket/SSE distribution of simulation state updates to connected clients. Manages thousands of concurrent connections.
+
+This micorservices job is to recieve pushed state updates from the simulation and broadcast them efficiently to portals, of which there may be thousands.
+
+**Status:** Planned
+
+#### Simulation (Rust)
+[TODO: Add details]
+
+Server-authoritative ECS simulation engine running at the simulation of agents and player avatars position in the world. Single source of truth for all game state. It should maintain a 'Ports & Adaptors / Clean Architecture' architecture, where routes in (Player commands) and routes out (Broadcast simulation to portals) are kept seperate from a pure, high performance simulation core that needs to run uninterrupted from I/O.
+
+I/O should be able to run on seperate threads and minimal impact on the core simulation threads.
+
+It uses rust for extreme performance and and ECS (Entity Component System) for even more optimisation of hardware. 
+
+**Location:** `apps/simulation/` | [Details →](apps/simulation/README.md)
+
+#### Sprite Generator
+[TODO: Add details]
+
+Procedural sprite generation service for dynamically discovered species. Caches assets to CDN.
+This microservice's job is to do the important work of dynamically building, caching and serving sprites for the infinite variabilty of creatures and plants from the simulation.
+
+It is not decided how it will do this just yet...
+
+**Status:** Planned
+
+#### Ledger (Node.js)
+[TODO: Add details]
+
+Secure economy microservice with PostgreSQL backend. ACID-compliant transaction handling for all player assets.
+This microservice's job is to maintain a secure and consistant transaction ledger to ensure that player owned resources such as wood, biomass, DNA (which represents that the player has ownership of a species).
+
+**Location:** `apps/ledger/` | **Status:** Planned
+
+---
 
 ## Getting Started
 
@@ -44,204 +76,77 @@ Speciate is a simulation where:
 - **Node.js** 22.12+ (for Vite 7 ESM support)
 - **npm** 10+
 
-### Quick Start - Run the Complete Stack
+### Quick Start
 
 ```bash
-# 1. Start the Rust simulation server (Terminal 1)
+# 1. Start the simulation server (Terminal 1)
 cd apps/simulation
 cargo run
-# Server will start on ws://localhost:8080/ws
 
 # 2. Start the frontend dev server (Terminal 2)
 cd apps/ui
 npm install
 npm run dev
-# Frontend will start on http://localhost:3000
 
-# 3. Open your browser
-# Navigate to http://localhost:3000
-# You should see a cyan circle moving across a black canvas
-# The HUD displays FPS, Tick, Ping, and connection status
+# 3. Open http://localhost:3000 in your browser
 ```
+
+---
 
 ## Application Components
 
-The project is organized as a monorepo with three independent applications:
+### Simulation Server (Rust)
+Headless ECS simulation engine using Bevy 0.14. Manages physics, agent behaviors, and deterministic state updates at 20 Hz. Currently console-only with no network layer.
 
-### 1. Simulation Server
-**Rust | Custom ECS | Tokio | WebSocket | 10 TPS**
+**Tech:** `bevy_ecs`, `bevy_app`, `rand` | [Details →](apps/simulation/README.md)
 
-Location: `apps/simulation/`
+### Frontend Application (TypeScript)
+Web-based client with Pixi.js rendering, interpolation for smooth 60 FPS motion, and real-time state synchronization. (Currently planned - WebSocket integration pending)
 
-The server-authoritative simulation engine that manages:
-- Custom HashMap-based Entity Component System
-- Deterministic physics and state updates at 10 TPS
-- WebSocket broadcasting to connected clients
-- Position, velocity, and health tracking for entities
+**Tech:** `pixi.js@8.14.0`, `vite@7.0.0`, `typescript@5.9.3` | [Details →](apps/ui/README.md)
 
-**Tech Stack:**
-- `tokio` - Async runtime
-- `tokio-tungstenite` - WebSocket server
-- `serde_json` - Message serialization
+### Ledger Microservice (Node.js)
+Secure, ACID-compliant economy service with PostgreSQL persistence. Tracks player resources, transactions, and inventory.
 
-**Run:**
-```bash
-cd apps/simulation
-cargo run
-# Listens on ws://localhost:8080/ws
-# Health check: http://localhost:8080/health
-```
+**Tech:** Node.js, TypeScript, PostgreSQL, Express | **Status:** Planned
 
-### 2. Frontend Application
-**TypeScript | Pixi.js 8.x | Vite 7 | WebSocket**
-
-Location: `apps/ui/`
-
-The client-side web interface providing:
-- Real-time rendering at 60 FPS with Pixi.js
-- WebSocket client with auto-reconnection
-- Linear interpolation (10 TPS → 60 FPS smooth motion)
-- HUD showing FPS, tick count, ping, and connection status
-- Entity visualization with position tracking
-
-**Tech Stack:**
-- `pixi.js@8.14.0` - WebGL/WebGPU rendering
-- `vite@7.0.0` - Build tool and dev server
-- `typescript@5.9.3` - Type safety
-
-**Run:**
-```bash
-cd apps/ui
-npm install
-npm run dev
-# Development: http://localhost:3000
-# Production build: npm run build
-```
-
-### 3. Ledger Microservice
-**Node.js | TypeScript | PostgreSQL | Express**
-
-Location: `apps/ledger/` (Planned - Not yet implemented)
-
-The secure, immutable economy service that will track:
-- Player resources and currency
-- Transaction history with ACID guarantees
-- Trade and exchange validation
-- Inventory management
-
-**Status:** Planned for future sprint
-
-## Project Structure
-
-```
-speciate/                                   # Monorepo root
-├── apps/
-│   ├── simulation/                         # Rust simulation server
-│   │   ├── Cargo.toml
-│   │   ├── src/
-│   │   └── README.md                       # Simulation docs
-│   ├── ledger/                             # Node.js ledger microservice
-│   │   ├── package.json
-│   │   ├── src/
-│   │   └── README.md                       # Ledger docs
-│   └── ui/                                 # Frontend application
-│       ├── package.json
-│       ├── src/
-│       └── README.md                       # UI docs
-├── docs/
-│   ├── architecture/
-│   │   ├── ARCHITECTURE.md                 # System design
-│   │   └── API_CONTRACTS.md                # Service APIs
-│   ├── development/
-│   │   └── SETUP.md                        # Dev environment
-│   └── deployment/
-│       └── DEPLOYMENT.md                   # Deploy guides
-├── scripts/
-│   ├── build-all.sh                        # Build all services
-│   └── test-all.sh                         # Test all services
-├── .claude/
-│   ├── spec/                               # Project specification
-│   └── commands/                           # CLI commands
-├── SPRINT_BACKLOG.md                       # Active sprint tasks
-├── SPRINT_DOCS/                            # Sprint documentation
-├── CONTRIBUTING.md                         # Contribution guidelines
-└── README.md                                # This file
-```
-
-## Development Workflow
-
-We use a **feature branch workflow** with sprint-based development cycles.
-
-### Starting a New Sprint
-
-```bash
-/start-sprint
-```
-
-This will:
-1. Create a feature branch: `feat/sprint-<name>`
-2. Initialize SPRINT_DOCS with plan and backlog
-3. Set up the sprint structure
-
-### Ending a Sprint
-
-```bash
-/end-sprint
-```
-
-This will:
-1. Generate sprint summary and archive documentation
-2. Clean up sprint files
-3. Provide instructions for merging to main
-
-### Current Sprint Status
-
-Check the current sprint progress in:
-- `SPRINT_DOCS/PLAN.md` - Sprint goals and implementation plan
-- `SPRINT_DOCS/BACKLOG.md` - Task tracking
-- `SPRINT_DOCS/PROGRESS.md` - Session logs and notes
-
-## Contributing
-
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
-- Branch naming conventions
-- Commit message format
-- Code review process
-- Deployment procedures
+---
 
 ## AI Development Team
 
-The Speciate project uses specialized AI agents (via Claude Code) to assist with development:
+Speciate uses specialized AI agents (via Claude Code) for development:
 
 ### Core Engineering
-- **architect-andy** - Technical design and system architecture
-- **backend-simulation-sam** - Rust simulation engine implementation
-- **backend-ledger-larry** - Economy ledger microservice (Node.js/TypeScript)
-- **frontend-fanny** - Client-side rendering with Pixi.js and UI/UX
+- **architect-andy** - Technical blueprints, communication contracts, architectural standards
+- **backend-simulation-sam** - Rust simulation engine, A-Life systems, ECS implementation
+- **backend-ledger-larry** - Node.js economy ledger, PostgreSQL, ACID transactions
+- **frontend-fabian** - Client rendering, Pixi.js optimization, UI/UX design
 
 ### Domain Experts
-- **botanist-betsy** - Flora biology, genetics, and resource production
-- **zoologist-tom** - Fauna behaviors and ecosystem dynamics
-- **environment-eddy** - Procedural world generation and biomes
-- **gamification-garry** - Game balance and player motivation
+- **botanist-betsy** - Plant biology, genetics, growth cycles, biomass production
+- **zoologist-tom** - Ecosystem design, creature behaviors, emergent dynamics
+- **environment-eddy** - Procedural world generation, biomes, terrain systems
+- **gamification-garry** - Game balance, player motivation, economic design
 
 ### Operations
-- **play-test-petra** - End-to-end testing and quality assurance
-- **devops-daria** - CI/CD, infrastructure, and deployment
-- **qa-karen** - Pre-merge code review and validation
-- **pm-pam** - Sprint management and task coordination
-- **mr-motivator** - Vision alignment and team focus
+- **playtest-petra** - End-to-end testing, gameplay validation, UX evaluation
+- **devops-daria** - CI/CD pipelines, Google Cloud infrastructure, Terraform
+- **qa-karen** - Pre-merge code review, test validation, security checks
+- **pm-pam** - Sprint management, task coordination, documentation
+- **mr-motivator** - Vision alignment, team focus, philosophical guidance
 
-Invoke agents with `/pam <request>` or use the Task tool for specialized work.
+---
 
 ## Resources
 
 ### Project Documentation
-- `.claude/spec/` - Project specification and architecture
-- `SPRINT_DOCS/` - Current sprint plan and progress
+- **[Project_Spec.md](Project_Spec.md)** - Complete technical specification
+- **`.claude/spec/`** - Detailed architecture and standards
+- **`.claude/agents/`** - AI agent definitions
 
 ### Technology Documentation
 - **[Pixi.js 8.x Documentation](https://pixijs.com/8.x/guides)** - Rendering library
+- **[Bevy ECS](https://docs.rs/bevy_ecs/)** - Entity Component System
 - **[Tokio Documentation](https://tokio.rs/)** - Async runtime for Rust
 - **[Vite Documentation](https://vite.dev/)** - Frontend build tool
 - **[Rust Book](https://doc.rust-lang.org/book/)** - Learning Rust

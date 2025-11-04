@@ -65,18 +65,8 @@ pub struct Rotation {
 impl Rotation {
 }
 
-/// Size component for creature dimensions
-#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct Size {
-    pub width: f32,
-    pub height: f32,
-}
-
-impl Size {
-}
-
 /// Behavior modes for creatures (A-Life state machine)
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub enum BehaviorMode {
     #[default]
     Wandering,
@@ -92,21 +82,23 @@ pub struct CreatureState {
     pub behavior: BehaviorMode,
     pub energy: f32,
     pub age: f32,
-    pub species_id: u32,
     pub max_speed: f32,
-    pub perception_radius: f32,
 }
 
-impl CreatureState {
-    pub fn new(species_id: u32) -> Self {
+impl Default for CreatureState {
+    fn default() -> Self {
         Self {
             behavior: BehaviorMode::Wandering,
             energy: 100.0,
             age: 0.0,
-            species_id,
             max_speed: 20.0,
-            perception_radius: 50.0,
         }
+    }
+}
+
+impl CreatureState {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn is_low_energy(&self) -> bool {
@@ -127,7 +119,7 @@ impl CreatureState {
 }
 
 /// Wander state for autonomous movement behavior (behavior-specific, optional)
-#[derive(Component, Clone, Copy, Debug, Default)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct WanderState {
     pub wander_angle: f32,
     pub wander_radius: f32,
@@ -136,7 +128,7 @@ pub struct WanderState {
 }
 
 /// Flee state for escaping danger (behavior-specific, optional)
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct FleeState {
     pub flee_speed_multiplier: f32,
 }
@@ -179,20 +171,6 @@ impl Default for BoundaryConfig {
     }
 }
 
-/// Creature data for network serialization (not a component)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreatureData {
-    pub id: u32,
-    pub x: f32,
-    pub y: f32,
-    pub rotation: f32,
-    pub width: f32,
-    pub height: f32,
-    pub behavior: BehaviorMode,
-    pub energy: f32,
-    pub species_id: u32,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,5 +187,43 @@ mod tests {
         let vel = Velocity { vx: 1.5, vy: -2.5 };
         assert_eq!(vel.vx, 1.5);
         assert_eq!(vel.vy, -2.5);
+    }
+
+    #[test]
+    fn test_creature_state_energy_management() {
+        let mut state = CreatureState::new();
+        let initial_energy = state.energy;
+
+        state.consume_energy(10.0);
+        assert_eq!(state.energy, initial_energy - 10.0);
+
+        state.restore_energy(5.0);
+        assert_eq!(state.energy, initial_energy - 5.0);
+    }
+
+    #[test]
+    fn test_creature_state_exhaustion() {
+        let mut state = CreatureState::new();
+
+        // Drain to low energy (< 30)
+        state.consume_energy(75.0); // 100 - 75 = 25
+        assert!(state.is_low_energy());
+        assert!(!state.is_exhausted());
+
+        // Drain further to exhausted (< 10)
+        state.consume_energy(20.0); // 25 - 20 = 5
+        assert!(state.is_exhausted());
+    }
+
+    #[test]
+    fn test_velocity_helper_methods() {
+        let vel = Velocity { vx: 3.0, vy: 4.0 };
+
+        let magnitude = vel.magnitude();
+        assert_eq!(magnitude, 5.0); // 3-4-5 triangle
+
+        let angle = vel.angle();
+        let expected = 4.0f32.atan2(3.0);
+        assert!((angle - expected).abs() < 0.001);
     }
 }

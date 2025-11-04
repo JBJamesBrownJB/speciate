@@ -3,10 +3,8 @@
 //! This module contains all configurable parameters for the simulation,
 //! making it easy to tweak world settings without modifying code.
 
-use serde::{Deserialize, Serialize};
-
 /// World configuration parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct WorldConfig {
     /// World boundaries
     pub world: WorldBoundaries,
@@ -16,12 +14,9 @@ pub struct WorldConfig {
 
     /// Simulation timing parameters
     pub timing: TimingConfig,
-
-    /// Network configuration
-    pub network: NetworkConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct WorldBoundaries {
     /// World width (in world coordinates)
     pub width: f32,
@@ -29,7 +24,7 @@ pub struct WorldBoundaries {
     pub height: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SpawningConfig {
     /// Number of creatures to spawn at startup
     pub initial_population: usize,
@@ -53,7 +48,7 @@ pub struct SpawningConfig {
     pub spawn_y_max: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TimingConfig {
     /// Target simulation tick rate in Hz (e.g., 60 for 60 ticks per second)
     pub target_tick_rate: u32,
@@ -68,13 +63,27 @@ pub struct TimingConfig {
     pub creature_count_log_interval_secs: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NetworkConfig {
-    /// WebSocket server bind address
-    pub bind_address: String,
+/// Automatic snapshot configuration
+#[derive(Debug, Clone)]
+pub struct SnapshotConfig {
+    /// Enable periodic automatic snapshots
+    pub enabled: bool,
 
-    /// WebSocket server port
-    pub port: u16,
+    /// Interval between periodic snapshots in seconds (default: 300 = 5 minutes)
+    pub interval_secs: u64,
+
+    /// Maximum number of periodic snapshots to keep (older ones are auto-deleted)
+    pub keep_last_n: usize,
+}
+
+impl Default for SnapshotConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval_secs: 300, // 5 minutes
+            keep_last_n: 10,
+        }
+    }
 }
 
 impl Default for WorldConfig {
@@ -85,7 +94,7 @@ impl Default for WorldConfig {
                 height: 130.0,
             },
             spawning: SpawningConfig {
-                initial_population: 200,
+                initial_population: 1,
                 min_size: 0.5,
                 max_size: 2.0,
                 spawn_x_min: 40.0,
@@ -97,12 +106,19 @@ impl Default for WorldConfig {
                 target_tick_rate: 20,
                 timing_window_size: 100,
                 timing_report_interval: 200,
-                creature_count_log_interval_secs: 1,
+                creature_count_log_interval_secs: 5,
             },
-            network: NetworkConfig {
-                bind_address: "0.0.0.0".to_string(),
-                port: 8080,
-            },
+        }
+    }
+}
+
+impl Default for TimingConfig {
+    fn default() -> Self {
+        Self {
+            target_tick_rate: 20,
+            timing_window_size: 100,
+            timing_report_interval: 200,
+            creature_count_log_interval_secs: 5,
         }
     }
 }
@@ -111,44 +127,5 @@ impl WorldConfig {
     /// Create a new WorldConfig with default values
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Get the tick duration for the target tick rate
-    /// Get the WebSocket bind address with port
-    pub fn ws_bind_address(&self) -> String {
-        format!("{}:{}", self.network.bind_address, self.network.port)
-    }
-
-    /// Get the WebSocket URL for logging
-    pub fn ws_url(&self) -> String {
-        format!("ws://localhost:{}/ws", self.network.port)
-    }
-
-    /// Get the health check URL for logging
-    pub fn health_url(&self) -> String {
-        format!("http://localhost:{}/health", self.network.port)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_config() {
-        let config = WorldConfig::default();
-        assert_eq!(config.world.width, 180.0);
-        assert_eq!(config.world.height, 130.0);
-        assert_eq!(config.spawning.initial_population, 100);
-        assert_eq!(config.timing.target_tick_rate, 20);
-        assert_eq!(config.network.port, 8080);
-    }
-
-    #[test]
-    fn test_network_urls() {
-        let config = WorldConfig::default();
-        assert_eq!(config.ws_bind_address(), "0.0.0.0:8080");
-        assert_eq!(config.ws_url(), "ws://localhost:8080/ws");
-        assert_eq!(config.health_url(), "http://localhost:8080/health");
     }
 }

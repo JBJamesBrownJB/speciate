@@ -1,0 +1,6 @@
+# Ignore all snapshot files in this directory
+*.msgpack
+*.snapshot
+
+# But keep the directory itself
+!.gitignore

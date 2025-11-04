@@ -1,0 +1,13 @@
+[metadata]
+version = "1.0"
+description = "Default simulation state with 10,000 creatures"
+created_at = "2025-11-04T12:00:00Z"
+
+[world]
+# World dimensions (in world coordinates)
+width = 180.0
+height = 130.0
+
+[spawn]
+# Number of creatures to spawn randomly at simulation start
+random_creatures = 100

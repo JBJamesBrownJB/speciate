@@ -84,7 +84,7 @@ class SimulationApp {
     this.pixiApp = new PixiApp(
       document.getElementById('canvas-container') ?? document.body
     );
-    this.wsClient = new WebSocketClient('ws://localhost:8080/ws');
+    this.wsClient = new WebSocketClient('ws://localhost:8080/stream');
     this.stateManager = new StateManager();
     this.gameLoop = new GameLoop();
     this.hud = new HUDController();

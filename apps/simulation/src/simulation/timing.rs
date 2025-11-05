@@ -1,3 +1,8 @@
+//! Tick timing instrumentation
+//!
+//! Provides utilities for tracking and reporting simulation tick performance
+//! using a rolling window of timing samples.
+
 use std::collections::VecDeque;
 use std::time::Duration;
 

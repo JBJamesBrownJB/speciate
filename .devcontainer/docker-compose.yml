@@ -6,6 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # Enable Docker-outside-of-Docker
       - ..:/workspace:cached
       - cargo-cache:/usr/local/cargo/registry
       - simulation-target-cache:/workspace/apps/simulation/target
@@ -14,6 +15,16 @@ services:
       - RUST_BACKTRACE=1
     ports:
       - "8080:8080"
+    networks:
+      - default
+      - speciate-local
+    external_links:
+      - speciate-nats:nats
+
+networks:
+  speciate-local:
+    external: true
+    name: speciate-local
 
 volumes:
   cargo-cache:

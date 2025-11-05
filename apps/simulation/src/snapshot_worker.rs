@@ -100,44 +100,51 @@ fn worker_thread_loop(receiver: Receiver<WorkerMessage>, config: SnapshotConfig)
 
 /// Handle saving a single snapshot
 fn handle_save_snapshot(snapshot: WorldSnapshot, snapshot_type: SnapshotType, config: &SnapshotConfig) {
-    // Generate timestamp for filename
-    let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
+    match snapshot_type {
+        SnapshotType::Periodic => {
+            // Generate timestamp for filename
+            let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
+            let timestamped_path = PathBuf::from(format!("snapshots/simulation_{}.msgpack", timestamp));
 
-    let prefix = match snapshot_type {
-        SnapshotType::Periodic => "simulation",
-        SnapshotType::Shutdown => "shutdown",
-    };
+            // Save timestamped snapshot
+            match snapshot.save_to_file(&timestamped_path) {
+                Ok(_) => {
+                    info!(
+                        "Saved periodic snapshot: {} ({} creatures)",
+                        timestamped_path.display(),
+                        snapshot.metadata.creature_count
+                    );
+                }
+                Err(e) => {
+                    error!("Failed to save snapshot {}: {}", timestamped_path.display(), e);
+                    return; // Don't update latest if save failed
+                }
+            }
 
-    let timestamped_path = PathBuf::from(format!("snapshots/{}_{}.msgpack", prefix, timestamp));
+            // Update latest.msgpack
+            let latest_path = PathBuf::from("snapshots/latest.msgpack");
+            if let Err(e) = snapshot.save_to_file(&latest_path) {
+                error!("Failed to update latest snapshot: {}", e);
+            }
 
-    // Save timestamped snapshot
-    match snapshot.save_to_file(&timestamped_path) {
-        Ok(_) => {
-            info!(
-                "Saved {} snapshot: {} ({} creatures)",
-                match snapshot_type {
-                    SnapshotType::Periodic => "periodic",
-                    SnapshotType::Shutdown => "shutdown",
-                },
-                timestamped_path.display(),
-                snapshot.metadata.creature_count
-            );
+            // Cleanup old snapshots
+            cleanup_old_snapshots(config.keep_last_n);
         }
-        Err(e) => {
-            error!("Failed to save snapshot {}: {}", timestamped_path.display(), e);
-            return; // Don't update latest if save failed
+        SnapshotType::Shutdown => {
+            // On shutdown, only update latest.msgpack (no timestamped file)
+            let latest_path = PathBuf::from("snapshots/latest.msgpack");
+            match snapshot.save_to_file(&latest_path) {
+                Ok(_) => {
+                    info!(
+                        "Saved shutdown snapshot to latest.msgpack ({} creatures)",
+                        snapshot.metadata.creature_count
+                    );
+                }
+                Err(e) => {
+                    error!("Failed to save shutdown snapshot: {}", e);
+                }
+            }
         }
-    }
-
-    // Update latest.msgpack
-    let latest_path = PathBuf::from("snapshots/latest.msgpack");
-    if let Err(e) = snapshot.save_to_file(&latest_path) {
-        error!("Failed to update latest snapshot: {}", e);
-    }
-
-    // Cleanup old snapshots (only for periodic snapshots)
-    if matches!(snapshot_type, SnapshotType::Periodic) {
-        cleanup_old_snapshots(config.keep_last_n);
     }
 }
 
@@ -211,6 +218,18 @@ mod tests {
         // Create test directory
         let test_dir = PathBuf::from("snapshots");
         fs::create_dir_all(&test_dir).ok();
+
+        // Clean up any existing simulation snapshot files first (test isolation)
+        if let Ok(entries) = fs::read_dir(&test_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.starts_with("simulation_") && name.ends_with(".msgpack") {
+                        fs::remove_file(path).ok();
+                    }
+                }
+            }
+        }
 
         // Create 3 test snapshots
         for i in 1..=3 {

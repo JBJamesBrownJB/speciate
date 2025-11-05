@@ -18,6 +18,22 @@ export interface SimulationStateMessage {
   server_time: number;
 }
 
+// New types for broadcaster format
+export interface AgentTransform {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rotation: number;
+}
+
+export interface SimulationFrame {
+  tick: number;
+  timestamp: string;
+  agents: AgentTransform[];
+}
+
 export interface WorldStateMessage {
   type: 'WorldState';
   entities: Array<{
@@ -45,4 +61,35 @@ export function isSimulationStateMessage(data: unknown): data is SimulationState
     typeof msg.server_time === 'number' &&
     Array.isArray(msg.creatures)
   );
+}
+
+export function isSimulationFrame(data: unknown): data is SimulationFrame {
+  if (typeof data !== 'object' || data === null) return false;
+  const msg = data as Record<string, unknown>;
+  return (
+    typeof msg.tick === 'number' &&
+    typeof msg.timestamp === 'string' &&
+    Array.isArray(msg.agents)
+  );
+}
+
+/**
+ * Adapts SimulationFrame (broadcaster format) to SimulationStateMessage (UI format)
+ */
+export function adaptSimulationFrame(frame: SimulationFrame): SimulationStateMessage {
+  const creatures: Creature[] = frame.agents.map((agent) => ({
+    id: agent.id,
+    x: agent.x,
+    y: agent.y,
+    rotation: agent.rotation,
+    width: 10, // Default width for now
+    height: 10, // Default height for now
+    // Optional fields can be undefined
+  }));
+
+  return {
+    tick: frame.tick,
+    creatures,
+    server_time: new Date(frame.timestamp).getTime(),
+  };
 }

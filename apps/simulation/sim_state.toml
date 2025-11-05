@@ -1,6 +1,6 @@
 [metadata]
 version = "1.0"
-description = "Default simulation state with 10,000 creatures"
+description = "Test simulation state"
 created_at = "2025-11-04T12:00:00Z"
 
 [world]
@@ -10,4 +10,4 @@ height = 130.0
 
 [spawn]
 # Number of creatures to spawn randomly at simulation start
-random_creatures = 100
+random_creatures = 1000

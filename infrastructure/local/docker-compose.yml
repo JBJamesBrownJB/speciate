@@ -1,0 +1,20 @@
+services:
+  # NATS Message Broker
+  nats:
+    image: nats:latest
+    container_name: speciate-nats
+    ports:
+      - "4222:4222"  # Client connections
+      - "8222:8222"  # Monitoring HTTP endpoint
+    command:
+      - "--name=speciate-nats"
+      - "--http_port=8222"
+    networks:
+      - speciate-local
+    # Note: Healthcheck disabled - NATS container doesn't include wget/curl
+    # Monitor via: docker compose ps && curl http://localhost:8222/varz
+
+networks:
+  speciate-local:
+    name: speciate-local
+    driver: bridge

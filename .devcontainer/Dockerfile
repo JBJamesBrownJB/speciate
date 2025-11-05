@@ -15,6 +15,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI (for Docker-outside-of-Docker)
+RUN curl -fsSL https://get.docker.com -o get-docker.sh \
+    && sh get-docker.sh \
+    && rm get-docker.sh \
+    && usermod -aG docker vscode
+
 # Install Rust tooling
 RUN rustup component add rustfmt clippy rust-analyzer
 

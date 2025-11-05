@@ -110,8 +110,9 @@ fn test_shutdown_snapshot_is_separate() {
     let shutdown_count = count_shutdown_snapshots();
 
     assert_eq!(periodic_count, 1, "Should have 1 periodic snapshot");
-    assert_eq!(shutdown_count, 1, "Should have 1 shutdown snapshot");
-    assert!(latest_snapshot_exists(), "latest.msgpack should exist");
+    // Shutdown snapshots no longer create timestamped files, only update latest.msgpack
+    assert_eq!(shutdown_count, 0, "Shutdown should not create timestamped files");
+    assert!(latest_snapshot_exists(), "latest.msgpack should exist (updated by shutdown)");
 
     worker.shutdown();
     cleanup_test_snapshots();
@@ -190,13 +191,23 @@ fn test_graceful_shutdown_flag() {
     let final_snapshot = simulation.to_snapshot();
     worker.save_snapshot(final_snapshot, SnapshotType::Shutdown);
 
-    thread::sleep(Duration::from_millis(500));
+    // Wait for snapshot to be saved with retry loop (more robust than single sleep)
+    let start = std::time::Instant::now();
+    let max_wait = Duration::from_secs(2);
+    let mut latest_exists = false;
 
-    // Verify shutdown snapshot was created
-    let shutdown_count = count_shutdown_snapshots();
+    while start.elapsed() < max_wait {
+        latest_exists = latest_snapshot_exists();
+        if latest_exists {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    // Verify shutdown snapshot was saved (as latest.msgpack, not timestamped file)
     assert!(
-        shutdown_count >= 1,
-        "Should have at least 1 shutdown snapshot"
+        latest_exists,
+        "latest.msgpack should exist after shutdown snapshot"
     );
 
     worker.shutdown();

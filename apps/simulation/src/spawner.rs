@@ -4,7 +4,7 @@
 
 use crate::config::SpawningConfig;
 use crate::simulation::components::*;
-use crate::simulation::Simulation;
+use crate::simulation::{Simulation, SimulationBuilder};
 use log::info;
 use rand::Rng;
 
@@ -98,7 +98,7 @@ mod tests {
     /// Tests for spawn_initial_creatures helper function
     #[test]
     fn test_spawn_initial_creatures() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         let config = SpawningConfig {
             initial_population: 10,
             min_size: 0.5,
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_spawn_zero_creatures() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         let config = SpawningConfig {
             initial_population: 0,
             min_size: 0.5,
@@ -135,7 +135,7 @@ mod tests {
     /// Cycle 1: Random Everything Tests
     #[test]
     fn test_spawn_creature_with_defaults_creates_entity() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         let entity_id = spawn_creature(&mut simulation, CreatureSpawnRequest::new());
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_spawn_creature_random_position_within_bounds() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         let width = 100.0;
         let height = 100.0;
         simulation.set_boundaries(width, height);
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_spawn_creature_random_has_valid_defaults() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Spawn multiple to ensure randomness is working
@@ -174,7 +174,7 @@ mod tests {
     /// Cycle 2: Specific Position Tests
     #[test]
     fn test_spawn_creature_at_specific_position() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
         let target_x = 25.5;
         let target_y = 75.3;
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_spawn_at_position_still_has_random_state() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Spawn two creatures at same position
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_spawn_position_clamped_to_bounds() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Try to spawn outside bounds - should be clamped
@@ -226,7 +226,7 @@ mod tests {
     /// Cycle 3: Specific State Tests
     #[test]
     fn test_spawn_creature_with_specific_state() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         let custom_state = CreatureState {
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_spawn_with_state_still_has_random_position() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         let state = CreatureState {
@@ -275,7 +275,7 @@ mod tests {
     /// Cycle 4: Fully Specified Tests
     #[test]
     fn test_spawn_creature_with_full_specification() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         let state = CreatureState {
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_spawn_deterministic_with_full_spec() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         let state = CreatureState {
@@ -324,7 +324,7 @@ mod tests {
     /// Cycle 5: Edge Cases Tests
     #[test]
     fn test_spawn_with_zero_energy_is_valid() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         let state = CreatureState {
@@ -345,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_spawn_multiple_maintains_independence() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Spawn 100 random creatures
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn test_spawn_at_boundary_edges() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Test all corners
@@ -388,7 +388,7 @@ mod tests {
     /// Integration Tests
     #[test]
     fn test_mixed_spawn_strategies() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Mix all 4 spawn strategies

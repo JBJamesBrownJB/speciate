@@ -139,13 +139,12 @@ snapshots/
   ├── simulation_2025-11-04_12-00-00.msgpack  (periodic)
   ├── simulation_2025-11-04_12-05-00.msgpack  (periodic)
   ├── simulation_2025-11-04_12-10-00.msgpack  (periodic)
-  ├── shutdown_2025-11-04_12-15-30.msgpack    (shutdown)
-  └── latest.msgpack                           (always current)
+  └── latest.msgpack                           (always current, updated on shutdown)
 ```
 
-- **Timestamped snapshots**: `simulation_YYYY-MM-DD_HH-MM-SS.msgpack` (periodic), `shutdown_YYYY-MM-DD_HH-MM-SS.msgpack` (on exit)
-- **Latest snapshot**: `latest.msgpack` always points to most recent save (for quick resume)
-- **Retention**: Only last 10 periodic snapshots kept, shutdown snapshots never auto-deleted
+- **Timestamped snapshots**: `simulation_YYYY-MM-DD_HH-MM-SS.msgpack` (periodic saves only)
+- **Latest snapshot**: `latest.msgpack` always contains most recent state (updated by both periodic saves and shutdown)
+- **Retention**: Only last 10 periodic snapshots kept. Shutdown saves update `latest.msgpack` without creating timestamped files
 
 ### Configuration
 

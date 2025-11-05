@@ -9,6 +9,7 @@ pub mod config;
 pub mod spawner;
 pub mod snapshot;
 pub mod snapshot_worker;
+pub mod nats;
 
 // Re-export commonly used types
-pub use simulation::{components::*, systems::*};
+pub use simulation::{components::*, sim::*, agent_systems::*};

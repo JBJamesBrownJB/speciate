@@ -1,3 +1,8 @@
+//! TOML state file loading
+//!
+//! This module handles loading simulation configuration from TOML files,
+//! allowing users to define initial world state declaratively.
+
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;

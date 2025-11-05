@@ -17,12 +17,12 @@
 //! ## Usage Example
 //!
 //! ```no_run
-//! use speciate::simulation::Simulation;
+//! use speciate::simulation::{Simulation, SimulationBuilder};
 //! use speciate::snapshot::WorldSnapshot;
 //! use std::path::PathBuf;
 //!
 //! // Save snapshot
-//! let mut simulation = Simulation::new();
+//! let mut simulation = SimulationBuilder::new().build();
 //! let snapshot = simulation.to_snapshot();
 //! snapshot.save_to_file(&PathBuf::from("snapshots/latest.msgpack")).unwrap();
 //!
@@ -32,7 +32,7 @@
 //! ```
 
 use crate::simulation::components::*;
-use crate::simulation::Simulation;
+use crate::simulation::{Simulation, SimulationBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
@@ -215,7 +215,7 @@ impl Simulation {
     pub fn from_snapshot(snapshot: WorldSnapshot) -> Self {
         use bevy_ecs::world::EntityWorldMut;
 
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
 
         // Set world boundaries from snapshot
         simulation.set_boundaries(snapshot.world.width, snapshot.world.height);
@@ -230,6 +230,7 @@ impl Simulation {
 
             // Add all required components
             let mut entity_mut: EntityWorldMut = simulation.world.entity_mut(entity);
+            entity_mut.insert(AgentId(creature.id));
             entity_mut.insert(creature.position);
             entity_mut.insert(creature.velocity);
             entity_mut.insert(creature.acceleration);
@@ -386,7 +387,7 @@ mod tests {
 
     #[test]
     fn test_simulation_snapshot_empty() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         let snapshot = simulation.to_snapshot();
@@ -398,7 +399,7 @@ mod tests {
 
     #[test]
     fn test_simulation_snapshot_with_creatures() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Spawn 10 creatures
@@ -419,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_simulation_restore_from_snapshot() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Spawn 5 creatures
@@ -441,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_simulation_snapshot_preserves_state() {
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Spawn creature at specific position with specific state
@@ -476,7 +477,7 @@ mod tests {
         use std::fs;
         use std::path::PathBuf;
 
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(100.0, 100.0);
 
         // Spawn 3 creatures
@@ -511,7 +512,7 @@ mod tests {
         use std::path::PathBuf;
 
         // Create simulation with creatures
-        let mut simulation = Simulation::new();
+        let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(180.0, 130.0);
 
         for _ in 0..100 {
@@ -544,5 +545,44 @@ mod tests {
 
         // Clean up
         fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_snapshot_restore_preserves_agent_id_component() {
+        use bevy_ecs::query::QueryState;
+        use crate::simulation::components::AgentId;
+
+        let mut simulation = SimulationBuilder::new().build();
+        simulation.set_boundaries(100.0, 100.0);
+
+        // Spawn 3 creatures
+        let id1 = simulation.spawn_creature(25.0, 25.0, 100.0, 100.0);
+        let id2 = simulation.spawn_creature(50.0, 50.0, 100.0, 100.0);
+        let id3 = simulation.spawn_creature(75.0, 75.0, 100.0, 100.0);
+
+        // Take snapshot
+        let snapshot = simulation.to_snapshot();
+
+        // Restore from snapshot
+        let mut restored = Simulation::from_snapshot(snapshot);
+
+        // Query for AgentId components
+        let mut query_state: QueryState<&AgentId> = restored.world.query();
+        let agent_ids: Vec<u32> = query_state
+            .iter(&restored.world)
+            .map(|agent_id| agent_id.0)
+            .collect();
+
+        // Verify all AgentId components are present
+        assert_eq!(
+            agent_ids.len(),
+            3,
+            "All restored entities should have AgentId component"
+        );
+
+        // Verify IDs match
+        assert!(agent_ids.contains(&id1));
+        assert!(agent_ids.contains(&id2));
+        assert!(agent_ids.contains(&id3));
     }
 }

@@ -29,24 +29,26 @@ This microservice's job is to recieve and orchestrate commands and actions from 
 **Status:** Planned
 
 #### Broadcaster
-[TODO: Add details]
 
-Real-time WebSocket/SSE distribution of simulation state updates to connected clients. Manages thousands of concurrent connections.
+Real-time WebSocket distribution of simulation state updates to connected clients. Subscribes to NATS message broker and relays simulation frames to browser clients at 20 Hz.
 
-This micorservices job is to recieve pushed state updates from the simulation and broadcast them efficiently to portals, of which there may be thousands.
+This microservice's job is to receive pushed state updates from the simulation (via NATS) and broadcast them efficiently to portals, of which there may be thousands.
 
-**Status:** Planned
+**Tech:** Node.js, TypeScript, NATS.js, WebSocket (ws library)
+**Location:** `apps/broadcaster/` | [Details →](apps/broadcaster/README.md)
+**Status:** ✅ **Implemented** (Sprint 6)
 
 #### Simulation (Rust)
-[TODO: Add details]
 
-Server-authoritative ECS simulation engine running at the simulation of agents and player avatars position in the world. Single source of truth for all game state. It should maintain a 'Ports & Adaptors / Clean Architecture' architecture, where routes in (Player commands) and routes out (Broadcast simulation to portals) are kept seperate from a pure, high performance simulation core that needs to run uninterrupted from I/O.
+Server-authoritative ECS simulation engine running at 20 Hz. Single source of truth for all game state. Publishes agent positions, velocities, and rotations to NATS message broker in real-time.
 
-I/O should be able to run on seperate threads and minimal impact on the core simulation threads.
+Maintains a 'Ports & Adapters / Clean Architecture' where I/O (NATS publishing, player commands) runs on separate threads with minimal impact on the core simulation loop.
 
-It uses rust for extreme performance and and ECS (Entity Component System) for even more optimisation of hardware. 
+Uses Rust for extreme performance and Bevy ECS (Entity Component System) for hardware optimization.
 
+**Tech:** Rust, Bevy ECS, async-nats, tokio
 **Location:** `apps/simulation/` | [Details →](apps/simulation/README.md)
+**Status:** ✅ **NATS Publishing Implemented** (Sprint 6)
 
 #### Sprite Generator
 [TODO: Add details]
@@ -75,21 +77,50 @@ This microservice's job is to maintain a secure and consistant transaction ledge
 - **Rust** 1.70+ (with Cargo)
 - **Node.js** 22.12+ (for Vite 7 ESM support)
 - **npm** 10+
+- **Docker** and **Docker Compose** (for NATS infrastructure)
+- **VS Code** with Dev Containers extension (recommended for development)
 
-### Quick Start
+### Quick Start (Streaming Pipeline - Sprint 6)
 
+The current implementation demonstrates the **real-time streaming architecture**:
+
+**1. Start NATS Message Broker:**
 ```bash
-# 1. Start the simulation server (Terminal 1)
-cd apps/simulation
-cargo run
+cd infrastructure/local
+docker compose up -d
+```
 
-# 2. Start the frontend dev server (Terminal 2)
-cd apps/ui
+**2. Start Broadcaster (WebSocket Service):**
+```bash
+# From devcontainer
+cd apps/broadcaster
 npm install
 npm run dev
-
-# 3. Open http://localhost:3000 in your browser
 ```
+
+**3. Start Simulation (Data Publisher):**
+```bash
+# From devcontainer
+cd apps/simulation
+cargo run
+```
+
+**4. Test the WebSocket Stream:**
+```bash
+# Install wscat globally
+npm install -g wscat
+
+# Connect to the stream
+wscat -c ws://localhost:8080/stream
+```
+
+You should see JSON frames streaming at ~20 Hz with agent positions and velocities.
+
+**See [infrastructure/local/README.md](infrastructure/local/README.md) for detailed setup instructions.**
+
+---
+
+**Note:** The UI (`apps/ui`) is not yet connected to the streaming pipeline. This integration is planned for Sprint 7.
 
 ---
 

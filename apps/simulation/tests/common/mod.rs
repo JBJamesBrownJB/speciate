@@ -1,15 +1,16 @@
 //! Common test utilities for integration tests
 
 use speciate::config::SnapshotConfig;
-use speciate::simulation::Simulation;
+use speciate::simulation::{Simulation, SimulationBuilder};
 use speciate::spawner::{spawn_creature, CreatureSpawnRequest};
 use std::fs;
 use std::path::PathBuf;
 
 /// Create a test simulation with specified number of creatures
 pub fn setup_test_simulation(creature_count: usize) -> Simulation {
-    let mut simulation = Simulation::new();
-    simulation.set_boundaries(180.0, 130.0);
+    let mut simulation = SimulationBuilder::new()
+        .set_boundaries(180.0, 130.0)
+        .build();
 
     for _ in 0..creature_count {
         spawn_creature(&mut simulation, CreatureSpawnRequest::new());

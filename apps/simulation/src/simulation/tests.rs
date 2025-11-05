@@ -10,13 +10,13 @@ mod simulation_tests {
 
     #[test]
     fn test_simulation_creates_successfully() {
-        let sim = Simulation::new();
+        let sim = SimulationBuilder::new().build();
         assert_eq!(sim.creature_count(), 0);
     }
 
     #[test]
     fn test_spawn_creature_increases_count() {
-        let mut sim = Simulation::new();
+        let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(180.0, 130.0);
 
         let initial_count = sim.creature_count();
@@ -27,7 +27,7 @@ mod simulation_tests {
 
     #[test]
     fn test_simulation_update_doesnt_crash() {
-        let mut sim = Simulation::new();
+        let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(180.0, 130.0);
         sim.spawn_creature(90.0, 65.0, 2.0, 1.0);
 
@@ -37,7 +37,7 @@ mod simulation_tests {
 
     #[test]
     fn test_multiple_updates_work() {
-        let mut sim = Simulation::new();
+        let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(180.0, 130.0);
         sim.spawn_creature(90.0, 65.0, 2.0, 1.0);
 

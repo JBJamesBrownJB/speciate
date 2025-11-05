@@ -3,6 +3,7 @@
 //! Headless simulation engine running at 20 Hz with console output
 
 mod config;
+mod nats;
 mod simulation;
 mod snapshot;
 mod snapshot_worker;
@@ -14,7 +15,7 @@ use clap::Parser;
 use config::{SnapshotConfig, SpawningConfig, TimingConfig, WorldConfig};
 use log::{info, warn};
 use simulation::timing::TickTimer;
-use simulation::Simulation;
+use simulation::{Simulation, SimulationBuilder};
 use snapshot_worker::{SnapshotType, SnapshotWorker};
 use spawner::spawn_initial_creatures;
 use state_loader::SimStateFile;
@@ -100,8 +101,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             spawn_y_max: state_file.spawn.area_y_max.unwrap_or(world_height),
         };
 
-        let mut simulation = Simulation::new();
-        simulation.set_boundaries(world_width, world_height);
+        // Build simulation with all systems registered
+        let mut simulation = SimulationBuilder::new()
+            .set_boundaries(world_width, world_height)
+            .build();
 
         spawn_initial_creatures(&mut simulation, &spawning);
         let initial_count = simulation.creature_count();
@@ -114,8 +117,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Using default configuration");
         let config = WorldConfig::new();
 
-        let mut simulation = Simulation::new();
-        simulation.set_boundaries(config.world.width, config.world.height);
+        // Build simulation with all systems registered
+        let mut simulation = SimulationBuilder::new()
+            .set_boundaries(config.world.width, config.world.height)
+            .build();
 
         spawn_initial_creatures(&mut simulation, &config.spawning);
         let initial_count = simulation.creature_count();

@@ -3,6 +3,11 @@
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
 
+/// Stable, unique identifier for each agent
+/// This ID is assigned at spawn time and never changes, even when the entity is despawned/respawned
+#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct AgentId(pub u32);
+
 /// Position component representing an entity's location in 2D space
 #[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Position {
@@ -225,5 +230,81 @@ mod tests {
         let angle = vel.angle();
         let expected = 4.0f32.atan2(3.0);
         assert!((angle - expected).abs() < 0.001);
+    }
+
+    /// Velocity Method Tests
+    #[test]
+    fn test_velocity_magnitude() {
+        let vel = Velocity { vx: 3.0, vy: 4.0 };
+        assert_eq!(vel.magnitude(), 5.0);
+
+        let zero_vel = Velocity { vx: 0.0, vy: 0.0 };
+        assert_eq!(zero_vel.magnitude(), 0.0);
+    }
+
+    #[test]
+    fn test_velocity_normalize() {
+        let mut vel = Velocity { vx: 3.0, vy: 4.0 };
+        vel.normalize();
+
+        assert!((vel.vx - 0.6).abs() < 0.001);
+        assert!((vel.vy - 0.8).abs() < 0.001);
+        assert!((vel.magnitude() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_velocity_normalize_zero() {
+        let mut vel = Velocity { vx: 0.0, vy: 0.0 };
+        vel.normalize();
+
+        // Should remain zero when normalizing zero velocity
+        assert_eq!(vel.vx, 0.0);
+        assert_eq!(vel.vy, 0.0);
+    }
+
+    #[test]
+    fn test_velocity_limit_under_max() {
+        let mut vel = Velocity { vx: 3.0, vy: 4.0 };
+        vel.limit(10.0);
+
+        // Should remain unchanged (magnitude 5.0 < 10.0)
+        assert_eq!(vel.vx, 3.0);
+        assert_eq!(vel.vy, 4.0);
+    }
+
+    #[test]
+    fn test_velocity_limit_over_max() {
+        let mut vel = Velocity { vx: 3.0, vy: 4.0 };
+        vel.limit(2.5);
+
+        // Should be limited to magnitude 2.5 but keep direction
+        assert!((vel.magnitude() - 2.5).abs() < 0.001);
+        assert!((vel.vx - 1.5).abs() < 0.001); // 3/5 * 2.5
+        assert!((vel.vy - 2.0).abs() < 0.001); // 4/5 * 2.5
+    }
+
+    #[test]
+    fn test_velocity_limit_zero() {
+        let mut vel = Velocity { vx: 0.0, vy: 0.0 };
+        vel.limit(5.0);
+
+        // Should remain zero
+        assert_eq!(vel.vx, 0.0);
+        assert_eq!(vel.vy, 0.0);
+    }
+
+    #[test]
+    fn test_velocity_angle_quadrants() {
+        // Quadrant 1: positive x, positive y
+        let vel1 = Velocity { vx: 1.0, vy: 1.0 };
+        assert!((vel1.angle() - std::f32::consts::FRAC_PI_4).abs() < 0.001);
+
+        // Quadrant 2: negative x, positive y
+        let vel2 = Velocity { vx: -1.0, vy: 1.0 };
+        assert!((vel2.angle() - 3.0 * std::f32::consts::FRAC_PI_4).abs() < 0.001);
+
+        // Quadrant 4: positive x, negative y
+        let vel4 = Velocity { vx: 1.0, vy: -1.0 };
+        assert!((vel4.angle() + std::f32::consts::FRAC_PI_4).abs() < 0.001);
     }
 }

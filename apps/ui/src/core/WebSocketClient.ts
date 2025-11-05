@@ -1,5 +1,5 @@
 import type { SimulationStateMessage } from '@/types/messages';
-import { isSimulationStateMessage } from '@/types/messages';
+import { isSimulationStateMessage, isSimulationFrame, adaptSimulationFrame } from '@/types/messages';
 import { ConnectionState } from '@/types/entities';
 
 export type MessageHandler = (message: SimulationStateMessage) => void;
@@ -19,7 +19,7 @@ export class WebSocketClient {
   private readonly initialReconnectDelay = 1000;
   private readonly reconnectBackoffMultiplier = 1.5;
 
-  constructor(url: string = 'ws://localhost:8080/ws') {
+  constructor(url: string = 'ws://localhost:8080/stream') {
     this.url = url;
     this.reconnectDelay = this.initialReconnectDelay;
   }
@@ -77,7 +77,14 @@ export class WebSocketClient {
       this.lastMessageTime = Date.now();
       try {
         const parsed: unknown = JSON.parse(event.data);
-        if (isSimulationStateMessage(parsed)) {
+
+        // Handle new broadcaster format (SimulationFrame with agents)
+        if (isSimulationFrame(parsed)) {
+          const adapted = adaptSimulationFrame(parsed);
+          this.messageHandlers.forEach(handler => handler(adapted));
+        }
+        // Handle legacy format (SimulationStateMessage with creatures)
+        else if (isSimulationStateMessage(parsed)) {
           this.messageHandlers.forEach(handler => handler(parsed));
         } else {
           console.warn('[WebSocket] Message validation failed. Received:', typeof parsed, Object.keys(parsed as any));

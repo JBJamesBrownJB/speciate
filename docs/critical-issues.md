@@ -5,6 +5,11 @@ I suspect, due to rapdid nature of everything that anywhere that has ever increa
 - CritId
 - ...
 
+## Snapshots load crits but not moving
+I tested loading from a snapshot, all crits were there but all stationary. Maybe something is not part of the snapshot or loaded properly. Maybe behaviour?
+
+Also, world bounds looked off, maybe snapshot is not serialising/deserialising that correctly as well. How do we ensure snapshot logic keeps up to date with our changes!??!?
+
 ## NanoIds or uuids
 For things like agent ids and species ids (DNA that can replicate any agent) should use nanoID. Maybe for any unique thing in the world, NanoId should be used?
 

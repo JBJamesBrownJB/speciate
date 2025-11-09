@@ -9,7 +9,7 @@ use log::{error, info, warn};
 use std::thread;
 use std::time::Duration;
 
-const NATS_SUBJECT: &str = "speciate.agents.transform";
+const NATS_SUBJECT: &str = "speciate.crits.transform";
 const RECONNECT_DELAY_MS: u64 = 1000;
 const MAX_RECONNECT_DELAY_MS: u64 = 5000;
 

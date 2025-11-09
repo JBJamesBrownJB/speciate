@@ -1,37 +1,37 @@
 import { EventEmitter } from 'events';
 import { connect, NatsConnection, Subscription } from 'nats';
 import { decode } from '@msgpack/msgpack';
-import type { NatsConfig, SimulationFrame, AgentTransform } from './types.js';
+import type { NatsConfig, SimulationFrame, CritTransform } from './types.js';
 
 // Maximum safe integer for JavaScript (2^53 - 1)
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 
 /**
- * Validates that an object is a valid AgentTransform
+ * Validates that an object is a valid CritTransform
  */
-function isValidAgentTransform(obj: unknown): obj is AgentTransform {
+function isValidCritTransform(obj: unknown): obj is CritTransform {
   if (typeof obj !== 'object' || obj === null) {
     return false;
   }
 
-  const agent = obj as Record<string, unknown>;
+  const crit = obj as Record<string, unknown>;
 
   // Check required fields exist and have correct types
-  if (typeof agent.id !== 'number') return false;
-  if (typeof agent.x !== 'number') return false;
-  if (typeof agent.y !== 'number') return false;
-  if (typeof agent.vx !== 'number') return false;
-  if (typeof agent.vy !== 'number') return false;
-  if (typeof agent.rotation !== 'number') return false;
+  if (typeof crit.id !== 'number') return false;
+  if (typeof crit.x !== 'number') return false;
+  if (typeof crit.y !== 'number') return false;
+  if (typeof crit.vx !== 'number') return false;
+  if (typeof crit.vy !== 'number') return false;
+  if (typeof crit.rotation !== 'number') return false;
 
   // Check for NaN values
-  if (Number.isNaN(agent.x) || Number.isNaN(agent.y)) return false;
-  if (Number.isNaN(agent.vx) || Number.isNaN(agent.vy)) return false;
-  if (Number.isNaN(agent.rotation)) return false;
+  if (Number.isNaN(crit.x) || Number.isNaN(crit.y)) return false;
+  if (Number.isNaN(crit.vx) || Number.isNaN(crit.vy)) return false;
+  if (Number.isNaN(crit.rotation)) return false;
 
   // Check for integer overflow in ID
-  if (agent.id > MAX_SAFE_INTEGER) {
-    console.warn(`Agent ID ${agent.id} exceeds safe integer range`);
+  if (crit.id > MAX_SAFE_INTEGER) {
+    console.warn(`Crit ID ${crit.id} exceeds safe integer range`);
   }
 
   return true;
@@ -58,8 +58,8 @@ function isValidSimulationFrame(obj: unknown): obj is SimulationFrame {
     return false;
   }
 
-  if (!Array.isArray(frame.agents)) {
-    console.error('Invalid frame: agents must be an array');
+  if (!Array.isArray(frame.crits)) {
+    console.error('Invalid frame: crits must be an array');
     return false;
   }
 
@@ -68,10 +68,10 @@ function isValidSimulationFrame(obj: unknown): obj is SimulationFrame {
     console.warn(`Tick ${frame.tick} exceeds safe integer range`);
   }
 
-  // Validate each agent
-  for (let i = 0; i < frame.agents.length; i++) {
-    if (!isValidAgentTransform(frame.agents[i])) {
-      console.error(`Invalid agent at index ${i}:`, frame.agents[i]);
+  // Validate each crit
+  for (let i = 0; i < frame.crits.length; i++) {
+    if (!isValidCritTransform(frame.crits[i])) {
+      console.error(`Invalid crit at index ${i}:`, frame.crits[i]);
       return false;
     }
   }
@@ -87,6 +87,8 @@ export interface NatsSubscriberEvents {
   disconnected: () => void;
   reconnecting: () => void;
   reconnected: () => void;
+  resubscribed: () => void;
+  resubscribeFailed: (error: Error) => void;
   message: (frame: SimulationFrame) => void;
   error: (error: Error) => void;
 }
@@ -99,9 +101,24 @@ export class NatsSubscriber extends EventEmitter {
   private subscription: Subscription | null = null;
   private isClosing = false;
   private subscriptionLoop: Promise<void> | null = null;
+  private isSubscribed = false;
 
   constructor(private config: NatsConfig) {
     super();
+  }
+
+  /**
+   * Get connection status
+   */
+  isConnected(): boolean {
+    return this.connection !== null && !this.connection.isClosed();
+  }
+
+  /**
+   * Get subscription status
+   */
+  hasActiveSubscription(): boolean {
+    return this.isSubscribed && this.subscription !== null;
   }
 
   /**
@@ -111,6 +128,10 @@ export class NatsSubscriber extends EventEmitter {
     try {
       this.connection = await connect({
         servers: this.config.servers,
+        reconnect: this.config.reconnect,
+        maxReconnectAttempts: this.config.maxReconnectAttempts,
+        reconnectTimeWait: this.config.reconnectTimeWait,
+        timeout: this.config.timeout,
       });
 
       this.emit('connected');
@@ -122,6 +143,7 @@ export class NatsSubscriber extends EventEmitter {
         for await (const status of this.connection.status()) {
           switch (status.type) {
             case 'disconnect':
+              this.isSubscribed = false;
               this.emit('disconnected');
               break;
             case 'reconnecting':
@@ -129,6 +151,8 @@ export class NatsSubscriber extends EventEmitter {
               break;
             case 'reconnect':
               this.emit('reconnected');
+              // Automatically resubscribe after reconnection
+              await this.resubscribe();
               break;
           }
         }
@@ -155,6 +179,7 @@ export class NatsSubscriber extends EventEmitter {
     }
 
     this.subscription = this.connection.subscribe(this.config.subject);
+    this.isSubscribed = true;
 
     // Process messages in the background
     this.subscriptionLoop = (async () => {
@@ -188,6 +213,39 @@ export class NatsSubscriber extends EventEmitter {
         }
       }
     })();
+  }
+
+  /**
+   * Resubscribe to NATS subject after reconnection
+   */
+  private async resubscribe(): Promise<void> {
+    try {
+      if (!this.connection) {
+        throw new Error('Not connected to NATS');
+      }
+
+      // Clean up old subscription if it exists
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+        this.subscription = null;
+      }
+
+      // Wait for previous subscription loop to finish
+      if (this.subscriptionLoop) {
+        await this.subscriptionLoop.catch(() => {
+          // Ignore errors from old subscription
+        });
+        this.subscriptionLoop = null;
+      }
+
+      // Create new subscription
+      await this.subscribe();
+      this.emit('resubscribed');
+    } catch (error) {
+      this.isSubscribed = false;
+      this.emit('resubscribeFailed', error as Error);
+      throw error;
+    }
   }
 
   /**

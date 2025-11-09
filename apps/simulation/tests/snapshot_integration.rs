@@ -10,8 +10,8 @@ mod common;
 use common::*;
 use speciate::config::SnapshotConfig;
 use speciate::simulation::Simulation;
-use speciate::snapshot::WorldSnapshot;
-use speciate::snapshot_worker::{SnapshotType, SnapshotWorker};
+use speciate::snapshots::WorldSnapshot;
+use speciate::snapshots::{SnapshotType, SnapshotWorker};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -72,13 +72,17 @@ fn test_snapshot_cleanup_keeps_last_n() {
         assert!(
             periodic_count <= 5,
             "Should keep at most 5 periodic snapshots, got {} (created {})",
-            periodic_count, snapshot_count
+            periodic_count,
+            snapshot_count
         );
 
         // Check if latest.msgpack exists (it should, but timing can be tricky in tests)
         // This is not a critical failure since we're mainly testing cleanup
         if !latest_snapshot_exists() {
-            eprintln!("Warning: latest.msgpack doesn't exist after saving {} snapshots (timing issue)", snapshot_count);
+            eprintln!(
+                "Warning: latest.msgpack doesn't exist after saving {} snapshots (timing issue)",
+                snapshot_count
+            );
         }
     }
 
@@ -111,8 +115,14 @@ fn test_shutdown_snapshot_is_separate() {
 
     assert_eq!(periodic_count, 1, "Should have 1 periodic snapshot");
     // Shutdown snapshots no longer create timestamped files, only update latest.msgpack
-    assert_eq!(shutdown_count, 0, "Shutdown should not create timestamped files");
-    assert!(latest_snapshot_exists(), "latest.msgpack should exist (updated by shutdown)");
+    assert_eq!(
+        shutdown_count, 0,
+        "Shutdown should not create timestamped files"
+    );
+    assert!(
+        latest_snapshot_exists(),
+        "latest.msgpack should exist (updated by shutdown)"
+    );
 
     worker.shutdown();
     cleanup_test_snapshots();

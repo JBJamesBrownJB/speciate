@@ -34,18 +34,6 @@ pub struct SpawningConfig {
 
     /// Maximum creature size
     pub max_size: f32,
-
-    /// Spawn area - minimum X coordinate (screen space)
-    pub spawn_x_min: f32,
-
-    /// Spawn area - maximum X coordinate (screen space)
-    pub spawn_x_max: f32,
-
-    /// Spawn area - minimum Y coordinate (screen space)
-    pub spawn_y_min: f32,
-
-    /// Spawn area - maximum Y coordinate (screen space)
-    pub spawn_y_max: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -90,17 +78,14 @@ impl Default for WorldConfig {
     fn default() -> Self {
         Self {
             world: WorldBoundaries {
-                width: 180.0,
-                height: 130.0,
+                // 2,000,000m × 2,000,000m (2,000 km × 2,000 km) as per World_Scale.md
+                width: 2_000_000.0,
+                height: 2_000_000.0,
             },
             spawning: SpawningConfig {
                 initial_population: 1,
                 min_size: 0.5,
                 max_size: 2.0,
-                spawn_x_min: 40.0,
-                spawn_x_max: 140.0,
-                spawn_y_min: 30.0,
-                spawn_y_max: 100.0,
             },
             timing: TimingConfig {
                 target_tick_rate: 20,

@@ -4,13 +4,13 @@
 export interface SimulationFrame {
   tick: number;
   timestamp: string;
-  agents: AgentTransform[];
+  crits: CritTransform[];
 }
 
 /**
- * Agent transform data (position, velocity, rotation)
+ * Crit transform data (position, velocity, rotation)
  */
-export interface AgentTransform {
+export interface CritTransform {
   id: number;
   x: number;
   y: number;
@@ -25,6 +25,12 @@ export interface AgentTransform {
 export interface NatsConfig {
   servers: string;
   subject: string;
+  reconnect: boolean;
+  maxReconnectAttempts: number;
+  reconnectTimeWait: number;
+  timeout: number;
+  connectMaxRetries: number;
+  connectRetryDelay: number;
 }
 
 /**
@@ -43,10 +49,18 @@ export interface LoggingConfig {
 }
 
 /**
+ * Health check configuration
+ */
+export interface HealthConfig {
+  port: number;
+}
+
+/**
  * Complete application configuration
  */
 export interface AppConfig {
   nats: NatsConfig;
   websocket: WebSocketConfig;
   logging: LoggingConfig;
+  health: HealthConfig;
 }

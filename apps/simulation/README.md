@@ -85,19 +85,14 @@ height = 130.0
 [spawn]
 random_creatures = 10000
 
-# Optional: Constrain spawn area (defaults to entire world)
-area_x_min = 40.0
-area_x_max = 140.0
-area_y_min = 30.0
-area_y_max = 100.0
-
 # Optional: Creature size range (defaults to 0.5-2.0)
 size_min = 0.5
 size_max = 2.0
 ```
 
 **Required fields:** `random_creatures`
-**Optional fields:** Spawn area boundaries, size range (defaults to entire world and 0.5-2.0)
+**Optional fields:** size range (defaults to 0.5-2.0)
+**Note:** Creatures now spawn at world center (0, 0) for tuning purposes
 
 ### 3. Resume from Snapshot
 

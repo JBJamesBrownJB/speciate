@@ -29,7 +29,7 @@ Your first task is to establish a robust local environment using **`.devcontaine
     * The **Rust Simulation Server** (`bevy_ecs`).
     * The **Node.js/TypeScript Economy Ledger Microservice**.
     * A local, persistent **PostgreSQL** instance.
-2.  **Connectivity:** Ensure the local services communicate using internal network names (e.g., `http://economy-ledger:8080`), mirroring the production environment.
+2.  **Connectivity:** Ensure the local services communicate using internal network names (e.g., `http://economy-ledger:3001`), mirroring the production environment.
 3.  **Client Environment:** Configure a Node.js development environment for the **TypeScript Thin Client** (Vite/Pixi.js).
 
 ## CI/CD Pipeline (GitHub Actions)

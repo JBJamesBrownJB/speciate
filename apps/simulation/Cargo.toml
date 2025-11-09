@@ -24,6 +24,7 @@ rmp-serde = "1.3"  # MessagePack serialization for binary snapshots
 
 # Utility
 rand = "0.8"
+noise = "0.9"  # Perlin noise for locomotion variability
 chrono = { version = "0.4", features = ["serde"] }  # Timestamp generation for snapshots
 ctrlc = { version = "3.4", features = ["termination"] }  # Signal handling for graceful shutdown
 
@@ -32,6 +33,13 @@ async-nats = "0.37"
 tokio = { version = "1.43", features = ["rt", "sync", "time"] }
 crossbeam-channel = "0.5"
 serde_json = "1.0"
+futures = { version = "0.3", optional = true }  # For dev-commands NATS subscriber
+
+[features]
+# Enable test helper methods for integration tests
+test-helpers = []
+# Enable dev commands for local testing (NEVER enabled in production)
+dev-commands = ["futures"]
 
 [dev-dependencies]
 # Testing utilities
@@ -50,3 +58,24 @@ opt-level = 0
 [[bin]]
 name = "speciate"
 path = "src/main.rs"
+
+# Integration tests that require test-helpers feature
+[[test]]
+name = "territory_behavior_test"
+path = "tests/territory_behavior_test.rs"
+required-features = ["test-helpers"]
+
+[[test]]
+name = "max_wander_distance_test"
+path = "tests/max_wander_distance_test.rs"
+required-features = ["test-helpers"]
+
+[[test]]
+name = "debug_wander_test"
+path = "tests/debug_wander_test.rs"
+required-features = ["test-helpers"]
+
+[[test]]
+name = "dev_commands_test"
+path = "tests/dev_commands_test.rs"
+required-features = ["test-helpers", "dev-commands"]

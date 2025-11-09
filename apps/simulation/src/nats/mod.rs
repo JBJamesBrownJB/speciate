@@ -8,7 +8,7 @@ pub mod publisher;
 pub mod systems;
 
 // Re-export commonly used types
-pub use frame::{AgentTransform, SimulationFrame};
+pub use frame::{CritTransform, SimulationFrame};
 pub use systems::SimulationTick;
 
 use bevy_ecs::system::Resource;

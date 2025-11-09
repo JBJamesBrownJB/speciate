@@ -305,6 +305,7 @@ interface AgentTransform {
 4. **Timestamp Format:** Initially numeric, switched to ISO 8601 for better debugging
 5. **AgentId Stability:** Originally used Entity::index(), switched to dedicated AgentId component
 6. **Snapshot Loading Bug:** AgentId component missing from restored entities - fixed with comprehensive testing
+7. **NATS WebSocket Port Conflict:** Port 4224 caused persistent Docker "address already in use" errors despite no visible process. Root cause: Docker daemon phantom port reservation. Changed to port 9224 and required absolute host path for config file mounting in Docker-outside-of-Docker setup (`/home/dev/dev/speciate/...` instead of `./`)
 
 ### Technical Debt Identified ⚠️
 1. **No compression:** JSON payloads uncompressed (MessagePack deferred)

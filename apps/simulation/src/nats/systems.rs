@@ -2,9 +2,9 @@
 //!
 //! Bevy ECS systems that query entities and publish frame data to NATS.
 
-use super::frame::{AgentTransform, SimulationFrame};
+use super::frame::{CritTransform, SimulationFrame};
 use super::NatsPublisher;
-use crate::simulation::components::{AgentId, Position, Rotation, Velocity};
+use crate::simulation::components::{CritId, Position, Rotation, Velocity};
 use bevy_ecs::prelude::*;
 use log::{debug, warn};
 
@@ -21,15 +21,15 @@ pub struct SimulationTick(pub u64);
 /// If the channel is full (NATS is slow), frames are dropped to ensure
 /// the simulation never blocks on NATS.
 pub fn publish_frame_system(
-    query: Query<(&AgentId, &Position, &Velocity, &Rotation)>,
+    query: Query<(&CritId, &Position, &Velocity, &Rotation)>,
     tick: Res<SimulationTick>,
     publisher: Res<NatsPublisher>,
 ) {
-    // Collect all agent transforms
-    let agents: Vec<AgentTransform> = query
+    // Collect all crit transforms
+    let crits: Vec<CritTransform> = query
         .iter()
-        .map(|(agent_id, position, velocity, rotation)| AgentTransform {
-            id: agent_id.0,
+        .map(|(crit_id, position, velocity, rotation)| CritTransform {
+            id: crit_id.0,
             x: position.x,
             y: position.y,
             vx: velocity.vx,
@@ -41,14 +41,14 @@ pub fn publish_frame_system(
     if tick.0 % 100 == 0 {
         // Log every 100 ticks for visibility
         debug!(
-            "[NATS] Tick {}: Publishing frame with {} agents",
+            "[NATS] Tick {}: Publishing frame with {} crits",
             tick.0,
-            agents.len()
+            crits.len()
         );
     }
 
     // Create simulation frame
-    let frame = SimulationFrame::new(tick.0, agents);
+    let frame = SimulationFrame::new(tick.0, crits);
 
     // Try to send without blocking
     if let Err(dropped_frame) = publisher.try_send(frame) {

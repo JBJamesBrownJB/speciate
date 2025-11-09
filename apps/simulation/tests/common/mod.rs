@@ -2,7 +2,7 @@
 
 use speciate::config::SnapshotConfig;
 use speciate::simulation::{Simulation, SimulationBuilder};
-use speciate::spawner::{spawn_creature, CreatureSpawnRequest};
+use speciate::{spawn_creature, CreatureSpawnRequest};
 use std::fs;
 use std::path::PathBuf;
 

@@ -30,8 +30,8 @@ describe('config', () => {
       expect(expectedUrl).toBe('nats://custom-server:4222');
     });
 
-    it('should use correct NATS subject for agent transforms', () => {
-      expect(config.nats.subject).toBe('speciate.agents.transform');
+    it('should use correct NATS subject for crit transforms', () => {
+      expect(config.nats.subject).toBe('speciate.crits.transform');
     });
   });
 
@@ -104,7 +104,7 @@ describe('config', () => {
     });
 
     it('should have NATS subject in correct format', () => {
-      expect(config.nats.subject).toMatch(/^speciate\.agents\.\w+$/);
+      expect(config.nats.subject).toMatch(/^speciate\.crits\.\w+$/);
     });
   });
 });

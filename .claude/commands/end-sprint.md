@@ -41,6 +41,6 @@ Your work is complete. The human developer must now perform the final Git action
 > You must now manually execute the Git commands to merge and tidy up:
 > 1.  `git checkout main`
 > 2.  `git merge --squash feat/$CURRENT_SPRINT_NAME`
-> 3.  `AC=true git commit -m "feat(sprint-end): Final code from $CURRENT_SPRINT_NAME"`
+> 3.  `SECRET_AC_CODE_HUMAN_ONLY=true git commit -m "feat(sprint-end): Final code from $CURRENT_SPRINT_NAME"`
 > 4.  `git branch -d feat/$CURRENT_SPRINT_NAME`
 > 5.  **Clean up Remote Branch:** `git push origin --delete feat/$CURRENT_SPRINT_NAME`"

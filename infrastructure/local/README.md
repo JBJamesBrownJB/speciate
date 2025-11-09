@@ -22,7 +22,8 @@ Simulation (Rust) → NATS (port 4222) → Broadcaster (Node.js) → Portal (Web
 ## Services
 
 ### NATS (Message Broker)
-- **Port 4222:** Client connections (Simulation, Broadcaster)
+- **Port 4222:** Client connections (Simulation, Broadcaster) - TCP
+- **Port 9224:** WebSocket connections (Admin Dev UI) - Browser clients
 - **Port 8222:** Monitoring HTTP endpoint
 - **Subject:** `speciate.agents.transform` (simulation data)
 - **Rate:** 20 Hz (50ms per frame)
@@ -270,6 +271,31 @@ netstat -tuln | grep 8080
 
 # Check if devcontainer port is forwarded
 # VS Code should auto-forward port 8080
+```
+
+### NATS WebSocket (Admin Dev UI) not working
+```bash
+# 1. Verify NATS WebSocket is active in logs
+docker logs speciate-nats | grep -i websocket
+# Expected: [INF] Listening for websocket clients on ws://0.0.0.0:9224
+
+# 2. Check config file is mounted correctly
+docker exec speciate-nats cat /etc/nats/nats-server.conf
+# Should show: websocket { port: 9224 ... }
+
+# 3. Verify port is exposed
+docker port speciate-nats 9224
+# Expected: 9224/tcp -> 0.0.0.0:9224
+
+# 4. Test WebSocket from browser console
+# Open http://localhost:8000 (admin UI)
+# Console: new WebSocket('ws://localhost:9224')
+
+# Common issue: Config file mounted as directory
+# Solution: Use absolute host path in docker-compose.yml:
+#   volumes:
+#     - /home/dev/dev/speciate/infrastructure/local/nats-server.conf:/etc/nats/nats-server.conf:ro
+# (Relative paths like ./nats-server.conf fail with Docker-outside-of-Docker)
 ```
 
 ---

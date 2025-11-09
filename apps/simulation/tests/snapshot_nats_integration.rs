@@ -1,31 +1,30 @@
+use async_nats;
+use futures::StreamExt;
+use speciate::nats::frame::SimulationFrame;
 /// End-to-end integration test for snapshot + NATS publishing
 ///
-/// This test verifies that agents loaded from snapshots are correctly published to NATS.
+/// This test verifies that crits loaded from snapshots are correctly published to NATS.
 ///
-/// Bug being tested: When loading from snapshots, the AgentId component was not being
-/// inserted on restored entities, causing the NATS publishing query to return zero agents
+/// Bug being tested: When loading from snapshots, the CritId component was not being
+/// inserted on restored entities, causing the NATS publishing query to return zero crits
 /// even though the entities existed in the ECS.
 ///
 /// Test flow:
-/// 1. Create simulation and spawn agents
-/// 2. Verify NATS publishes agents from original simulation
+/// 1. Create simulation and spawn crits
+/// 2. Verify NATS publishes crits from original simulation
 /// 3. Save snapshot to file
 /// 4. Load snapshot and restore simulation
-/// 5. Verify NATS publishes agents from restored simulation (this would fail before fix)
-/// 6. Verify agent IDs are preserved after restoration
+/// 5. Verify NATS publishes crits from restored simulation (this would fail before fix)
+/// 6. Verify crit IDs are preserved after restoration
 ///
 /// Prerequisites:
 /// - NATS server must be running on nats://nats:4222
 ///
 /// Run with: cargo test --test snapshot_nats_integration -- --nocapture
-
 use speciate::simulation::{Simulation, SimulationBuilder};
-use speciate::nats::frame::SimulationFrame;
-use speciate::snapshot::WorldSnapshot;
-use async_nats;
-use futures::StreamExt;
-use std::path::PathBuf;
+use speciate::snapshots::WorldSnapshot;
 use std::fs;
+use std::path::PathBuf;
 
 #[tokio::test]
 async fn test_snapshot_restore_with_nats_publishing() {
@@ -39,13 +38,12 @@ async fn test_snapshot_restore_with_nats_publishing() {
 
     // Step 1: Connect to NATS
     println!("1. Connecting to NATS...");
-    let nats_url = std::env::var("NATS_URL")
-        .unwrap_or_else(|_| "nats://nats:4222".to_string());
+    let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "nats://nats:4222".to_string());
     let nats_client = async_nats::connect(&nats_url)
         .await
         .expect("Failed to connect to NATS - is the server running?");
     let mut subscriber = nats_client
-        .subscribe("speciate.agents.transform")
+        .subscribe("speciate.crits.transform")
         .await
         .expect("Failed to subscribe to NATS topic");
     println!("   ✓ Connected to NATS at {}", nats_url);
@@ -75,23 +73,23 @@ async fn test_snapshot_restore_with_nats_publishing() {
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
     println!("5. Reading message from original simulation...");
-    let msg1 = tokio::time::timeout(
-        tokio::time::Duration::from_secs(2),
-        subscriber.next()
-    )
-    .await
-    .expect("Timeout waiting for NATS message")
-    .expect("No message received from NATS");
+    let msg1 = tokio::time::timeout(tokio::time::Duration::from_secs(2), subscriber.next())
+        .await
+        .expect("Timeout waiting for NATS message")
+        .expect("No message received from NATS");
 
-    let frame1 = SimulationFrame::from_msgpack_bytes(&msg1.payload)
-        .expect("Failed to parse MessagePack");
+    let frame1 =
+        SimulationFrame::from_msgpack_bytes(&msg1.payload).expect("Failed to parse MessagePack");
 
     assert_eq!(
-        frame1.agents.len(),
+        frame1.crits.len(),
         3,
-        "Original simulation should publish 3 agents"
+        "Original simulation should publish 3 crits"
     );
-    println!("   ✓ Original simulation published {} agents", frame1.agents.len());
+    println!(
+        "   ✓ Original simulation published {} crits",
+        frame1.crits.len()
+    );
 
     // Step 6: Save snapshot to file
     println!("6. Saving snapshot...");
@@ -110,8 +108,8 @@ async fn test_snapshot_restore_with_nats_publishing() {
 
     // Step 8: Load snapshot and restore simulation
     println!("8. Loading snapshot and restoring simulation...");
-    let loaded_snapshot = WorldSnapshot::load_from_file(&snapshot_path)
-        .expect("Failed to load snapshot");
+    let loaded_snapshot =
+        WorldSnapshot::load_from_file(&snapshot_path).expect("Failed to load snapshot");
     let mut restored_sim = Simulation::from_snapshot(loaded_snapshot);
 
     assert_eq!(
@@ -119,7 +117,10 @@ async fn test_snapshot_restore_with_nats_publishing() {
         3,
         "Restored simulation should have 3 creatures"
     );
-    println!("   ✓ Restored simulation has {} agents", restored_sim.creature_count());
+    println!(
+        "   ✓ Restored simulation has {} agents",
+        restored_sim.creature_count()
+    );
 
     // Step 9: Wait for restored NATS publisher to connect
     println!("9. Waiting for restored NATS publisher to connect...");
@@ -133,33 +134,33 @@ async fn test_snapshot_restore_with_nats_publishing() {
 
     // Step 11: Verify restored simulation publishes correctly to NATS
     println!("11. Reading message from restored simulation...");
-    let msg2 = tokio::time::timeout(
-        tokio::time::Duration::from_secs(2),
-        subscriber.next()
-    )
-    .await
-    .expect("Timeout waiting for NATS message")
-    .expect("No message received from NATS");
+    let msg2 = tokio::time::timeout(tokio::time::Duration::from_secs(2), subscriber.next())
+        .await
+        .expect("Timeout waiting for NATS message")
+        .expect("No message received from NATS");
 
-    let frame2 = SimulationFrame::from_msgpack_bytes(&msg2.payload)
-        .expect("Failed to parse MessagePack");
+    let frame2 =
+        SimulationFrame::from_msgpack_bytes(&msg2.payload).expect("Failed to parse MessagePack");
 
     // THIS IS THE KEY ASSERTION - verifies the bug is fixed
     assert_eq!(
-        frame2.agents.len(),
+        frame2.crits.len(),
         3,
-        "❌ BUG: Restored simulation should publish 3 agents to NATS! \
-         This fails if AgentId component is not inserted during snapshot restoration."
+        "❌ BUG: Restored simulation should publish 3 crits to NATS! \
+         This fails if CritId component is not inserted during snapshot restoration."
     );
-    println!("   ✓ Restored simulation published {} agents", frame2.agents.len());
+    println!(
+        "   ✓ Restored simulation published {} crits",
+        frame2.crits.len()
+    );
 
-    // Step 12: Verify agent IDs are preserved after restoration
-    println!("12. Verifying agent IDs are preserved...");
-    let restored_ids: Vec<u32> = frame2.agents.iter().map(|a| a.id).collect();
+    // Step 12: Verify crit IDs are preserved after restoration
+    println!("12. Verifying crit IDs are preserved...");
+    let restored_ids: Vec<u32> = frame2.crits.iter().map(|c| c.id).collect();
     for id in &agent_ids {
         assert!(
             restored_ids.contains(id),
-            "Agent ID {} should be preserved after restore",
+            "Crit ID {} should be preserved after restore",
             id
         );
     }

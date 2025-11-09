@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulation Viewer</title>
+  <style>
+    /* Nature-Themed Color Palette */
+    :root {
+      /* Backgrounds - Forest greens */
+      --bg-primary: #0d1f0d;
+      --bg-secondary: #1a2f1a;
+      --bg-tertiary: #243a24;
+
+      /* Accent colors - Life and vitality */
+      --color-life: #6fb83f;        /* Vibrant green - healthy, alive */
+      --color-warning: #f0a830;     /* Amber - caution, attention */
+      --color-danger: #d94848;      /* Red - critical, danger */
+      --color-info: #4a9eff;        /* Blue - neutral information */
+
+      /* UI Chrome - Translucent overlays */
+      --glass-bg: rgba(255, 255, 255, 0.08);
+      --glass-border: rgba(255, 255, 255, 0.15);
+      --glass-shadow: rgba(0, 0, 0, 0.4);
+
+      /* Text colors */
+      --text-primary: #e8f5e8;      /* Soft white with green tint */
+      --text-secondary: #9cb89c;    /* Muted green-gray */
+      --text-accent: #6fb83f;       /* Life green */
+
+      /* Typography */
+      --font-mono: 'Courier New', 'SF Mono', Monaco, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 100vw; height: 100vh; overflow: hidden;
+      /* Dark forest green gradient background */
+      background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* Subtle noise texture for organic feel */
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 1;
+    }
+    #canvas-container {
+      width: 80vw;
+      height: 80vh;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                  inset 0 0 120px rgba(0,0,0,0.7),
+                  0 0 40px rgba(111, 184, 63, 0.15);
+      background: #000;
+      position: relative;
+      transition: box-shadow 0.8s ease-in-out;
+      z-index: 10;
+    }
+
+    /* Functional backlight states (3-state system) - changes color based on app state */
+
+    /* Connecting/Reconnecting - Orange (merged state for any connection attempt) */
+    #canvas-container.glow-connecting-reconnecting {
+      animation: pulse-orange 2s ease-in-out infinite;
+    }
+
+    /* Connected - Green with caustic effect (normal operational state) */
+    #canvas-container.glow-connected {
+      animation: wave-green 7s ease-in-out infinite;
+    }
+
+    /* Error/Disconnected - Red with pulse (rare, manual disconnect or critical error) */
+    #canvas-container.glow-error {
+      animation: pulse-red 2s ease-in-out infinite;
+    }
+
+    /* Animation: Amber pulse for connecting/reconnecting states */
+    @keyframes pulse-orange {
+      0%, 100% {
+        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                    inset 0 0 120px rgba(0,0,0,0.7),
+                    0 0 32px rgba(240,168,48,0.15),
+                    0 0 30px rgba(240,168,48,0.08);
+      }
+      50% {
+        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                    inset 0 0 120px rgba(0,0,0,0.7),
+                    0 0 56px rgba(240,168,48,0.20),
+                    0 0 54px rgba(240,168,48,0.10);
+      }
+    }
+
+    /* Animation: Life green caustic effect for connected state (organic, living pulse) */
+    @keyframes wave-green {
+      0% {
+        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                    inset 0 0 120px rgba(0,0,0,0.7),
+                    0px 3px 10px rgba(111,184,63,0.12),
+                    5px 2px 8px rgba(111,184,63,0.10),
+                    -3px 0px 12px rgba(111,184,63,0.08);
+      }
+      33% {
+        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                    inset 0 0 120px rgba(0,0,0,0.7),
+                    3px 0px 9px rgba(111,184,63,0.13),
+                    -4px 1px 11px rgba(111,184,63,0.09),
+                    -1px 4px 10px rgba(111,184,63,0.11);
+      }
+      66% {
+        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                    inset 0 0 120px rgba(0,0,0,0.7),
+                    1px -4px 11px rgba(111,184,63,0.11),
+                    4px 3px 8px rgba(111,184,63,0.12),
+                    -5px -1px 10px rgba(111,184,63,0.09);
+      }
+      100% {
+        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                    inset 0 0 120px rgba(0,0,0,0.7),
+                    0px 3px 10px rgba(111,184,63,0.12),
+                    5px 2px 8px rgba(111,184,63,0.10),
+                    -3px 0px 12px rgba(111,184,63,0.08);
+      }
+    }
+
+    /* Animation: Red pulse for error/disconnected state */
+    @keyframes pulse-red {
+      0%, 100% {
+        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                    inset 0 0 120px rgba(0,0,0,0.7),
+                    0 0 33px rgba(217,72,72,0.18),
+                    0 0 30px rgba(217,72,72,0.10);
+      }
+      50% {
+        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
+                    inset 0 0 120px rgba(0,0,0,0.7),
+                    0 0 67px rgba(217,72,72,0.25),
+                    0 0 64px rgba(217,72,72,0.12);
+      }
+    }
+    #hud {
+      position: fixed; top: 10px; right: 10px;
+      padding: 16px 20px;
+      /* Glassomorphic panel with nature theme */
+      background: var(--glass-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px var(--glass-shadow);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      z-index: 1000;
+      min-width: 220px;
+    }
+    #hud .section { margin-bottom: 16px; }
+    #hud .section:last-child { margin-bottom: 0; }
+    #hud .section-title {
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      opacity: 0.8;
+    }
+    #hud .stat { display: flex; justify-content: space-between; margin-bottom: 6px; gap: 20px; }
+    #hud .stat:last-child { margin-bottom: 0; }
+    #hud .label { color: var(--text-secondary); font-weight: 600; letter-spacing: 0.5px; }
+    #hud .value { color: var(--text-accent); font-weight: 500; }
+    #hud .value.connected { color: var(--color-life); }
+    #hud .value.disconnected { color: var(--color-danger); }
+    #hud .value.reconnecting { color: var(--color-warning); }
+
+    /* FPS Sparkline */
+    #fps-sparkline {
+      width: 100%;
+      height: 30px;
+      margin-top: 8px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    /* Keyboard shortcuts help panel */
+    #shortcuts-panel {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 16px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px var(--glass-shadow);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      z-index: 1000;
+      min-width: 200px;
+    }
+    #shortcuts-panel .shortcut {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      gap: 12px;
+    }
+    #shortcuts-panel .shortcut:last-child { margin-bottom: 0; }
+    #shortcuts-panel .key {
+      color: var(--text-accent);
+      font-weight: 600;
+      background: rgba(111, 184, 63, 0.1);
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid rgba(111, 184, 63, 0.2);
+    }
+    #shortcuts-panel .action {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    #connection-overlay {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      padding: 30px 50px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      border: 2px solid var(--color-danger);
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      text-align: center; z-index: -1; display: none;
+    }
+    #connection-overlay.visible { display: block; z-index: -1; } /* Hidden for sprite testing */
+    #connection-overlay h2 { color: var(--color-danger); margin-bottom: 10px; font-size: 24px; font-family: var(--font-sans); font-weight: 600; }
+    #connection-overlay p { color: var(--text-primary); font-size: 16px; font-family: var(--font-sans); }
+
+    /* Nature-themed scale bar */
+    #scale-bar {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-accent);
+      text-shadow: 0 0 4px rgba(111, 184, 63, 0.4);
+    }
+
+    .scale-tick {
+      width: 1px;
+      height: 6px;
+      background: var(--text-accent);
+      box-shadow: 0 0 3px rgba(111, 184, 63, 0.4);
+    }
+
+    .scale-line {
+      height: 1px;
+      background: var(--text-accent);
+      box-shadow: 0 0 3px rgba(111, 184, 63, 0.4);
+      /* Width set dynamically by JavaScript */
+    }
+
+    .scale-label {
+      margin-left: 8px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    /* Creature Inspection Panel - Slide-in from left */
+    #inspection-panel {
+      position: fixed;
+      top: 50%;
+      left: -400px; /* Hidden off-screen by default */
+      transform: translateY(-50%);
+      width: 360px;
+      padding: 20px 24px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 0 12px 12px 0;
+      border-left: none;
+      box-shadow: 8px 0 32px var(--glass-shadow);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      z-index: 2000;
+      transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    #inspection-panel.visible {
+      left: 0; /* Slide in */
+    }
+
+    #inspection-panel .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    #inspection-panel .panel-title {
+      color: var(--text-primary);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    #inspection-panel .close-btn {
+      background: rgba(217, 72, 72, 0.2);
+      border: 1px solid rgba(217, 72, 72, 0.4);
+      color: var(--color-danger);
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    #inspection-panel .close-btn:hover {
+      background: rgba(217, 72, 72, 0.3);
+    }
+
+    #inspection-panel .info-section {
+      margin-bottom: 20px;
+    }
+
+    #inspection-panel .info-section:last-child {
+      margin-bottom: 0;
+    }
+
+    #inspection-panel .info-section-title {
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      opacity: 0.8;
+    }
+
+    #inspection-panel .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding: 6px 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+    }
+
+    #inspection-panel .info-row:last-child {
+      margin-bottom: 0;
+    }
+
+    #inspection-panel .info-label {
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    #inspection-panel .info-value {
+      color: var(--text-accent);
+      font-weight: 500;
+    }
+
+    /* Selection highlight for selected creature */
+    .creature-selected {
+      filter: drop-shadow(0 0 8px rgba(111, 184, 63, 0.8))
+              drop-shadow(0 0 16px rgba(111, 184, 63, 0.4));
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="hud">
+    <!-- Performance Section -->
+    <div class="section">
+      <div class="section-title">Performance</div>
+      <div class="stat"><span class="label">FPS:</span><span class="value" id="fps-value">0</span></div>
+      <canvas id="fps-sparkline"></canvas>
+    </div>
+
+    <!-- World Section -->
+    <div class="section">
+      <div class="section-title">World</div>
+      <div class="stat"><span class="label">Position:</span><span class="value" id="position-value">0, 0</span></div>
+      <div class="stat"><span class="label">Creatures:</span><span class="value" id="creature-count">0</span></div>
+    </div>
+
+    <!-- Connection Section -->
+    <div class="section">
+      <div class="section-title">Connection</div>
+      <div class="stat"><span class="label">Ping:</span><span class="value" id="ping-value">0ms</span></div>
+      <div class="stat"><span class="label">Status:</span><span class="value" id="status-value">Connecting...</span></div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Panel -->
+  <div id="shortcuts-panel">
+    <div class="section-title">Controls</div>
+    <div class="shortcut"><span class="key">Scroll</span><span class="action">Zoom</span></div>
+    <div class="shortcut"><span class="key">Drag</span><span class="action">Pan (soon)</span></div>
+    <div class="shortcut"><span class="key">Click</span><span class="action">Select creature</span></div>
+  </div>
+
+  <!-- Creature Inspection Panel (slide-in from left) -->
+  <div id="inspection-panel">
+    <div class="panel-header">
+      <div class="panel-title">Creature Inspector</div>
+      <button class="close-btn" id="close-inspector">Close</button>
+    </div>
+
+    <!-- Identity Section -->
+    <div class="info-section">
+      <div class="info-section-title">Identity</div>
+      <div class="info-row">
+        <span class="info-label">ID:</span>
+        <span class="info-value" id="inspect-id">-</span>
+      </div>
+    </div>
+
+    <!-- Physical Section -->
+    <div class="info-section">
+      <div class="info-section-title">Physical</div>
+      <div class="info-row">
+        <span class="info-label">Position:</span>
+        <span class="info-value" id="inspect-position">-</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Rotation:</span>
+        <span class="info-value" id="inspect-rotation">-</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Size:</span>
+        <span class="info-value" id="inspect-size">-</span>
+      </div>
+    </div>
+
+    <!-- Movement Section -->
+    <div class="info-section">
+      <div class="info-section-title">Movement</div>
+      <div class="info-row">
+        <span class="info-label">Velocity:</span>
+        <span class="info-value" id="inspect-velocity">-</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Speed:</span>
+        <span class="info-value" id="inspect-speed">-</span>
+      </div>
+    </div>
+
+    <!-- State Section -->
+    <div class="info-section">
+      <div class="info-section-title">State</div>
+      <div class="info-row">
+        <span class="info-label">Energy:</span>
+        <span class="info-value" id="inspect-energy">-</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Age:</span>
+        <span class="info-value" id="inspect-age">-</span>
+      </div>
+    </div>
+
+    <!-- DNA Section (placeholder for future) -->
+    <div class="info-section">
+      <div class="info-section-title">Genetics</div>
+      <div class="info-row">
+        <span class="info-label">DNA:</span>
+        <span class="info-value" id="inspect-dna">Coming soon...</span>
+      </div>
+    </div>
+  </div>
+  <!-- TEMP: Connection overlay present but hidden for sprite testing -->
+  <div id="connection-overlay">
+    <h2>Connection Lost</h2>
+    <p>Attempting to reconnect...</p>
+  </div>
+  <!-- Scale bar (minimal tech style) -->
+  <div id="scale-bar">
+    <div class="scale-tick"></div>
+    <div class="scale-line" id="scale-line"></div>
+    <div class="scale-tick"></div>
+    <div class="scale-label" id="scale-label">10m</div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

@@ -27,7 +27,7 @@ This document defines the contract for simulation data streaming between the **S
 
 - **Format:** MessagePack (binary serialization)
 - **Transport:** NATS pub/sub
-- **Subject:** `speciate.agents.transform`
+- **Subject:** `speciate.crits.transform`
 - **Frequency:** ~20 Hz (20 messages per second)
 - **Quality of Service:** At-most-once delivery
 
@@ -50,7 +50,7 @@ The top-level message structure representing a single simulation tick.
 interface SimulationFrame {
   tick: number;              // Simulation tick counter (uint64)
   timestamp: string;         // ISO 8601 timestamp (UTC)
-  agents: AgentTransform[];  // Array of agent states
+  crits: CritTransform[];  // Array of crit states
 }
 ```
 
@@ -60,7 +60,7 @@ interface SimulationFrame {
 struct SimulationFrame {
     tick: u64,
     timestamp: String,
-    agents: Vec<AgentTransform>,
+    crits: Vec<CritTransform>,
 }
 ```
 
@@ -70,20 +70,20 @@ struct SimulationFrame {
 |-------|------|-------|----------|-------------|
 | `tick` | uint64 | 0 to 2^53-1 (safe) | Yes | Monotonically increasing tick counter |
 | `timestamp` | string | ISO 8601 | Yes | Server timestamp when frame was created |
-| `agents` | array | 0 to 100,000 | Yes | Array of agent transforms (can be empty) |
+| `crits` | array | 0 to 100,000 | Yes | Array of crit transforms (can be empty) |
 
 **Safe Integer Range:**
 JavaScript can safely represent integers up to 2^53-1 (9,007,199,254,740,991). Tick values exceeding this will lose precision.
 
 ---
 
-### AgentTransform
+### CritTransform
 
-Individual agent state data for rendering and interpolation.
+Individual crit state data for rendering and interpolation.
 
 ```typescript
-interface AgentTransform {
-  id: number;        // Agent unique identifier (uint64)
+interface CritTransform {
+  id: number;        // Crit unique identifier (uint64)
   x: number;         // Position X in world coordinates (f32)
   y: number;         // Position Y in world coordinates (f32)
   vx: number;        // Velocity X (meters/second) (f32)
@@ -95,7 +95,7 @@ interface AgentTransform {
 **Rust Definition:**
 ```rust
 #[derive(Debug, Serialize)]
-struct AgentTransform {
+struct CritTransform {
     id: u64,
     x: f32,
     y: f32,

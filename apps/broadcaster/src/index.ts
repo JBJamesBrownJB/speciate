@@ -4,7 +4,49 @@ import { config } from './config.js';
 import { NatsSubscriber } from './nats-subscriber.js';
 import { WebSocketServer } from './websocket-server.js';
 import { Broadcaster } from './broadcaster.js';
+import { HealthServer } from './health-server.js';
 import { setLogLevel, logger } from './logger.js';
+
+/**
+ * Exponential backoff retry logic for NATS connection
+ */
+async function connectWithRetry(
+  natsSubscriber: NatsSubscriber,
+  maxRetries: number,
+  initialDelay: number
+): Promise<void> {
+  const MAX_DELAY_MS = 30000; // Cap backoff at 30 seconds
+  let attempt = 0;
+
+  while (true) {
+    try {
+      await natsSubscriber.connect();
+      logger.info('Successfully connected to NATS');
+      return;
+    } catch (error) {
+      attempt++;
+
+      // Check if we've exceeded max retries (-1 means infinite)
+      if (maxRetries !== -1 && attempt >= maxRetries) {
+        throw new Error(`Failed to connect to NATS after ${attempt} attempts: ${error}`);
+      }
+
+      // Calculate exponential backoff delay (capped at MAX_DELAY_MS)
+      const delay = Math.min(initialDelay * Math.pow(2, attempt - 1), MAX_DELAY_MS);
+
+      if (maxRetries === -1) {
+        logger.warn(`Failed to connect to NATS (attempt ${attempt}). Retrying in ${delay}ms...`);
+      } else {
+        logger.warn(
+          `Failed to connect to NATS (attempt ${attempt}/${maxRetries}). Retrying in ${delay}ms...`
+        );
+      }
+
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
 
 /**
  * Main entry point for the Broadcaster service
@@ -20,13 +62,18 @@ async function main() {
   logger.info(`NATS Subject: ${config.nats.subject}`);
   logger.info(`WebSocket Port: ${config.websocket.port}`);
   logger.info(`WebSocket Path: ${config.websocket.path}`);
+  logger.info(`Health Port: ${config.health.port}`);
   logger.info(`Log Level: ${config.logging.level}`);
   logger.info('='.repeat(60));
 
   // Create service components
   const natsSubscriber = new NatsSubscriber(config.nats);
   const wsServer = new WebSocketServer(config.websocket);
+  const healthServer = new HealthServer(config.health);
   const broadcaster = new Broadcaster(natsSubscriber, wsServer);
+
+  // Link health server to broadcaster
+  broadcaster.setHealthServer(healthServer);
 
   // Set up graceful shutdown
   let isShuttingDown = false;
@@ -43,6 +90,7 @@ async function main() {
 
     try {
       await broadcaster.shutdown();
+      await healthServer.stop();
       logger.info('Broadcaster service stopped successfully');
       process.exit(0);
     } catch (error) {
@@ -68,9 +116,13 @@ async function main() {
   });
 
   try {
-    // Connect to NATS
+    // Start health server first (available even if NATS is down)
+    logger.info('Starting health check server...');
+    healthServer.start();
+
+    // Connect to NATS with retry logic
     logger.info('Connecting to NATS...');
-    await natsSubscriber.connect();
+    await connectWithRetry(natsSubscriber, config.nats.connectMaxRetries, config.nats.connectRetryDelay);
 
     // Start broadcaster
     logger.info('Starting broadcaster...');

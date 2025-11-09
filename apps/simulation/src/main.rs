@@ -5,20 +5,20 @@
 mod config;
 mod nats;
 mod simulation;
-mod snapshot;
-mod snapshot_worker;
-mod spawner;
+mod snapshots;
 mod state;
-mod state_loader;
+
+#[cfg(feature = "dev-commands")]
+mod dev_commands;
 
 use clap::Parser;
 use config::{SnapshotConfig, SpawningConfig, TimingConfig, WorldConfig};
 use log::{info, warn};
-use simulation::timing::TickTimer;
+use simulation::core::timing::TickTimer;
+use simulation::creatures::spawner::{spawn_initial_creatures, spawn_initial_creatures_from_config};
 use simulation::{Simulation, SimulationBuilder};
-use snapshot_worker::{SnapshotType, SnapshotWorker};
-use spawner::spawn_initial_creatures;
-use state_loader::SimStateFile;
+use snapshots::{SnapshotType, SnapshotWorker, WorldSnapshot};
+use state::SimStateFile;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -29,7 +29,11 @@ use std::time::{Duration, Instant};
 #[command(name = "speciate")]
 #[command(about = "Speciate simulation server", long_about = None)]
 struct Args {
-    #[arg(long, value_name = "PATH", help = "Path to simulation state file (TOML)")]
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Path to simulation state file (TOML)"
+    )]
     state: Option<PathBuf>,
 
     #[arg(
@@ -62,8 +66,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let simulation = if let Some(snapshot_path) = args.load_snapshot {
         // Load from binary snapshot (takes precedence over --state)
-        info!("Loading simulation from snapshot: {}", snapshot_path.display());
-        let snapshot = snapshot::WorldSnapshot::load_from_file(&snapshot_path)?;
+        info!(
+            "Loading simulation from snapshot: {}",
+            snapshot_path.display()
+        );
+        let snapshot = WorldSnapshot::load_from_file(&snapshot_path)?;
 
         info!(
             "Snapshot loaded: v{} - {} creatures (created {})",
@@ -73,9 +80,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
         let simulation = Simulation::from_snapshot(snapshot);
-        let (width, height) = simulation.get_boundaries();
+        let (min_x, max_x, min_y, max_y) = simulation.get_boundaries();
+        let world_width = max_x - min_x;
+        let world_height = max_y - min_y;
         info!("Restored {} creatures", simulation.creature_count());
-        info!("World boundaries: {}x{}\n", width, height);
+        info!(
+            "World boundaries: {}x{} (centered: {} to {}, {} to {})\n",
+            world_width, world_height, min_x, max_x, min_y, max_y
+        );
 
         simulation
     } else if let Some(state_path) = args.state {
@@ -91,22 +103,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let world_width = state_file.world.width;
         let world_height = state_file.world.height;
 
-        let spawning = SpawningConfig {
-            initial_population: state_file.spawn.random_creatures,
-            min_size: state_file.spawn.size_min.unwrap_or(0.5),
-            max_size: state_file.spawn.size_max.unwrap_or(2.0),
-            spawn_x_min: state_file.spawn.area_x_min.unwrap_or(0.0),
-            spawn_x_max: state_file.spawn.area_x_max.unwrap_or(world_width),
-            spawn_y_min: state_file.spawn.area_y_min.unwrap_or(0.0),
-            spawn_y_max: state_file.spawn.area_y_max.unwrap_or(world_height),
-        };
-
         // Build simulation with all systems registered
+        // Note: set_boundaries now takes extents (half-widths), not full dimensions
         let mut simulation = SimulationBuilder::new()
-            .set_boundaries(world_width, world_height)
+            .set_boundaries(world_width / 2.0, world_height / 2.0)
             .build();
 
-        spawn_initial_creatures(&mut simulation, &spawning);
+        spawn_initial_creatures_from_config(&mut simulation, &state_file.spawn);
         let initial_count = simulation.creature_count();
         info!("Spawned {} initial creatures", initial_count);
         info!("World boundaries: {}x{}\n", world_width, world_height);
@@ -118,8 +121,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let config = WorldConfig::new();
 
         // Build simulation with all systems registered
+        // Note: set_boundaries now takes extents (half-widths), not full dimensions
         let mut simulation = SimulationBuilder::new()
-            .set_boundaries(config.world.width, config.world.height)
+            .set_boundaries(config.world.width / 2.0, config.world.height / 2.0)
             .build();
 
         spawn_initial_creatures(&mut simulation, &config.spawning);

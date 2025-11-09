@@ -6,9 +6,11 @@ services:
     ports:
       - "4222:4222"  # Client connections
       - "8222:8222"  # Monitoring HTTP endpoint
+      - "9224:9224"  # WebSocket connections (LOCAL DEV ONLY)
+    volumes:
+      - /home/dev/dev/speciate/infrastructure/local/nats-server.conf:/etc/nats/nats-server.conf:ro
     command:
-      - "--name=speciate-nats"
-      - "--http_port=8222"
+      - "--config=/etc/nats/nats-server.conf"
     networks:
       - speciate-local
     # Note: Healthcheck disabled - NATS container doesn't include wget/curl

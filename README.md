@@ -19,7 +19,7 @@ This means that we only need context, tools, strategies that match the specific 
 
 Client-side rendering at 60 FPS with interpolation, WebSocket connection management, and player interaction.
 
-**Location:** `apps/ui/` | [Details →](apps/ui/README.md)
+**Location:** `apps/portal/` | [Details →](apps/portal/README.md)
 
 #### Player Commander (Node.js)
 
@@ -40,7 +40,7 @@ This microservice's job is to receive pushed state updates from the simulation (
 
 #### Simulation (Rust)
 
-Server-authoritative ECS simulation engine running at 20 Hz. Single source of truth for all game state. Publishes agent positions, velocities, and rotations to NATS message broker in real-time.
+Server-authoritative ECS simulation engine running at 20 Hz. Single source of truth for all game state. Publishes crit positions, velocities, and rotations to NATS message broker in real-time.
 
 Maintains a 'Ports & Adapters / Clean Architecture' where I/O (NATS publishing, player commands) runs on separate threads with minimal impact on the core simulation loop.
 
@@ -80,9 +80,49 @@ This microservice's job is to maintain a secure and consistant transaction ledge
 - **Docker** and **Docker Compose** (for NATS infrastructure)
 - **VS Code** with Dev Containers extension (recommended for development)
 
-### Quick Start (Streaming Pipeline - Sprint 6)
+### 🚀 Quick Start
 
-The current implementation demonstrates the **real-time streaming architecture**:
+**For the complete stack with visual testing:**
+
+Open **5 terminal windows** and run these commands in order:
+
+```bash
+# Terminal 1: NATS
+cd infrastructure/local && docker compose up
+
+# Terminal 2: Broadcaster
+cd apps/broadcaster && npm run dev
+
+# Terminal 3: Simulation (with dev commands for admin UI)
+cd apps/simulation && cargo run --features dev-commands
+
+# Terminal 4: Portal
+cd apps/portal && npm run dev
+
+# Terminal 5: Admin Dev UI
+cd apps/admin-dev-ui && python3 -m http.server 8000
+```
+
+**Service URLs:**
+- **Portal:** http://localhost:3000 (or :5173)
+- **Admin UI:** http://localhost:8000
+- **Broadcaster:** ws://localhost:8080
+- **NATS Monitor:** http://localhost:8222
+
+**Quick Test:**
+1. Wait for all services to start (~30 seconds)
+2. Open Admin UI: http://localhost:8000
+3. Click "Two Seekers Intercept" scenario
+4. Open Portal: http://localhost:3000
+5. Watch creatures spawn and interact! 🎯
+
+Press `Ctrl+C` in each terminal to stop services.
+
+---
+
+### Manual Setup (Step-by-Step)
+
+If you prefer to start services individually, the current implementation demonstrates the **real-time streaming architecture**:
 
 **1. Start NATS Message Broker:**
 ```bash
@@ -98,12 +138,33 @@ npm install
 npm run dev
 ```
 
-**3. Start Simulation (Data Publisher):**
+**3. Start Simulation:**
+
+Choose the appropriate mode for your workflow:
+
+**Standard Mode (Production):**
 ```bash
-# From devcontainer
 cd apps/simulation
 cargo run
 ```
+Use this for normal development and testing. No dev commands enabled.
+
+**Dev Commands Mode (With Admin UI):**
+```bash
+cd apps/simulation
+cargo run --features dev-commands
+```
+Use this when you want to control the simulation via the Admin Dev UI for rapid visual testing.
+You'll see in the logs: `[DEV] Dev commands enabled - listening on dev.sim.*`
+
+**Release Mode (Optimized):**
+```bash
+cd apps/simulation
+cargo run --release
+```
+Fully optimized build for performance testing. Dev commands are automatically disabled in release builds.
+
+> **💡 Admin UI Integration:** The Admin Dev UI (`apps/admin-dev-ui`) only works when the simulation runs with `--features dev-commands`. This enables NATS command listeners for spawn/clear/speed controls. See [Admin UI README](apps/admin-dev-ui/README.md) for usage.
 
 **4. Test the WebSocket Stream:**
 ```bash
@@ -114,20 +175,20 @@ npm install -g wscat
 wscat -c ws://localhost:8080/stream
 ```
 
-You should see JSON frames streaming at ~20 Hz with agent positions and velocities.
+You should see JSON frames streaming at ~20 Hz with crit positions and velocities.
 
 **See [infrastructure/local/README.md](infrastructure/local/README.md) for detailed setup instructions.**
 
 ---
 
-**Note:** The UI (`apps/ui`) is not yet connected to the streaming pipeline. This integration is planned for Sprint 7.
+**Note:** The Portal (`apps/portal`) is not yet connected to the streaming pipeline. This integration is planned for Sprint 7.
 
 ---
 
 ## Application Components
 
 ### Simulation Server (Rust)
-Headless ECS simulation engine using Bevy 0.14. Manages physics, agent behaviors, and deterministic state updates at 20 Hz. Currently console-only with no network layer.
+Headless ECS simulation engine using Bevy 0.14. Manages physics, crit behaviors, and deterministic state updates at 20 Hz. Currently console-only with no network layer.
 
 **Tech:** `bevy_ecs`, `bevy_app`, `rand` | [Details →](apps/simulation/README.md)
 

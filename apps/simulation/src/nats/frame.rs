@@ -16,14 +16,14 @@ pub struct SimulationFrame {
     /// ISO 8601 timestamp (UTC)
     pub timestamp: DateTime<Utc>,
 
-    /// All active agents in the simulation
-    pub agents: Vec<AgentTransform>,
+    /// All active crits in the simulation
+    pub crits: Vec<CritTransform>,
 }
 
-/// Agent position, velocity, and rotation snapshot
+/// Crit position, velocity, and rotation snapshot
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentTransform {
-    /// Unique, stable agent identifier
+pub struct CritTransform {
+    /// Unique, stable crit identifier
     pub id: u32,
 
     /// Position X in world coordinates
@@ -45,11 +45,11 @@ pub struct AgentTransform {
 
 impl SimulationFrame {
     /// Create a new simulation frame
-    pub fn new(tick: u64, agents: Vec<AgentTransform>) -> Self {
+    pub fn new(tick: u64, crits: Vec<CritTransform>) -> Self {
         Self {
             tick,
             timestamp: Utc::now(),
-            agents,
+            crits,
         }
     }
 
@@ -73,8 +73,8 @@ mod tests {
         let frame = SimulationFrame {
             tick: 12450,
             timestamp: Utc::now(),
-            agents: vec![
-                AgentTransform {
+            crits: vec![
+                CritTransform {
                     id: 1,
                     x: 45.23,
                     y: 78.91,
@@ -82,7 +82,7 @@ mod tests {
                     vy: -0.87,
                     rotation: 1.57,
                 },
-                AgentTransform {
+                CritTransform {
                     id: 2,
                     x: 120.50,
                     y: 34.12,
@@ -112,13 +112,13 @@ mod tests {
             serde_json::from_str(&json_str).expect("Failed to deserialize");
 
         assert_eq!(deserialized.tick, 12450);
-        assert_eq!(deserialized.agents.len(), 2);
-        assert_eq!(deserialized.agents[0].id, 1);
+        assert_eq!(deserialized.crits.len(), 2);
+        assert_eq!(deserialized.crits[0].id, 1);
     }
 
     #[test]
-    fn test_agent_transform_fields() {
-        let agent = AgentTransform {
+    fn test_crit_transform_fields() {
+        let crit = CritTransform {
             id: 42,
             x: 100.0,
             y: 200.0,
@@ -127,12 +127,12 @@ mod tests {
             rotation: std::f32::consts::PI,
         };
 
-        assert_eq!(agent.id, 42);
-        assert_eq!(agent.x, 100.0);
-        assert_eq!(agent.y, 200.0);
-        assert_eq!(agent.vx, 5.0);
-        assert_eq!(agent.vy, -3.0);
-        assert_eq!(agent.rotation, std::f32::consts::PI);
+        assert_eq!(crit.id, 42);
+        assert_eq!(crit.x, 100.0);
+        assert_eq!(crit.y, 200.0);
+        assert_eq!(crit.vx, 5.0);
+        assert_eq!(crit.vy, -3.0);
+        assert_eq!(crit.rotation, std::f32::consts::PI);
     }
 
     #[test]
@@ -140,7 +140,7 @@ mod tests {
         let frame = SimulationFrame {
             tick: 12345,
             timestamp: Utc::now(),
-            agents: vec![AgentTransform {
+            crits: vec![CritTransform {
                 id: 1,
                 x: 10.0,
                 y: 20.0,
@@ -153,8 +153,7 @@ mod tests {
         // Serialize using struct map (field names, not arrays)
         let mut buffer = Vec::new();
         let mut serializer = rmp_serde::Serializer::new(&mut buffer).with_struct_map();
-        serde::Serialize::serialize(&frame, &mut serializer)
-            .expect("Failed to serialize");
+        serde::Serialize::serialize(&frame, &mut serializer).expect("Failed to serialize");
 
         // Decode as generic Value to inspect structure
         let decoded: serde_json::Value =
@@ -169,12 +168,12 @@ mod tests {
         // Verify field names are preserved
         assert_eq!(decoded["tick"], 12345);
         assert!(decoded["timestamp"].is_string());
-        assert!(decoded["agents"].is_array());
+        assert!(decoded["crits"].is_array());
 
-        // Verify agent has field names too
-        let agent = &decoded["agents"][0];
-        assert!(agent.is_object(), "Agent should be object, not array");
-        assert_eq!(agent["id"], 1);
-        assert_eq!(agent["x"], 10.0);
+        // Verify crit has field names too
+        let crit = &decoded["crits"][0];
+        assert!(crit.is_object(), "Crit should be object, not array");
+        assert_eq!(crit["id"], 1);
+        assert_eq!(crit["x"], 10.0);
     }
 }

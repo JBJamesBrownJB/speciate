@@ -463,3 +463,225 @@ homing_urgency: f32             // 0.5-2.0 (seek force strength)
 - Lévy flight foraging: Viswanathan et al. (1999), Nature
 - Reynolds steering behaviors: "Steering Behaviors For Autonomous Characters" (1999)
 
+---
+
+## 2025-11-10 | Drongo Species Design | Zoologist Validation
+
+### Biological Rationale
+
+**Species Niche:** Intelligent, bipedal tool-users with weak physiology compensated by social learning and cooperation.
+
+**Plausibility:** ✅ **APPROVED**
+- Real-world analogues: Australopithecus (early hominids), naked mole rats, meerkats, capuchin monkeys, corvids
+- Evolutionary strategy: Intelligence as survival tool for physically weak organisms
+- Niche viability: High cognition + social cooperation offsets lack of size/strength/speed
+
+### DNA Traits (Phase 1.5 Implementation)
+
+**Physical Traits (Small, Weak):**
+```rust
+size: f32,              // 0.8 - 1.2m (small biped)
+speed: f32,             // 3.0 - 5.0 m/s (slow runner, cannot outrun predators)
+strength: f32,          // 0.3 - 0.5 (weak, cannot fight predators)
+```
+
+**Cognitive Traits (High Intelligence):**
+```rust
+perception_range: f32,  // 100 - 200m (keen senses, threat detection)
+memory_duration: f32,   // 3600 - 7200 sec (1-2 hours, pattern learning)
+learning_rate: f32,     // 0.8 - 1.0 (fast social learning)
+```
+
+**Social Traits (Cooperative):**
+```rust
+personal_space: f32,    // 1 - 3m (tolerates close proximity)
+flocking: bool,         // true (forms groups)
+aggression: f32,        // 0.1 - 0.3 (non-aggressive, flee response)
+social_learning: bool,  // true (observes and mimics behaviors)
+```
+
+**Metabolic Traits (Fragile):**
+```rust
+metabolism: f32,        // 1.5 - 2.0 (high brain energy cost)
+hunger_threshold: f32,  // 0.6 - 0.7 (frequent feeding needed)
+health: f32,            // 50 - 70 (low durability, easily injured)
+```
+
+**Dexterity (Tool Use):**
+```rust
+dexterity: f32,         // 0.7 - 1.0 (capable hands, can craft simple tools)
+```
+
+### Emergent Behaviors (NOT Directly Encoded)
+
+**These arise from DNA trait combinations:**
+
+| Behavior | DNA Combination |
+|----------|-----------------|
+| **Group cohesion** | Small personal_space + flocking + low aggression |
+| **Sentinel watch** | High perception_range + long memory + social_learning |
+| **Tool use** | High dexterity + high learning_rate + observed actions |
+| **Following player** | Social_learning + flocking + low threat assessment |
+| **Panic scatter** | Low aggression + low fear_threshold + predator detected |
+| **Resource gathering** | Dexterity + memory (location recall) + mimicry |
+
+**Key Insight:** Drongos aren't "programmed" to help. They mimic successful strategies (player gathering = food access), and survival pressure selects for this behavior.
+
+### Systemic Trade-Offs (Kleiber's Law)
+
+**Intelligence = Energy Cost:**
+- Formula: `metabolism = base_metabolism * (1 + 0.5 * learning_rate)`
+- High learning_rate (0.8-1.0) = 40-50% increased energy consumption
+- Trade-off: Drongos must eat 1.5x more frequently than same-sized herbivores
+- **Gameplay impact:** Player must sustain Drongo population with food
+
+**Intelligence = Slow Maturation:**
+- High intelligence requires long childhood (learning period)
+- Juveniles defenseless for first 20% of lifespan
+- **Result:** High infant mortality without group protection
+- **Gameplay impact:** Drongo colonies collapse without player protection
+
+**Small Size = Low Combat Power:**
+- Allometric scaling: `speed = 5.0 * size^0.25` → 3-4 m/s
+- Strength formula: `strength = size^2` → Cannot overpower larger creatures
+- **Result:** Drongos cannot fight (flee-only strategy)
+- **Gameplay impact:** Players provide protection, Drongos provide utility
+
+**High Perception = Sentinel Advantage:**
+- High perception_range (150-200m) detects threats early
+- **Trade-off:** Cognitive overload in cluttered terrain + high caloric cost
+- **Gameplay impact:** Drongos act as early warning system but need feeding
+
+### Social Learning Mechanism
+
+**Observational Mimicry:**
+1. Drongo within perception_range observes player action
+2. If social_learning == true, stores action in memory
+3. Chance to imitate = learning_rate * proximity_bonus
+4. Forgets if time > memory_duration
+
+**Example Flow:**
+1. Player chops tree with axe
+2. Drongo within 20m observes (perception check)
+3. Stores `Action::Chop(tool: Axe)` in memory (80% chance, learning_rate=0.8)
+4. If axe nearby, Drongo attempts chop
+5. If successful, behavior persists via cultural transmission to other Drongos
+
+**NOT Hardcoded:** Drongos don't innately "know" to help. They mimic what works.
+
+### Tool Use & Crafting Realism
+
+**Biologically Plausible Crafting Tiers:**
+
+| Tier | Item | Real-World Analogue | Drongo Capability |
+|------|------|---------------------|-------------------|
+| 1 | Sharpened Stick | Chimpanzee termite stick | ✅ Yes |
+| 2 | Stone Chopper | Oldowan stone tools (~2.6 MYA) | ✅ Yes (if shown by player) |
+| 3 | Basket (woven vines) | Orangutan nests | ✅ Yes (high dexterity required) |
+| 4 | Fire | Humans ~400k YA | ❌ No (abstract reasoning) |
+| 5 | Metal tools | Humans ~3000 BCE | ❌ No (requires smelting) |
+
+**Constraints:**
+- Drongos don't "invent" recipes (not humans)
+- Can only combine items they've **observed being combined**
+- Dexterity check: Low dexterity = item breaks
+- Energy cost: Crafting drains stamina
+
+### Ecosystem Role
+
+**Trophic Position:** Secondary consumer / scavenger
+
+**Food Web Integration:**
+- Compete with scavenger species (vultures, hyenas) for carcasses
+- **Advantage:** Tools + cooperation (access carcasses faster)
+- **Disadvantage:** Weak in direct conflict (flee if threatened)
+- **Predation pressure:** Vulnerable to large predators (big cats, pack hunters)
+- **Survival strategy:** Group vigilance + proximity to player
+
+**Population Dynamics:**
+- High reproduction rate (compensates for high mortality)
+- Boom-bust cycles tied to food availability
+- **Player impact:** Feeding Drongos = population spike → attracts predators
+- **Niche creation:** Drongos create "cleared zones" around player bases → attracts grazers → attracts predators
+
+### Implementation Roadmap
+
+**Phase 1: DNA Traits (Sprint 6 Phase 3)**
+```rust
+pub learning_rate: f32,      // 0.0 - 1.0
+pub memory_duration: f32,    // 0 - 7200 sec
+pub social_learning: bool,   // false/true
+pub dexterity: f32,          // 0.0 - 1.0
+```
+
+**Phase 2: Observation System (Sprint 7)**
+```rust
+pub struct SocialLearning { observed_actions: Vec<Action> }
+pub struct ToolUser { equipped_tool: Option<Item> }
+
+// Systems:
+// - ObservationSystem: Drongos watch player actions
+// - ImitationSystem: Drongos attempt observed actions
+// - CulturalTransmissionSystem: Spread knowledge to nearby Drongos
+```
+
+**Phase 3: Crafting System (Sprint 8)**
+```rust
+pub struct Recipe {
+    inputs: Vec<ItemType>,
+    output: ItemType,
+    dexterity_required: f32,
+}
+
+// Drongo crafting attempt:
+if dexterity >= recipe.dexterity_required {
+    if rng.gen::<f32>() < learning_rate {
+        craft_item(recipe)
+    }
+}
+```
+
+**Phase 4: Colony Dynamics (Phase 1.5)**
+- Nesting behavior (build shelters near player)
+- Reproduction (sexual reproduction with DNA crossover)
+- Population management (carrying capacity, predation)
+- Sentinel behavior (alarm calls, threat detection)
+
+### Ecological Balance Validation
+
+**Niche Viability Check:**
+
+**Can Drongos survive without player intervention?**
+- **Alone:** No (high predation + high metabolism = starvation)
+- **In groups:** Marginal (sentinel behavior helps, but still vulnerable)
+- **With player:** Yes (protection + food access = thriving population)
+
+**Symbiosis Mechanics:**
+- Player provides: Protection (scares predators), food (scraps), safe zone (base)
+- Drongos provide: Labor (gather resources), companionship, early warning (sentinel)
+- **Emergent result:** Players want to protect Drongos (cute, useful) → conservation behavior
+
+**Population Dynamics:**
+- Without player: Small groups near safe zones (caves, dense forest)
+- With player: Population explosion near base → attracts predators → player must hunt
+- **Result:** Dynamic ecosystem, not static "helper NPCs"
+
+### Documentation
+
+- **Full species spec:** [docs/biology/drongo-species.md](./drongo-species.md)
+- **Gameplay integration:** [docs/gameplay/taming-system.md](../gameplay/taming-system.md)
+- **Narrative context:** [docs/strategy/goal.md](../strategy/goal.md)
+
+### Validation Status
+
+**Zoologist Approval:** ✅ **APPROVED** (2025-11-10)
+
+**Key Validations:**
+- Australopithecus-like niche is realistic (high intelligence, weak physiology)
+- Trade-offs are systemic (intelligence cost, maturation time, size weakness)
+- Tool use is plausible (Tier 1-3 observed in primates, corvids)
+- Ecosystem role is viable (secondary consumer/scavenger niche)
+- DNA-driven emergence preserved (not scripted helpers)
+
+**The DNA is the creature. Everything else is emergence.**
+

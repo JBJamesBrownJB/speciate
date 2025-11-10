@@ -1,38 +1,94 @@
-# Project Spec: "Speciate" (Finalized)
+# Project Spec: "Speciate"
 
 **Status**: Foundational Document
-**Last Updated**: 2025-11-09
-**Related**: [DNA-Driven Design](./biology/dna-driven-design.md), [Architectural Patterns](./architecture/architectural-patterns.md)
+**Last Updated**: 2025-11-10 (Updated for Steam Early Access pivot)
+**Related**: [DNA-Driven Design](./biology/dna-driven-design.md), [Business Strategy](./strategy/biz-strategy.md), [Game Goal](./strategy/goal.md)
 
-## Architecture & Technology Specification
+---
+
+## 🚀 Current Development Phase
+
+**Phase 1: Steam Early Access (Target: Q2 2026)**
+
+**Speciate** is a **single-player desktop game** featuring DNA-driven artificial life simulation set on an alien planet. Players explore, survive, and interact with an evolving ecosystem of autonomous creatures.
+
+**Platform:** Windows, Mac, Linux (via Tauri)
+**Price:** $20-30 one-time purchase
+**Distribution:** Steam Early Access
+
+**Phase Strategy:**
+- **Phase 1 (6-9 months):** Standalone sandbox game → Build community, validate concept
+- **Phase 1.5 (post-launch):** Narrative campaign (daughter rescue story) → Retention & reviews
+- **Phase 2 (future):** Web MMO expansion → If Phase 1 succeeds (see [Business Strategy](./strategy/biz-strategy.md))
 
 ---
 
 ## 1. 🎯 Core Concept
 
-A persistent, **server-authoritative artificial life simulation** with a player-driven economy. 
-Players are "Influencers" in a shared world populated by hundreds of thousands of autonomous, evolving agents.
+A **DNA-driven artificial life simulation** where hundreds of autonomous creatures evolve, compete, and adapt in a procedurally generated ecosystem.
 
-The core gameplay loop involves:
-* **Indirect Control** (influencing the environment).
-* **Survival** (resource management, crafting).
-* **Economic & Technological Progression**.
+**Phase 1 (Current) - Single-Player Sandbox:**
+* **Observation & Exploration:** Navigate a vast alien world with fog of war
+* **Survival:** Gather biomass, craft tools, manage resources
+* **Ecosystem Interaction:** Tame creatures, breed selective traits, manipulate environment
+* **DNA-Driven Emergence:** All creature behavior flows from genetic code (no scripted NPCs)
 
-Players compete to harvest resources and "**biomass**" (accrued from cultivating life forms). The ultimate goal is to trigger "**speciation events**," which grant the player ownership of unique "**DNA**" assets, forming the basis of the game's economy.
+**Phase 1.5 (Post-Launch) - Narrative Campaign:**
+* **Story Goal:** Find and rescue daughter across dangerous alien planet
+* **Systemic Challenge:** Navigate predator territories using tamed creatures and ecosystem knowledge
+* **Emotional Climax:** Player-driven victory through mastery of A-Life systems
+
+**Phase 2 (Future Vision) - Web MMO:**
+* **Multiplayer:** Shared world with thousands of players
+* **Player Economy:** DNA ownership, biomass trading, speciation events
+* **Conservation:** Compete to protect/exploit endangered species
+* **See:** [Archived MMO Architecture](./architecture/archived/MMO_STREAMING.md)
 
 ---
 
-## 2. 🏛️ Architectural Model (Non-Negotiable)
+## 2. 🏛️ Architectural Model
 
-We use a **Headless Server / Thin Client / Microservice** model to secure the economy and prevent cheating.
+### Phase 1: Tauri Hybrid Desktop (Current)
 
-### Simulation Server (Rust - Authoritative)
-* **Stateful:** A single, headless **Rust** application (`bevy_ecs`). It is the **sole source of truth** for all **real-time simulation logic**.
-* **Decoupling:** **Does not** directly access the database. It communicates with the **Economy Ledger Microservice** via API calls for all asset changes.
+**Architecture:** Local simulation bundled with rendering frontend into desktop executable
 
-### Client (TypeScript - Thin Client)
-* A **TypeScript** web application (`Pixi.js`). Responsible only for rendering, input, and **client-side prediction**.
-* **Performance:** Must utilize **interpolation** to translate the server's low-frequency updates (10-20 Hz) into a fluid **60-90 FPS** visual experience.
+**Core Components:**
+* **Simulation Backend (Rust/Bevy ECS):** Runs AI, physics, and state logic locally on player's machine
+  - **FixedUpdate (20 Hz):** Expensive AI systems (decision-making, steering, pathfinding)
+  - **Update (90 Hz):** Cheap physics integration (position += velocity * dt)
+  - **Lock-free snapshot system:** Non-blocking state sharing with frontend
+
+* **Frontend (PixiJS):** Renders at 60-90 FPS, pulls state via Tauri IPC
+  - **No interpolation needed:** Direct access to simulation state via `invoke('get_game_state')`
+  - **Full f32 precision:** No quantization (bandwidth irrelevant for local IPC)
+
+* **Wrapper (Tauri):** Bundles Rust + TypeScript into single `.exe`/`.app` for Steam distribution
+
+**See:** [Tauri Architecture Documentation](./architecture/tauri-architecture.md)
+
+**Benefits:**
+- Zero server costs ($228k/year eliminated)
+- Simpler development (no network synchronization)
+- Faster iteration (local testing, no deployment)
+- Compiled Rust (harder to pirate than web)
+
+---
+
+### Phase 2: Headless Server / Microservices (Future Vision)
+
+**Architecture:** Server-authoritative MMO with distributed microservices
+
+**Core Components:**
+* **Simulation Server (Rust - Authoritative):** Headless Bevy ECS, sole source of truth for real-time simulation
+* **NATS Message Broker:** Pub/sub streaming (8-11M msg/sec capacity)
+* **Broadcaster (Node.js):** WebSocket distribution to thousands of clients
+* **Client (Web Browser):** PixiJS rendering with client-side interpolation (10-20 Hz → 60-90 FPS)
+* **Economy Ledger (Node.js/PostgreSQL):** ACID-compliant asset management
+* **Player Commander:** Authentication and command validation
+
+**See:** [Archived MMO Streaming Architecture](./architecture/archived/MMO_STREAMING.md)
+
+**Status:** Archived pending Phase 1 success. Code preserved in `archive/mmo-streaming-v1` branch.
 
 ---
 
@@ -50,40 +106,94 @@ The core food chain is implemented through DNA-defined behaviors:
     * **Predators:** Behavior is defined by DNA parameters that prioritize hunting entities with specific traits (e.g., size, speed) and avoiding larger, stronger entities. This includes **intraspecies predation** (larger on smaller).
     * **Omnivores/Scavengers:** Exhibit flexible behavior prioritizing both plant matter, smaller creatures, and consuming dead biomass.
 
-### B. Player Avatar (The Influencer)
+### B. Player Avatar
 
-* **Role:** The player controls a simple **2D top-down human avatar**.
-* **Gameplay:** The avatar's primary interaction is survival, resource gathering, and influencing the environment.
-* **Vulnerability:** The player avatar is **not exempt from the simulation** and is considered a target/prey for larger, DNA-driven predatory agents.
+**Phase 1 (Current) - Survivor:**
+* **Role:** Crash survivor exploring alien planet to find daughter
+* **Gameplay:** Survival (hunger, crafting), exploration (fog of war), creature taming/interaction
+* **Vulnerability:** Not exempt from simulation (can be hunted by predators)
+* **Camera:** Top-down 2D view with zoom (0.0005 - 200 px/m)
+
+**Phase 1.5 (Post-Launch) - Daughter Rescue:**
+* **Narrative Goal:** Navigate to daughter's pod across dangerous terrain
+* **Mechanics:** Taming (beacon zones, harpoon capture, DNA cloning), creature commands (Thumper, herding)
+* **Endgame:** Gauntlet challenge through Karg territory using tamed creatures
+
+**Phase 2 (Future) - Influencer:**
+* **Role:** Player as "Influencer" in shared MMO world
+* **Economy:** DNA ownership, biomass trading, speciation events
+* **Competition:** Leaderboards, conservation mechanics, ecosystem management
 
 ---
 
-## 4. 🏦 Economy Ledger Microservice (Decoupled, Secure, ACID) 💰
+## 4. 🏦 Economy & Persistence
 
-This is a dedicated, secure service that is the final authority on all player assets.
+### Phase 1 (Current) - Local Save/Load
+
+**Architecture:** Single-player local save files
+* **Save System:** Serialize Bevy World to disk (bincode/MessagePack)
+* **Load System:** Deserialize World state on game launch
+* **Steam Cloud:** Optional cloud save sync via Steam API
+* **No Economy:** Phase 1 is sandbox, no trading/ownership
+
+### Phase 2 (Future) - Economy Ledger Microservice 💰
+
+**Architecture:** Dedicated, secure service for player asset management
 
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
-| **Service Language** | **Node.js + TypeScript** | The runtime for the secure, transactional API layer. |
-| **Persistence Engine** | **`PostgreSQL`** | **Mandatory.** The database guaranteeing **ACID properties**, concurrency, and data integrity for all player assets. |
-| **Interface / API** | **REST** | All external components (including the Simulation Server) interact with the ledger through this API. |
+| **Service Language** | **Node.js + TypeScript** | Runtime for secure, transactional API layer |
+| **Persistence Engine** | **PostgreSQL** | ACID properties, concurrency, data integrity for player assets |
+| **Interface / API** | **REST** | All external components (Simulation Server) interact via this API |
+| **Assets** | DNA ownership, biomass, resources | Player-owned assets with scarcity and trading |
+
+**Status:** Phase 2 feature, pending Early Access success
 
 ---
 
 ## 5. 🛠️ General Technology Stack
 
-### Backend / Infrastructure
+### Phase 1 (Current) - Tauri Desktop Application
 
+**Backend:**
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
-| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | High-performance, multi-threaded simulation, running at a **fixed tick rate (e.g., 20Hz)**. |
-| **Networking** | `tokio` + `axum` | `axum` manages persistent **WebSocket** state sync with clients and makes API calls to the Economy Ledger. |
-| **IAC / Deployment** | **Terraform** + **GitHub Actions** | Mandatory for managing all cloud resources and continuous delivery pipelines on **Google Cloud Platform (GCP)**. |
+| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | High-performance simulation at dual-tick (20 Hz AI, 90 Hz physics) |
+| **IPC Bridge** | `tauri` + `crossbeam` | Lock-free snapshot queue for Rust ↔ TypeScript communication |
+| **Serialization** | `serde` + `serde_json` | GameState serialization for Tauri commands |
+| **Save/Load** | `bincode` or `MessagePack` | World persistence to disk |
 
-### Frontend (Presentation Layer)
-
+**Frontend:**
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
-| **Rendering** | `Pixi.js` | Mature, high-performance **2D WebGL/WebGPU renderer**. |
-| **Core Visuals** | **Procedural Art** | Agent appearance and movement must be procedurally generated from their **DNA** to ensure unique, lifelike, and emergent animation. |
-| **UI** | HTML/DOM | Standard HTML/DOM for all supplemental "chrome" (menus, inventory, HUD) for rapid UX development. |
+| **Rendering** | `Pixi.js` | 2D WebGL/WebGPU renderer at 60-90 FPS |
+| **UI Framework** | HTML/DOM | Menus, inventory, HUD (standard web UI) |
+| **IPC Client** | `@tauri-apps/api` | Invoke Rust commands from TypeScript |
+
+**Deployment:**
+| Component | Technologies | Key Role/Purpose |
+| :--- | :--- | :--- |
+| **Distribution** | **Steam** | Early Access release, cloud saves, achievements |
+| **CI/CD** | **GitHub Actions** | Build Windows/Mac/Linux binaries, automated testing |
+
+---
+
+### Phase 2 (Future) - Web MMO Infrastructure
+
+**Backend:**
+| Component | Technologies | Key Role/Purpose |
+| :--- | :--- | :--- |
+| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | Server-authoritative simulation at 20 Hz |
+| **Networking** | `tokio` + `axum` | WebSocket state sync, REST APIs |
+| **Message Broker** | **NATS** | Pub/sub streaming (8-11M msg/sec capacity) |
+| **Broadcaster** | **Node.js** | WebSocket distribution to thousands of clients |
+| **Deployment** | **Terraform** + **GCP** | Cloud infrastructure, Kubernetes orchestration |
+
+**Frontend:**
+| Component | Technologies | Key Role/Purpose |
+| :--- | :--- | :--- |
+| **Rendering** | `Pixi.js` | Browser-based 2D WebGL renderer |
+| **Interpolation** | Custom lerp system | 10-20 Hz server updates → 60-90 FPS smooth visuals |
+| **State Management** | Delta encoding + quantization | Bandwidth optimization for networked gameplay |
+
+**Status:** Archived in `archive/mmo-streaming-v1` branch, pending Phase 1 success

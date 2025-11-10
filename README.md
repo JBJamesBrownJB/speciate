@@ -1,72 +1,102 @@
-# Speciate - AI Life Simulation
+# Speciate - DNA-Driven A-Life Simulation
 
-A server-authoritative artificial life simulation with emergent DNA-driven behaviors and a player-driven economy.
+**A single-player desktop game featuring DNA-driven artificial life, emergent ecosystems, and systemic survival gameplay.**
 
-> See [Project_Spec.md](Project_Spec.md) for the complete technical specification.
+**Platform:** Windows, Mac, Linux (Tauri desktop application)
+**Target:** Steam Early Access Q2 2026
+**Status:** Phase 1 Development (Sandbox Mode)
+
+> See [docs/project-spec.md](docs/project-spec.md) for complete technical specification
+> See [docs/strategy/biz-strategy.md](docs/strategy/biz-strategy.md) for business model and phase gates
+
+---
+
+## What is Speciate?
+
+**Speciate** is an artificial life simulation where **DNA drives everything**. Hundreds of autonomous creatures evolve, compete, and adapt in a procedurally generated alien ecosystem. No scripted behaviors, no hardcoded NPCs—complex patterns emerge from simple genetic primitives.
+
+**Core Gameplay (Phase 1 - Sandbox):**
+- 🧬 **DNA-Driven Evolution** - All creature behavior flows from genetic code
+- 🌍 **Explore** - Navigate vast alien world with fog of war
+- 🐾 **Tame & Breed** - Domesticate creatures, selective breeding for traits
+- 🔬 **Experiment** - Manipulate ecosystem, observe emergent dynamics
+- 💀 **Survive** - Gather biomass, craft tools, avoid predators
+
+**Future Content (Phase 1.5 - Post-Launch):**
+- 📖 **Story Campaign** - Find and rescue daughter across dangerous planet
+- 🦖 **Advanced Taming** - Harpoon capture, DNA cloning, creature commands
+- 🐒 **Drongo Species** - Intelligent tool-users with social learning
+- ⚔️ **Endgame Challenge** - Navigate Karg territory using tamed creatures
+
+---
+
+## Development Phase
+
+### Current: Phase 1 (6-9 months)
+
+**Goal:** Prove DNA-driven A-Life concept is fun, build community, generate revenue
+
+**Deliverables:**
+- Standalone desktop game (Steam Early Access)
+- DNA system (size, speed, perception, aggression, social learning)
+- Sandbox mode (observe, breed, manipulate ecosystem)
+- Procedural world generation
+- Save/load system with Steam Cloud support
+
+### Next: Phase 1.5 (Post-Launch)
+
+**Goal:** Add emotional depth and retention through narrative campaign
+
+**Deliverables:**
+- Daughter rescue story mode
+- Taming system (beacon zones, harpoon, cloning)
+- Drongo species + social learning mechanics
+- Creature commands (Thumper, herding)
+- Karg territory gauntlet
+
+### Future: Phase 2 (2027+)
+
+**Goal:** Expand to web MMO if Phase 1 succeeds
+
+**Deliverables:**
+- Browser-based multiplayer
+- Player economy (DNA ownership, biomass trading)
+- Speciation events
+- Conservation mechanics
+
+**Status:** Archived pending Early Access success (see [docs/strategy/biz-strategy.md](docs/strategy/biz-strategy.md))
+
+---
 
 ## Architecture
 
-The system uses a microservices architecture with clean separation of concerns:
+**Current (Phase 1): Tauri Hybrid Desktop**
 
-![Architecture Diagram](Architecture_High.png).
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    TAURI APPLICATION                         │
+├──────────────────────────┬───────────────────────────────────┤
+│  RUST BACKEND            │  FRONTEND (PixiJS)               │
+│  (Bevy ECS)              │                                   │
+│                          │                                   │
+│  FixedUpdate (20 Hz):    │  app.ticker (90 FPS):            │
+│  • AI & Decision Making  │  • invoke('get_game_state')      │
+│  • Steering Behaviors    │  • Update sprite positions       │
+│  • Pathfinding           │  • Render frame                  │
+│                          │                                   │
+│  Update (90 Hz):         │                                   │
+│  • Physics Integration   │                                   │
+│  • Snapshot to Queue ────┼──> Lock-Free IPC                 │
+└──────────────────────────┴───────────────────────────────────┘
+```
 
-This means that we only need context, tools, strategies that match the specific concern of each part of the system.
+**Benefits:**
+- $228k/year server costs eliminated
+- No network complexity (interpolation, quantization, sync)
+- Full f32 precision coordinates
+- Faster development and iteration
 
-### Components
-
-#### Portal (React + PixiJS)
-[TODO: Add details]
-
-Client-side rendering at 60 FPS with interpolation, WebSocket connection management, and player interaction.
-
-**Location:** `apps/portal/` | [Details →](apps/portal/README.md)
-
-#### Player Commander (Node.js)
-
-Authentication, input validation, command routing to simulation. Stateless gateway for player actions.
-This microservice's job is to recieve and orchestrate commands and actions from players and negotiate valid commands to the simulation server which is the ultimate source of truth for the players avatar.
-
-**Status:** Planned
-
-#### Broadcaster
-
-Real-time WebSocket distribution of simulation state updates to connected clients. Subscribes to NATS message broker and relays simulation frames to browser clients at 20 Hz.
-
-This microservice's job is to receive pushed state updates from the simulation (via NATS) and broadcast them efficiently to portals, of which there may be thousands.
-
-**Tech:** Node.js, TypeScript, NATS.js, WebSocket (ws library)
-**Location:** `apps/broadcaster/` | [Details →](apps/broadcaster/README.md)
-**Status:** ✅ **Implemented** (Sprint 6)
-
-#### Simulation (Rust)
-
-Server-authoritative ECS simulation engine running at 20 Hz. Single source of truth for all game state. Publishes crit positions, velocities, and rotations to NATS message broker in real-time.
-
-Maintains a 'Ports & Adapters / Clean Architecture' where I/O (NATS publishing, player commands) runs on separate threads with minimal impact on the core simulation loop.
-
-Uses Rust for extreme performance and Bevy ECS (Entity Component System) for hardware optimization.
-
-**Tech:** Rust, Bevy ECS, async-nats, tokio
-**Location:** `apps/simulation/` | [Details →](apps/simulation/README.md)
-**Status:** ✅ **NATS Publishing Implemented** (Sprint 6)
-
-#### Sprite Generator
-[TODO: Add details]
-
-Procedural sprite generation service for dynamically discovered species. Caches assets to CDN.
-This microservice's job is to do the important work of dynamically building, caching and serving sprites for the infinite variabilty of creatures and plants from the simulation.
-
-It is not decided how it will do this just yet...
-
-**Status:** Planned
-
-#### Ledger (Node.js)
-[TODO: Add details]
-
-Secure economy microservice with PostgreSQL backend. ACID-compliant transaction handling for all player assets.
-This microservice's job is to maintain a secure and consistant transaction ledger to ensure that player owned resources such as wood, biomass, DNA (which represents that the player has ownership of a species).
-
-**Location:** `apps/ledger/` | **Status:** Planned
+**See:** [docs/architecture/tauri-architecture.md](docs/architecture/tauri-architecture.md)
 
 ---
 
@@ -77,26 +107,28 @@ This microservice's job is to maintain a secure and consistant transaction ledge
 - **Rust** 1.70+ (with Cargo)
 - **Node.js** 22.12+ (for Vite 7 ESM support)
 - **npm** 10+
-- **Docker** and **Docker Compose** (for NATS infrastructure)
-- **VS Code** with Dev Containers extension (recommended for development)
+- **Tauri CLI** (install via: `cargo install tauri-cli`)
+- **VS Code** with Dev Containers extension (recommended)
 
-### 🚀 Quick Start
+### Quick Start (Current Development)
 
-**For the complete stack with visual testing:**
+**Note:** Tauri migration is Sprint 7. Current setup uses NATS streaming (will be removed).
 
-Open **5 terminal windows** and run these commands in order:
+**For now, start the multi-service stack:**
+
+Open **5 terminal windows**:
 
 ```bash
-# Terminal 1: NATS
+# Terminal 1: NATS (temporary, will be removed in Sprint 7)
 cd infrastructure/local && docker compose up
 
-# Terminal 2: Broadcaster
+# Terminal 2: Broadcaster (temporary, will be removed in Sprint 7)
 cd apps/broadcaster && npm run dev
 
 # Terminal 3: Simulation (with dev commands for admin UI)
 cd apps/simulation && cargo run --features dev-commands
 
-# Terminal 4: Portal
+# Terminal 4: Portal (frontend - will migrate to Tauri)
 cd apps/portal && npm run dev
 
 # Terminal 5: Admin Dev UI
@@ -104,7 +136,7 @@ cd apps/admin-dev-ui && python3 -m http.server 8000
 ```
 
 **Service URLs:**
-- **Portal:** http://localhost:3000 (or :5173)
+- **Portal:** http://localhost:3000
 - **Admin UI:** http://localhost:8000
 - **Broadcaster:** ws://localhost:8080
 - **NATS Monitor:** http://localhost:8222
@@ -114,93 +146,80 @@ cd apps/admin-dev-ui && python3 -m http.server 8000
 2. Open Admin UI: http://localhost:8000
 3. Click "Two Seekers Intercept" scenario
 4. Open Portal: http://localhost:3000
-5. Watch creatures spawn and interact! 🎯
-
-Press `Ctrl+C` in each terminal to stop services.
+5. Watch creatures spawn and interact!
 
 ---
 
-### Manual Setup (Step-by-Step)
+### Post-Sprint 7 (Tauri Unified App)
 
-If you prefer to start services individually, the current implementation demonstrates the **real-time streaming architecture**:
+**Coming Soon:**
 
-**1. Start NATS Message Broker:**
 ```bash
-cd infrastructure/local
-docker compose up -d
-```
-
-**2. Start Broadcaster (WebSocket Service):**
-```bash
-# From devcontainer
-cd apps/broadcaster
+# Single command to run everything
+cd apps/desktop
 npm install
-npm run dev
+npm run tauri dev
 ```
 
-**3. Start Simulation:**
-
-Choose the appropriate mode for your workflow:
-
-**Standard Mode (Production):**
-```bash
-cd apps/simulation
-cargo run
-```
-Use this for normal development and testing. No dev commands enabled.
-
-**Dev Commands Mode (With Admin UI):**
-```bash
-cd apps/simulation
-cargo run --features dev-commands
-```
-Use this when you want to control the simulation via the Admin Dev UI for rapid visual testing.
-You'll see in the logs: `[DEV] Dev commands enabled - listening on dev.sim.*`
-
-**Release Mode (Optimized):**
-```bash
-cd apps/simulation
-cargo run --release
-```
-Fully optimized build for performance testing. Dev commands are automatically disabled in release builds.
-
-> **💡 Admin UI Integration:** The Admin Dev UI (`apps/admin-dev-ui`) only works when the simulation runs with `--features dev-commands`. This enables NATS command listeners for spawn/clear/speed controls. See [Admin UI README](apps/admin-dev-ui/README.md) for usage.
-
-**4. Test the WebSocket Stream:**
-```bash
-# Install wscat globally
-npm install -g wscat
-
-# Connect to the stream
-wscat -c ws://localhost:8080/stream
-```
-
-You should see JSON frames streaming at ~20 Hz with crit positions and velocities.
-
-**See [infrastructure/local/README.md](infrastructure/local/README.md) for detailed setup instructions.**
+One window, one process, no NATS, no complexity.
 
 ---
 
-**Note:** The Portal (`apps/portal`) is not yet connected to the streaming pipeline. This integration is planned for Sprint 7.
+## Project Structure
+
+```
+/workspace
+├── apps/
+│   ├── simulation/         # Rust/Bevy ECS simulation engine
+│   ├── portal/             # PixiJS frontend (migrating to Tauri)
+│   ├── broadcaster/        # Node.js WebSocket (archiving in Sprint 7)
+│   ├── admin-dev-ui/       # Dev testing UI
+│   └── ledger/             # Economy service (Phase 2)
+├── docs/
+│   ├── strategy/           # Business model, game goal
+│   ├── architecture/       # Tauri, streaming (archived), patterns
+│   ├── biology/            # DNA design, species, zoologist notes
+│   ├── gameplay/           # Taming, combat, progression
+│   └── project-spec.md     # Complete technical specification
+├── infrastructure/
+│   └── local/              # Docker Compose for NATS (temporary)
+└── .claude/
+    ├── agents/             # AI development team definitions
+    └── spec/               # Architecture standards
+```
 
 ---
 
-## Application Components
+## Key Design Principles
 
-### Simulation Server (Rust)
-Headless ECS simulation engine using Bevy 0.14. Manages physics, crit behaviors, and deterministic state updates at 20 Hz. Currently console-only with no network layer.
+### 1. DNA-Driven Design (MANDATORY)
 
-**Tech:** `bevy_ecs`, `bevy_app`, `rand` | [Details →](apps/simulation/README.md)
+**The DNA is the creature. Everything else is just expression.**
 
-### Frontend Application (TypeScript)
-Web-based client with Pixi.js rendering, interpolation for smooth 60 FPS motion, and real-time state synchronization. (Currently planned - WebSocket integration pending)
+- **All traits flow from genes:** Size, speed, perception, aggression, social learning
+- **Complex behaviors emerge:** Sociality emerges from low aggression + high flocking
+- **Systemic trade-offs:** Large + fast = massive energy consumption → starvation
+- **No hardcoded values:** Every creature unique via genetic variation
 
-**Tech:** `pixi.js@8.14.0`, `vite@7.0.0`, `typescript@5.9.3` | [Details →](apps/ui/README.md)
+**See:** [docs/biology/dna-driven-design.md](docs/biology/dna-driven-design.md)
 
-### Ledger Microservice (Node.js)
-Secure, ACID-compliant economy service with PostgreSQL persistence. Tracks player resources, transactions, and inventory.
+### 2. Test-Driven Development (MANDATORY)
 
-**Tech:** Node.js, TypeScript, PostgreSQL, Express | **Status:** Planned
+**Tests exist to catch breaking changes. They're worthless if you don't use them.**
+
+- **Before ANY code change:** Run `npm test` to verify current state
+- **Write tests FIRST** for new functionality
+- **Run tests IMMEDIATELY** after changes
+- **Never skip tests** because "it's a small change"
+
+**Current:** 196 tests passing (Portal + Simulation)
+
+### 3. Emergence Over Scripting
+
+**Systems, not scripts:**
+- ❌ "Sociality" gene → ✅ Emerges from: personal_space + flocking + low aggression
+- ❌ Scripted boss fights → ✅ Systemic gauntlet challenges
+- ❌ Hardcoded helper NPCs → ✅ DNA-driven social species (Drongos)
 
 ---
 
@@ -209,37 +228,99 @@ Secure, ACID-compliant economy service with PostgreSQL persistence. Tracks playe
 Speciate uses specialized AI agents (via Claude Code) for development:
 
 ### Core Engineering
-- **architect-andy** - Technical blueprints, communication contracts, architectural standards
-- **backend-simulation-sam** - Rust simulation engine, A-Life systems, ECS implementation
-- **backend-ledger-larry** - Node.js economy ledger, PostgreSQL, ACID transactions
-- **frontend-fabian** - Client rendering, Pixi.js optimization, UI/UX design
+- **architect-andy** - Technical architecture, system design, performance analysis
+- **backend-simulation-sam** - Rust simulation, A-Life systems, ECS implementation
+- **frontend-fanny** - PixiJS rendering, UI/UX, client optimization
+- **backend-ledger-larry** - Economy ledger (Phase 2)
+- **broadcaster-brian** - WebSocket streaming (archiving Sprint 7)
+- **devops-daria** - CI/CD, infrastructure, Terraform
 
 ### Domain Experts
-- **botanist-betsy** - Plant biology, genetics, growth cycles, biomass production
-- **zoologist-tom** - Ecosystem design, creature behaviors, emergent dynamics
-- **environment-eddy** - Procedural world generation, biomes, terrain systems
-- **gamification-garry** - Game balance, player motivation, economic design
+- **zoologist-tom** - Ecosystem design, biology validation, DNA traits
+- **botanist-betsy** - Plant biology, growth systems
+- **environment-eddy** - Procedural generation, biomes, terrain
+- **gamification-garry** - Game design, balance, player motivation
 
 ### Operations
-- **playtest-petra** - End-to-end testing, gameplay validation, UX evaluation
-- **devops-daria** - CI/CD pipelines, Google Cloud infrastructure, Terraform
-- **qa-karen** - Pre-merge code review, test validation, security checks
-- **pm-pam** - Sprint management, task coordination, documentation
-- **mr-motivator** - Vision alignment, team focus, philosophical guidance
+- **play-test-petra** - E2E testing, gameplay validation
+- **qa-karen** - Pre-merge reviews, security, standards
+- **pm-pam** - Sprint management, task coordination
+- **mr-motivator** - Vision alignment, team focus
+
+---
+
+## Current Sprint Status
+
+**Sprint 6: "Learning to Walk"** ✅ Complete (Nov 6-9, 2025)
+
+**Achievements:**
+- Seeking behavior with Reynolds steering
+- Territory-based wandering with elastic tether
+- Locomotion noise (Perlin-based organic wobble)
+- Body radius volumetric physics
+- NATS WebSocket support (port 9224)
+- Admin portal with live spawning
+- Single-gate spawning architecture
+- 133 passing tests
+
+**Next: Sprint 7 - Tauri Migration** (5-7 days)
+
+**Goals:**
+- Remove NATS, Broadcaster, interpolation code
+- Implement Tauri IPC with lock-free snapshot queue
+- Dual-tick refactor (20 Hz AI, 90 Hz physics)
+- Test 1000 creatures @ 90 FPS
+- Cross-platform builds (Windows, Mac, Linux)
 
 ---
 
 ## Resources
 
 ### Project Documentation
-- **[Project_Spec.md](Project_Spec.md)** - Complete technical specification
-- **`.claude/spec/`** - Detailed architecture and standards
-- **`.claude/agents/`** - AI agent definitions
+- [docs/project-spec.md](docs/project-spec.md) - Complete technical specification
+- [docs/strategy/biz-strategy.md](docs/strategy/biz-strategy.md) - Business model & phase gates
+- [docs/strategy/goal.md](docs/strategy/goal.md) - Game narrative & design
+- [docs/architecture/tauri-architecture.md](docs/architecture/tauri-architecture.md) - Current architecture
+- [docs/biology/dna-driven-design.md](docs/biology/dna-driven-design.md) - Core design principle
+- [CLAUDE.md](CLAUDE.md) - TDD requirements & DNA enforcement
 
 ### Technology Documentation
-- **[Pixi.js 8.x Documentation](https://pixijs.com/8.x/guides)** - Rendering library
-- **[Bevy ECS](https://docs.rs/bevy_ecs/)** - Entity Component System
-- **[Tokio Documentation](https://tokio.rs/)** - Async runtime for Rust
-- **[Vite Documentation](https://vite.dev/)** - Frontend build tool
-- **[Rust Book](https://doc.rust-lang.org/book/)** - Learning Rust
-- **[TypeScript Handbook](https://www.typescriptlang.org/docs/)** - TypeScript guide
+- [Tauri](https://tauri.app/) - Desktop app framework
+- [Bevy ECS](https://bevyengine.org/) - Entity Component System
+- [Pixi.js 8.x](https://pixijs.com/8.x/guides) - 2D WebGL renderer
+- [Rust Book](https://doc.rust-lang.org/book/) - Learning Rust
+- [TypeScript Handbook](https://www.typescriptlang.org/docs/) - TypeScript guide
+
+---
+
+## Contributing
+
+**Current Focus:** Phase 1 (Steam Early Access sandbox)
+
+**Priorities:**
+1. DNA system implementation (Sprint 6 Phase 3+)
+2. Tauri migration (Sprint 7)
+3. Player interaction UI (Sprint 8)
+4. World generation (Sprint 9)
+5. Steam integration & polish (Sprint 10)
+
+**Deferred to Phase 1.5:**
+- Narrative campaign (daughter rescue)
+- Taming system (beacon, harpoon, cloning)
+- Drongo species
+- Creature commands
+
+**Deferred to Phase 2:**
+- Multiplayer/MMO features
+- Player economy
+- Speciation events
+
+---
+
+## License
+
+[TODO: Add license]
+
+---
+
+**The DNA is the creature. Everything else is just expression.**

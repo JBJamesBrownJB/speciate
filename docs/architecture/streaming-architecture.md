@@ -1,9 +1,27 @@
 # Streaming Architecture Strategy
+
+> **⚠️ STATUS: FUTURE VISION (Phase 2)**
+>
+> **Last Updated:** 2025-11-10 (Marked as Phase 2 feature)
+>
+> This architecture was designed for MMO-scale server-authoritative gameplay but is **not currently implemented** due to pivot to standalone Steam Early Access (Phase 1).
+>
+> **Current Architecture:** See [Tauri Desktop Architecture](./tauri-architecture.md) for the active implementation.
+>
+> **Why Preserved:** This analysis of streaming trade-offs, interpolation, and delta encoding remains valuable as reference for:
+> - Potential multiplayer DLC or sequel
+> - Understanding networked game architecture decisions
+> - Save file compression strategies
+>
+> **If Implementing Later:** This document applies to Phase 2 (Web MMO) pending Early Access success. See [Business Strategy](../strategy/biz-strategy.md) for phase gates.
+
+---
+
 ## Simulation → Broadcaster Data Flow
 
 **Date:** 2025-11-04
 **Sprint:** 5 - Performance Instrumentation
-**Status:** Architecture Design
+**Status:** ARCHIVED - Phase 2 Feature
 **Author:** Research conducted by Planning Agent + Backend Simulation Team
 
 ---
@@ -11,6 +29,8 @@
 ## Executive Summary
 
 This document defines the architecture for streaming simulation rendering data from the Rust/Bevy simulation server to a broadcaster microservice at 20-30 Hz, supporting 1M+ concurrent entities.
+
+**NOTE:** This was designed for the original MMO architecture. The current Phase 1 uses local Tauri IPC instead.
 
 **Recommended Solution:** Dedicated Streaming Layer (Strategy 3)
 - **Serialization:** FlatBuffers (zero-copy deserialization)

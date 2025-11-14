@@ -109,6 +109,19 @@ impl PhysicsTick {
     }
 }
 
+/// Measured tick rate resource (actual Hz, not target)
+///
+/// Updated by main loop after each tick based on rolling average.
+/// Used for frontend HUD display to show actual simulation performance.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct ActualTickRate(pub f32);
+
+impl Default for ActualTickRate {
+    fn default() -> Self {
+        Self(-1.0) // Sentinel: -1.0 means not yet measured
+    }
+}
+
 /// Boundary configuration resource for world limits
 /// Uses centered coordinate system: world extends from (min_x, min_y) to (max_x, max_y)
 /// with (0, 0) at the center

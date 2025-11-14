@@ -74,18 +74,6 @@ npm-debug.log*
 .terraform/
 
 # --------------------------------------------------------------------------
-# DOCKER AND DEVCONTAINERS
-# Stack: Docker Compose, Dev Containers
-# --------------------------------------------------------------------------
-# Local volumes and service-specific logs/data created by Docker Compose
-# Generic data volume directory (e.g., used to store local PG data)
-/data/
-# Generic log directory
-/logs/
-# Dev Container cache files
-.devcontainer/cache/
-
-# --------------------------------------------------------------------------
 # CLAUDE AGENT FILES
 # --------------------------------------------------------------------------
 # Files created by Claude Code for user-specific settings or memory

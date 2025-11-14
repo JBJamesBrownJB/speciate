@@ -1,0 +1,34 @@
+{
+  "appId": "com.simulation.alife",
+  "productName": "A-Life Simulation",
+  "directories": {
+    "output": "dist-electron",
+    "buildResources": "electron/resources"
+  },
+  "files": [
+    "electron/**/*",
+    "dist/**/*",
+    "!electron/resources/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "../../../target/release/simulation",
+      "to": "simulation",
+      "filter": ["**/*"]
+    }
+  ],
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "category": "Game",
+    "icon": "electron/resources/icon.png"
+  },
+  "mac": {
+    "target": "dmg",
+    "icon": "electron/resources/icon.icns",
+    "category": "public.app-category.games"
+  },
+  "win": {
+    "target": "nsis",
+    "icon": "electron/resources/icon.ico"
+  }
+}

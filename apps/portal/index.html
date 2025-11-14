@@ -395,15 +395,34 @@
     <!-- World Section -->
     <div class="section">
       <div class="section-title">World</div>
-      <div class="stat"><span class="label">Position:</span><span class="value" id="position-value">0, 0</span></div>
+      <div class="stat"><span class="label">Tick Rate:</span><span class="value" id="tick-rate-value">0 Hz</span></div>
       <div class="stat"><span class="label">Creatures:</span><span class="value" id="creature-count">0</span></div>
+      <div id="empty-state-warning" style="margin-top: 12px; padding: 8px; background: rgba(240,168,48,0.15); border: 1px solid rgba(240,168,48,0.3); border-radius: 4px; color: var(--color-warning); font-size: 11px; text-align: center; display: none;">
+        ⚠️ No creatures in simulation
+      </div>
+    </div>
+
+    <!-- IPC Performance Section -->
+    <div class="section">
+      <div class="section-title">IPC Performance</div>
+      <div class="stat"><span class="label">IPC Latency:</span><span class="value" id="ipc-latency-value">0ms</span></div>
+      <div class="stat"><span class="label">Decode:</span><span class="value" id="decode-time-value">0ms</span></div>
+      <div class="stat"><span class="label">Payload:</span><span class="value" id="payload-size-value">0KB</span></div>
+    </div>
+
+    <!-- Render Performance Section -->
+    <div class="section">
+      <div class="section-title">Render Performance</div>
+      <div class="stat"><span class="label">Sprite Upd:</span><span class="value" id="sprite-update-value">0ms</span></div>
+      <div class="stat"><span class="label">DOM Upd:</span><span class="value" id="dom-update-value">0ms</span></div>
+      <div class="stat"><span class="label">Frame Budget:</span><span class="value" id="frame-budget-value">0ms</span></div>
     </div>
 
     <!-- Connection Section -->
     <div class="section">
       <div class="section-title">Connection</div>
-      <div class="stat"><span class="label">Ping:</span><span class="value" id="ping-value">0ms</span></div>
       <div class="stat"><span class="label">Status:</span><span class="value" id="status-value">Connecting...</span></div>
+      <div class="stat"><span class="label">Tick Freshness:</span><span class="value" id="tick-freshness-value">0</span></div>
     </div>
   </div>
 

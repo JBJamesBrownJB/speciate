@@ -27,24 +27,14 @@ rand = "0.8"
 noise = "0.9"  # Perlin noise for locomotion variability
 chrono = { version = "0.4", features = ["serde"] }  # Timestamp generation for snapshots
 ctrlc = { version = "3.4", features = ["termination"] }  # Signal handling for graceful shutdown
-
-# NATS Streaming
-async-nats = "0.37"
-tokio = { version = "1.43", features = ["rt", "sync", "time"] }
-crossbeam-channel = "0.5"
-serde_json = "1.0"
-futures = { version = "0.3", optional = true }  # For dev-commands NATS subscriber
+crossbeam = "0.8"  # Lock-free data structures for snapshot queue
 
 [features]
 # Enable test helper methods for integration tests
 test-helpers = []
-# Enable dev commands for local testing (NEVER enabled in production)
-dev-commands = ["futures"]
 
 [dev-dependencies]
-# Testing utilities
-tokio = { version = "1.43", features = ["rt", "sync", "time", "macros"] }
-futures = "0.3"
+# No additional dev dependencies needed
 
 [profile.release]
 opt-level = 3
@@ -74,8 +64,3 @@ required-features = ["test-helpers"]
 name = "debug_wander_test"
 path = "tests/debug_wander_test.rs"
 required-features = ["test-helpers"]
-
-[[test]]
-name = "dev_commands_test"
-path = "tests/dev_commands_test.rs"
-required-features = ["test-helpers", "dev-commands"]

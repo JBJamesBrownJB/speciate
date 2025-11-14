@@ -6,6 +6,7 @@
 #[cfg(test)]
 mod simulation_tests {
     use super::super::*;
+    use crate::simulation::creatures::builder::CritBuilder;
 
     #[test]
     fn test_simulation_creates_successfully() {
@@ -19,7 +20,8 @@ mod simulation_tests {
         sim.set_boundaries(180.0, 130.0);
 
         let initial_count = sim.creature_count();
-        sim.spawn_creature(90.0, 65.0, 2.0, 1.0);
+        let builder = CritBuilder::new().at(90.0, 65.0).with_all_capabilities();
+        sim.spawn_crit(builder);
 
         assert_eq!(sim.creature_count(), initial_count + 1);
     }
@@ -28,7 +30,8 @@ mod simulation_tests {
     fn test_simulation_update_doesnt_crash() {
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(180.0, 130.0);
-        sim.spawn_creature(90.0, 65.0, 2.0, 1.0);
+        let builder = CritBuilder::new().at(90.0, 65.0).with_all_capabilities();
+        sim.spawn_crit(builder);
 
         // Should not panic
         sim.update(0.016); // 60 FPS delta
@@ -38,7 +41,8 @@ mod simulation_tests {
     fn test_multiple_updates_work() {
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(180.0, 130.0);
-        sim.spawn_creature(90.0, 65.0, 2.0, 1.0);
+        let builder = CritBuilder::new().at(90.0, 65.0).with_all_capabilities();
+        sim.spawn_crit(builder);
 
         // Run 100 simulation ticks
         for _ in 0..100 {
@@ -151,6 +155,7 @@ mod system_tests {
 mod behavior_tests {
 
     use crate::simulation::components::{BehaviorMode, CreatureState, CritId, Position, Velocity};
+    use crate::simulation::creatures::builder::CritBuilder;
     use crate::simulation::SimulationBuilder;
 
     #[test]
@@ -158,7 +163,12 @@ mod behavior_tests {
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(100.0, 100.0);
 
-        let entity_id = sim.spawn_creature(0.0, 0.0, 0.0, 0.0);
+        // Explicitly spawn as Catatonic (default is Wandering)
+        let builder = CritBuilder::new()
+            .at(0.0, 0.0)
+            .with_all_capabilities()
+            .in_behavior(BehaviorMode::Catatonic);
+        let entity_id = sim.spawn_crit(builder);
 
         // Query the spawned crit directly from world
         let world = sim.world_mut();
@@ -191,7 +201,12 @@ mod behavior_tests {
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(100.0, 100.0);
 
-        let entity_id = sim.spawn_creature(50.0, 50.0, 0.0, 0.0);
+        // Explicitly spawn as Catatonic (default is Wandering)
+        let builder = CritBuilder::new()
+            .at(50.0, 50.0)
+            .with_all_capabilities()
+            .in_behavior(BehaviorMode::Catatonic);
+        let entity_id = sim.spawn_crit(builder);
 
         // Run simulation for 100 ticks (should be ~5 seconds at 20Hz)
         for _ in 0..100 {
@@ -403,7 +418,11 @@ mod behavior_tests {
         sim.set_boundaries(200.0, 200.0);
 
         // Spawn crit with Target and CanSeek but KEEP it Catatonic
-        let crit_id = sim.spawn_creature(0.0, 0.0, 0.0, 0.0);
+        let builder = CritBuilder::new()
+            .at(0.0, 0.0)
+            .with_all_capabilities()
+            .in_behavior(BehaviorMode::Catatonic);
+        let crit_id = sim.spawn_crit(builder);
 
         // Add Target and CanSeek but don't change behavior
         {

@@ -44,7 +44,7 @@ Steam Early Access    Story Campaign Update    Web MMO (if Phase 1 succeeds)
 **Prove the core A-Life simulation is fun and engaging before investing in massive infrastructure.**
 
 ### Business Model
-- **Platform:** Steam (Windows, Mac, Linux via Tauri)
+- **Platform:** Steam (Windows, Mac, Linux via Electron)
 - **Price:** $20-30 one-time purchase
 - **Revenue Model:** Pay-once, no subscriptions or IAP
 - **Server Costs:** $0/month (runs locally)
@@ -190,7 +190,7 @@ Steam Early Access    Story Campaign Update    Web MMO (if Phase 1 succeeds)
 ### 2025 Q4 (Now - Dec)
 - ✅ Strategic pivot decision
 - ✅ Team alignment on phase gates
-- 🔄 **Sprint 7:** Tauri migration (remove NATS, implement lock-free IPC)
+- ✅ **Sprint 7:** Electron desktop app (stdio IPC, MessagePack streaming)
 
 ### 2026 Q1 (Jan - Mar)
 - **Sprints 8-10:** Core gameplay (player interaction, world generation, polish)
@@ -220,11 +220,6 @@ Steam Early Access    Story Campaign Update    Web MMO (if Phase 1 succeeds)
 - **Scope control:** Story adds 30-40% development time
 - **Iteration space:** Learn what players enjoy in sandbox first
 - **Marketing hook:** Major story update = press event + sales boost
-
-### Why Tauri over Electron?
-- **Performance:** Native Rust backend, smaller bundle size
-- **Security:** Compiled Rust harder to pirate than interpreted JS
-- **Ecosystem:** Leverages existing Bevy simulation work
 
 ### Why Defer Multiplayer to Phase 2?
 - **Validation first:** Prove single-player fun before MMO complexity
@@ -304,7 +299,7 @@ The Steam Early Access strategy transforms **Speciate** from a high-risk, capita
 - Validates concept before scaling
 
 **Next Steps:**
-1. Sprint 7: Tauri migration
+1. ✅ Sprint 7: Electron desktop app (complete)
 2. Sprints 8-10: Core gameplay polish
 3. Q2 2026: Early Access launch
 4. Evaluate → Iterate → Scale

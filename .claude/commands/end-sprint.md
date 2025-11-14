@@ -4,12 +4,13 @@ allowed-tools:
   - Bash
   - Read
   - Write
-model: haiku
+  - Task
+model: sonnet
 ---
 
-# Sprint Closure Workflow: Documentation and Tidy Up
+# Sprint Closure Workflow: QA, Documentation, and Tidy Up
 
-You have been called to finalize the sprint. **ASSUME ALL CODE REVIEW (QA) IS COMPLETE, PASSED, AND APPROVED FOR MERGE.** Your responsibility is **PROCESS AND DOCUMENTATION ONLY.**
+You have been called to finalize the sprint. This workflow includes QA verification, documentation generation, and cleanup.
 
 ## 1. 🔍 Identify Current Sprint
 
@@ -17,7 +18,22 @@ You have been called to finalize the sprint. **ASSUME ALL CODE REVIEW (QA) IS CO
 2.  Parse the output (e.g., "feat/sprint-1-blueprints") to extract **only** the sprint name (e.g., "sprint-1-blueprints").
 3.  Store this as the **`CURRENT_SPRINT_NAME`** for all following steps.
 
-## 2. 📝 Final Review and Documentation
+## 2. ✅ QA Verification (Pre-Merge Check)
+
+Before proceeding with sprint closure, verify code quality:
+
+1.  **Run Test Suite:** Execute `/test-all` command to verify all tests pass
+2.  **Call QA Agent:** Use the Task tool to invoke **qa-karen** agent for code review:
+    - Review recent commits on current branch
+    - Validate architectural compliance
+    - Check for security issues
+    - Verify code style and idioms
+3.  **If QA Fails:** STOP and report issues to user. Sprint cannot close until QA passes.
+4.  **If QA Passes:** Proceed to documentation step.
+
+**Note:** QA verification is MANDATORY. Never skip this step.
+
+## 3. 📝 Final Review and Documentation
 
 1.  **Summary Creation:** Read all documentation in the `/SPRINT_DOCS` folder and generate a concise **SPRINT_SUMMARY.md** file. This summary **MUST** include:
     * The original **Sprint Goal** and **Key Outcomes**.
@@ -25,12 +41,12 @@ You have been called to finalize the sprint. **ASSUME ALL CODE REVIEW (QA) IS CO
     * A section for **Retrospective/Lessons Learned**.
 2.  **Move Summary:** **Convert the `CURRENT_SPRINT_NAME` to lowercase.** Move the generated **SPRINT_SUMMARY.md** into the required format: **`[current_sprint_name]_summary.md`** and place it in the **`/sprint_summaries`** folder in the root directory.
 
-## 3. 🧹 Final Cleanup
+## 4. 🧹 Final Cleanup
 
 1.  **Log:** Log the successful closure in **SPRINT_DOCS/SESSION_LOG.md**.
 2.  **Remove Sprint Docs:** Execute `!rm -rf SPRINT_DOCS` to ensure no planning documents are left in the main workspace.
 
-## 4. 🌲 Next Action: Human Hand-off
+## 5. 🌲 Next Action: Human Hand-off
 
 Your work is complete. The human developer must now perform the final Git actions.
 

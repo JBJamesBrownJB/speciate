@@ -2,7 +2,7 @@
 
 **A single-player desktop game featuring DNA-driven artificial life, emergent ecosystems, and systemic survival gameplay.**
 
-**Platform:** Windows, Mac, Linux (Tauri desktop application)
+**Platform:** Windows, Mac, Linux (Electron desktop application)
 **Target:** Steam Early Access Q2 2026
 **Status:** Phase 1 Development (Sandbox Mode)
 
@@ -70,23 +70,23 @@
 
 ## Architecture
 
-**Current (Phase 1): Tauri Hybrid Desktop**
+**Current (Phase 1): Electron Hybrid Desktop**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    TAURI APPLICATION                         │
+│                  ELECTRON APPLICATION                        │
 ├──────────────────────────┬───────────────────────────────────┤
-│  RUST BACKEND            │  FRONTEND (PixiJS)               │
+│  RUST SUBPROCESS         │  FRONTEND (PixiJS)               │
 │  (Bevy ECS)              │                                   │
 │                          │                                   │
 │  FixedUpdate (20 Hz):    │  app.ticker (90 FPS):            │
-│  • AI & Decision Making  │  • invoke('get_game_state')      │
+│  • AI & Decision Making  │  • Receive state-update events   │
 │  • Steering Behaviors    │  • Update sprite positions       │
 │  • Pathfinding           │  • Render frame                  │
 │                          │                                   │
 │  Update (90 Hz):         │                                   │
-│  • Physics Integration   │                                   │
-│  • Snapshot to Queue ────┼──> Lock-Free IPC                 │
+│  • Physics Integration   │  stdout MessagePack (60 Hz):     │
+│  • Write to stdout ──────┼──> Main Process → Renderer       │
 └──────────────────────────┴───────────────────────────────────┘
 ```
 
@@ -94,9 +94,9 @@
 - $228k/year server costs eliminated
 - No network complexity (interpolation, quantization, sync)
 - Full f32 precision coordinates
-- Faster development and iteration
+- Simple stdio IPC (no shared memory complexity)
 
-**See:** [docs/architecture/tauri-architecture.md](docs/architecture/tauri-architecture.md)
+**See:** [docs/architecture/electron-architecture.md](docs/architecture/electron-architecture.md)
 
 ---
 
@@ -104,64 +104,135 @@
 
 ### Prerequisites
 
-- **Rust** 1.70+ (with Cargo)
-- **Node.js** 22.12+ (for Vite 7 ESM support)
-- **npm** 10+
-- **Tauri CLI** (install via: `cargo install tauri-cli`)
-- **VS Code** with Dev Containers extension (recommended)
+**Local Development Requirements:**
+- **Rust** 1.75+ (`rustc --version`) - For simulation backend
+- **Node.js** 18+ (`node --version`) - For Electron + frontend
+- **npm** 10+ (`npm --version`)
+- **System dependencies:**
+  - **Linux:** None (Electron bundles Chromium)
+  - **macOS:** None (Electron bundles Chromium)
+  - **Windows:** None (Electron bundles Chromium)
 
-### Quick Start (Current Development)
+### Quick Start
 
-**Note:** Tauri migration is Sprint 7. Current setup uses NATS streaming (will be removed).
-
-**For now, start the multi-service stack:**
-
-Open **5 terminal windows**:
+**First-Time Setup:**
 
 ```bash
-# Terminal 1: NATS (temporary, will be removed in Sprint 7)
-cd infrastructure/local && docker compose up
-
-# Terminal 2: Broadcaster (temporary, will be removed in Sprint 7)
-cd apps/broadcaster && npm run dev
-
-# Terminal 3: Simulation (with dev commands for admin UI)
-cd apps/simulation && cargo run --features dev-commands
-
-# Terminal 4: Portal (frontend - will migrate to Tauri)
-cd apps/portal && npm run dev
-
-# Terminal 5: Admin Dev UI
-cd apps/admin-dev-ui && python3 -m http.server 8000
+cd apps/portal
+npm run setup  # Installs deps + builds debug Rust + frontend (2-3 min)
+npm run dev    # Launches app with hot reload
 ```
-
-**Service URLs:**
-- **Portal:** http://localhost:3000
-- **Admin UI:** http://localhost:8000
-- **Broadcaster:** ws://localhost:8080
-- **NATS Monitor:** http://localhost:8222
-
-**Quick Test:**
-1. Wait for all services to start (~30 seconds)
-2. Open Admin UI: http://localhost:8000
-3. Click "Two Seekers Intercept" scenario
-4. Open Portal: http://localhost:3000
-5. Watch creatures spawn and interact!
 
 ---
 
-### Post-Sprint 7 (Tauri Unified App)
+## Development Workflows
 
-**Coming Soon:**
+### 🎨 Frontend Changes (PixiJS/TypeScript) - Instant Feedback
 
 ```bash
-# Single command to run everything
-cd apps/desktop
-npm install
-npm run tauri dev
+npm run dev  # Start once, leave running
 ```
 
-One window, one process, no NATS, no complexity.
+Edit any `.ts` or `.tsx` file → **Changes appear in <1 second** (Vite HMR)
+
+**Example:** Change sprite colors, UI layouts, camera controls → Instant visual update!
+
+---
+
+### 🦀 Rust Changes (Simulation) - Fast Iteration
+
+```bash
+# 1. Edit Rust code (simulation behavior, physics, etc.)
+# 2. Rebuild debug binary (30 seconds)
+npm run dev:rust
+
+# 3. Restart Electron (Ctrl+R or relaunch npm run dev)
+```
+
+**Speed:** 30 sec rebuild → See simulation changes visually in frontend
+
+**Example:** Modify creature speed, steering behavior, spawning logic → Quick feedback loop!
+
+---
+
+### 📦 Production Build - Final Testing
+
+```bash
+npm run build          # Optimized Rust + frontend (3-5 min)
+npm run package:linux  # Create standalone .AppImage/.deb
+```
+
+**When to use:**
+- Pre-commit validation
+- Performance testing (release builds are ~2x faster)
+- Creating installers for distribution
+
+---
+
+## Command Reference
+
+```bash
+# First-time setup
+npm run setup              # Install deps, build debug Rust, build frontend
+
+# Development
+npm run dev                # Start Vite dev server + Electron (hot reload)
+npm run dev:vite           # Vite dev server only (for browser testing)
+npm run dev:electron       # Electron only (if Vite already running)
+npm run dev:rust           # Rebuild debug Rust binary (30 sec)
+
+# Production builds
+npm run build              # Build optimized Rust + frontend
+npm run build:rust         # Rust release build only (3-5 min)
+npm run build:frontend     # Frontend build only
+
+# Packaging
+npm run package            # Build + package for current platform
+npm run package:linux      # Linux .deb + .AppImage
+npm run package:mac        # macOS .dmg
+npm run package:win        # Windows .exe installer
+
+# Testing
+npm test                   # Frontend tests
+npm run type-check         # TypeScript validation
+cd ../simulation && cargo test  # Rust tests
+```
+
+---
+
+## Troubleshooting
+
+**White screen on launch:**
+```bash
+# Build debug Rust binary (development)
+npm run dev:rust
+
+# Or build release binary (production)
+npm run build:rust
+```
+
+**"Cannot connect to Vite":**
+```bash
+# Make sure both processes are running
+npm run dev  # Starts Vite + Electron in parallel
+```
+
+**Slow Rust compilation:**
+- Use `npm run dev:rust` (debug builds, 30 sec)
+- Only use `npm run build:rust` for production (3-5 min)
+
+**"No creatures rendering"**
+- Check browser console for JavaScript errors
+- Verify dist/ folder exists: `ls apps/portal/dist`
+- Rebuild frontend: `npm run build`
+
+**"Cargo build fails"**
+- Check Rust version: `rustc --version` (need 1.75+)
+- Clean and rebuild: `cargo clean && cargo build --release`
+
+**"npm install fails"**
+- Check Node.js version: `node --version` (need 18+)
+- Clear npm cache: `npm cache clean --force && npm install`
 
 ---
 
@@ -171,21 +242,20 @@ One window, one process, no NATS, no complexity.
 /workspace
 ├── apps/
 │   ├── simulation/         # Rust/Bevy ECS simulation engine
-│   ├── portal/             # PixiJS frontend (migrating to Tauri)
-│   ├── broadcaster/        # Node.js WebSocket (archiving in Sprint 7)
-│   ├── admin-dev-ui/       # Dev testing UI
-│   └── ledger/             # Economy service (Phase 2)
+│   └── portal/             # PixiJS frontend + Electron wrapper
+│       ├── electron/       # Electron main process + preload
+│       ├── src/            # TypeScript frontend (PixiJS)
+│       └── dist/           # Vite build output
 ├── docs/
 │   ├── strategy/           # Business model, game goal
-│   ├── architecture/       # Tauri, streaming (archived), patterns
+│   ├── architecture/       # Electron patterns, performance
 │   ├── biology/            # DNA design, species, zoologist notes
 │   ├── gameplay/           # Taming, combat, progression
 │   └── project-spec.md     # Complete technical specification
-├── infrastructure/
-│   └── local/              # Docker Compose for NATS (temporary)
 └── .claude/
     ├── agents/             # AI development team definitions
-    └── spec/               # Architecture standards
+    ├── commands/           # Custom slash commands
+    └── hooks/              # Pre-commit validation scripts
 ```
 
 ---
@@ -231,46 +301,44 @@ Speciate uses specialized AI agents (via Claude Code) for development:
 - **architect-andy** - Technical architecture, system design, performance analysis
 - **backend-simulation-sam** - Rust simulation, A-Life systems, ECS implementation
 - **frontend-fanny** - PixiJS rendering, UI/UX, client optimization
-- **backend-ledger-larry** - Economy ledger (Phase 2)
-- **broadcaster-brian** - WebSocket streaming (archiving Sprint 7)
-- **devops-daria** - CI/CD, infrastructure, Terraform
 
 ### Domain Experts
 - **zoologist-tom** - Ecosystem design, biology validation, DNA traits
 - **botanist-betsy** - Plant biology, growth systems
 - **environment-eddy** - Procedural generation, biomes, terrain
 - **gamification-garry** - Game design, balance, player motivation
+- **narrative-nancy** - Story design, quests, campaign structure (Phase 1.5+)
 
-### Operations
-- **play-test-petra** - E2E testing, gameplay validation
+### Distribution & QA
+- **steam-steve** - Steam integration, achievements, cloud saves, workshop
+- **playtest-petra** - E2E testing, gameplay validation, UX evaluation
 - **qa-karen** - Pre-merge reviews, security, standards
-- **pm-pam** - Sprint management, task coordination
-- **mr-motivator** - Vision alignment, team focus
+
+### Project Management
+- **pm-pam** - Sprint management, task coordination, agile workflow
 
 ---
 
 ## Current Sprint Status
 
-**Sprint 6: "Learning to Walk"** ✅ Complete (Nov 6-9, 2025)
+**Sprint 7: "Electron Standalone Desktop"** ✅ Complete (Nov 14, 2025)
 
-**Achievements:**
+**Completed:**
+- ✅ Electron desktop app working with stdio IPC
+- ✅ MessagePack frame protocol (60 Hz streaming)
+- ✅ Lock-free snapshot queue (crossbeam::ArrayQueue)
+- ✅ Frontend rendering with PixiJS (WebGL)
+- ✅ Creatures spawning and rendering
+- ✅ Camera zoom and controls
+- ✅ Documentation updated (architecture, setup, development)
+- ✅ Code cleanup (removed all Tauri references)
+
+**Previous: Sprint 6 - "Learning to Walk"** ✅ Complete (Nov 6-9, 2025)
 - Seeking behavior with Reynolds steering
 - Territory-based wandering with elastic tether
 - Locomotion noise (Perlin-based organic wobble)
 - Body radius volumetric physics
-- NATS WebSocket support (port 9224)
-- Admin portal with live spawning
-- Single-gate spawning architecture
 - 133 passing tests
-
-**Next: Sprint 7 - Tauri Migration** (5-7 days)
-
-**Goals:**
-- Remove NATS, Broadcaster, interpolation code
-- Implement Tauri IPC with lock-free snapshot queue
-- Dual-tick refactor (20 Hz AI, 90 Hz physics)
-- Test 1000 creatures @ 90 FPS
-- Cross-platform builds (Windows, Mac, Linux)
 
 ---
 
@@ -280,12 +348,12 @@ Speciate uses specialized AI agents (via Claude Code) for development:
 - [docs/project-spec.md](docs/project-spec.md) - Complete technical specification
 - [docs/strategy/biz-strategy.md](docs/strategy/biz-strategy.md) - Business model & phase gates
 - [docs/strategy/goal.md](docs/strategy/goal.md) - Game narrative & design
-- [docs/architecture/tauri-architecture.md](docs/architecture/tauri-architecture.md) - Current architecture
+- [docs/architecture/electron-architecture.md](docs/architecture/electron-architecture.md) - Current architecture
 - [docs/biology/dna-driven-design.md](docs/biology/dna-driven-design.md) - Core design principle
 - [CLAUDE.md](CLAUDE.md) - TDD requirements & DNA enforcement
 
 ### Technology Documentation
-- [Tauri](https://tauri.app/) - Desktop app framework
+- [Electron](https://www.electronjs.org/) - Desktop app framework
 - [Bevy ECS](https://bevyengine.org/) - Entity Component System
 - [Pixi.js 8.x](https://pixijs.com/8.x/guides) - 2D WebGL renderer
 - [Rust Book](https://doc.rust-lang.org/book/) - Learning Rust
@@ -298,11 +366,10 @@ Speciate uses specialized AI agents (via Claude Code) for development:
 **Current Focus:** Phase 1 (Steam Early Access sandbox)
 
 **Priorities:**
-1. DNA system implementation (Sprint 6 Phase 3+)
-2. Tauri migration (Sprint 7)
-3. Player interaction UI (Sprint 8)
-4. World generation (Sprint 9)
-5. Steam integration & polish (Sprint 10)
+1. DNA system implementation
+2. Player interaction UI
+3. World generation
+4. Steam integration & polish
 
 **Deferred to Phase 1.5:**
 - Narrative campaign (daughter rescue)

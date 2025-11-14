@@ -1,12 +1,5 @@
-export const NETWORK_CONFIG = {
-  UPDATE_RATE_HZ: 20,
-  RECONNECT_DELAY_MS: 3000,
-  MAX_RECONNECT_ATTEMPTS: 5,
-} as const;
-
 export const RENDERING_CONFIG = {
   TARGET_FPS: 90,
-  INTERPOLATION_BUFFER_MS: 50, // Fallback buffer when adaptive has <3 intervals. Assumes ~20 Hz server.
   VIEWPORT_SIZE_RATIO: 0.75, // Viewport is 75% of window size
   VELOCITY_DAMPING: 0.1, // Exponential decay rate for extrapolation (tune: 0.05-0.2)
 } as const;

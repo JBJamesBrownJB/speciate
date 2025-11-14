@@ -5,7 +5,6 @@
 //!
 //! Also includes rotation system which updates creature orientation based on velocity direction.
 
-pub mod components;
 pub mod constants;
 pub mod noise;
 pub mod rotation;

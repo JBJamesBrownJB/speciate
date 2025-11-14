@@ -3,9 +3,10 @@
 //! These systems handle motion integration (Euler) and world boundary constraints.
 //! They run AFTER behavior systems have accumulated forces into Acceleration.
 
+use crate::config::MovementConfig;
 use crate::simulation::components::*;
 use crate::simulation::core::components::*;
-use crate::simulation::movement::constants::{LOCOMOTION_NOISE_BASE, MAX_SPEED, VELOCITY_DAMPING};
+use crate::simulation::movement::constants::{MAX_SPEED, VELOCITY_DAMPING};
 use crate::simulation::movement::noise::perlin_locomotion_noise;
 use bevy_ecs::prelude::*;
 
@@ -49,6 +50,7 @@ pub fn integrate_motion_system(
     delta_time: Res<DeltaTime>,
     physics_tick: Res<PhysicsTick>,
     world_bounds: Res<crate::simulation::core::WorldBounds>,
+    movement_config: Res<MovementConfig>,
 ) {
     let dt = delta_time.0;
     let max_speed_sq = MAX_SPEED * MAX_SPEED;
@@ -74,11 +76,11 @@ pub fn integrate_motion_system(
             // Noise magnitude scales quadratically with speed (precision at low speeds)
             let speed_ratio = speed / MAX_SPEED;
             let size_factor = 1.0 / size.length.sqrt();
-            let noise_magnitude = LOCOMOTION_NOISE_BASE * speed_ratio * speed_ratio * size_factor;
+            let noise_magnitude = movement_config.locomotion_noise_base * speed_ratio * speed_ratio * size_factor;
 
             // Generate Perlin noise for this creature at current tick
-            let noise_x = perlin_locomotion_noise(entity.index(), tick, 0);
-            let noise_y = perlin_locomotion_noise(entity.index(), tick, 1);
+            let noise_x = perlin_locomotion_noise(entity.index(), tick, 0, movement_config.noise_time_scale);
+            let noise_y = perlin_locomotion_noise(entity.index(), tick, 1, movement_config.noise_time_scale);
 
             // Calculate perpendicular direction (lateral wobble, not forward/back)
             let perpendicular_x = -velocity.vy / speed;

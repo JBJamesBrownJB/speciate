@@ -104,10 +104,7 @@ fn random_point_in_rect(rect: &Rectangle) -> (f32, f32) {
 ///
 /// All spawn positions and targets are clamped to world boundaries with margin
 /// to prevent creatures from bunching at edges.
-pub fn spawn_initial_creatures_from_config(
-    simulation: &mut Simulation,
-    config: &SpawnSection,
-) {
+pub fn spawn_initial_creatures_from_config(simulation: &mut Simulation, config: &SpawnSection) {
     // Validate rectangles
     if !config.spawn_zone.is_valid() {
         log::error!("Invalid spawn_zone in config");
@@ -120,7 +117,10 @@ pub fn spawn_initial_creatures_from_config(
 
     // Support "seeking" and "wandering"
     if config.behavior != "seeking" && config.behavior != "wandering" {
-        log::error!("Unsupported behavior: {} (supported: seeking, wandering)", config.behavior);
+        log::error!(
+            "Unsupported behavior: {} (supported: seeking, wandering)",
+            config.behavior
+        );
         return;
     }
 
@@ -190,6 +190,7 @@ pub fn spawn_initial_creatures(simulation: &mut Simulation, _config: &SpawningCo
 
     simulation.spawn_crit(
         CritBuilder::new()
+            .with_size(5.0)
             .at(20.0, 0.0)
             .as_seeker(-10.0, 0.0) // Target is beyond obstacle
             .with_all_capabilities(),

@@ -14,6 +14,9 @@ pub struct WorldConfig {
 
     /// Simulation timing parameters
     pub timing: TimingConfig,
+
+    /// Movement behavior parameters
+    pub movement: MovementConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +54,29 @@ pub struct TimingConfig {
     pub creature_count_log_interval_secs: u64,
 }
 
+/// Movement behavior configuration
+#[derive(Debug, Clone, bevy_ecs::system::Resource)]
+pub struct MovementConfig {
+    /// Base magnitude for locomotion noise (Newtons)
+    /// Controls how much random wobble creatures have when moving
+    /// Scales with speed² and inversely with body size (smaller creatures wobble more)
+    pub locomotion_noise_base: f32,
+
+    /// Time scale for Perlin noise (controls wobble frequency)
+    /// Lower values = smoother, slower wobbles (e.g., 0.01 = very smooth)
+    /// Higher values = jittery, rapid wobbles (e.g., 0.2 = very jittery)
+    pub noise_time_scale: f32,
+}
+
+impl Default for MovementConfig {
+    fn default() -> Self {
+        Self {
+            locomotion_noise_base: 99.5,
+            noise_time_scale: 0.01,
+        }
+    }
+}
+
 /// Automatic snapshot configuration
 #[derive(Debug, Clone)]
 pub struct SnapshotConfig {
@@ -85,14 +111,10 @@ impl Default for WorldConfig {
             spawning: SpawningConfig {
                 initial_population: 1,
                 min_size: 0.5,
-                max_size: 2.0,
+                max_size: 5.0,
             },
-            timing: TimingConfig {
-                target_tick_rate: 20,
-                timing_window_size: 100,
-                timing_report_interval: 200,
-                creature_count_log_interval_secs: 5,
-            },
+            timing: TimingConfig::default(), // Use default() to avoid duplication
+            movement: MovementConfig::default(),
         }
     }
 }
@@ -100,7 +122,7 @@ impl Default for WorldConfig {
 impl Default for TimingConfig {
     fn default() -> Self {
         Self {
-            target_tick_rate: 20,
+            target_tick_rate: 60,
             timing_window_size: 100,
             timing_report_interval: 200,
             creature_count_log_interval_secs: 5,

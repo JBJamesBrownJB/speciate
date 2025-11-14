@@ -115,8 +115,14 @@ echo "   Ask: \"What's a realistic range for [trait]?\"" >&2
 echo "   Ask: \"How should [trait] scale with size/energy?\"" >&2
 echo "" >&2
 echo "3. 📝 Log the decision in /docs/biology/biology-notes.md:" >&2
-echo "   Format: Date | Feature | Zoologist Input | Implementation" >&2
-echo "   This creates permanent record for future reference" >&2
+echo "   Format: ### [Date] - [Trait Name]" >&2
+echo "           **Question:** ..." >&2
+echo "           **Zoologist Response:** ..." >&2
+echo "           **Implementation Status:** ..." >&2
+echo "   OR use: /dna-consult command to auto-log" >&2
+echo "" >&2
+echo "   ⚠️  MANDATORY: Every DNA trait change MUST be logged!" >&2
+echo "   This creates permanent record and prevents design drift." >&2
 echo "" >&2
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
 

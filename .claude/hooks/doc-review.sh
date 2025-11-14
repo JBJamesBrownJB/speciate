@@ -114,7 +114,20 @@ fi
 
 # Simulation ECS systems
 if [[ "$FILE_PATH" =~ apps/simulation/src/systems ]]; then
-  RELEVANT_DOCS+=("apps/simulation/README.md")
+  RELEVANT_DOCS+=("apps/simulation/CLAUDE.md")
+fi
+
+# Electron bridge code (IPC, main process, preload)
+if [[ "$FILE_PATH" =~ electron/ ]]; then
+  RELEVANT_DOCS+=("CLAUDE.md")
+  RELEVANT_DOCS+=("apps/simulation/CLAUDE.md")
+  RELEVANT_DOCS+=("docs/architecture/electron-architecture.md")
+fi
+
+# Check if file contains Electron IPC patterns (ipcMain, ipcRenderer, contextBridge)
+if [[ "$FILE_PATH" =~ \.(js|cjs|ts)$ ]] && grep -qE '(ipcMain|ipcRenderer|contextBridge)' "$FILE_PATH" 2>/dev/null; then
+  RELEVANT_DOCS+=("CLAUDE.md")
+  RELEVANT_DOCS+=("docs/architecture/electron-architecture.md")
 fi
 
 # No relevant docs? Exit silently

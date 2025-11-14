@@ -110,16 +110,16 @@ impl CritBuilder {
     /// - Position: (0, 0)
     /// - Velocity: (0, 0)
     /// - No capabilities enabled
-    /// - Behavior: Catatonic
+    /// - Behavior: Wandering (exploratory default)
     /// - Energy: 100.0
     /// - Age: 0.0
-    /// - Max speed: 5.0 m/s (biologically realistic from constants)
+    /// - Max speed: 30.0 m/s (biologically realistic from constants)
     pub fn new() -> Self {
         Self {
             position: (0.0, 0.0),
             velocity: (0.0, 0.0),
             capabilities: CritCapabilities::default(),
-            behavior: BehaviorMode::Catatonic,
+            behavior: BehaviorMode::Wandering,
             energy: 100.0,
             age: 0.0,
             max_speed: MAX_SPEED,
@@ -244,7 +244,8 @@ impl CritBuilder {
         let initial_target_x = self.position.0 + random_angle.cos() * random_distance;
         let initial_target_y = self.position.1 + random_angle.sin() * random_distance;
         const EDGE_MARGIN: f32 = 10.0; // Same margin as wander_target_selection_system
-        let (clamped_x, clamped_y) = world_bounds.clamp_target(initial_target_x, initial_target_y, EDGE_MARGIN);
+        let (clamped_x, clamped_y) =
+            world_bounds.clamp_target(initial_target_x, initial_target_y, EDGE_MARGIN);
 
         self.target = Some(Target::new(clamped_x, clamped_y));
         self
@@ -300,9 +301,9 @@ impl CritBuilder {
             wander_state: WanderState {
                 wander_angle: rng.gen_range(0.0..std::f32::consts::TAU),
                 // TODO(DNA Future DNA system): Derive from DNA genes
-                wander_radius: 5.0,    // TODO(DNA): perception_range * 0.3 * size.sqrt()
-                wander_distance: 3.0,  // TODO(DNA): body_size * 3.0 (planning horizon)
-                angle_change: 4.5,     // TODO(DNA): 50% of max turn rate from biomechanics
+                wander_radius: 5.0, // TODO(DNA): perception_range * 0.3 * size.sqrt()
+                wander_distance: 3.0, // TODO(DNA): body_size * 3.0 (planning horizon)
+                angle_change: 4.5,  // TODO(DNA): 50% of max turn rate from biomechanics
             },
             // Home position - defaults to spawn position (territory center)
             home_position: HomePosition::new(self.position.0, self.position.1),
@@ -330,7 +331,7 @@ mod tests {
         assert_eq!(builder.position, (0.0, 0.0));
         assert_eq!(builder.velocity, (0.0, 0.0));
         assert_eq!(builder.energy, 100.0);
-        assert_eq!(builder.behavior, BehaviorMode::Catatonic);
+        assert_eq!(builder.behavior, BehaviorMode::Wandering);
     }
 
     #[test]

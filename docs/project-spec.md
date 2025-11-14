@@ -12,7 +12,7 @@
 
 **Speciate** is a **single-player desktop game** featuring DNA-driven artificial life simulation set on an alien planet. Players explore, survive, and interact with an evolving ecosystem of autonomous creatures.
 
-**Platform:** Windows, Mac, Linux (via Tauri)
+**Platform:** Windows, Mac, Linux (via Electron)
 **Price:** $20-30 one-time purchase
 **Distribution:** Steam Early Access
 
@@ -48,7 +48,7 @@ A **DNA-driven artificial life simulation** where hundreds of autonomous creatur
 
 ## 2. 🏛️ Architectural Model
 
-### Phase 1: Tauri Hybrid Desktop (Current)
+### Phase 1: Electron Desktop (Current)
 
 **Architecture:** Local simulation bundled with rendering frontend into desktop executable
 
@@ -58,13 +58,13 @@ A **DNA-driven artificial life simulation** where hundreds of autonomous creatur
   - **Update (90 Hz):** Cheap physics integration (position += velocity * dt)
   - **Lock-free snapshot system:** Non-blocking state sharing with frontend
 
-* **Frontend (PixiJS):** Renders at 60-90 FPS, pulls state via Tauri IPC
-  - **No interpolation needed:** Direct access to simulation state via `invoke('get_game_state')`
-  - **Full f32 precision:** No quantization (bandwidth irrelevant for local IPC)
+* **Frontend (PixiJS):** Renders at 60 FPS, receives state via stdio MessagePack stream
+  - **Event-driven updates:** Listen for `state-update` events from main process
+  - **Full f32 precision:** No quantization (local IPC, no network limitations)
 
-* **Wrapper (Tauri):** Bundles Rust + TypeScript into single `.exe`/`.app` for Steam distribution
+* **Wrapper (Electron):** Bundles Rust + TypeScript into single `.exe`/`.app`/`.AppImage` for Steam distribution
 
-**See:** [Tauri Architecture Documentation](./architecture/tauri-architecture.md)
+**See:** [Electron Architecture Documentation](./architecture/electron-architecture.md)
 
 **Benefits:**
 - Zero server costs ($228k/year eliminated)
@@ -153,22 +153,22 @@ The core food chain is implemented through DNA-defined behaviors:
 
 ## 5. 🛠️ General Technology Stack
 
-### Phase 1 (Current) - Tauri Desktop Application
+### Phase 1 (Current) - Electron Desktop Application
 
 **Backend:**
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
-| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | High-performance simulation at dual-tick (20 Hz AI, 90 Hz physics) |
-| **IPC Bridge** | `tauri` + `crossbeam` | Lock-free snapshot queue for Rust ↔ TypeScript communication |
-| **Serialization** | `serde` + `serde_json` | GameState serialization for Tauri commands |
+| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | High-performance simulation at 20 Hz single-tick |
+| **IPC Protocol** | `stdio` + `MessagePack` | Length-prefixed binary frames at 60 Hz |
+| **Serialization** | `serde` + `rmp_serde` | GameState serialization to MessagePack |
 | **Save/Load** | `bincode` or `MessagePack` | World persistence to disk |
 
 **Frontend:**
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
-| **Rendering** | `Pixi.js` | 2D WebGL/WebGPU renderer at 60-90 FPS |
+| **Rendering** | `Pixi.js` | 2D WebGL renderer at 60 FPS |
 | **UI Framework** | HTML/DOM | Menus, inventory, HUD (standard web UI) |
-| **IPC Client** | `@tauri-apps/api` | Invoke Rust commands from TypeScript |
+| **IPC Client** | `window.electron` (preload) | Receive state updates from main process |
 
 **Deployment:**
 | Component | Technologies | Key Role/Purpose |

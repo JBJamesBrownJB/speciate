@@ -540,12 +540,235 @@ fn transition_system(
 
 ---
 
+## Electron Integration (Phase 1)
+
+### Overview
+
+Phase 1 uses **Electron** to bundle the Rust simulation subprocess with the TypeScript/PixiJS frontend. The simulation runs locally as a child process communicating via stdio (no network, no separate server).
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  ELECTRON APPLICATION                        │
+├──────────────────────────┬───────────────────────────────────┤
+│  RUST SUBPROCESS         │  FRONTEND (PixiJS)               │
+│  (Bevy ECS)              │  (Renderer Process)              │
+│                          │                                   │
+│  Update (20 Hz):         │  app.ticker (60 FPS):            │
+│  • AI & Decision Making  │  • Receive state-update events   │
+│  • Steering Behaviors    │  • Update sprite positions       │
+│  • Physics Integration   │  • Render frame                  │
+│                          │                                   │
+│  stdout MessagePack:     │                                   │
+│  • Serialize GameState   │  Main Process:                   │
+│  • 4-byte length prefix  │  • Read stdout frames            │
+│  • Binary payload   ─────┼──> Decode MessagePack            │
+│  • 60 Hz streaming       │  • Forward to renderer           │
+└──────────────────────────┴───────────────────────────────────┘
+```
+
+### stdio MessagePack Protocol
+
+**Problem:** Need efficient IPC between Rust subprocess and Electron main process.
+
+**Solution:** Length-prefixed MessagePack frames over stdout/stdin.
+
+**Protocol Format:**
+```
+┌─────────────┬─────────────────────────────┐
+│   4 bytes   │      N bytes                │
+│  (u32 BE)   │   (MessagePack payload)     │
+│   Length    │      GameState              │
+└─────────────┴─────────────────────────────┘
+```
+
+**Rust (Simulation) - Write:**
+```rust
+use rmp_serde;
+use std::io::{self, Write};
+
+fn write_frame(state: &GameState) -> io::Result<()> {
+    // Serialize to MessagePack
+    let payload = rmp_serde::to_vec(state)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    // Write 4-byte length prefix (big-endian)
+    let len = payload.len() as u32;
+    io::stdout().write_all(&len.to_be_bytes())?;
+
+    // Write payload
+    io::stdout().write_all(&payload)?;
+    io::stdout().flush()?;
+
+    Ok(())
+}
+```
+
+**Electron (Main Process) - Read:**
+```javascript
+const msgpack = require('msgpack-lite');
+
+simulationProcess.stdout.on('data', (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+
+    while (buffer.length >= 4) {
+        const frameLength = buffer.readUInt32BE(0);
+        if (buffer.length < 4 + frameLength) break;
+
+        const payload = buffer.slice(4, 4 + frameLength);
+        buffer = buffer.slice(4 + frameLength);
+
+        const state = msgpack.decode(payload);
+        mainWindow.webContents.send('state-update', state);
+    }
+});
+```
+
+**Benefits:**
+- **Simple:** No shared memory complexity
+- **Efficient:** Binary serialization, ~1KB per frame
+- **Lock-free:** Subprocess writes, main process reads (no coordination)
+- **Full precision:** f32 coordinates, no quantization
+
+### Event Streaming (Future)
+
+For significant events (death, reproduction), we can extend the protocol with event frames:
+
+```rust
+enum Frame {
+    State(GameState),
+    Event(GameEvent),
+}
+
+// Future enhancement - not yet implemented
+```
+
+### Persistence (Phase 1: None)
+
+**Phase 1 Strategy:** In-memory only. No database, no save files.
+
+- World resets on app close
+- Focus on gameplay, not persistence
+- Faster iteration (no migration headaches)
+
+**Phase 2 Strategy:** SQLite for save/load.
+
+---
+
+## Tick Architecture
+
+### Overview
+
+The simulation currently uses a **single-tick architecture** running at **20 Hz** (50ms per tick).
+
+| System | Tick Rate | Purpose |
+|--------|-----------|---------|
+| **All Systems** | 20 Hz (50ms) | Perception, AI, physics, movement, rendering |
+
+**Current Status:** All systems run on the same `Schedule::default()` at 20 Hz. This provides:
+- Consistent timing across all systems
+- Simplified system ordering (no cross-schedule dependencies)
+- Predictable performance characteristics
+
+### Implementation
+
+```rust
+impl SimulationBuilder {
+    pub fn new() -> Self {
+        let mut world = World::new();
+        let mut schedule = Schedule::default();
+
+        // ALL systems registered on the same schedule (20 Hz)
+        schedule.add_systems(process_spawn_events);
+
+        schedule.add_systems((
+            // Perception
+            perception::update_perception_system,
+
+            // Behaviors (force accumulation)
+            behavior_transition_system,
+            territory_wandering_system,
+            flee_system,
+            seek_system,
+            behaviors::avoidance_system,
+
+            // Physics integration
+            integrate_motion_system,
+            rotation_system,
+
+            // Snapshot for Electron stdout
+            snapshot_system,
+        ));
+
+        Self { world, schedule }
+    }
+}
+
+// Update loop runs at 20 Hz
+pub fn update(&mut self, delta_time: f32) {
+    self.world.insert_resource(DeltaTime(delta_time));
+    self.world.resource_mut::<PhysicsTick>().increment();
+    self.schedule.run(&mut self.world);  // All systems run here
+}
+```
+
+### System Ordering
+
+All systems run sequentially within the 20 Hz tick:
+
+1. **Spawn Events** - Process queued creature spawns
+2. **Perception** - Update spatial awareness
+3. **Behaviors** - Accumulate steering forces
+4. **Physics** - Integrate motion (Euler)
+5. **Rotation** - Update creature orientation
+6. **Snapshot** - Create state snapshot for frontend
+
+### Frontend Synchronization
+
+**Frontend polls at 60 FPS:**
+- Frontend renders at 60 FPS, simulation updates at 20 Hz
+- Some frames show new simulation state (every 50ms)
+- Other frames show stale state (interpolation could be added later)
+
+**Example:**
+```
+Time: 0ms    → Simulation tick (all systems run)
+Time: 16ms   → Frontend poll (stale state)
+Time: 33ms   → Frontend poll (stale state)
+Time: 50ms   → Simulation tick (all systems run)
+Time: 66ms   → Frontend poll (stale state)
+```
+
+### Future: Dual-Tick Architecture
+
+**Planned optimization (future sprint):**
+- **20 Hz tick:** AI decisions, perception, behavior transitions
+- **90 Hz tick:** Physics integration, movement, collision detection
+
+**Benefits:**
+- AI doesn't need to run every physics frame
+- 60-80% CPU savings on perception/decision systems
+- Smoother movement without wasting AI cycles
+
+**Implementation path:**
+1. Identify systems that benefit from higher tick rate (physics, movement)
+2. Split schedule into `FixedUpdate` (20 Hz) and `Update` (90 Hz)
+3. Benchmark to validate performance improvement
+4. Add interpolation for smooth visuals
+
+**Current decision:** Single-tick is simpler and adequate for current creature counts. Optimize when performance becomes a bottleneck.
+
+---
+
 ## See Also
 
-- `/workspace/CLAUDE.md` - Project-wide principles (TDD, DNA-driven design)
+- `/workspace/CLAUDE.md` - Project-wide principles (TDD, DNA-driven design, Electron IPC patterns)
 - `/workspace/docs/biology/biology-notes.md` - Zoologist consultations log
 - `/workspace/docs/biology/dna-driven-design.md` - DNA architecture specification
+- `/workspace/docs/architecture/electron-architecture.md` - Electron IPC patterns and desktop build
 - Bevy ECS documentation: https://bevyengine.org/learn/book/
+- Electron documentation: https://www.electronjs.org/
 
 ---
 

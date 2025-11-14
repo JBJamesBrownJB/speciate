@@ -18,7 +18,6 @@ describe("GridRenderer", () => {
     gridRenderer = new GridRenderer(
       worldContainer,
       GRID_CONFIG.SPACING,
-      2000000, // WORLD_CONFIG.SIZE
       GRID_CONFIG.COLOR,
       GRID_CONFIG.ALPHA,
       GRID_CONFIG.LINE_WIDTH,

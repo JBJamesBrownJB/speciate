@@ -180,8 +180,8 @@ describe('Camera', () => {
     });
 
     it('should respect zoom limits when adjusting', () => {
-      camera.setZoom(150);
-      camera.adjustZoom(2); // Would be 300, but clamped to MAX_ZOOM
+      camera.setZoom(250);
+      camera.adjustZoom(2); // Would be 500, but clamped to MAX_ZOOM (400)
       expect(camera.zoom).toBe(CAMERA_CONFIG.MAX_ZOOM);
     });
   });

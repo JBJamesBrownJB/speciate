@@ -20,7 +20,8 @@ export class SpriteProvider {
 
     try {
       // Load the placeholder sprite
-      this.placeholderTexture = await Assets.load('/placeholder.png');
+      const assetUrl = 'placeholder.png';
+      this.placeholderTexture = await Assets.load(assetUrl);
       this.initialized = true;
     } catch (error) {
       console.error('❌ Failed to load placeholder sprite:', error);

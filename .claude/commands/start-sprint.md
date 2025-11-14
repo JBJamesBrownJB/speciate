@@ -4,7 +4,7 @@ allowed-tools:
   - Bash
   - Read
   - Write
-model: haiku 
+model: sonnet
 ---
 
 # Sprint Initialization Wizard
@@ -30,6 +30,11 @@ Execute the following commands and report the status. If any check fails, **STOP
 1.  **Check for Uncommitted Changes:** `!git status --porcelain`
 2.  **Verify Main Branch:** `!git rev-parse --abbrev-ref HEAD` (Must confirm it is 'main').
 3.  **Check for Empty Docs Directory:** Verify the **SPRINT_DOCS** folder is empty or non-existent (`!ls -A SPRINT_DOCS`).
+4.  **Verify Development Environment:**
+    - Check Rust: `rustc --version`
+    - Check Node: `node --version`
+    - Check npm: `npm --version`
+    - Warn if any missing, but don't block sprint start
 
 ## 3. 🌲 Setup and Branching
 

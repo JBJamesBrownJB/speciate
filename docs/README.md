@@ -11,10 +11,8 @@ Welcome to the Biosphere project documentation. This index provides quick naviga
 
 System design, infrastructure, and technical architecture.
 
-- [Architectural Patterns](./architecture/architectural-patterns.md) - WebSocket broadcasting, infinite world, region design
-- [Streaming Architecture](./architecture/streaming-architecture.md) - FlatBuffers, NATS, LZ4 compression, spatial filtering (Sprint 5)
+- [Electron Architecture](./architecture/electron-architecture.md) - Standalone desktop game architecture, stdio IPC, MessagePack streaming
 - [World Coordinates](./architecture/world-coordinates.md) - Coordinate system, world size, zoom limits
-- [Contract Strategy](./architecture/contract-strategy.md) - JSON Schema contracts between frontend/backend
 - [Architecture Diagram](./architecture/diagrams/architecture-high.png) - Visual system overview
 
 ## Biology & Simulation
@@ -30,19 +28,15 @@ A-Life mechanics, genetics, creature behavior, and ecological systems.
 
 ## Performance
 
-Optimization strategies, instrumentation, and performance monitoring.
+Optimization strategies for the Electron desktop game.
 
-- [Optimization Catalog](./performance/optimization-catalog.md) - Viewport culling, spatial sharding, delta updates
-- [Instrumentation Plan](./performance/instrumentation-plan.md) - Metrics, dashboards, alerting, logging (Sprint 5)
-- [NATS Optimizations](./performance/nats-optimizations.md) - Non-blocking architecture, buffer pooling
+- [Optimization Catalog](./performance/optimization-catalog.md) - Viewport culling, ECS optimization, sprite pooling, save/load
 - [GPU Compute Idea](./performance/gpu-compute-idea.md) - WGSL kernel strategy (deferred)
 
 ## Research
 
-Technical decisions, technology evaluations, and setup guides.
+Technical decisions and technology evaluations.
 
-- [Technology Decisions](./research/technology-decisions.md) - NATS, WebSockets, observability stack choices
-- [Local Stack Setup](./research/local-stack-setup.md) - Docker Compose development environment
 - [Agent ID Strategy](./research/agent-id-nanoid.md) - NanoID vs UUID vs Snowflake analysis
 
 ## Gameplay

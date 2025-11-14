@@ -3,14 +3,12 @@
 //! This library provides the core ECS-based simulation engine for the Speciate project.
 
 pub mod config;
-pub mod nats;
 pub mod simulation;
-pub mod snapshots;
+pub mod persistence;
+pub mod ipc;
+pub mod stdio;
 pub mod state;
-
-// Dev commands module (feature-gated, local testing only)
-#[cfg(feature = "dev-commands")]
-pub mod dev_commands;
+pub mod runner;
 
 // Re-export commonly used types from simulation module
 pub use simulation::{components::*, core::*};
@@ -28,3 +26,12 @@ pub use simulation::creatures::builder::CritBuilder;
 pub use simulation::creatures::spawner::{
     spawn_creature, spawn_initial_creatures, CreatureSpawnRequest,
 };
+
+// Re-export IPC types for desktop integration
+pub use ipc::{CreatureSnapshot, GameState, SharedSnapshotQueue, SnapshotQueue};
+
+// Re-export runner types for loop orchestration
+pub use runner::{ConsoleHooks, NoOpHooks, RunnerConfig, RunnerHooks, SimulationRunner};
+
+// Re-export stdio hooks for Electron integration
+pub use stdio::StdioHooks;

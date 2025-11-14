@@ -55,7 +55,7 @@ pub const DEFAULT_MASS: f32 = 65.0;
 /// This is safely below collision threshold (0.5m), preventing physics tunneling.
 ///
 /// TODO: Migrate to DNA-derived calculation
-pub const MAX_SPEED: f32 = 30.0;
+pub const MAX_SPEED: f32 = 50.0;
 
 /// Maximum acceleration (meters/second²)
 ///
@@ -162,8 +162,8 @@ pub const SLOW_ZONE_MULTIPLIER: f32 = 30.0;
 /// - Fixes collinear obstacle edge case (adds lateral component)
 /// - Magnitude: 2-10% of typical locomotor forces (biologically realistic)
 ///
+/// **NOTE:** Locomotion noise magnitude is now configured via `MovementConfig` in `config.rs`
 /// TODO: Migrate to DNA gene: `motor_precision` (Future DNA system)
-pub const LOCOMOTION_NOISE_BASE: f32 = 90.5;
 
 // ============================================================================
 // STEERING FORCE CONSTANTS

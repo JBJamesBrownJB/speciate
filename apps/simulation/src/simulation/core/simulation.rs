@@ -2,7 +2,7 @@
 
 use super::components::*;
 use super::world_bounds::WorldBounds;
-use crate::nats::{self, NatsPublisher, SimulationTick};
+use crate::config::MovementConfig;
 use crate::simulation::creatures::behaviors::{
     self, behavior_transition_system, flee_system, seek_system,
     territory_wandering_system,
@@ -15,9 +15,6 @@ use crate::simulation::movement::{
 };
 use crate::simulation::perception;
 use bevy_ecs::prelude::*;
-
-#[cfg(feature = "dev-commands")]
-use crate::dev_commands::{DevCommandListener, DevSpawnIdCounter, process_dev_commands_system};
 
 /// Builder for creating a Simulation with proper system initialization
 ///
@@ -41,10 +38,6 @@ impl SimulationBuilder {
         // Spawn event processing (MUST run FIRST to process spawn requests)
         schedule.add_systems(process_spawn_events);
 
-        // Dev commands system (feature-gated, runs after spawn events)
-        #[cfg(feature = "dev-commands")]
-        schedule.add_systems(process_dev_commands_system.after(process_spawn_events));
-
         schedule.add_systems((
             // Perception systems - MUST run before behaviors
             perception::update_perception_system,
@@ -59,37 +52,21 @@ impl SimulationBuilder {
             integrate_motion_system,
             // Rotation can run whenever (one-frame delay is acceptable)
             rotation_system,
-            // NATS publishing systems
-            nats::systems::publish_frame_system,
-            // Tick must increment after frame is published
-            nats::systems::increment_tick_system.after(nats::systems::publish_frame_system),
         ));
+
 
         // Initialize default resources
         world.insert_resource(DeltaTime::default());
         world.insert_resource(BoundaryConfig::default());
         world.insert_resource(WorldBounds::default());
         world.insert_resource(PhysicsTick::default());
+        world.insert_resource(ActualTickRate::default());
+        world.insert_resource(MovementConfig::default());
 
         // Initialize spawn event system resources
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
         world.insert_resource(EntityIdMap::default());
-
-        // Initialize NATS publisher
-        let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "nats://nats:4222".to_string());
-        let (publisher, _nats_handle) = NatsPublisher::new(nats_url.clone(), 4);
-        world.insert_resource(publisher);
-        world.insert_resource(SimulationTick::default());
-
-        // Initialize dev command listener (feature-gated)
-        #[cfg(feature = "dev-commands")]
-        {
-            let (listener, _listener_handle) = DevCommandListener::new(nats_url, 16);
-            world.insert_resource(listener);
-            world.insert_resource(DevSpawnIdCounter::default());
-            log::info!("[DEV] Dev commands enabled - listening on dev.sim.*");
-        }
 
         Self { world, schedule }
     }
@@ -168,6 +145,14 @@ impl Simulation {
         (config.min_x, config.max_x, config.min_y, config.max_y)
     }
 
+    /// Update the measured tick rate resource
+    ///
+    /// This should be called by the main loop after measuring actual tick duration
+    /// to provide accurate tick rate display in the frontend.
+    pub fn set_tick_rate(&mut self, tick_rate: f32) {
+        self.world.resource_mut::<ActualTickRate>().0 = tick_rate;
+    }
+
     /// Spawns a new crit using the builder pattern
     ///
     /// This is the preferred way to spawn crits. Use `CritBuilder` to configure
@@ -193,30 +178,6 @@ impl Simulation {
         self.world.resource_mut::<EntityIdMap>().insert(entity, id);
 
         id
-    }
-
-    /// Spawns a new creature entity (deprecated)
-    ///
-    /// # Deprecated
-    /// Use `spawn_crit` with `CritBuilder` instead. This method is kept for
-    /// backward compatibility during the transition but will be removed in future versions.
-    ///
-    /// # Example Migration
-    /// ```no_run
-    /// # use speciate::{CritBuilder, SimulationBuilder};
-    /// # let mut sim = SimulationBuilder::new().build();
-    /// // OLD: sim.spawn_creature(10.0, 20.0, 0.0, 0.0);
-    /// // NEW:
-    /// let builder = CritBuilder::new().at(10.0, 20.0).with_all_capabilities();
-    /// sim.spawn_crit(builder);
-    /// ```
-    #[deprecated(
-        since = "0.1.0",
-        note = "Use spawn_crit with CritBuilder instead for better configurability"
-    )]
-    pub fn spawn_creature(&mut self, x: f32, y: f32, _width: f32, _height: f32) -> u32 {
-        let builder = CritBuilder::new().at(x, y).with_all_capabilities();
-        self.spawn_crit(builder)
     }
 
     /// Quick spawn for testing - crit with all capabilities, catatonic at position
@@ -250,14 +211,16 @@ impl Simulation {
     pub fn update(&mut self, delta_time: f32) {
         self.world.insert_resource(DeltaTime(delta_time));
 
-        // Increment physics tick for temporal variation (Perlin noise)
-        self.world.resource_mut::<PhysicsTick>().increment();
-
         // Run all systems (spawn events are emitted and processed in this frame)
+        // Systems run at the CURRENT tick (0-indexed)
         self.schedule.run(&mut self.world);
 
         // Update events AFTER systems run (prepare for next frame)
         self.world.resource_mut::<Events<SpawnCreatureEvent>>().update();
+
+        // Increment physics tick for next frame (Perlin noise temporal variation)
+        // This ensures first update runs at tick 0, second at tick 1, etc.
+        self.world.resource_mut::<PhysicsTick>().increment();
     }
 
     /// Returns the number of active creatures
@@ -325,8 +288,9 @@ mod tests {
             .set_boundaries(100.0, 100.0)
             .build();
 
-        // Spawn a creature
-        let entity_id = simulation.spawn_creature(50.0, 50.0, 0.0, 0.0);
+        // Spawn a creature using CritBuilder
+        let builder = CritBuilder::new().at(50.0, 50.0).with_all_capabilities();
+        let entity_id = simulation.spawn_crit(builder);
         assert!(entity_id > 0);
         assert_eq!(simulation.creature_count(), 1);
 
@@ -341,9 +305,9 @@ mod tests {
             .set_boundaries(100.0, 100.0)
             .build();
 
-        let id1 = simulation.spawn_creature(10.0, 10.0, 0.0, 0.0);
-        let id2 = simulation.spawn_creature(20.0, 20.0, 0.0, 0.0);
-        let id3 = simulation.spawn_creature(30.0, 30.0, 0.0, 0.0);
+        let id1 = simulation.spawn_crit(CritBuilder::new().at(10.0, 10.0).with_all_capabilities());
+        let id2 = simulation.spawn_crit(CritBuilder::new().at(20.0, 20.0).with_all_capabilities());
+        let id3 = simulation.spawn_crit(CritBuilder::new().at(30.0, 30.0).with_all_capabilities());
 
         assert_ne!(id1, id2);
         assert_ne!(id2, id3);

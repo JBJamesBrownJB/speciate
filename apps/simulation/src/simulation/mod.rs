@@ -7,7 +7,6 @@ pub mod perception;
 
 // Legacy modules (to be refactored)
 pub mod components; // Will be split across domains
-pub mod resources; // Internal use
 
 // Re-export commonly used types from core
 pub use core::components::{Acceleration, BodySize, BoundaryConfig, DeltaTime, PhysicsTick, Position, Velocity};

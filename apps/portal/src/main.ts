@@ -3,12 +3,11 @@ import { SpriteProvider } from "@/rendering/SpriteProvider";
 import { GridRenderer } from "@/rendering/GridRenderer";
 import { Camera } from "@/domain/Camera";
 import { Viewport } from "@/domain/Viewport";
-import { Interpolator } from "@/domain/Interpolator";
 import { Creature } from "@/domain/Creature";
-import { RENDERING_CONFIG, WORLD_CONFIG, GRID_CONFIG } from "@/core/constants";
-import { WebSocketClient, ConnectionState } from "@/core/WebSocketClient";
+import { RENDERING_CONFIG, GRID_CONFIG } from "@/core/constants";
 import { SpritePool } from "@/infrastructure/SpritePool";
-import type { SimulationStateMessage } from "@/types/messages";
+import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
+import { PerformanceMetrics } from "@/core/PerformanceMetrics";
 
 /**
  * Helper to update the canvas container size to match viewport dimensions
@@ -283,19 +282,61 @@ async function main(): Promise<void> {
       window.innerHeight * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
     );
 
-    // Create Pixi application
+    // Create Pixi application with WebGL fallback
     const app = new Application();
-    await app.init({
-      width: viewportWidth,
-      height: viewportHeight,
-      backgroundColor: 0x000000,
-      resolution: window.devicePixelRatio || 1,
-      autoDensity: true,
-      antialias: true,
-    });
 
-    // Configure target FPS
-    app.ticker.maxFPS = RENDERING_CONFIG.TARGET_FPS;
+    try {
+      // Try WebGL first (preferred for performance)
+      await app.init({
+        width: viewportWidth,
+        height: viewportHeight,
+        backgroundColor: 0x000000,
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true,
+        preference: 'webgl', // Prefer WebGL
+        powerPreference: 'low-power', // Use integrated GPU if available
+        failIfMajorPerformanceCaveat: false, // Allow slow WebGL
+        antialias: false, // Disable AA to reduce GPU load during init
+      });
+    } catch (error) {
+      console.error('[PixiJS] WebGL initialization failed:', error);
+
+      // Fallback to Canvas2D renderer
+      await app.init({
+        width: viewportWidth,
+        height: viewportHeight,
+        backgroundColor: 0x000000,
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true,
+        preference: 'webgpu', // Force Canvas2D (webgpu is canvas in PixiJS 8)
+        antialias: false,
+      });
+
+      console.warn('[PixiJS] ⚠️ Running in Canvas2D mode (software rendering, expect 30-60 FPS)');
+    }
+
+    // Explicitly disable PixiJS throttle - 0 means use native RAF rate
+    app.ticker.maxFPS = 0;
+
+    // Detect actual browser refresh rate via RAF sampling
+    let rafSamples: number[] = [];
+    let rafLastTime = performance.now();
+    let rafCount = 0;
+
+    const measureRefreshRate = () => {
+      const now = performance.now();
+      const delta = now - rafLastTime;
+      if (delta > 0) {
+        rafSamples.push(1000 / delta);
+      }
+      rafLastTime = now;
+      rafCount++;
+
+      if (rafCount < 20) {
+        requestAnimationFrame(measureRefreshRate);
+      }
+    };
+    requestAnimationFrame(measureRefreshRate);
 
     const container = document.getElementById("canvas-container");
     if (!container) throw new Error("canvas-container not found");
@@ -325,7 +366,6 @@ async function main(): Promise<void> {
     const gridRenderer = new GridRenderer(
       worldContainer,
       GRID_CONFIG.SPACING,
-      WORLD_CONFIG.SIZE,
       GRID_CONFIG.COLOR,
       GRID_CONFIG.ALPHA,
       GRID_CONFIG.LINE_WIDTH,
@@ -342,14 +382,23 @@ async function main(): Promise<void> {
     const spritePool = new SpritePool();
     const texture = spriteProvider.getCreatureTexture();
 
-    // Get HUD elements for updates
-    const fpsValue = document.getElementById("fps-value");
-    const tickValue = document.getElementById("tick-value");
-    const pingValue = document.getElementById("ping-value");
-    const statusValue = document.getElementById("status-value");
-    const positionValue = document.getElementById("position-value");
-    const zoomValue = document.getElementById("zoom-value");
-    const creatureCount = document.getElementById("creature-count");
+    // Cache HUD elements for efficient updates (no DOM queries in render loop)
+    const hudElements = {
+      fpsValue: document.getElementById("fps-value"),
+      tickRateValue: document.getElementById("tick-rate-value"),
+      positionValue: document.getElementById("position-value"),
+      zoomValue: document.getElementById("zoom-value"),
+      creatureCount: document.getElementById("creature-count"),
+      emptyStateWarning: document.getElementById("empty-state-warning"),
+      statusValue: document.getElementById("status-value"),
+      ipcLatencyValue: document.getElementById("ipc-latency-value"),
+      decodeTimeValue: document.getElementById("decode-time-value"),
+      payloadSizeValue: document.getElementById("payload-size-value"),
+      spriteUpdateValue: document.getElementById("sprite-update-value"),
+      domUpdateValue: document.getElementById("dom-update-value"),
+      frameBudgetValue: document.getElementById("frame-budget-value"),
+      tickFreshnessValue: document.getElementById("tick-freshness-value"),
+    };
 
     // Initialize FPS sparkline
     const fpsSparkline = new FPSSparkline("fps-sparkline");
@@ -363,99 +412,22 @@ async function main(): Promise<void> {
     let selectionIndicator: Graphics | null = null;
     let creatureDataMap = new Map<number, any>(); // Store full creature data
 
-    // Initialize WebSocket client
-    const wsClient = new WebSocketClient("ws://localhost:8080/stream");
+    // Initialize performance metrics tracker
+    const perfMetrics = new PerformanceMetrics(RENDERING_CONFIG.TARGET_FPS);
 
-    // Initialize interpolator for smooth rendering (adaptive buffer matches server tick rate)
-    const interpolator = new Interpolator();
+    // Initialize IPC client (auto-detects Electron/browser)
+    let latestCreatures: Creature[] = [];
+    const ipcClient: IPCClient | null = createIPCClient();
 
-    // Handle connection state changes
-    wsClient.onConnectionStateChange((state: ConnectionState) => {
-      // Clear interpolator on disconnect/reconnect
-      if (
-        state === ConnectionState.Disconnected ||
-        state === ConnectionState.Reconnecting
-      ) {
-        interpolator.clear();
-      }
+    if (ipcClient) {
+      // Connect to simulation backend (event-driven)
+      await ipcClient.connect();
 
-      // Update HUD status indicator
-      if (statusValue) {
-        statusValue.textContent = state;
-        statusValue.className = "value";
-
-        switch (state) {
-          case ConnectionState.Connected:
-            statusValue.classList.add("connected");
-            break;
-          case ConnectionState.Disconnected:
-            statusValue.classList.add("disconnected");
-            break;
-          case ConnectionState.Reconnecting:
-            statusValue.classList.add("reconnecting");
-            break;
-          default:
-            break;
-        }
-      }
-
-      // Update canvas container backlight glow (3-state system)
-      if (container) {
-        // Remove all glow classes
-        container.classList.remove(
-          "glow-connecting-reconnecting",
-          "glow-connected",
-          "glow-error"
-        );
-
-        // Add appropriate glow class based on connection state
-        switch (state) {
-          case ConnectionState.Connecting:
-          case ConnectionState.Reconnecting:
-            // Both states map to orange pulsing glow
-            container.classList.add("glow-connecting-reconnecting");
-            break;
-          case ConnectionState.Connected:
-            // Normal operational state - green with subtle wave
-            container.classList.add("glow-connected");
-            break;
-          case ConnectionState.Disconnected:
-            // Error/manual disconnect - red pulsing
-            container.classList.add("glow-error");
-            break;
-        }
-      }
-    });
-
-    // Handle incoming simulation frames
-    wsClient.onMessage((message: SimulationStateMessage) => {
-      currentTick = message.tick;
-      currentCreatureCount = message.creatures.length;
-
-      // Update tick display
-      if (tickValue) {
-        tickValue.textContent = currentTick.toString();
-      }
-
-      // Update creature count
-      if (creatureCount) {
-        creatureCount.textContent = currentCreatureCount.toString();
-      }
-
-      // Store full creature data for inspection panel
-      creatureDataMap.clear();
-      for (const creature of message.creatures) {
-        creatureDataMap.set(creature.id, creature);
-      }
-
-      // Update interpolator with new creature data
-      const now = performance.now();
-      const creatures = message.creatures.map(c => Creature.fromMessage(c));
-      interpolator.update(creatures, now);
-    });
-
-    // Start WebSocket connection
-    wsClient.connect();
+      // Cleanup on page unload
+      window.addEventListener("beforeunload", async () => {
+        await ipcClient.disconnect();
+      });
+    }
 
     // Handle inspection panel close button
     const closeInspectorBtn = document.getElementById("close-inspector");
@@ -476,18 +448,91 @@ async function main(): Promise<void> {
       });
     }
 
-    // FPS counter and HUD update loop
+    // FPS counter and HUD update loop (synced to display refresh rate)
+    // SYNCHRONOUS: No await! Uses cached state from background polling
+    let frameCount = 0;
     app.ticker.add(() => {
-      const now = performance.now();
-      const deltaMs = now - lastFrameTime;
+      const frameStart = performance.now();
+      const deltaMs = frameStart - lastFrameTime;
       const fps = Math.round(1000 / deltaMs);
-      lastFrameTime = now;
 
-      // RENDER SPRITES WITH INTERPOLATION/EXTRAPOLATION (TARGET_FPS controlled)
-      // Buffer is calculated adaptively based on observed server update rate
-      const interpolatedCreatures = interpolator.interpolate(now);
+      // Record frame time
+      perfMetrics.recordFrameTime(deltaMs);
 
-      for (const creature of interpolatedCreatures) {
+      frameCount++;
+
+      // Read latest state from IPC client (synchronous, <1ms!)
+      const state = ipcClient?.getLatestState();
+
+      // Defensive: Check both state AND state.creatures
+      // This prevents crashes if malformed state somehow gets through validation
+      if (state && state.creatures) {
+        currentTick = state.tick;
+        currentCreatureCount = state.creatures.length;
+
+        // Update status to Connected (use cached element)
+        if (hudElements.statusValue && hudElements.statusValue.textContent !== "Connected") {
+          hudElements.statusValue.textContent = "Connected";
+          hudElements.statusValue.className = "value connected";
+        }
+
+        // Update tick rate display (use cached element)
+        if (hudElements.tickRateValue) {
+          const tickRateHz = state.tickRateHz || 0;
+          // Display "..." until first measurement (backend uses -1.0 as sentinel)
+          const tickRateDisplay = tickRateHz < 0 ? "..." : `${tickRateHz.toFixed(1)} Hz`;
+          hudElements.tickRateValue.textContent = tickRateDisplay;
+        }
+
+        // Update creature count (use cached element)
+        if (hudElements.creatureCount) {
+          hudElements.creatureCount.textContent = currentCreatureCount.toString();
+        }
+
+        // Show/hide empty state warning (use cached element)
+        if (hudElements.emptyStateWarning) {
+          if (currentCreatureCount === 0 && currentTick > 5) {
+            hudElements.emptyStateWarning.style.display = 'block';
+          } else {
+            hudElements.emptyStateWarning.style.display = 'none';
+          }
+        }
+
+        // Store full creature data for inspection panel
+        creatureDataMap.clear();
+        for (const creature of state.creatures) {
+          creatureDataMap.set(creature.id, creature);
+        }
+
+        // Convert to Creature domain objects for rendering
+        latestCreatures = state.creatures.map((c: any) => new Creature(
+          c.id,
+          c.x,
+          c.y,
+          c.rotation,
+          c.width,
+          c.height
+        ));
+      } else {
+        // Update status based on mode
+        if (hudElements.statusValue) {
+          if (!ipcClient) {
+            // Browser mode - no backend
+            hudElements.statusValue.textContent = "Browser Mode";
+            hudElements.statusValue.className = "value";
+          } else if (currentTick === 0) {
+            // Electron mode but still connecting
+            hudElements.statusValue.textContent = "Connecting...";
+            hudElements.statusValue.className = "value reconnecting";
+          }
+        }
+      }
+
+      // RENDER SPRITES (updated from latest state above)
+      const spriteUpdateStart = performance.now();
+      const creatures = latestCreatures;
+
+      for (const creature of creatures) {
         const sprite = spritePool.acquire(creature.id, texture);
 
         // Update sprite transform
@@ -504,51 +549,52 @@ async function main(): Promise<void> {
           sprite.scale.set(worldScale);
         }
 
-        // Add to world container if not already there
+        // Add to world container and configure interactivity (only once per sprite)
         if (!sprite.parent) {
           worldContainer.addChild(sprite);
+
+          // Make sprite interactive for click detection (configure once)
+          sprite.eventMode = 'static';
+          sprite.cursor = 'pointer';
+
+          // Add click handler ONCE when sprite is first added
+          sprite.on('click', (event: any) => {
+            event.stopPropagation(); // Prevent event bubbling
+            const clickedId = (sprite as any).creatureId;
+
+            // Remove old selection indicator
+            if (selectionIndicator && selectionIndicator.parent) {
+              selectionIndicator.parent.removeChild(selectionIndicator);
+              selectionIndicator.destroy();
+              selectionIndicator = null;
+            }
+
+            // Select new creature
+            selectedCreatureId = clickedId;
+
+            // Get creature data and show panel
+            const data = creatureDataMap.get(clickedId);
+            if (data) {
+              // Create selection indicator
+              selectionIndicator = new Graphics();
+              selectionIndicator.circle(0, 0, Math.max(data.width, data.height) * 0.7);
+              selectionIndicator.stroke({ width: 2, color: 0x6fb83f, alpha: 0.8 });
+              selectionIndicator.circle(0, 0, Math.max(data.width, data.height) * 0.75);
+              selectionIndicator.stroke({ width: 1, color: 0x6fb83f, alpha: 0.4 });
+
+              selectionIndicator.position.set((sprite as any).__lastX, (sprite as any).__lastY);
+              worldContainer.addChild(selectionIndicator);
+
+              updateInspectionPanel(data);
+              showInspectionPanel();
+            }
+          });
         }
 
-        // Make sprite interactive for click detection
-        sprite.eventMode = 'static';
-        sprite.cursor = 'pointer';
-
-        // Store creature ID on sprite for click handling
+        // Store creature ID on sprite for click handling (update every frame)
         (sprite as any).creatureId = creature.id;
-
-        // Add click handler to sprite
-        sprite.removeAllListeners('click'); // Remove old listeners
-        sprite.on('click', (event: any) => {
-          event.stopPropagation(); // Prevent event bubbling
-          const clickedId = (sprite as any).creatureId;
-
-          // Remove old selection indicator
-          if (selectionIndicator && selectionIndicator.parent) {
-            selectionIndicator.parent.removeChild(selectionIndicator);
-            selectionIndicator.destroy();
-            selectionIndicator = null;
-          }
-
-          // Select new creature
-          selectedCreatureId = clickedId;
-
-          // Get creature data and show panel
-          const data = creatureDataMap.get(clickedId);
-          if (data) {
-            // Create selection indicator
-            selectionIndicator = new Graphics();
-            selectionIndicator.circle(0, 0, Math.max(data.width, data.height) * 0.7);
-            selectionIndicator.stroke({ width: 2, color: 0x6fb83f, alpha: 0.8 });
-            selectionIndicator.circle(0, 0, Math.max(data.width, data.height) * 0.75);
-            selectionIndicator.stroke({ width: 1, color: 0x6fb83f, alpha: 0.4 });
-
-            selectionIndicator.position.set(creature.x, creature.y);
-            worldContainer.addChild(selectionIndicator);
-
-            updateInspectionPanel(data);
-            showInspectionPanel();
-          }
-        });
+        (sprite as any).__lastX = creature.x;
+        (sprite as any).__lastY = creature.y;
 
         // Update selection indicator position if this is the selected creature
         if (creature.id === selectedCreatureId && selectionIndicator) {
@@ -557,7 +603,7 @@ async function main(): Promise<void> {
       }
 
       // Release sprites for creatures that no longer exist
-      const currentCreatureIds = new Set(interpolatedCreatures.map(c => c.id));
+      const currentCreatureIds = new Set(creatures.map(c => c.id));
       const pooledIds = spritePool.getActiveIds();
       for (const id of pooledIds) {
         if (!currentCreatureIds.has(id)) {
@@ -565,33 +611,85 @@ async function main(): Promise<void> {
         }
       }
 
-      // Update FPS display and sparkline
-      if (fpsValue) {
-        fpsValue.textContent = fps.toString();
+      const spriteUpdateEnd = performance.now();
+      perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
+
+      // DOM UPDATES
+      const domUpdateStart = performance.now();
+
+      // Update FPS display and sparkline (use cached element)
+      if (hudElements.fpsValue) {
+        hudElements.fpsValue.textContent = fps.toString();
       }
       fpsSparkline.update(fps);
 
-      // Update camera position
-      if (positionValue) {
+      // Update camera position (use cached element)
+      if (hudElements.positionValue) {
         const x = Math.round(camera.x);
         const y = Math.round(camera.y);
-        positionValue.textContent = `${x}m, ${y}m`;
+        hudElements.positionValue.textContent = `${x}m, ${y}m`;
       }
 
-      // Update zoom level
-      if (zoomValue) {
+      // Update zoom level (use cached element)
+      if (hudElements.zoomValue) {
         const zoom = camera.zoom.toFixed(2);
-        zoomValue.textContent = `${zoom}px/m`;
+        hudElements.zoomValue.textContent = `${zoom}px/m`;
       }
 
-      // Update ping
-      if (pingValue) {
-        const ping = wsClient.getPing();
-        pingValue.textContent = ping > 0 ? `${ping}ms` : "N/A";
+      const domUpdateEnd = performance.now();
+      perfMetrics.recordDomUpdateTime(domUpdateEnd - domUpdateStart);
+
+      // Calculate total render time (sprite + DOM)
+      const totalRenderTime = (spriteUpdateEnd - spriteUpdateStart) + (domUpdateEnd - domUpdateStart);
+      perfMetrics.recordTotalRenderTime(totalRenderTime);
+
+      // Update performance metrics in HUD
+      const perfSnapshot = perfMetrics.getSnapshot();
+
+      if (hudElements.ipcLatencyValue) {
+        hudElements.ipcLatencyValue.textContent = `${perfSnapshot.ipcLatencyAvg.toFixed(2)}ms`;
       }
+
+      if (hudElements.decodeTimeValue) {
+        hudElements.decodeTimeValue.textContent = `${perfSnapshot.decodeTimeAvg.toFixed(2)}ms`;
+      }
+
+      if (hudElements.payloadSizeValue) {
+        hudElements.payloadSizeValue.textContent = `${(perfSnapshot.payloadSize / 1024).toFixed(2)}KB`;
+      }
+
+      if (hudElements.spriteUpdateValue) {
+        hudElements.spriteUpdateValue.textContent = `${perfSnapshot.spriteUpdateTime.toFixed(2)}ms`;
+      }
+
+      if (hudElements.domUpdateValue) {
+        hudElements.domUpdateValue.textContent = `${perfSnapshot.domUpdateTime.toFixed(2)}ms`;
+      }
+
+      if (hudElements.frameBudgetValue) {
+        const overhead = perfSnapshot.frameOverhead;
+        const color = overhead > 0 ? '#d94848' : '#6fb83f'; // Red if over budget, green otherwise
+        hudElements.frameBudgetValue.textContent = `${overhead >= 0 ? '+' : ''}${overhead.toFixed(2)}ms`;
+        hudElements.frameBudgetValue.style.color = color;
+      }
+
+      if (hudElements.tickFreshnessValue) {
+        const tickAge = perfSnapshot.tickAge;
+        const color = tickAge > 5 ? '#d94848' : (tickAge > 2 ? '#f0a830' : '#6fb83f');
+        hudElements.tickFreshnessValue.textContent = `${tickAge} frames`;
+        hudElements.tickFreshnessValue.style.color = color;
+      }
+
+      // Update lastFrameTime for next frame
+      lastFrameTime = frameStart;
     });
 
     document.title = "✅ Simulation Viewer - Live";
+
+    // Monitor for browser throttling of background tabs
+    document.addEventListener('visibilitychange', () => {
+      // Tab visibility changed - could update UI status here if needed
+    });
 
     // Handle resize
     window.addEventListener("resize", () => {

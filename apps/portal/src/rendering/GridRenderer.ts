@@ -13,7 +13,6 @@ export class GridRenderer {
   private readonly color: number;
   private readonly alpha: number;
   private readonly baseLineWidth: number;
-  private readonly worldSize: number;
   private currentZoom: number;
   private camera: Camera | null = null;
   private viewport: Viewport | null = null;
@@ -21,14 +20,12 @@ export class GridRenderer {
   constructor(
     worldContainer: Container,
     spacing: number,
-    worldSize: number,
     color: number = 0x2a2a2a,
     alpha: number = 0.3,
     lineWidth: number = 1,
     initialZoom: number = 1
   ) {
     this.spacing = spacing;
-    this.worldSize = worldSize;
     this.color = color;
     this.alpha = alpha;
     this.baseLineWidth = lineWidth;

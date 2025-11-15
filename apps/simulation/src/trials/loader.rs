@@ -1,4 +1,3 @@
-//! Trial loader - reads TOML files and spawns creatures into ECS World
 
 use bevy_ecs::world::World;
 use std::fs;
@@ -9,40 +8,21 @@ use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::components::state::BehaviorMode;
 use crate::simulation::creatures::systems::NextCreatureId;
 
-/// Load a trial from TOML template file
-///
-/// # Arguments
-/// * `world` - ECS World to spawn creatures into
-/// * `template_name` - Name of trial template (e.g., "default-spawn-baseline")
-///
-/// # Returns
-/// * `Ok(TrialConfig)` - Successfully loaded and spawned trial
-/// * `Err(String)` - Error message if file not found or invalid TOML
-///
-/// # Example
-/// ```no_run
-/// use bevy_ecs::world::World;
-/// use speciate::trials::loader::load_trial;
-///
-/// let mut world = World::new();
-/// let config = load_trial(&mut world, "crowd-navigation").unwrap();
-/// println!("Loaded trial: {}", config.name);
-/// ```
 #[cfg(feature = "dev-tools")]
 pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig, String> {
-    // Resolve trial path relative to binary location, not CWD
-    // When run from Electron, CWD is apps/portal but binary is in apps/simulation/target/debug
+
+
     let exe_dir = std::env::current_exe()
         .map_err(|e| format!("Failed to get executable path: {}", e))?
         .parent()
         .ok_or_else(|| "Failed to get executable directory".to_string())?
         .to_path_buf();
 
-    // Detect if running from test (target/debug/deps) vs normal (target/debug)
+
     let trials_relative_path = if exe_dir.ends_with("deps") {
-        "../../../trials" // test binary in target/debug/deps
+        "../../../trials"
     } else {
-        "../../trials" // normal binary in target/debug or target/release
+        "../../trials"
     };
 
     let trial_path = exe_dir
@@ -52,15 +32,15 @@ pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig,
     let path = trial_path.canonicalize()
         .map_err(|e| format!("Trial file not found at {}: {}", trial_path.display(), e))?;
 
-    // Read TOML file
+
     let toml_content = fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read trial file '{}': {}", path.display(), e))?;
 
-    // Parse TOML into TrialConfig
+
     let config: TrialConfig = toml::from_str(&toml_content)
         .map_err(|e| format!("Failed to parse trial TOML '{}': {}", path.display(), e))?;
 
-    // Apply world configuration overrides (if present)
+
     if let Some(world_config) = &config.world {
         if let Some(dt) = world_config.delta_time {
             world.insert_resource(crate::simulation::core::components::DeltaTime(dt));
@@ -72,13 +52,13 @@ pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig,
                 max_x: boundary.max_x,
                 min_y: boundary.min_y,
                 max_y: boundary.max_y,
-                margin: 10_000.0, // Default margin
-                max_force: 1.0,   // Default max force
+                margin: 10_000.0,
+                max_force: 1.0,
             });
         }
     }
 
-    // Spawn creatures for each pattern
+
     for pattern in &config.spawns {
         spawn_pattern(world, pattern);
     }
@@ -86,7 +66,6 @@ pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig,
     Ok(config)
 }
 
-/// Spawn creatures according to a spawn pattern
 fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
     match pattern {
         SpawnPattern::Single {
@@ -135,7 +114,6 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
     }
 }
 
-/// Spawn a single creature with appropriate components based on type
 fn spawn_creature(
     world: &mut World,
     x: f32,
@@ -144,28 +122,28 @@ fn spawn_creature(
     target_x: Option<f32>,
     target_y: Option<f32>,
 ) {
-    // Get next creature ID
+
     let mut next_id = world.resource_mut::<NextCreatureId>();
     let creature_id = next_id.generate();
 
     match creature_type {
         CreatureType::Catatonic => {
-            // Use CritBuilder but set to Catatonic behavior
+
             let builder = CritBuilder::new()
                 .at(x, y)
                 .in_behavior(BehaviorMode::Catatonic);
             let bundle = builder.build(creature_id);
 
-            // Spawn with bundle and add Catatonic marker
+
             world.spawn((bundle, Catatonic));
         }
 
         CreatureType::Seeker => {
-            // Use configured target or default to origin
+
             let target_x = target_x.unwrap_or(0.0);
             let target_y = target_y.unwrap_or(0.0);
 
-            // Use CritBuilder's as_seeker preset
+
             let builder = CritBuilder::new()
                 .at(x, y)
                 .as_seeker(target_x, target_y);
@@ -175,9 +153,9 @@ fn spawn_creature(
         }
 
         CreatureType::Wanderer => {
-            // Use CritBuilder for wandering behavior
-            // Note: Can't use as_wanderer() because it requires WorldBounds
-            // Instead, configure manually
+
+
+
             let builder = CritBuilder::new()
                 .at(x, y)
                 .with_wandering()
@@ -211,7 +189,7 @@ mod tests {
 
         spawn_pattern(&mut world, &pattern);
 
-        // Verify creature spawned
+
         let mut query = world.query::<(&Position, &Catatonic)>();
         let results: Vec<_> = query.iter(&world).collect();
 
@@ -236,7 +214,7 @@ mod tests {
 
         spawn_pattern(&mut world, &pattern);
 
-        // Verify seeker has Target component
+
         let mut query = world.query::<(&Position, &Target, &CreatureState)>();
         let results: Vec<_> = query.iter(&world).collect();
 
@@ -244,10 +222,10 @@ mod tests {
         let (pos, target, state) = results[0];
         assert_eq!(pos.x, 100.0);
         assert_eq!(pos.y, 200.0);
-        assert_eq!(target.x, 0.0); // Default target at origin
+        assert_eq!(target.x, 0.0);
         assert_eq!(target.y, 0.0);
 
-        // Verify BehaviorMode is Seeking
+
         assert!(matches!(state.behavior, BehaviorMode::Seeking));
     }
 
@@ -266,7 +244,7 @@ mod tests {
 
         spawn_pattern(&mut world, &pattern);
 
-        // Verify seeker has custom target
+
         let mut query = world.query::<(&Position, &Target, &CreatureState)>();
         let results: Vec<_> = query.iter(&world).collect();
 
@@ -277,7 +255,7 @@ mod tests {
         assert_eq!(target.x, -10.0);
         assert_eq!(target.y, 5.0);
 
-        // Verify BehaviorMode is Seeking
+
         assert!(matches!(state.behavior, BehaviorMode::Seeking));
     }
 
@@ -297,16 +275,16 @@ mod tests {
 
         spawn_pattern(&mut world, &pattern);
 
-        // Verify correct count (3 rows × 4 cols = 12 creatures)
+
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
         assert_eq!(positions.len(), 12);
 
-        // Verify first creature at (0, 0)
+
         let first = positions.iter().find(|p| p.x == 0.0 && p.y == 0.0);
         assert!(first.is_some());
 
-        // Verify last creature at (30, 20) - (cols-1)*spacing, (rows-1)*spacing
+
         let last = positions.iter().find(|p| p.x == 30.0 && p.y == 20.0);
         assert!(last.is_some());
     }
@@ -328,12 +306,12 @@ mod tests {
 
         spawn_pattern(&mut world, &pattern);
 
-        // Verify count
+
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
         assert_eq!(positions.len(), 8);
 
-        // Verify all creatures are approximately 50m from center
+
         for pos in positions {
             let dx = pos.x - 100.0;
             let dy = pos.y - 100.0;
@@ -361,9 +339,9 @@ mod tests {
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
 
-        // Expected positions:
-        // Row 0: (10, 20), (15, 20), (20, 20)
-        // Row 1: (10, 25), (15, 25), (20, 25)
+
+
+
         assert!(positions.iter().any(|p| p.x == 10.0 && p.y == 20.0));
         assert!(positions.iter().any(|p| p.x == 15.0 && p.y == 20.0));
         assert!(positions.iter().any(|p| p.x == 20.0 && p.y == 20.0));
@@ -392,7 +370,7 @@ mod tests {
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
 
-        // First creature should be at angle 0 (radius along X axis)
+
         let first = positions
             .iter()
             .find(|p| (p.x - 100.0).abs() < 0.01 && p.y.abs() < 0.01);
@@ -411,9 +389,9 @@ mod tests {
         spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker, None, None);
         spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer, None, None);
 
-        // Count each type
-        // Note: All creatures now have Target component (from CritBundle)
-        // We count by behavior mode instead
+
+
+
         let catatonic_count = world.query::<&Catatonic>().iter(&world).count();
         let seeker_count = world
             .query::<&CreatureState>()
@@ -449,7 +427,7 @@ mod tests {
 
         spawn_pattern(&mut world, &pattern);
 
-        // All creatures should have Position, Velocity, Acceleration, BodySize
+
         let pos_count = world.query::<&Position>().iter(&world).count();
         let vel_count = world.query::<&Velocity>().iter(&world).count();
         let accel_count = world.query::<&Acceleration>().iter(&world).count();
@@ -481,8 +459,8 @@ mod tests {
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
 
-        // With 4 creatures, angles should be 0°, 90°, 180°, 270°
-        // Positions: (100, 0), (0, 100), (-100, 0), (0, -100)
+
+
         assert!(positions.iter().any(|p| (p.x - 100.0).abs() < 0.01
             && p.y.abs() < 0.01));
         assert!(positions.iter().any(|p| p.x.abs() < 0.01
@@ -510,7 +488,7 @@ mod tests {
 
         spawn_pattern(&mut world, &pattern);
 
-        // Verify all seekers have the same target at origin
+
         let mut query = world.query::<(&Target, &CreatureState)>();
         let results: Vec<_> = query.iter(&world).collect();
 

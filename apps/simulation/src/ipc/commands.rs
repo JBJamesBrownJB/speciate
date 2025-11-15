@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::io;
 
-/// Commands that can be sent from the frontend to the simulation via stdin
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
@@ -23,7 +22,6 @@ pub enum Command {
 }
 
 impl Command {
-    /// Serialize to MessagePack using map format (compatible with Electron's msgpack-lite)
     pub fn to_msgpack(&self) -> io::Result<Vec<u8>> {
         let mut buf = Vec::new();
         self.serialize(&mut rmp_serde::Serializer::new(&mut buf).with_struct_map())
@@ -31,7 +29,6 @@ impl Command {
         Ok(buf)
     }
 
-    /// Deserialize from MessagePack (accepts both map and array formats)
     pub fn from_msgpack(bytes: &[u8]) -> io::Result<Self> {
         rmp_serde::from_slice(bytes)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
@@ -107,7 +104,6 @@ mod tests {
 
         match command {
             Command::DevClearCreatures => {
-                // Successfully deserialized
             }
             _ => panic!("Expected DevClearCreatures"),
         }
@@ -115,7 +111,6 @@ mod tests {
 
     #[test]
     fn test_command_enum_uses_snake_case_type_field() {
-        // Verify the type field is exactly "dev_spawn_creature" not "DevSpawnCreature"
         let json = r#"{"type": "dev_spawn_creature", "x": 0.0, "y": 0.0}"#;
         let value: serde_json::Value = serde_json::from_str(json).unwrap();
         let msgpack = rmp_serde::to_vec(&value).unwrap();
@@ -123,7 +118,6 @@ mod tests {
         let result: Result<Command, _> = rmp_serde::from_slice(&msgpack);
         assert!(result.is_ok(), "Should deserialize with snake_case type field");
 
-        // Now try with PascalCase (should fail)
         let json_pascal = r#"{"type": "DevSpawnCreature", "x": 0.0, "y": 0.0}"#;
         let value_pascal: serde_json::Value = serde_json::from_str(json_pascal).unwrap();
         let msgpack_pascal = rmp_serde::to_vec(&value_pascal).unwrap();
@@ -134,7 +128,6 @@ mod tests {
 
     #[test]
     fn test_invalid_command_returns_error() {
-        // Missing required field
         let json = r#"{"type": "dev_spawn_creature", "x": 100.5}"#;
         let value: serde_json::Value = serde_json::from_str(json).unwrap();
         let msgpack = rmp_serde::to_vec(&value).unwrap();
@@ -142,7 +135,6 @@ mod tests {
         let result: Result<Command, _> = rmp_serde::from_slice(&msgpack);
         assert!(result.is_err(), "Should fail when missing required field 'y'");
 
-        // Unknown command type
         let json_unknown = r#"{"type": "unknown_command", "data": "test"}"#;
         let value_unknown: serde_json::Value = serde_json::from_str(json_unknown).unwrap();
         let msgpack_unknown = rmp_serde::to_vec(&value_unknown).unwrap();

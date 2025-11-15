@@ -139,66 +139,24 @@ cargo test -- --nocapture  # Run tests with output
 
 ## Testing Requirements
 
-### Test-Driven Development (TDD) - MANDATORY
+**CRITICAL: Test-Driven Development (TDD) is MANDATORY for all contributions.**
 
-**CRITICAL: You MUST follow Test-Driven Development principles at all times.**
+See [CLAUDE.md](CLAUDE.md#test-driven-development-tdd---mandatory) for complete TDD workflow and requirements.
 
-#### TDD Workflow
+**Quick reference:**
+- Run tests BEFORE and AFTER every change
+- Write tests FIRST for new features
+- Write failing test FIRST when fixing bugs
+- Never commit without all tests passing
 
-1. **Before ANY code change:**
-   - Run `npm test` to verify current state
-   - Ensure all tests pass before proceeding
-   - If tests fail, FIX THEM FIRST before making any other changes
-
-2. **When making changes:**
-   - Write tests FIRST if adding new functionality
-   - Make the minimal change needed
-   - Run tests IMMEDIATELY after the change
-   - If tests fail, revert or fix immediately
-
-3. **NEVER:**
-   - Make code changes without running tests
-   - Assume code works without test verification
-   - Skip tests because "it's a small change"
-   - Batch multiple changes before testing
-
-#### Test-First Bug Fixing
-
-**CRITICAL: When debugging, write a failing test BEFORE investigating the bug.**
-
-1. **Reproduce the bug in a test:**
-   - Write the simplest test that fails due to the bug
-   - Verify the test fails with the current code
-   - This proves you understand the bug
-
-2. **Fix the bug:**
-   - Make minimal changes to fix the issue
-   - Run the test to verify it now passes
-   - Run ALL tests to ensure no regressions
-
-3. **NEVER:**
-   - Jump straight into "fixing" without a failing test
-   - Add console.logs instead of writing tests
-   - Assume a fix works without test verification
-
-#### Running Tests
-
-**Frontend tests:**
+**Running tests:**
 ```bash
-cd apps/portal
-npm test            # Run full test suite
-npm run test:watch  # Run tests in watch mode
-```
+# Frontend
+cd apps/portal && npm test
 
-**Backend tests:**
-```bash
-cd apps/simulation
-cargo test                    # Run all Rust tests
-cargo test -- --nocapture     # Run with output
-cargo test test_name          # Run specific test
+# Backend
+cd apps/simulation && cargo test
 ```
-
-**Current test coverage:** 196 tests passing (Portal + Simulation)
 
 ---
 

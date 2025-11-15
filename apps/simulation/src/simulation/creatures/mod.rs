@@ -1,8 +1,3 @@
-//! Creature behavior domain
-//!
-//! Contains all creature-specific logic: capabilities, behavioral states,
-//! steering behaviors, and spawning. Systems in this module ADD forces
-//! to acceleration (force accumulation pattern).
 
 pub mod behaviors;
 pub mod builder;

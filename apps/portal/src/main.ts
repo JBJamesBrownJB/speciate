@@ -9,9 +9,6 @@ import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
 import { PerformanceMetrics } from "@/core/PerformanceMetrics";
 import type { CreatureData } from "@/types/GameState";
 
-/**
- * Helper to update the canvas container size to match viewport dimensions
- */
 function updateContainerSize(
   container: HTMLElement,
   width: number,
@@ -21,15 +18,11 @@ function updateContainerSize(
   container.style.height = `${height}px`;
 }
 
-/**
- * FPS Sparkline Chart
- * Displays a mini performance graph showing FPS over the last TARGET_FPS frames
- */
 class FPSSparkline {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private fpsHistory: number[] = [];
-  private maxHistory = RENDERING_CONFIG.TARGET_FPS; // Show last TARGET_FPS frames (~1 second)
+  private maxHistory = RENDERING_CONFIG.TARGET_FPS;
 
   constructor(canvasId: string) {
     const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
@@ -40,7 +33,6 @@ class FPSSparkline {
     if (!ctx) throw new Error("Could not get 2d context");
     this.ctx = ctx;
 
-    // Set canvas resolution (2x for retina displays)
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width * dpr;
@@ -60,18 +52,15 @@ class FPSSparkline {
     const width = this.canvas.width / (window.devicePixelRatio || 1);
     const height = this.canvas.height / (window.devicePixelRatio || 1);
 
-    // Clear canvas
     this.ctx.clearRect(0, 0, width, height);
 
     if (this.fpsHistory.length < 2) return;
 
-    // Find max FPS for scaling (cap at TARGET_FPS for consistent scale)
     const maxFPS = RENDERING_CONFIG.TARGET_FPS;
     const minFPS = 0;
 
-    // Draw sparkline
     this.ctx.beginPath();
-    this.ctx.strokeStyle = "#6fb83f"; // Life green
+    this.ctx.strokeStyle = "#6fb83f";
     this.ctx.lineWidth = 1.5;
 
     const xStep = width / (this.maxHistory - 1);
@@ -90,7 +79,6 @@ class FPSSparkline {
 
     this.ctx.stroke();
 
-    // Draw 60fps reference line
     this.ctx.beginPath();
     this.ctx.strokeStyle = "rgba(111, 184, 63, 0.3)";
     this.ctx.lineWidth = 1;
@@ -102,15 +90,10 @@ class FPSSparkline {
   }
 }
 
-/**
- * Updates the inspection panel with creature data
- */
 function updateInspectionPanel(creatureData: CreatureData): void {
-  // Identity
   const idElement = document.getElementById("inspect-id");
   if (idElement) idElement.textContent = `#${creatureData.id}`;
 
-  // Physical
   const positionElement = document.getElementById("inspect-position");
   if (positionElement) {
     positionElement.textContent = `${creatureData.x.toFixed(
@@ -131,7 +114,6 @@ function updateInspectionPanel(creatureData: CreatureData): void {
     )}m × ${creatureData.height.toFixed(2)}m`;
   }
 
-  // Movement
   const velocityElement = document.getElementById("inspect-velocity");
   if (
     velocityElement &&
@@ -157,7 +139,6 @@ function updateInspectionPanel(creatureData: CreatureData): void {
     speedElement.textContent = "N/A";
   }
 
-  // State
   const energyElement = document.getElementById("inspect-energy");
   if (energyElement && creatureData.energy !== undefined) {
     energyElement.textContent = `${creatureData.energy.toFixed(0)}`;
@@ -173,9 +154,6 @@ function updateInspectionPanel(creatureData: CreatureData): void {
   }
 }
 
-/**
- * Shows the inspection panel
- */
 function showInspectionPanel(): void {
   const panel = document.getElementById("inspection-panel");
   if (panel) {
@@ -183,9 +161,6 @@ function showInspectionPanel(): void {
   }
 }
 
-/**
- * Hides the inspection panel
- */
 function hideInspectionPanel(): void {
   const panel = document.getElementById("inspection-panel");
   if (panel) {
@@ -193,25 +168,18 @@ function hideInspectionPanel(): void {
   }
 }
 
-/**
- * Selects an appropriate "nice" distance for the scale bar
- * based on current zoom level. Targets ~120px bar width.
- */
 function selectScaleDistance(zoom: number): {
   distance: number;
   label: string;
 } {
-  const targetPixelWidth = 120; // Target bar width in pixels
-  // Expanded nice numbers to support 2000km × 2000km world (up to 1,000km scale)
+  const targetPixelWidth = 120;
   const niceNumbers = [
     1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000,
     100000, 200000, 500000, 1000000,
   ];
 
-  // Calculate what world distance would give us target width
   const idealDistance = targetPixelWidth / zoom;
 
-  // Find closest nice number
   let bestDistance = niceNumbers[0];
   let bestDiff = Math.abs(idealDistance - bestDistance);
 
@@ -223,7 +191,6 @@ function selectScaleDistance(zoom: number): {
     }
   }
 
-  // Format label with appropriate unit
   let label: string;
   if (bestDistance >= 1000) {
     label = `${bestDistance / 1000}km`;
@@ -234,14 +201,9 @@ function selectScaleDistance(zoom: number): {
   return { distance: bestDistance, label };
 }
 
-/**
- * Updates scale bar based on current zoom level.
- * Scale bar uses adaptive distances for readability across all zoom levels.
- */
 function updateScale(zoom: number): void {
   const { distance, label } = selectScaleDistance(zoom);
 
-  // Update scale bar
   const pixelWidth = distance * zoom;
   const scaleLine = document.getElementById("scale-line");
   const scaleLabel = document.getElementById("scale-label");
@@ -257,12 +219,9 @@ function updateScale(zoom: number): void {
 
 async function main(): Promise<void> {
   try {
-    // Set CSS custom property from RENDERING_CONFIG (single source of truth)
-    // Convert 0.75 → "75" for use in calc(var(--viewport-size) * 1vw)
     const viewportSizePercent = (RENDERING_CONFIG.VIEWPORT_SIZE_RATIO * 100).toString();
     document.documentElement.style.setProperty('--viewport-size', viewportSizePercent);
 
-    // Calculate viewport dimensions from config
     const viewportWidth = Math.floor(
       window.innerWidth * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
     );
@@ -270,43 +229,38 @@ async function main(): Promise<void> {
       window.innerHeight * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
     );
 
-    // Create Pixi application with WebGL fallback
     const app = new Application();
 
     try {
-      // Try WebGL first (preferred for performance)
       await app.init({
         width: viewportWidth,
         height: viewportHeight,
         backgroundColor: 0x000000,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
-        preference: 'webgl', // Prefer WebGL
-        powerPreference: 'low-power', // Use integrated GPU if available
-        failIfMajorPerformanceCaveat: false, // Allow slow WebGL
-        antialias: false, // Disable AA to reduce GPU load during init
+        preference: 'webgl',
+        powerPreference: 'low-power',
+        failIfMajorPerformanceCaveat: false,
+        antialias: false,
       });
     } catch (error) {
       console.error('[PixiJS] WebGL initialization failed:', error);
 
-      // Fallback to Canvas2D renderer
       await app.init({
         width: viewportWidth,
         height: viewportHeight,
         backgroundColor: 0x000000,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
-        preference: 'webgpu', // Force Canvas2D (webgpu is canvas in PixiJS 8)
+        preference: 'webgpu',
         antialias: false,
       });
 
       console.warn('[PixiJS] ⚠️ Running in Canvas2D mode (software rendering, expect 30-60 FPS)');
     }
 
-    // Explicitly disable PixiJS throttle - 0 means use native RAF rate
     app.ticker.maxFPS = 0;
 
-    // Detect actual browser refresh rate via RAF sampling
     let rafSamples: number[] = [];
     let rafLastTime = performance.now();
     let rafCount = 0;
@@ -328,40 +282,31 @@ async function main(): Promise<void> {
 
     const container = document.getElementById("canvas-container");
     if (!container) throw new Error("canvas-container not found");
-    container.classList.add('glow-active'); // Apply default backlight
+    container.classList.add('glow-active');
     container.appendChild(app.canvas);
 
-    // Update container size to match viewport (overrides CSS)
     updateContainerSize(container, viewportWidth, viewportHeight);
 
-    // Initialize domain objects
-    const camera = new Camera(0, 0, 10); // Start at origin, 10 pixels per meter
+    const camera = new Camera(0, 0, 10);
     const viewport = new Viewport(viewportWidth, viewportHeight);
 
-    // Load sprite
     const spriteProvider = new SpriteProvider();
     await spriteProvider.init();
 
-    // Create world container (holds all game objects at world coordinates)
     const worldContainer = new Container();
-    worldContainer.eventMode = 'static'; // Enable event handling on container
+    worldContainer.eventMode = 'static';
     app.stage.addChild(worldContainer);
 
-    // Enable interactive events on the stage
     app.stage.eventMode = "static";
     app.stage.hitArea = app.screen;
 
-    // Apply camera transform to world container
     camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
 
-    // Initialize scale bar
     updateScale(camera.zoom);
 
-    // Initialize sprite pool for efficient entity management
     const spritePool = new SpritePool();
     const texture = spriteProvider.getCreatureTexture();
 
-    // Cache HUD elements for efficient updates (no DOM queries in render loop)
     const hudElements = {
       fpsValue: document.getElementById("fps-value"),
       tickRateValue: document.getElementById("tick-rate-value"),
@@ -369,99 +314,77 @@ async function main(): Promise<void> {
       zoomValue: document.getElementById("zoom-value"),
     };
 
-    // Initialize FPS sparkline
     const fpsSparkline = new FPSSparkline("fps-sparkline");
 
     let lastFrameTime = performance.now();
     let currentCreatureCount = 0;
 
-    // Track selected creature for inspection
     let selectedCreatureId: number | null = null;
     let selectionIndicator: Graphics | null = null;
-    let creatureDataMap = new Map<number, any>(); // Store full creature data
+    let creatureDataMap = new Map<number, any>();
 
-    // Initialize performance metrics tracker
     const perfMetrics = new PerformanceMetrics(RENDERING_CONFIG.TARGET_FPS);
 
-    // Initialize IPC client (auto-detects Electron/browser)
     let latestCreatures: Creature[] = [];
     const ipcClient: IPCClient | null = createIPCClient();
 
     if (ipcClient) {
-      // Connect to simulation backend (event-driven)
       await ipcClient.connect();
 
-      // Cleanup on page unload
       window.addEventListener("beforeunload", async () => {
         await ipcClient.disconnect();
       });
     }
 
-    // Handle inspection panel close button
     const closeInspectorBtn = document.getElementById("close-inspector");
     if (closeInspectorBtn) {
       closeInspectorBtn.addEventListener("click", () => {
-        // Remove selection indicator
         if (selectionIndicator && selectionIndicator.parent) {
           selectionIndicator.parent.removeChild(selectionIndicator);
           selectionIndicator.destroy();
           selectionIndicator = null;
         }
 
-        // Deselect creature
         selectedCreatureId = null;
 
-        // Hide panel
         hideInspectionPanel();
       });
     }
 
-    // FPS counter and HUD update loop (synced to display refresh rate)
-    // SYNCHRONOUS: No await! Uses cached state from background polling
     let frameCount = 0;
     app.ticker.add(() => {
       const frameStart = performance.now();
       const deltaMs = frameStart - lastFrameTime;
       const fps = Math.round(1000 / deltaMs);
 
-      // Record frame time
       perfMetrics.recordFrameTime(deltaMs);
 
       frameCount++;
 
-      // Read latest state from IPC client (synchronous, <1ms!)
       const state = ipcClient?.getLatestState();
 
-      // Defensive: Check both state AND state.creatures
-      // This prevents crashes if malformed state somehow gets through validation
       if (state && state.creatures) {
         currentCreatureCount = state.creatures.length;
 
-        // Update tick rate display (use cached element)
         if (hudElements.tickRateValue) {
           const tickRateHz = state.tickRateHz || 0;
-          // Display "..." until first measurement (backend uses -1.0 as sentinel)
           const tickRateDisplay = tickRateHz < 0 ? "..." : `${tickRateHz.toFixed(1)} Hz`;
           hudElements.tickRateValue.textContent = tickRateDisplay;
         }
 
-        // Update creature count (use cached element)
         if (hudElements.creatureCount) {
           hudElements.creatureCount.textContent = currentCreatureCount.toString();
         }
 
-        // Update zoom display (use cached element)
         if (hudElements.zoomValue) {
           hudElements.zoomValue.textContent = `${camera.zoom.toFixed(2)}x`;
         }
 
-        // Store full creature data for inspection panel
         creatureDataMap.clear();
         for (const creature of state.creatures) {
           creatureDataMap.set(creature.id, creature);
         }
 
-        // Convert to Creature domain objects for rendering
         latestCreatures = state.creatures.map((c: CreatureData) => new Creature(
           c.id,
           c.x,
@@ -472,18 +395,15 @@ async function main(): Promise<void> {
         ));
       }
 
-      // RENDER SPRITES (updated from latest state above)
       const spriteUpdateStart = performance.now();
       const creatures = latestCreatures;
 
       for (const creature of creatures) {
         const sprite = spritePool.acquire(creature.id, texture);
 
-        // Update sprite transform
         sprite.position.set(creature.x, creature.y);
         sprite.rotation = creature.rotation;
 
-        // Get creature data for sizing
         const creatureData = creatureDataMap.get(creature.id);
         if (creatureData) {
           const worldScale = Math.min(
@@ -493,33 +413,26 @@ async function main(): Promise<void> {
           sprite.scale.set(worldScale);
         }
 
-        // Add to world container and configure interactivity (only once per sprite)
         if (!sprite.parent) {
           worldContainer.addChild(sprite);
 
-          // Make sprite interactive for click detection (configure once)
           sprite.eventMode = 'static';
           sprite.cursor = 'pointer';
 
-          // Add click handler ONCE when sprite is first added
           sprite.on('click', (event: FederatedPointerEvent) => {
-            event.stopPropagation(); // Prevent event bubbling
+            event.stopPropagation();
             const clickedId = (sprite as any).creatureId;
 
-            // Remove old selection indicator
             if (selectionIndicator && selectionIndicator.parent) {
               selectionIndicator.parent.removeChild(selectionIndicator);
               selectionIndicator.destroy();
               selectionIndicator = null;
             }
 
-            // Select new creature
             selectedCreatureId = clickedId;
 
-            // Get creature data and show panel
             const data = creatureDataMap.get(clickedId);
             if (data) {
-              // Create selection indicator
               selectionIndicator = new Graphics();
               selectionIndicator.circle(0, 0, Math.max(data.width, data.height) * 0.7);
               selectionIndicator.stroke({ width: 2, color: 0x6fb83f, alpha: 0.8 });
@@ -535,18 +448,15 @@ async function main(): Promise<void> {
           });
         }
 
-        // Store creature ID on sprite for click handling (update every frame)
         (sprite as any).creatureId = creature.id;
         (sprite as any).__lastX = creature.x;
         (sprite as any).__lastY = creature.y;
 
-        // Update selection indicator position if this is the selected creature
         if (creature.id === selectedCreatureId && selectionIndicator) {
           selectionIndicator.position.set(creature.x, creature.y);
         }
       }
 
-      // Release sprites for creatures that no longer exist
       const currentCreatureIds = new Set(creatures.map(c => c.id));
       const pooledIds = spritePool.getActiveIds();
       for (const id of pooledIds) {
@@ -558,24 +468,19 @@ async function main(): Promise<void> {
       const spriteUpdateEnd = performance.now();
       perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
 
-      // Update FPS display and sparkline (use cached element)
       if (hudElements.fpsValue) {
         hudElements.fpsValue.textContent = fps.toString();
       }
       fpsSparkline.update(fps);
 
-      // Update lastFrameTime for next frame
       lastFrameTime = frameStart;
     });
 
     document.title = "✅ Simulation Viewer - Live";
 
-    // Monitor for browser throttling of background tabs
     document.addEventListener('visibilitychange', () => {
-      // Tab visibility changed - could update UI status here if needed
     });
 
-    // Handle resize
     window.addEventListener("resize", () => {
       const newWidth = Math.floor(
         window.innerWidth * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
@@ -591,14 +496,11 @@ async function main(): Promise<void> {
       updateScale(camera.zoom);
     });
 
-    // Handle mouse wheel zoom
     window.addEventListener(
       "wheel",
       (event: WheelEvent) => {
         event.preventDefault();
 
-        // Zoom sensitivity: 0.001 = 0.1% per wheel delta unit
-        // Standard mouse wheel generates ~100 deltaY per notch, so ~10% zoom per notch
         const zoomFactor = 1 - event.deltaY * 0.001;
 
         camera.adjustZoom(zoomFactor);
@@ -606,7 +508,7 @@ async function main(): Promise<void> {
         updateScale(camera.zoom);
       },
       { passive: false }
-    ); // passive: false required for preventDefault()
+    );
   } catch (error) {
     console.error("[Portal] ❌ Failed to initialize:", error);
     document.title = "❌ Failed";
@@ -617,9 +519,8 @@ async function main(): Promise<void> {
   }
 }
 
-// Ensure CSS is fully loaded before initializing PixiJS (prevents canvas/container size mismatch)
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => main());
 } else {
-  main(); // DOM already loaded (e.g., if script is deferred)
+  main();
 }

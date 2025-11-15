@@ -51,8 +51,7 @@ apps/ui/dist
 apps/ui/build
 
 # State snapshot directories
-/apps/portal/snapshots
-/apps/simulation/snapshots
+*.msgpack
 
 # Log files and npm debug
 npm-debug.log*

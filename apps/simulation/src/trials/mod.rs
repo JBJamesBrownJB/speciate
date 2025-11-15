@@ -1,79 +1,52 @@
-//! Trial system for regression testing simulation scenarios
-//!
-//! Trials are predefined starting conditions (spawn patterns, world config)
-//! stored in TOML files. They enable:
-//! - Reproducible regression tests across refactors
-//! - Debugging specific scenarios (crowd navigation, boundary behavior)
-//! - Benchmarking performance with controlled conditions
 
 use serde::{Deserialize, Serialize};
 
 pub mod loader;
 
-/// Trial configuration loaded from TOML template
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TrialConfig {
-    /// Display name (e.g., "Crowd Navigation Test")
     pub name: String,
 
-    /// Description of test scenario
     #[serde(default)]
     pub description: String,
 
-    /// Spawn patterns to apply when loading trial
     pub spawns: Vec<SpawnPattern>,
 
-    /// Optional world configuration overrides
     #[serde(default)]
     pub world: Option<WorldConfig>,
 }
 
-/// Spawn pattern defining how creatures are placed
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SpawnPattern {
-    /// Single creature at specific position
     Single {
         x: f32,
         y: f32,
         #[serde(default)]
         creature_type: CreatureType,
-        /// Optional target position for seeker creatures (defaults to origin)
         #[serde(default)]
         target_x: Option<f32>,
         #[serde(default)]
         target_y: Option<f32>,
     },
 
-    /// Grid of creatures with spacing
     Grid {
-        /// Top-left corner X coordinate
         start_x: f32,
-        /// Top-left corner Y coordinate
         start_y: f32,
-        /// Spacing between creatures (meters)
         spacing: f32,
-        /// Number of rows
         rows: u32,
-        /// Number of columns
         cols: u32,
         #[serde(default)]
         creature_type: CreatureType,
     },
 
-    /// Circle formation
     Circle {
-        /// Center X coordinate
         center_x: f32,
-        /// Center Y coordinate
         center_y: f32,
-        /// Radius (meters)
         radius: f32,
-        /// Number of creatures
         count: u32,
         #[serde(default)]
         creature_type: CreatureType,
-        /// Optional shared target position for all seeker creatures (defaults to origin)
         #[serde(default)]
         target_x: Option<f32>,
         #[serde(default)]
@@ -81,17 +54,13 @@ pub enum SpawnPattern {
     },
 }
 
-/// Type of creature to spawn (affects components added)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CreatureType {
-    /// Stationary creature (Catatonic marker)
     Catatonic,
 
-    /// Mobile creature with seeking behavior
     Seeker,
 
-    /// Default wanderer (all capabilities enabled)
     Wanderer,
 }
 
@@ -101,19 +70,15 @@ impl Default for CreatureType {
     }
 }
 
-/// Optional world configuration overrides
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorldConfig {
-    /// Override delta time (default: 0.05 for 20 Hz)
     #[serde(default)]
     pub delta_time: Option<f32>,
 
-    /// Override boundary limits (default: ±1,000,000m)
     #[serde(default)]
     pub boundary: Option<BoundaryOverride>,
 }
 
-/// Boundary configuration override
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BoundaryOverride {
     pub min_x: f32,

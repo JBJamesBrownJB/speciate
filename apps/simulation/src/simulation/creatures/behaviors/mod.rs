@@ -1,10 +1,3 @@
-//! Creature steering behaviors
-//!
-//! All behavior systems follow the force accumulation pattern:
-//! they ADD to Acceleration, never replace it. This allows multiple
-//! behaviors to blend naturally (emergent obstacle avoidance, etc.).
-//!
-//! System ordering: These run BEFORE physics integration.
 
 pub mod avoidance;
 pub mod flee;

@@ -1,44 +1,9 @@
-//! Obstacle avoidance behavior system
-//!
-//! Implements separation steering using inverse square law for repulsion.
-//! Follows the force accumulation pattern: ADDs to Acceleration, never replaces.
-//!
-//! # Force Zones
-//! - **Safe distance** (distance > personal_space): No avoidance force
-//! - **Repulsion zone** (panic_threshold < distance ≤ personal_space): Inverse square force
-//! - **Panic zone** (distance ≤ panic_threshold): Maximum force (capped)
-//!
-//! # Biological Rationale
-//! Inverse square law mimics looming threat perception (angular size scaling).
-//! See docs/biology/biology-notes.md (2025-11-07) for full zoologist consultation.
-
 use crate::simulation::components::*;
 use crate::simulation::core::components::*;
 use crate::simulation::movement::STEERING;
 use crate::simulation::perception::*;
 use bevy_ecs::prelude::*;
 
-/// Avoidance behavior: steer away from nearby obstacles
-///
-/// System ordering: Runs BEFORE physics integration (force accumulation)
-///
-/// Algorithm:
-/// 1. Query creatures with avoidance capability
-/// 2. For each nearby entity from perception:
-///    - Calculate distance and direction
-///    - If within personal space: apply repulsion force :: TODO see 
-///    - Use inverse square scaling (stronger when closer)
-///    - Cap at panic force if collision imminent
-/// 3. Sum all repulsion forces
-/// 4. Limit total magnitude
-/// 5. ADD to acceleration (force accumulation)
-///
-/// Only executes when creature has:
-/// - CanAvoidObstacles capability marker
-/// - Perception component (populated by update_perception_system)
-/// - AvoidanceBehavior component (personal space parameters)
-///
-/// TODO: Migrate hardcoded constants to DNA-driven parameters (Future DNA system)
 #[allow(clippy::type_complexity)]
 pub fn avoidance_system(
     mut query: Query<
@@ -70,37 +35,29 @@ pub fn avoidance_system(
                 continue;
             }
 
-            // Get other entity's position and size
             let Ok((other_pos, other_size)) = others.get(other_entity) else {
                 continue;
             };
 
-            // Calculate center-to-center distance
             let away_x = position.x - other_pos.x;
             let away_y = position.y - other_pos.y;
             let center_distance = (away_x * away_x + away_y * away_y).sqrt();
 
-            // Guard against division by zero (creatures at same position)
             if center_distance < 0.001 {
-                continue; // Skip this neighbor to avoid NaN
+                continue;
             }
 
-            // Edge-to-edge distance
             let edge_distance = center_distance - self_radius - other_size.radius();
-            let safe_distance = edge_distance.max(0.01); // Prevent div-by-zero
+            let safe_distance = edge_distance.max(0.01);
 
-            // Apply force if edge-to-edge distance within personal space
             if safe_distance < avoidance.personal_space {
-                // Inverse square law using edge distance
                 let ratio = avoidance.personal_space / safe_distance;
                 let mut force_magnitude = STEERING.avoidance_force * ratio * ratio;
 
-                // Panic threshold cap
                 if safe_distance < panic_threshold {
                     force_magnitude = force_magnitude.min(STEERING.panic_force);
                 }
 
-                // Use center_distance for direction (not edge_distance)
                 let force_x = (away_x / center_distance) * force_magnitude;
                 let force_y = (away_y / center_distance) * force_magnitude;
 
@@ -109,8 +66,6 @@ pub fn avoidance_system(
             }
         }
 
-        // Limit total repulsion force to max_force
-        // This prevents overwhelming forces when surrounded by many obstacles
         let total_mag_sq = total_repulsion_x * total_repulsion_x
             + total_repulsion_y * total_repulsion_y;
         let max_force = avoidance.max_force;
@@ -122,7 +77,6 @@ pub fn avoidance_system(
             acceleration.ax += total_repulsion_x * scale;
             acceleration.ay += total_repulsion_y * scale;
         } else {
-            // Add to acceleration (force accumulation pattern)
             acceleration.ax += total_repulsion_x;
             acceleration.ay += total_repulsion_y;
         }
@@ -133,16 +87,13 @@ pub fn avoidance_system(
 mod tests {
     use super::*;
 
-    // Helper to manually run avoidance logic in tests
     fn run_avoidance_test(world: &mut World) {
-        // Collect positions (avoid borrow checker)
         let all_positions: Vec<(Entity, Position)> = world
             .query::<(Entity, &Position)>()
             .iter(world)
             .map(|(e, p)| (e, *p))
             .collect();
 
-        // Query creatures with avoidance capability
         let mut query = world.query_filtered::<(
             Entity,
             &Position,

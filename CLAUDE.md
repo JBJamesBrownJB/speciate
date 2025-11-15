@@ -180,6 +180,102 @@ The `dna-consultation-check.sh` hook provides guidance when you edit creature co
 
 **The DNA is the creature. Everything else is just expression.**
 
+## Code Documentation Standards - MANDATORY
+
+**CRITICAL: Code comments are a code smell. If you need a comment to explain what code does, refactor the code instead.**
+
+### Philosophy: Code First, Comments Never
+
+Comments lie. They go out of sync with code, creating confusion and technical debt. Our source of truth is:
+1. **The code itself** (self-documenting through clear names and structure)
+2. **Type signatures** (TypeScript/Rust types document contracts)
+3. **Tests** (executable documentation of behavior)
+4. **docs/** (high-level architecture and rationale)
+
+### Strict Policy - What is BANNED
+
+**NEVER write:**
+- ❌ Doc comments (JSDoc `/***/`, Rustdoc `///` or `//!`)
+- ❌ Explanatory comments (why code does something)
+- ❌ Algorithm descriptions (belongs in docs/)
+- ❌ Parameter documentation (`@param` - types already document this)
+- ❌ Examples in comments (write tests instead)
+- ❌ Historical notes ("old value was X" - check git history)
+- ❌ Formula derivations (belongs in `/docs/biology/constants-rationale.md`)
+
+### What is ALLOWED
+
+**ONLY these comment types are permitted:**
+- ✅ **Concise constant descriptions:** Inline comments explaining high-level concept
+  ```rust
+  pub const COMFORT_ZONE: f32 = 20.0; // Distance a critter will wander from home
+  pub const PERSONAL_SPACE: f32 = 2.0; // Distance critters prefer from friendlies
+  ```
+- ✅ **TODO markers:** Track technical debt with sprint references
+  ```rust
+  // TODO(DNA): Migrate to gene expression
+  // TODO(sprint-12): Implement sexual reproduction
+  ```
+- ✅ **Shell script headers:** Concise functional description ONLY
+  ```bash
+  #!/bin/bash
+  # Launch simulation with health checks and retry logic
+  ```
+
+**Even for allowed comments:**
+- Keep it to ONE line maximum
+- No multi-paragraph explanations
+- No examples, formulas, or historical context
+- If you need more than one line, the info belongs in docs/
+
+### Enforcement
+
+**Pre-commit hook** (`.claude/hooks/comment-policy-check.sh`) will:
+- Block commits with multi-line comments (except TODOs)
+- Flag Rustdoc (`///`, `//!`) and JSDoc (`/***/`)
+- Warn on inline comments in implementation code (non-constants)
+
+**If the hook blocks you:** The comment is too verbose. Either:
+1. Refactor code to be self-documenting
+2. Move rationale to `/docs/`
+3. Shorten to one concise line (constants only)
+
+### Migration of Existing Knowledge
+
+Scientific rationale extracted from code comments is preserved in:
+- **`/docs/biology/constants-rationale.md`** - Kleiber's Law, Reynolds steering, allometric formulas
+- **`/docs/architecture/behavior-engine.md`** - Force accumulation, state machines
+- **`/docs/biology/biology-notes.md`** - Zoologist consultation log
+
+**Rule:** Before deleting a comment with scientific value, ensure it's documented in `/docs/`.
+
+### Why This Matters
+
+**Real example from our codebase:**
+```rust
+// BEFORE (62% of file was comments!)
+/// Maximum speed for creatures (meters/second)
+/// **Value:** 5.0 m/s (18 km/h - wolf trot)
+/// **Formula (Kleiber's Law):** `top_speed = 5.0 × body_length^0.25`
+/// [10 more lines of examples, history, validation...]
+pub const MAX_SPEED: f32 = 50.0;
+
+// AFTER
+pub const MAX_SPEED: f32 = 50.0; // Maximum creature speed in m/s
+```
+
+**All rationale preserved in `/docs/biology/constants-rationale.md`** - where it belongs.
+
+**Benefits:**
+- Code is readable (not buried in comment noise)
+- Documentation doesn't lie (updated with code in same commit)
+- Scientific knowledge centralized in docs/ (not scattered across 86 files)
+- Faster code reviews (read code, not essays)
+
+### Remember
+
+**If you're writing a comment, you're doing it wrong. Refactor instead.**
+
 ## Project-Specific Commands
 
 ### Testing
@@ -223,34 +319,37 @@ npm run package    # Package with electron-builder (.exe, .dmg, .AppImage)
 - Rendering layer: PixiJS integration (GridRenderer, SpriteProvider)
 - Infrastructure: External services (WebSocketClient, SpritePool)
 
-## Current Sprint: Sprint 8 - Code Quality & Architecture Foundation (COMPLETE ✅)
+## Current Sprint: Sprint 9 - Trials Regression Testing (IN PROGRESS 🚀)
 
 ### Sprint Focus
-Refactor, understand code and architecture, small bug fixes. Clean understandable code and strategy for behavior engine. Stats pane cleanup and new baseline stats established.
+Implement continuous regression testing system ("Trials") for recording and replaying scenarios to test future changes.
 
-### Completed Goals
-- ✅ **Phase 1:** Type safety cleanup (removed 5 TypeScript `any`, fixed 10 Rust warnings)
-- ✅ **Phase 2:** Constant extraction (created TERRITORY & SEEKING structs, 6 validation tests)
-- ✅ **Phase 3:** behavior-engine.md architecture documentation (17-page comprehensive guide)
-- ✅ **Phase 4:** Performance baseline section in stats pane (Target FPS, Frame Budget, Tick Rate)
-- ✅ **Phase 5:** Technical debt inventory (catalogued 52 items, categorized by priority)
+### Goals
+- **Trial Infrastructure:** Core system for defining/running scenarios with deterministic RNG
+- **Spawning Pattern Trial:** Capture current default spawn as baseline
+- **Crowd Navigation Trial:** Creature weaving through obstacle grid
+- **Documentation:** Trial authoring guide and integration instructions
 
-### Key Outcomes
-- **Code Quality:** Removed TypeScript `any` types, fixed clippy warnings, cleaner codebase
-- **Constants Refactor:** Extracted 13 magic numbers to named constants (TERRITORY, SEEKING)
-- **Documentation:** behavior-engine.md explains force accumulation, state machines, DNA roadmap
-- **Technical Debt:** Complete inventory with migration plans (46 DNA items, 5 behavior items)
-- **Performance Metrics:** Baseline targets visible in HUD (60 FPS, 16.67ms budget, 20 Hz tick)
+### Success Criteria
+- Both trials triggerable via command
+- Deterministic, reproducible results
+- All tests passing (100% pass rate)
 
-### Active Areas
-- `/workspace/docs/architecture/` - Architecture documentation
-- `/workspace/docs/technical-debt.md` - Technical debt tracking
-- `/workspace/apps/simulation/src/simulation/movement/constants.rs` - Centralized constants
-- `/workspace/apps/portal/index.html` - Performance baseline UI
+**See:** `SPRINT_DOCS/SPRINT_PLAN_sprint-9-trials-regression-testing.md`
 
 ---
 
 ## Previous Sprints
+
+### Sprint 8 - Code Quality & Architecture Foundation (COMPLETE ✅)
+
+**Focus:** Refactor, understand architecture, establish documentation baseline
+
+**Key Outcomes:**
+- Type safety cleanup, constant extraction
+- behavior-engine.md architecture documentation
+- Technical debt inventory (52 items catalogued)
+- Performance baseline in stats pane
 
 ### Sprint 7 - Electron Standalone Desktop (COMPLETE ✅)
 
@@ -282,226 +381,9 @@ Refactor, understand code and architecture, small bug fixes. Clean understandabl
 - Persistent cloud world
 - Player economy & trading
 
-## Electron IPC Patterns
+## Electron IPC Architecture
 
-### Core Principle
-
-Electron IPC uses **stdio MessagePack streaming** between the Rust simulation subprocess and the Electron main process. The simulation writes length-prefixed binary frames to stdout at 60 Hz, which the main process reads, deserializes, and forwards to the renderer via `webContents.send()`.
-
-**Communication is currently unidirectional:** Backend → Frontend only. Frontend cannot send commands to the simulation yet (planned for future sprint).
-
-### Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  RUST SUBPROCESS               ELECTRON MAIN    RENDERER    │
-│  (apps/simulation)             (electron/main)  (src/)      │
-├────────────────────────────────────────────────────────────┤
-│                                                              │
-│  stdout.write()  ─────────→  child.stdout  ──────────→      │
-│  (MessagePack)               .on('data')   webContents      │
-│  60 Hz                       deserialize   .send()          │
-│                              GameState     'state-update'   │
-│                                                │             │
-│                                                ▼             │
-│                                         window.electron      │
-│                                         .onStateUpdate()     │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### MessagePack Frame Protocol
-
-**Wire Format:**
-```
-┌────────────────┬──────────────────────┐
-│ Length (4B)    │ Payload (N bytes)    │
-│ Big Endian u32 │ MessagePack binary   │
-└────────────────┴──────────────────────┘
-```
-
-**Rust (Simulation - Writer):**
-```rust
-use rmp_serde;
-use std::io::{self, Write};
-
-/// Write a single MessagePack frame to stdout (60 Hz)
-fn write_state_frame(state: &GameState) -> io::Result<()> {
-    // Serialize state to MessagePack
-    let payload = rmp_serde::to_vec(state)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-    // Write 4-byte big-endian length prefix
-    let len = payload.len() as u32;
-    io::stdout().write_all(&len.to_be_bytes())?;
-
-    // Write MessagePack payload
-    io::stdout().write_all(&payload)?;
-    io::stdout().flush()?;
-
-    Ok(())
-}
-
-// Called from Bevy FixedUpdate system at 60 Hz
-fn snapshot_system(world: &World) {
-    let state = create_game_state_snapshot(world);
-    if let Err(e) = write_state_frame(&state) {
-        eprintln!("[Simulation] Failed to write state: {}", e);
-    }
-}
-```
-
-**JavaScript (Electron Main - Reader):**
-```javascript
-const { spawn } = require('child_process');
-const msgpack = require('@msgpack/msgpack');
-
-// Spawn Rust simulation subprocess
-const simulation = spawn('./apps/simulation/target/release/speciate', [], {
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
-
-let buffer = Buffer.alloc(0);
-
-// Read stdout frames
-simulation.stdout.on('data', (chunk) => {
-  buffer = Buffer.concat([buffer, chunk]);
-
-  // Process all complete frames in buffer
-  while (buffer.length >= 4) {
-    // Read 4-byte length prefix (big-endian u32)
-    const frameLength = buffer.readUInt32BE(0);
-    const totalLength = 4 + frameLength;
-
-    // Wait for complete frame
-    if (buffer.length < totalLength) break;
-
-    // Extract and decode MessagePack payload
-    const payload = buffer.slice(4, totalLength);
-    const state = msgpack.decode(payload);
-
-    // Send to renderer
-    mainWindow.webContents.send('state-update', state);
-
-    // Remove processed frame from buffer
-    buffer = buffer.slice(totalLength);
-  }
-});
-```
-
-**TypeScript (Renderer - Receiver):**
-```typescript
-// apps/portal/electron/preload.cjs exposes API via contextBridge
-const { contextBridge, ipcRenderer } = require('electron');
-
-contextBridge.exposeInMainWorld('electron', {
-  onStateUpdate: (callback: (state: GameState) => void) => {
-    ipcRenderer.on('state-update', (_event, state) => callback(state));
-  },
-  removeStateUpdateListener: () => {
-    ipcRenderer.removeAllListeners('state-update');
-  },
-});
-
-// apps/portal/src/infrastructure/ipc/ElectronIPCClient.ts
-export class ElectronIPCClient implements IPCClient {
-  constructor() {
-    window.electron?.onStateUpdate((state: GameState) => {
-      // Update sprite positions, camera, etc.
-      this.handleStateUpdate(state);
-    });
-  }
-
-  private handleStateUpdate(state: GameState): void {
-    // 60 Hz state updates drive rendering loop
-    this.latestState = state;
-    this.callbacks.forEach(cb => cb(state));
-  }
-}
-```
-
-### Performance Characteristics
-
-**Frame Rate:** 60 Hz state streaming (16.67ms per frame)
-**Frame Size:** ~4-12 KB per frame (200 creatures × 20 bytes/creature)
-**Latency:** 16-33ms (1-2 frames) main → renderer propagation
-**Throughput:** ~240-720 KB/s (well within stdout buffer capacity)
-
-### Error Handling
-
-**Rust Side:**
-- **Serialization failure:** Log error, skip frame (frontend keeps rendering last good state)
-- **Broken pipe:** Electron crashed, exit simulation gracefully
-- **Partial write:** Flush after every frame to prevent buffering issues
-
-**Electron Side:**
-- **Malformed frame:** Log error, discard partial buffer, wait for next frame
-- **Subprocess crash:** Detect via `child.on('exit')`, show error dialog, close app
-- **Deserialization failure:** Skip frame, log error (likely MessagePack schema mismatch)
-
-### Type Safety
-
-**Keep TypeScript and Rust types synchronized:**
-
-```rust
-// apps/simulation/src/ipc/game_state.rs
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct GameState {
-    pub tick: u64,
-    pub creatures: Vec<CreatureSnapshot>,
-    pub timestamp_ms: u64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CreatureSnapshot {
-    pub id: u32,
-    pub x: f32,
-    pub y: f32,
-    pub heading: f32,
-    pub body_radius: f32,
-    pub energy: f32,
-}
-```
-
-```typescript
-// apps/portal/src/types/GameState.ts
-export interface GameState {
-  tick: number;
-  creatures: CreatureSnapshot[];
-  timestamp_ms: number;
-}
-
-export interface CreatureSnapshot {
-  id: number;
-  x: number;
-  y: number;
-  heading: number;
-  body_radius: number;
-  energy: number;
-}
-```
-
-**Validation:** Use `zod` or JSON Schema to validate frames in Electron main before forwarding to renderer (defense in depth).
-
-### Best Practices
-
-1. **Never block stdout** - Simulation writes at 60 Hz; blocking causes frame drops
-2. **Keep payloads small** - Serialize only what renderer needs (<20 KB/frame target)
-3. **Version your schema** - Add `schema_version` field to GameState for future migrations
-4. **Use map format** - Configure `rmp_serde` with `.with_struct_map()` for field-name encoding
-5. **Test desync** - Verify frontend handles dropped frames gracefully (stale state rendering)
-
-### Future: Bidirectional IPC
-
-**Planned for Sprint 8:** Frontend → Backend commands for player interactions.
-
-**Approach:** stdin commands using same MessagePack framing:
-- Frontend sends commands via IPC: `window.electron.sendCommand('spawn_creature', {x, y})`
-- Electron main writes to `simulation.stdin`
-- Rust reads stdin in separate thread, queues commands for next tick
-- Commands execute in Bevy system, results flow back via stdout
-
-**See:** `docs/architecture/electron-architecture.md` for full design
+**See:** `docs/architecture/electron-architecture.md` for complete IPC patterns, MessagePack protocol, and implementation details.
 
 ## Remember
 

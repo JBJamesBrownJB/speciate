@@ -1,7 +1,7 @@
 # Speciate Terminology Glossary
 
-**Version:** 1.0.0
-**Last Updated:** Sprint 6
+**Version:** 2.0.0
+**Last Updated:** Sprint 9
 **Status:** Active
 
 ---
@@ -14,100 +14,99 @@ This glossary defines the official terminology used throughout the Speciate code
 
 ## Core Entities
 
-### Crit / Crits
-**Definition:** Autonomous creatures/agents in the simulation.
-
-**Etymology:** Short for "critter" - a friendly, informal term for creatures.
+### Creature / Creatures
+**Definition:** Autonomous agents in the simulation with emergent A-Life behavior.
 
 **Usage:**
-- Singular: "crit"
-- Plural: "crits"
+- Singular: "creature"
+- Plural: "creatures"
 - **Examples:**
-  - "Each crit has a unique ID"
-  - "The simulation manages 1000 crits"
-  - "Crit behavior is driven by steering forces"
+  - "Each creature has a unique ID"
+  - "The simulation manages 1000 creatures"
+  - "Creature behavior is driven by steering forces and DNA"
 
-**Previously:** agents, creatures, boids
+**Previously:** agents, crits, boids
 
 **Code References:**
-- `CritId` - Unique identifier component
-- `CritTransform` - Position, velocity, and rotation snapshot
-- `crit_systems.rs` - ECS systems file
+- `CreatureId` - Unique identifier component
+- `CreatureSnapshot` - Position, velocity, and state snapshot
+- `creature_systems.rs` - ECS systems file
 
 ---
 
 ### Portal
-**Definition:** The web-based client application where players interact with the simulation.
+**Definition:** The Electron desktop frontend where players interact with the simulation.
 
 **Usage:**
 - Always capitalized as "Portal" when referring to the application
 - **Examples:**
-  - "The Portal renders crits at 60 FPS"
-  - "Players connect to the simulation via the Portal"
-  - "Portal receives updates from the Broadcaster"
+  - "The Portal renders creatures at 60 FPS"
+  - "Portal receives state updates via stdio IPC"
+  - "Portal uses PixiJS for WebGL rendering"
 
 **Previously:** UI, frontend
 
 **Code References:**
 - `apps/portal/` - Portal application directory
-- `@simulation/portal` - NPM package name
+- `ElectronIPCClient` - IPC interface
 
 ---
 
 ## Technical Terms
 
-### CritId
+### CreatureId
 **Type:** Component (Rust), number (TypeScript)
 
-**Definition:** Stable, unique identifier for each crit. Assigned at spawn time and never changes.
+**Definition:** Stable, unique identifier for each creature. Assigned at spawn time and never changes.
 
-**Rust:** `CritId(u32)`
+**Rust:** `Entity` (Bevy ECS), exposed as `u32`
 **TypeScript:** `number` (uint32 range)
 
 **Usage:**
 ```rust
 // Rust
-CritId(42)
+entity.index() // Returns u32 ID
 
 // TypeScript
-const critId: number = 42;
+const creatureId: number = 42;
 ```
 
 ---
 
-### CritTransform
+### CreatureSnapshot
 **Type:** Struct (Rust), Interface (TypeScript)
 
-**Definition:** Complete state snapshot of a crit including position, velocity, and rotation.
+**Definition:** Complete state snapshot of a creature including position, heading, and vital stats.
 
 **Fields:**
 - `id` - Unique identifier (u32/number)
 - `x`, `y` - World position (f32/number)
-- `vx`, `vy` - Velocity in units/second (f32/number)
-- `rotation` - Rotation in radians, 0 to 2π (f32/number)
+- `heading` - Direction in radians, 0 to 2π (f32/number)
+- `body_radius` - Physical size (f32/number)
+- `energy` - Current energy level (f32/number)
 
 **Usage:**
 ```rust
 // Rust
-CritTransform {
+CreatureSnapshot {
     id: 1,
     x: 45.23,
     y: 78.91,
-    vx: 2.15,
-    vy: -0.87,
-    rotation: 1.57,
+    heading: 1.57,
+    body_radius: 2.0,
+    energy: 85.5,
 }
 ```
 
 ```typescript
 // TypeScript
-const crit: CritTransform = {
+const creature: CreatureSnapshot = {
   id: 1,
   x: 45.23,
   y: 78.91,
-  vx: 2.15,
-  vy: -0.87,
-  rotation: 1.57,
+  heading: 1.57,
+  body_radius: 2.0,
+  energy: 85.5,
 };
 ```
 
@@ -116,21 +115,21 @@ const crit: CritTransform = {
 ### Behavior Mode
 **Type:** Enum
 
-**Definition:** State machine state for crit behavior.
+**Definition:** State machine state for creature behavior.
 
 **Values:**
 - `Wandering` - Random exploration (default)
+- `Seeking` - Moving toward target
 - `Fleeing` - Escaping from danger
-- `Feeding` - Consuming resources
-- `Resting` - Energy restoration
+- `Feeding` - Consuming resources (future)
 
 **Usage:**
 ```rust
 pub enum BehaviorMode {
     Wandering,
+    Seeking,
     Fleeing,
     Feeding,
-    Resting,
 }
 ```
 
@@ -138,68 +137,36 @@ pub enum BehaviorMode {
 
 ## System Components
 
-### Broadcaster
-**Definition:** WebSocket service that streams simulation frames from NATS to connected Portal clients.
-
-**Responsibility:** Real-time distribution of simulation state at ~20 Hz.
-
-**Tech Stack:** Node.js, TypeScript, NATS.js, WebSocket
-
-**Location:** `apps/broadcaster/`
-
----
-
 ### Simulation
-**Definition:** Server-authoritative ECS simulation engine running at 20 Hz.
+**Definition:** Bevy ECS simulation engine running at 20 Hz as Rust subprocess.
 
-**Responsibility:** Single source of truth for all game state. Physics, crit behaviors, and state updates.
+**Responsibility:** Single source of truth for all game state. Physics, creature behaviors, and state updates.
 
-**Tech Stack:** Rust, Bevy ECS, async-nats, tokio
+**Tech Stack:** Rust, Bevy ECS
 
 **Location:** `apps/simulation/`
 
----
-
-## NATS Messaging
-
-### Subject: `speciate.crits.transform`
-**Definition:** NATS pub/sub subject for streaming crit state updates.
-
-**Publisher:** Simulation (Rust)
-**Subscribers:** Broadcaster (TypeScript)
-
-**Format:** MessagePack binary serialization
-**Frequency:** ~20 Hz (20 messages per second)
-
-**Message Structure:**
-```typescript
-interface SimulationFrame {
-  tick: number;              // Simulation tick counter
-  timestamp: string;         // ISO 8601 timestamp (UTC)
-  crits: CritTransform[];    // Array of crit states
-}
-```
+**IPC:** Writes MessagePack frames to stdout at 60 Hz
 
 ---
 
 ## Steering Behaviors (Nature of Code)
 
 ### Wander
-**Definition:** Smooth random exploration using steering forces. Projects a circle ahead of the crit and picks a random point on the circumference.
+**Definition:** Smooth random exploration using steering forces. Projects a circle ahead of the creature and picks a random point on the circumference.
 
 **Parameters:**
-- `wander_distance` - How far ahead to project (default: 50.0)
-- `wander_radius` - Circle size (default: 25.0)
-- `angle_change` - Max angle delta per frame (default: 0.15 radians)
+- Territory-based with elastic tether to home point
+- Perlin noise for organic movement
 
 ---
 
-### Separation
-**Definition:** Collision avoidance through mutual repulsion. Crits steer away from nearby neighbors.
+### Avoidance
+**Definition:** Collision avoidance through obstacle detection and steering. Creatures detect obstacles ahead and steer around them.
 
 **Parameters:**
-- `separation_radius` - Distance at which separation engages (default: 15.0)
-- `separation_force` - Strength of repulsion (default: 2.0)
+- Detection distance based on creature speed
+- Raycasting for obstacle detection
 
 ---
 
@@ -218,7 +185,7 @@ interface SimulationFrame {
 ### Spatial Hash
 **Definition:** Grid-based spatial partitioning for O(1) neighbor queries.
 
-**Use Case:** Efficient crit-to-crit interaction checks without O(n²) full-collection scanning.
+**Use Case:** Efficient creature-to-creature interaction checks without O(n²) full-collection scanning.
 
 **Cell Size:** 2-3x the typical interaction radius
 
@@ -228,27 +195,28 @@ interface SimulationFrame {
 
 | **Deprecated** | **Current** | **Changed In** |
 |----------------|-------------|----------------|
-| Agent/Agents   | Crit/Crits  | Sprint 6       |
-| AgentId        | CritId      | Sprint 6       |
-| AgentTransform | CritTransform | Sprint 6     |
+| Agent/Agents   | Creature/Creatures | Sprint 6 |
+| Crit/Crits     | Creature/Creatures | Sprint 9 |
+| AgentId        | CreatureId  | Sprint 6       |
+| CritId         | CreatureId  | Sprint 9       |
+| AgentTransform | CreatureSnapshot | Sprint 6  |
+| CritTransform  | CreatureSnapshot | Sprint 9  |
 | UI             | Portal      | Sprint 6       |
 | `apps/ui/`     | `apps/portal/` | Sprint 6    |
-| `agent_systems.rs` | `crit_systems.rs` | Sprint 6 |
-| `speciate.agents.transform` | `speciate.crits.transform` | Sprint 6 |
 
 ---
 
 ## Communication Guidelines
 
 ### Do ✅
-- Use "crit" for individual creatures
-- Use "crits" for the plural
-- Use "Portal" (capitalized) for the web application
-- Use "CritTransform" for state snapshots
-- Use "CritId" for identifiers
+- Use "creature" for individual creatures
+- Use "creatures" for the plural
+- Use "Portal" (capitalized) for the Electron application
+- Use "CreatureSnapshot" for state snapshots
+- Use "CreatureId" for identifiers
 
 ### Don't ❌
-- Use "agent" or "creature" (legacy terms)
+- Use "agent", "crit", or "critter" (legacy terms)
 - Use "UI" when referring to the Portal application (use "Portal" instead)
 - Mix old and new terminology in the same context
 

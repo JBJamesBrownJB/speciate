@@ -1,5 +1,0 @@
-- Refactor and understand current behaviour engine
-- Trials - setup easy way to record and replay scenarios to regression test beahvours, movement etc
-- - See: docs/testin/trials
-- Use trials to fix avoidance system
-- Look to the influcnce zone ideas

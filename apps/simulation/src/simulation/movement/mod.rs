@@ -1,10 +1,3 @@
-//! Movement domain systems
-//!
-//! Pure motion integration - applies accumulated forces to velocity/position using Euler integration.
-//! These systems run AFTER behavior systems have applied forces to Acceleration.
-//!
-//! Also includes rotation system which updates creature orientation based on velocity direction.
-
 pub mod constants;
 pub mod noise;
 pub mod rotation;

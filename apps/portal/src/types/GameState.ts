@@ -1,8 +1,3 @@
-/**
- * Game State Types
- * Shared between Rust simulation and Electron IPC
- */
-
 export interface CreatureData {
   id: number;
   x: number;
@@ -19,6 +14,6 @@ export interface CreatureData {
 
 export interface GameState {
   tick: number;
-  tickRateHz: number; // Measured tick rate (not target)
+  tickRateHz: number;
   creatures: CreatureData[];
 }

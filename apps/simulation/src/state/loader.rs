@@ -1,7 +1,3 @@
-//! TOML state file loading
-//!
-//! This module handles loading simulation configuration from TOML files,
-//! allowing users to define initial world state declaratively.
 
 use serde::Deserialize;
 use std::fs;
@@ -27,7 +23,6 @@ pub struct WorldSection {
     pub height: f32,
 }
 
-/// Rectangle for spawn zones and target zones
 #[derive(Debug, Deserialize, Clone, Copy)]
 pub struct Rectangle {
     pub min_x: f32,
@@ -37,17 +32,14 @@ pub struct Rectangle {
 }
 
 impl Rectangle {
-    /// Check if rectangle has valid dimensions
     pub fn is_valid(&self) -> bool {
         self.min_x < self.max_x && self.min_y < self.max_y
     }
 
-    /// Get width of rectangle
     pub fn width(&self) -> f32 {
         self.max_x - self.min_x
     }
 
-    /// Get height of rectangle
     pub fn height(&self) -> f32 {
         self.max_y - self.min_y
     }
@@ -56,7 +48,7 @@ impl Rectangle {
 #[derive(Debug, Deserialize)]
 pub struct SpawnSection {
     pub count: usize,
-    pub behavior: String, // "seeking" for now, extensible later
+    pub behavior: String,
     pub spawn_zone: Rectangle,
     pub target_zone: Rectangle,
 }

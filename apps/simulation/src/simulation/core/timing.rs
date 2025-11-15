@@ -1,12 +1,6 @@
-//! Tick timing instrumentation
-//!
-//! Provides utilities for tracking and reporting simulation tick performance
-//! using a rolling window of timing samples.
-
 use std::collections::VecDeque;
 use std::time::Duration;
 
-/// Tracks tick timing statistics with a rolling window
 #[derive(Debug)]
 pub struct TickTimer {
     recent_durations: VecDeque<Duration>,
@@ -16,7 +10,6 @@ pub struct TickTimer {
 }
 
 impl TickTimer {
-    /// Create a new TickTimer with specified window size and report interval
     pub fn new(window_size: usize, report_interval: u64) -> Self {
         Self {
             recent_durations: VecDeque::with_capacity(window_size),
@@ -26,7 +19,6 @@ impl TickTimer {
         }
     }
 
-    /// Record a tick duration and return whether to report
     pub fn record_tick(&mut self, duration: Duration) -> bool {
         self.recent_durations.push_back(duration);
         if self.recent_durations.len() > self.window_size {
@@ -37,8 +29,6 @@ impl TickTimer {
         self.tick_count.is_multiple_of(self.report_interval)
     }
 
-    /// Get the current tick count
-    /// Calculate average duration over the rolling window
     pub fn average_duration(&self) -> Option<Duration> {
         if self.recent_durations.is_empty() {
             return None;
@@ -48,7 +38,6 @@ impl TickTimer {
         Some(total / self.recent_durations.len() as u32)
     }
 
-    /// Get the most recent tick duration
     pub fn current_duration(&self) -> Option<Duration> {
         self.recent_durations.back().copied()
     }
@@ -75,7 +64,7 @@ mod tests {
 
         let should_report = timer.record_tick(duration);
 
-        assert!(!should_report); // First tick shouldn't trigger report
+        assert!(!should_report);
         assert_eq!(timer.current_duration(), Some(duration));
         assert_eq!(timer.average_duration(), Some(duration));
     }
@@ -93,7 +82,6 @@ mod tests {
             }
         }
 
-        // Next report should be at tick 10
         for _ in 6..10 {
             let should_report = timer.record_tick(Duration::from_millis(10));
             assert!(!should_report);
@@ -105,20 +93,17 @@ mod tests {
 
     #[test]
     fn test_rolling_window() {
-        let mut timer = TickTimer::new(3, 60); // Small window for testing
+        let mut timer = TickTimer::new(3, 60);
 
         timer.record_tick(Duration::from_millis(10));
         timer.record_tick(Duration::from_millis(20));
         timer.record_tick(Duration::from_millis(30));
 
-        // Average should be (10 + 20 + 30) / 3 = 20ms
         let avg = timer.average_duration().unwrap();
         assert_eq!(avg.as_millis(), 20);
 
-        // Add fourth tick - should evict first (10ms)
         timer.record_tick(Duration::from_millis(40));
 
-        // Average should be (20 + 30 + 40) / 3 = 30ms
         let avg = timer.average_duration().unwrap();
         assert_eq!(avg.as_millis(), 30);
     }

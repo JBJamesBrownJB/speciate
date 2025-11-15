@@ -4,10 +4,12 @@
 //! needed by specific behaviors. They contain no logic, just data.
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 /// Target position for seeking behavior (data component)
-#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct Target {
     pub x: f32,
     pub y: f32,
@@ -23,7 +25,8 @@ impl Target {
 ///
 /// Contains configuration for wandering behavior (Reynolds steering).
 /// TODO: Migrate wander_radius, wander_distance, angle_change to DNA
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct WanderState {
     pub wander_angle: f32,
     pub wander_radius: f32,   // TODO: from DNA
@@ -35,7 +38,8 @@ pub struct WanderState {
 ///
 /// Contains configuration for fleeing behavior.
 /// TODO: Migrate flee_speed_multiplier to DNA
-#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct FleeState {
     pub flee_speed_multiplier: f32, // TODO: from DNA
 }

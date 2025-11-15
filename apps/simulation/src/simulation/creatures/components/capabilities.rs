@@ -5,24 +5,29 @@
 //! (archetype stability).
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 /// Capability marker: Entity can perform seeking behavior
 /// Added at spawn, never removed (archetype stability)
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct CanSeek;
 
 /// Capability marker: Entity can perform fleeing behavior
 /// Added at spawn, never removed (archetype stability)
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct CanFlee;
 
 /// Capability marker: Entity can perform wandering behavior
 /// Added at spawn, never removed (archetype stability)
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct CanWander;
 
 /// Capability marker: Entity can avoid obstacles
 /// Added at spawn, never removed (archetype stability)
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct CanAvoidObstacles;

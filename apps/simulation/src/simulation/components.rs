@@ -4,6 +4,7 @@
 //! Components have been moved to core/ and creatures/ and are re-exported here for backward compatibility.
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 // Re-export core components for backward compatibility during refactor
@@ -32,7 +33,8 @@ pub use super::creatures::components::{
 
 /// Rotation component for creature orientation
 /// TODO: Move to rendering module in Phase 5
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct Rotation {
     pub radians: f32,
 }

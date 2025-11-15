@@ -1,7 +1,23 @@
 //! Simulation snapshot and persistence
 //!
 //! This module handles saving and loading complete simulation state to/from binary files.
-//! Uses MessagePack for compact, fast serialization while maintaining ECS structure.
+//! Uses Bevy Reflection with DynamicSceneBuilder to automatically serialize ALL registered components.
+//!
+//! ## Architecture
+//!
+//! **Problem:** Manually listing components in queries hits Bevy's 16-element tuple limit and is error-prone.
+//!
+//! **Solution:** Use Bevy's reflection system (DynamicSceneBuilder) to automatically capture ALL components
+//! that have been registered in the AppTypeRegistry. This ensures:
+//! - No components are missed
+//! - No query tuple limits
+//! - Automatic schema evolution as new components are added
+//!
+//! **How it works:**
+//! 1. All components have `#[derive(Reflect, Serialize, Deserialize)]`
+//! 2. All components are registered in SimulationBuilder::new() via AppTypeRegistry
+//! 3. DynamicSceneBuilder extracts all registered components from all entities with CritId
+//! 4. DynamicScene is serialized to MessagePack for compact storage
 //!
 //! ## Recommended Directory Structure
 //!
@@ -31,13 +47,10 @@
 //! let restored_sim = Simulation::from_snapshot(loaded);
 //! ```
 
-use crate::simulation::components::*;
-use crate::simulation::core::components::BodySize;
-use crate::simulation::creatures::components::capabilities::*;
-use crate::simulation::creatures::components::perception::Target;
-use crate::simulation::creatures::components::state::HomePosition;
+use crate::simulation::creatures::components::CritId;
 use crate::simulation::creatures::systems::{EntityIdMap, NextCreatureId};
 use crate::simulation::{Simulation, SimulationBuilder};
+use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
@@ -66,67 +79,25 @@ pub struct WorldConfig {
     pub extent_y: f32, // Half-height (world spans -extent_y to +extent_y)
 }
 
-/// Serialized representation of a single creature with all components
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerializedCreature {
-    /// Creature's unique ID
-    pub id: u32,
-    /// Position component (always present)
-    pub position: Position,
-    /// Velocity component (always present)
-    pub velocity: Velocity,
-    /// Acceleration component (always present)
-    pub acceleration: Acceleration,
-    /// Rotation component (always present)
-    pub rotation: Rotation,
-    /// Creature state component (always present)
-    pub creature_state: CreatureState,
-    /// Wander state component (optional - only present for wandering creatures)
-    pub wander_state: Option<WanderState>,
-    /// Flee state component (optional - only present for fleeing creatures)
-    pub flee_state: Option<FleeState>,
-    /// Body size component (always present, but optional for backward compatibility)
-    /// Defaults to 1.0m length if missing from old snapshots
-    #[serde(default = "default_body_size")]
-    pub body_size: BodySize,
-
-    // ========== Capability Markers (ZST components) ==========
-    /// Whether creature has seeking capability (ZST marker component)
-    #[serde(default)]
-    pub can_seek: bool,
-    /// Whether creature has fleeing capability (ZST marker component)
-    #[serde(default)]
-    pub can_flee: bool,
-    /// Whether creature has wandering capability (ZST marker component)
-    #[serde(default)]
-    pub can_wander: bool,
-    /// Whether creature has obstacle avoidance capability (ZST marker component)
-    #[serde(default)]
-    pub can_avoid_obstacles: bool,
-
-    // ========== Data Components (optional) ==========
-    /// Home position for wandering behavior (optional - only present for wanderers)
-    #[serde(default)]
-    pub home_position: Option<HomePosition>,
-    /// Target position for seeking behavior (optional - only present for seekers)
-    #[serde(default)]
-    pub target: Option<Target>,
-}
-
-/// Default body size for backward compatibility with old snapshots
-fn default_body_size() -> BodySize {
-    BodySize::default() // 1.0m length (wolf-sized)
-}
-
-/// Complete snapshot of the simulation world
+/// Complete snapshot of the simulation world using Bevy Reflection
+///
+/// This uses DynamicScene to automatically capture ALL registered components
+/// from all entities with a CritId component. No manual component listing required!
+///
+/// The scene is serialized to RON (Rusty Object Notation) format, which is Bevy's
+/// native scene format. This ensures ALL registered components are preserved.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldSnapshot {
     /// Snapshot metadata
     pub metadata: SnapshotMetadata,
     /// World configuration
     pub world: WorldConfig,
-    /// All creatures in the simulation
-    pub creatures: Vec<SerializedCreature>,
+    /// Bevy DynamicScene serialized to RON format
+    /// Contains all creature entities and their components
+    /// This automatically includes ALL components registered in AppTypeRegistry
+    pub scene_ron: String,
+    /// Entity ID mapping (Entity → CritId) for reference
+    pub entity_id_map: Vec<(u32, u32)>, // (entity_index, crit_id)
 }
 
 /// Errors that can occur during snapshot operations
@@ -184,163 +155,118 @@ impl WorldSnapshot {
 }
 
 impl Simulation {
-    /// Create a snapshot of the current simulation state
-    #[allow(clippy::type_complexity)]
+    /// Create a snapshot of the current simulation state using Bevy Reflection
+    ///
+    /// Uses DynamicSceneBuilder to automatically serialize ALL registered components.
+    /// This ensures no components are missed and works around Bevy's query tuple size limit.
     pub fn to_snapshot(&mut self) -> WorldSnapshot {
-        use bevy_ecs::query::QueryState;
-        use std::collections::HashMap;
+        use bevy_scene::{DynamicSceneBuilder, serde::SceneSerializer};
 
         // Get world boundaries (centered coordinate system)
         let (min_x, max_x, min_y, max_y) = self.get_boundaries();
         let extent_x = (max_x - min_x) / 2.0;
         let extent_y = (max_y - min_y) / 2.0;
 
-        // Build reverse map from entity to ID
-        let mut entity_to_id: HashMap<bevy_ecs::entity::Entity, u32> = HashMap::new();
-        let entity_id_map = self.world.resource::<EntityIdMap>();
-        for (entity, id) in entity_id_map.iter() {
-            entity_to_id.insert(*entity, *id);
-        }
+        // Query all entities with CritId component (all creatures)
+        let mut query_state: QueryState<(Entity, &CritId)> = self.world.query();
+        let creature_entities: Vec<Entity> = query_state.iter(&self.world)
+            .map(|(entity, _)| entity)
+            .collect();
 
-        // Query all creatures with required components and optional capability markers
-        let mut query_state: QueryState<(
-            bevy_ecs::entity::Entity,
-            &Position,
-            &Velocity,
-            &Acceleration,
-            &Rotation,
-            &CreatureState,
-            &BodySize,
-            Option<&WanderState>,
-            Option<&FleeState>,
-            Option<&CanSeek>,
-            Option<&CanFlee>,
-            Option<&CanWander>,
-            Option<&CanAvoidObstacles>,
-            Option<&HomePosition>,
-            Option<&Target>,
-        )> = self.world.query();
+        let creature_count = creature_entities.len();
 
-        let mut creatures = Vec::new();
+        // Build entity ID mapping for reference
+        let entity_id_map: Vec<(u32, u32)> = query_state.iter(&self.world)
+            .map(|(entity, crit_id)| (entity.index(), crit_id.0))
+            .collect();
 
-        for (
-            entity,
-            position,
-            velocity,
-            acceleration,
-            rotation,
-            creature_state,
-            body_size,
-            wander_state,
-            flee_state,
-            can_seek,
-            can_flee,
-            can_wander,
-            can_avoid_obstacles,
-            home_position,
-            target,
-        ) in query_state.iter(&self.world)
-        {
-            let id = entity_to_id.get(&entity).copied().unwrap_or(0);
+        // Use DynamicSceneBuilder to extract ALL registered components from creatures
+        // This automatically includes Position, Velocity, Perception, AvoidanceBehavior,
+        // capability markers, and any future components we add!
+        let type_registry = self.world.resource::<AppTypeRegistry>();
 
-            creatures.push(SerializedCreature {
-                id,
-                position: *position,
-                velocity: *velocity,
-                acceleration: *acceleration,
-                rotation: *rotation,
-                creature_state: *creature_state,
-                body_size: *body_size,
-                wander_state: wander_state.copied(),
-                flee_state: flee_state.copied(),
-                // Capability markers (ZST) - serialize as bool flags
-                can_seek: can_seek.is_some(),
-                can_flee: can_flee.is_some(),
-                can_wander: can_wander.is_some(),
-                can_avoid_obstacles: can_avoid_obstacles.is_some(),
-                // Data components (optional)
-                home_position: home_position.copied(),
-                target: target.copied(),
-            });
-        }
+        let scene = DynamicSceneBuilder::from_world(&self.world)
+            .allow_all()  // CRITICAL: Allow all components to be extracted
+            .extract_entities(creature_entities.into_iter())
+            .build();
 
-        // Sort by ID for deterministic output
-        creatures.sort_by_key(|c| c.id);
+        // Serialize scene to RON format (Bevy's native scene format)
+        let type_registry_guard = type_registry.read();
+        let scene_serializer = SceneSerializer::new(&scene, &type_registry_guard);
+        let scene_ron = bevy_scene::ron::ser::to_string(&scene_serializer)
+            .expect("Failed to serialize DynamicScene to RON");
 
-        let creature_count = creatures.len();
+        // Debug: Print first 500 chars of RON to see what's being serialized
+        eprintln!("[DEBUG] RON scene (first 500 chars): {}", &scene_ron.chars().take(500).collect::<String>());
+        eprintln!("[DEBUG] RON scene length: {} bytes", scene_ron.len());
+
+        drop(type_registry_guard);
 
         WorldSnapshot {
             metadata: SnapshotMetadata {
-                version: "1.0.0".to_string(),
+                version: "2.0.0".to_string(), // Bumped version for DynamicScene format
                 created_at: chrono::Utc::now().to_rfc3339(),
                 creature_count,
                 tick_number: 0, // TODO: Track tick number in Simulation
             },
             world: WorldConfig { extent_x, extent_y },
-            creatures,
+            scene_ron,
+            entity_id_map,
         }
     }
 
-    /// Restore simulation from a snapshot
+    /// Restore simulation from a snapshot using Bevy Reflection
+    ///
+    /// Uses DynamicScene::write_to_world() to automatically restore ALL components.
+    /// This ensures perfect fidelity with the saved state.
     pub fn from_snapshot(snapshot: WorldSnapshot) -> Self {
-        use bevy_ecs::world::EntityWorldMut;
+        use bevy_scene::serde::SceneDeserializer;
 
         let mut simulation = SimulationBuilder::new().build();
 
         // Set world boundaries from snapshot (extents, not full dimensions)
         simulation.set_boundaries(snapshot.world.extent_x, snapshot.world.extent_y);
 
-        // Find the maximum ID to set next_id correctly
-        let max_id = snapshot.creatures.iter().map(|c| c.id).max().unwrap_or(0);
+        // Find the maximum CritId to set next_id correctly
+        let max_id = snapshot.entity_id_map.iter()
+            .map(|(_, crit_id)| *crit_id)
+            .max()
+            .unwrap_or(0);
         simulation.world.resource_mut::<NextCreatureId>().set_next(max_id + 1);
 
-        // Spawn each creature with exact state from snapshot
-        for creature in snapshot.creatures {
-            let entity = simulation.world.spawn_empty().id();
+        // Deserialize RON scene data
+        let type_registry = simulation.world.resource::<AppTypeRegistry>();
+        let type_registry_guard = type_registry.read();
 
-            // Add all required components
-            let mut entity_mut: EntityWorldMut = simulation.world.entity_mut(entity);
-            entity_mut.insert(CritId(creature.id));
-            entity_mut.insert(creature.position);
-            entity_mut.insert(creature.velocity);
-            entity_mut.insert(creature.acceleration);
-            entity_mut.insert(creature.rotation);
-            entity_mut.insert(creature.creature_state);
-            entity_mut.insert(creature.body_size);
+        let mut ron_de = bevy_scene::ron::de::Deserializer::from_str(&snapshot.scene_ron)
+            .expect("Failed to create RON deserializer");
 
-            // Add optional state components
-            if let Some(wander_state) = creature.wander_state {
-                entity_mut.insert(wander_state);
-            }
-            if let Some(flee_state) = creature.flee_state {
-                entity_mut.insert(flee_state);
-            }
+        let scene_deserializer = SceneDeserializer {
+            type_registry: &type_registry_guard,
+        };
 
-            // Restore capability markers (ZST components) based on boolean flags
-            if creature.can_seek {
-                entity_mut.insert(CanSeek);
-            }
-            if creature.can_flee {
-                entity_mut.insert(CanFlee);
-            }
-            if creature.can_wander {
-                entity_mut.insert(CanWander);
-            }
-            if creature.can_avoid_obstacles {
-                entity_mut.insert(CanAvoidObstacles);
-            }
+        // Use DeserializeSeed to deserialize with type registry context
+        use serde::de::DeserializeSeed;
+        let scene = scene_deserializer.deserialize(&mut ron_de)
+            .expect("Failed to deserialize DynamicScene from RON");
 
-            // Restore data components
-            if let Some(home_position) = creature.home_position {
-                entity_mut.insert(home_position);
-            }
-            if let Some(target) = creature.target {
-                entity_mut.insert(target);
-            }
+        // Drop the type registry guard before mutably borrowing the world
+        drop(type_registry_guard);
 
-            // Register in entity map
-            simulation.world.resource_mut::<EntityIdMap>().insert(entity, creature.id);
+        // Write the DynamicScene to the world - this automatically restores ALL components!
+        // The scene contains all creatures with all their components exactly as they were saved.
+        let mut entity_map = bevy_ecs::entity::EntityHashMap::default();
+        scene.write_to_world(&mut simulation.world, &mut entity_map)
+            .expect("Failed to restore DynamicScene to world");
+
+        // Rebuild the EntityIdMap from the restored entities
+        // Query all entities with CritId and add them to the map
+        let mut query_state: QueryState<(Entity, &CritId)> = simulation.world.query();
+        let mut entity_id_map = EntityIdMap::default();
+        for (entity, crit_id) in query_state.iter(&simulation.world) {
+            entity_id_map.insert(entity, crit_id.0);
         }
+        simulation.world.insert_resource(entity_id_map);
 
         simulation
     }
@@ -349,12 +275,12 @@ impl Simulation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simulation::creatures::spawner::{spawn_creature, CreatureSpawnRequest};
+    use crate::simulation::creatures::builder::CritBuilder;
 
     #[test]
     fn test_snapshot_metadata_serialization() {
         let metadata = SnapshotMetadata {
-            version: "1.0.0".to_string(),
+            version: "2.0.0".to_string(),
             created_at: "2025-11-04T12:00:00Z".to_string(),
             creature_count: 100,
             tick_number: 12345,
@@ -368,576 +294,154 @@ mod tests {
     }
 
     #[test]
-    fn test_serialized_creature_round_trip() {
-        let creature = SerializedCreature {
-            id: 42,
-            position: Position { x: 10.5, y: 20.3 },
-            velocity: Velocity { vx: 1.2, vy: -0.8 },
-            acceleration: Acceleration { ax: 0.0, ay: 0.0 },
-            rotation: Rotation { radians: 1.57 },
-            creature_state: CreatureState {
-                behavior: BehaviorMode::Catatonic,
-                energy: 75.0,
-                age: 5.2,
-                max_speed: 20.0,
-            },
-            body_size: BodySize::new(1.5),
-            wander_state: Some(WanderState {
-                wander_angle: 0.5,
-                wander_radius: 25.0,
-                wander_distance: 50.0,
-                angle_change: 0.15,
-            }),
-            flee_state: None,
-            can_seek: false,
-            can_flee: false,
-            can_wander: true,
-            can_avoid_obstacles: false,
-            home_position: Some(HomePosition { x: 0.0, y: 0.0 }),
-            target: None,
-        };
+    fn test_snapshot_empty_world() {
+        let mut sim = SimulationBuilder::new()
+            .set_boundaries(100.0, 75.0)
+            .build();
 
-        let bytes = rmp_serde::to_vec(&creature).unwrap();
-        let deserialized: SerializedCreature = rmp_serde::from_slice(&bytes).unwrap();
-
-        assert_eq!(creature.id, deserialized.id);
-        assert_eq!(creature.position.x, deserialized.position.x);
-        assert_eq!(creature.velocity.vx, deserialized.velocity.vx);
-        assert_eq!(creature.body_size.length, deserialized.body_size.length);
-        assert!(deserialized.wander_state.is_some());
-        assert!(deserialized.flee_state.is_none());
-    }
-
-    #[test]
-    fn test_world_snapshot_empty() {
-        let snapshot = WorldSnapshot {
-            metadata: SnapshotMetadata {
-                version: "1.0.0".to_string(),
-                created_at: "2025-11-04T12:00:00Z".to_string(),
-                creature_count: 0,
-                tick_number: 0,
-            },
-            world: WorldConfig {
-                extent_x: 90.0,
-                extent_y: 65.0,
-            },
-            creatures: vec![],
-        };
-
-        let bytes = rmp_serde::to_vec(&snapshot).unwrap();
-        let deserialized: WorldSnapshot = rmp_serde::from_slice(&bytes).unwrap();
-
+        let snapshot = sim.to_snapshot();
         assert_eq!(snapshot.metadata.creature_count, 0);
-        assert_eq!(deserialized.creatures.len(), 0);
+        assert_eq!(snapshot.world.extent_x, 100.0);
+        assert_eq!(snapshot.world.extent_y, 75.0);
     }
 
     #[test]
-    fn test_world_snapshot_with_creatures() {
-        let creature1 = SerializedCreature {
-            id: 1,
-            position: Position { x: 10.0, y: 20.0 },
-            velocity: Velocity { vx: 1.0, vy: 0.0 },
-            acceleration: Acceleration { ax: 0.0, ay: 0.0 },
-            rotation: Rotation { radians: 0.0 },
-            creature_state: CreatureState::new(),
-            body_size: BodySize::default(),
-            wander_state: Some(WanderState::default()),
-            flee_state: None,
-            can_seek: false,
-            can_flee: false,
-            can_wander: true,
-            can_avoid_obstacles: false,
-            home_position: None,
-            target: None,
-        };
+    fn test_snapshot_round_trip_preserves_all_components() {
+        // Create simulation with a creature that has ALL capabilities and components
+        let mut sim = SimulationBuilder::new()
+            .set_boundaries(200.0, 150.0)
+            .build();
 
-        let creature2 = SerializedCreature {
-            id: 2,
-            position: Position { x: 50.0, y: 60.0 },
-            velocity: Velocity { vx: -1.0, vy: 1.0 },
-            acceleration: Acceleration { ax: 0.0, ay: 0.0 },
-            rotation: Rotation { radians: 2.35 },
-            creature_state: CreatureState {
-                behavior: BehaviorMode::Catatonic,
-                energy: 40.0,
-                age: 10.0,
-                max_speed: 25.0,
-            },
-            body_size: BodySize::new(2.0),
-            wander_state: None,
-            flee_state: Some(FleeState::new(None)),
-            can_seek: false,
-            can_flee: true,
-            can_wander: false,
-            can_avoid_obstacles: false,
-            home_position: None,
-            target: None,
-        };
+        // Spawn a seeker with avoidance (tests multiple components)
+        let builder = CritBuilder::new()
+            .at(50.0, 25.0)
+            .as_seeker(100.0, 75.0)
+            .with_avoidance();
+        let id1 = sim.spawn_crit(builder);
 
-        let snapshot = WorldSnapshot {
-            metadata: SnapshotMetadata {
-                version: "1.0.0".to_string(),
-                created_at: "2025-11-04T12:00:00Z".to_string(),
-                creature_count: 2,
-                tick_number: 100,
-            },
-            world: WorldConfig {
-                extent_x: 90.0,
-                extent_y: 65.0,
-            },
-            creatures: vec![creature1, creature2],
-        };
-
-        let bytes = rmp_serde::to_vec(&snapshot).unwrap();
-        let deserialized: WorldSnapshot = rmp_serde::from_slice(&bytes).unwrap();
-
-        assert_eq!(deserialized.creatures.len(), 2);
-        assert_eq!(deserialized.creatures[0].id, 1);
-        assert_eq!(deserialized.creatures[1].id, 2);
-        assert!(deserialized.creatures[0].wander_state.is_some());
-        assert!(deserialized.creatures[1].flee_state.is_some());
-    }
-
-    // Integration tests for ECS snapshot/restore
-
-    #[test]
-    fn test_simulation_snapshot_empty() {
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(50.0, 50.0);
-
-        let snapshot = simulation.to_snapshot();
-
-        assert_eq!(snapshot.creatures.len(), 0);
-        assert_eq!(snapshot.world.extent_x, 50.0);
-        assert_eq!(snapshot.world.extent_y, 50.0);
-    }
-
-    #[test]
-    fn test_simulation_snapshot_with_creatures() {
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(50.0, 50.0);
-
-        // Spawn 10 creatures
-        for _ in 0..10 {
-            spawn_creature(&mut simulation, CreatureSpawnRequest::new());
-        }
-
-        let snapshot = simulation.to_snapshot();
-
-        assert_eq!(snapshot.creatures.len(), 10);
-        assert_eq!(snapshot.metadata.creature_count, 10);
-
-        // Verify all creatures have IDs >= 1
-        for creature in &snapshot.creatures {
-            assert!(creature.id >= 1);
-        }
-    }
-
-    #[test]
-    fn test_simulation_restore_from_snapshot() {
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(50.0, 50.0);
-
-        // Spawn 5 creatures
-        for _ in 0..5 {
-            spawn_creature(&mut simulation, CreatureSpawnRequest::new());
-        }
+        // Spawn a wanderer
+        let builder2 = CritBuilder::new()
+            .at(-30.0, -40.0)
+            .with_wandering();
+        let id2 = sim.spawn_crit(builder2);
 
         // Take snapshot
-        let snapshot = simulation.to_snapshot();
+        let snapshot = sim.to_snapshot();
+        assert_eq!(snapshot.metadata.creature_count, 2);
 
         // Restore from snapshot
-        let restored = Simulation::from_snapshot(snapshot);
+        let mut restored_sim = Simulation::from_snapshot(snapshot);
 
-        assert_eq!(restored.creature_count(), 5);
-        let (min_x, max_x, min_y, max_y) = restored.get_boundaries();
-        assert_eq!(min_x, -50.0);
-        assert_eq!(max_x, 50.0);
-        assert_eq!(min_y, -50.0);
-        assert_eq!(max_y, 50.0);
-    }
+        // Verify creature count
+        assert_eq!(restored_sim.creature_count(), 2);
 
-    #[test]
-    fn test_simulation_snapshot_preserves_state() {
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(50.0, 50.0);
+        // Verify world boundaries
+        let (min_x, max_x, min_y, max_y) = restored_sim.get_boundaries();
+        assert_eq!(min_x, -200.0);
+        assert_eq!(max_x, 200.0);
+        assert_eq!(min_y, -150.0);
+        assert_eq!(max_y, 150.0);
 
-        // Spawn creature at specific position with specific state
-        let custom_state = CreatureState {
-            behavior: BehaviorMode::Catatonic,
-            energy: 42.5,
-            age: 13.7,
-            max_speed: 18.2,
-        };
-
-        spawn_creature(
-            &mut simulation,
-            CreatureSpawnRequest::new()
-                .at(25.0, 25.0)
-                .with_state(custom_state),
-        );
-
-        // Take snapshot
-        let snapshot = simulation.to_snapshot();
-
-        // Verify snapshot has correct data
-        assert_eq!(snapshot.creatures.len(), 1);
-        let creature = &snapshot.creatures[0];
-        assert_eq!(creature.position.x, 25.0);
-        assert_eq!(creature.position.y, 25.0);
-        // Note: The spawner doesn't currently use the custom state,
-        // but this test validates the snapshot mechanism itself
-    }
-
-    #[test]
-    fn test_snapshot_file_save_load() {
-        use std::fs;
-        use std::path::PathBuf;
-
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(50.0, 50.0);
-
-        // Spawn 3 creatures
-        for _ in 0..3 {
-            spawn_creature(&mut simulation, CreatureSpawnRequest::new());
-        }
-
-        // Take snapshot
-        let snapshot = simulation.to_snapshot();
-
-        // Save to file
-        let path = PathBuf::from("/tmp/test_snapshot.msgpack");
-        snapshot.save_to_file(&path).unwrap();
-
-        // Verify file exists and has size > 0
-        let metadata = fs::metadata(&path).unwrap();
-        assert!(metadata.len() > 0);
-
-        // Load from file
-        let loaded_snapshot = WorldSnapshot::load_from_file(&path).unwrap();
-
-        assert_eq!(loaded_snapshot.creatures.len(), 3);
-        assert_eq!(loaded_snapshot.metadata.creature_count, 3);
-
-        // Clean up
-        fs::remove_file(&path).ok();
-    }
-
-    #[test]
-    fn test_simulation_full_cycle_save_load() {
-        use std::fs;
-        use std::path::PathBuf;
-
-        // Create simulation with creatures
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(180.0, 130.0);
-
-        for _ in 0..100 {
-            spawn_creature(&mut simulation, CreatureSpawnRequest::new());
-        }
-
-        // Simulate for 10 ticks to change state
-        for _ in 0..10 {
-            simulation.update(0.016);
-        }
-
-        // Save snapshot
-        let snapshot1 = simulation.to_snapshot();
-        let path = PathBuf::from("/tmp/test_full_cycle.msgpack");
-        snapshot1.save_to_file(&path).unwrap();
-
-        // Report file size
-        let metadata = fs::metadata(&path).unwrap();
-        println!(
-            "Snapshot file size for 100 creatures: {} bytes",
-            metadata.len()
-        );
-
-        // Load and restore
-        let snapshot2 = WorldSnapshot::load_from_file(&path).unwrap();
-        let restored = Simulation::from_snapshot(snapshot2);
-
-        // Verify
-        assert_eq!(restored.creature_count(), 100);
-        let (min_x, max_x, min_y, max_y) = restored.get_boundaries();
-        // set_boundaries(180.0, 130.0) creates world from -180 to +180, -130 to +130
-        assert_eq!(min_x, -180.0);
-        assert_eq!(max_x, 180.0);
-        assert_eq!(min_y, -130.0);
-        assert_eq!(max_y, 130.0);
-
-        // Clean up
-        fs::remove_file(&path).ok();
-    }
-
-    #[test]
-    fn test_snapshot_restore_preserves_crit_id_component() {
-        use crate::simulation::components::CritId;
+        // CRITICAL TEST: Verify ALL components are preserved
+        // This is the test that will catch missing Perception/AvoidanceBehavior components!
         use bevy_ecs::query::QueryState;
+        use crate::simulation::perception::{Perception, AvoidanceBehavior};
+        use crate::simulation::creatures::components::perception::Target;
+        use crate::simulation::creatures::components::capabilities::*;
 
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(50.0, 50.0);
-
-        // Spawn 3 creatures using CritBuilder
-        use crate::simulation::creatures::builder::CritBuilder;
-        let id1 = simulation.spawn_crit(CritBuilder::new().at(25.0, 25.0).with_all_capabilities());
-        let id2 = simulation.spawn_crit(CritBuilder::new().at(50.0, 50.0).with_all_capabilities());
-        let id3 = simulation.spawn_crit(CritBuilder::new().at(75.0, 75.0).with_all_capabilities());
-
-        // Take snapshot
-        let snapshot = simulation.to_snapshot();
-
-        // Restore from snapshot
-        let mut restored = Simulation::from_snapshot(snapshot);
-
-        // Query for CritId components
-        let mut query_state: QueryState<&CritId> = restored.world.query();
-        let crit_ids: Vec<u32> = query_state
-            .iter(&restored.world)
-            .map(|crit_id| crit_id.0)
-            .collect();
-
-        // Verify all CritId components are present
-        assert_eq!(
-            crit_ids.len(),
-            3,
-            "All restored entities should have CritId component"
-        );
-
-        // Verify IDs match
-        assert!(crit_ids.contains(&id1));
-        assert!(crit_ids.contains(&id2));
-        assert!(crit_ids.contains(&id3));
-    }
-
-    #[test]
-    fn test_snapshot_restore_preserves_body_size_component() {
-        use crate::simulation::core::components::BodySize;
-        use bevy_ecs::query::QueryState;
-
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(50.0, 50.0);
-
-        // Spawn creatures with different body sizes
-        use crate::simulation::creatures::builder::CritBuilder;
-        simulation.spawn_crit(
-            CritBuilder::new()
-                .at(0.0, 0.0)
-                .with_size(1.0) // Default size
-                .with_all_capabilities(),
-        );
-        simulation.spawn_crit(
-            CritBuilder::new()
-                .at(10.0, 10.0)
-                .with_size(2.5) // Large creature
-                .with_all_capabilities(),
-        );
-        simulation.spawn_crit(
-            CritBuilder::new()
-                .at(20.0, 20.0)
-                .with_size(0.5) // Small creature
-                .with_all_capabilities(),
-        );
-
-        // Take snapshot
-        let snapshot = simulation.to_snapshot();
-
-        // Restore from snapshot
-        let mut restored = Simulation::from_snapshot(snapshot);
-
-        // Query for BodySize components
-        let mut query_state: QueryState<&BodySize> = restored.world.query();
-        let body_sizes: Vec<f32> = query_state
-            .iter(&restored.world)
-            .map(|body_size| body_size.length)
-            .collect();
-
-        // Verify all BodySize components are present
-        assert_eq!(
-            body_sizes.len(),
-            3,
-            "All restored entities should have BodySize component"
-        );
-
-        // Verify sizes match (order may differ due to entity ordering)
-        assert!(
-            body_sizes.contains(&1.0),
-            "Should have creature with size 1.0"
-        );
-        assert!(
-            body_sizes.contains(&2.5),
-            "Should have creature with size 2.5"
-        );
-        assert!(
-            body_sizes.contains(&0.5),
-            "Should have creature with size 0.5"
-        );
-    }
-
-    /// Comprehensive integration test for full snapshot lifecycle
-    ///
-    /// This test validates that ALL required components survive a save/load cycle.
-    /// Adding new required components? This test will fail if you forget to update
-    /// the snapshot schema!
-    #[test]
-    fn test_snapshot_full_lifecycle_preserves_all_components() {
-        use crate::simulation::core::components::BodySize;
-        use bevy_ecs::query::QueryState;
-
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(100.0, 100.0);
-
-        // Spawn test creatures with CritBuilder (ensures all components are added)
-        use crate::simulation::creatures::builder::CritBuilder;
-        let _id1 = simulation.spawn_crit(
-            CritBuilder::new()
-                .at(25.0, 25.0)
-                .with_size(1.5)
-                .with_energy(75.0)
-                .with_all_capabilities(),
-        );
-        let _id2 = simulation.spawn_crit(
-            CritBuilder::new()
-                .at(50.0, 50.0)
-                .with_size(0.8)
-                .with_energy(90.0)
-                .as_seeker(100.0, 100.0)
-                .with_all_capabilities(),
-        );
-
-        // Run simulation for a few ticks to change state
-        for _ in 0..5 {
-            simulation.update(0.05);
-        }
-
-        // Take snapshot
-        let snapshot = simulation.to_snapshot();
-
-        // Restore from snapshot
-        let mut restored = Simulation::from_snapshot(snapshot);
-
-        // Comprehensive validation: Query for ALL required components
-        let mut query_state: QueryState<(
+        // Verify seeker has Target, Perception, and AvoidanceBehavior components
+        let mut query: QueryState<(
             &CritId,
             &Position,
-            &Velocity,
-            &Acceleration,
-            &Rotation,
-            &CreatureState,
-            &BodySize,
-        )> = restored.world.query();
+            Option<&Target>,
+            Option<&Perception>,
+            Option<&AvoidanceBehavior>,
+            Option<&CanSeek>,
+            Option<&CanAvoidObstacles>,
+        )> = restored_sim.world_mut().query();
 
-        let results: Vec<_> = query_state.iter(&restored.world).collect();
+        let seeker_data = query.iter(restored_sim.world())
+            .find(|(crit_id, _, _, _, _, _, _)| crit_id.0 == id1)
+            .expect("Seeker creature should exist");
 
-        // Verify correct count
-        assert_eq!(
-            results.len(),
-            2,
-            "All creatures should have all required components"
-        );
+        // Verify position preserved
+        assert_eq!(seeker_data.1.x, 50.0);
+        assert_eq!(seeker_data.1.y, 25.0);
 
-        // Verify each component is present and has valid data
-        for (_crit_id, _pos, _vel, _accel, _rot, state, body_size) in results.iter() {
-            // BodySize should be preserved
-            assert!(
-                body_size.length > 0.0,
-                "BodySize should have valid length"
-            );
+        // Verify Target component preserved (critical!)
+        assert!(seeker_data.2.is_some(), "Target component should be preserved");
+        let target = seeker_data.2.unwrap();
+        assert_eq!(target.x, 100.0);
+        assert_eq!(target.y, 75.0);
 
-            // CreatureState should be preserved
-            assert!(
-                state.energy > 0.0,
-                "Energy should be preserved and positive"
-            );
-        }
+        // Verify Perception component preserved (CRITICAL - this is what was missing!)
+        assert!(seeker_data.3.is_some(), "Perception component should be preserved");
 
-        // Verify simulation can continue running after restore
-        for _ in 0..10 {
-            restored.update(0.05);
-        }
+        // Verify AvoidanceBehavior component preserved (CRITICAL - this is what was missing!)
+        assert!(seeker_data.4.is_some(), "AvoidanceBehavior component should be preserved");
 
-        // Verify creatures still exist after running
-        assert_eq!(
-            restored.creature_count(),
-            2,
-            "Creatures should survive running after restore"
-        );
+        // Verify capability markers preserved
+        assert!(seeker_data.5.is_some(), "CanSeek capability should be preserved");
+        assert!(seeker_data.6.is_some(), "CanAvoidObstacles capability should be preserved");
     }
 
     #[test]
-    fn test_snapshot_preserves_creature_capabilities_and_movement() {
-        use crate::simulation::creatures::builder::CritBuilder;
-        use crate::simulation::creatures::components::capabilities::*;
-        use bevy_ecs::query::QueryState;
+    fn test_snapshot_file_save_and_load() {
+        use std::path::PathBuf;
+        use tempfile::TempDir;
 
-        let mut simulation = SimulationBuilder::new().build();
-        simulation.set_boundaries(200.0, 200.0);
+        let temp_dir = TempDir::new().unwrap();
+        let snapshot_path = temp_dir.path().join("test_snapshot.msgpack");
 
-        // Spawn a creature with all capabilities
-        let id = simulation.spawn_crit(
-            CritBuilder::new()
-                .at(0.0, 0.0)
-                .with_all_capabilities()
-                .with_size(1.0),
-        );
+        // Create simulation and take snapshot
+        let mut sim = SimulationBuilder::new().build();
+        let builder = CritBuilder::new().at(10.0, 20.0).with_all_capabilities();
+        sim.spawn_crit(builder);
 
-        // Verify creature has capabilities BEFORE snapshot
-        {
-            let mut query: QueryState<(&CritId, &CanSeek, &CanFlee, &CanWander, &CanAvoidObstacles)> =
-                simulation.world_mut().query();
-            let count = query
-                .iter(simulation.world())
-                .filter(|(crit_id, _, _, _, _)| crit_id.0 == id)
-                .count();
-            assert_eq!(count, 1, "Creature should have all 4 capabilities before snapshot");
-        }
+        let snapshot = sim.to_snapshot();
+        snapshot.save_to_file(&snapshot_path).expect("Save should succeed");
+
+        // Load snapshot from file
+        let loaded = WorldSnapshot::load_from_file(&snapshot_path).expect("Load should succeed");
+        assert_eq!(loaded.metadata.creature_count, 1);
+
+        // Restore simulation
+        let restored_sim = Simulation::from_snapshot(loaded);
+        assert_eq!(restored_sim.creature_count(), 1);
+    }
+
+    /// Regression test for Bug #3: Creatures walk through each other after snapshot reload
+    ///
+    /// This test verifies that Perception and AvoidanceBehavior components are preserved
+    /// in snapshots, ensuring collision avoidance continues to work after reload.
+    #[test]
+    fn test_snapshot_preserves_avoidance_components() {
+        let mut sim = SimulationBuilder::new().build();
+
+        // Spawn creature with avoidance capability
+        let builder = CritBuilder::new()
+            .at(0.0, 0.0)
+            .with_avoidance();
+        sim.spawn_crit(builder);
 
         // Take snapshot
-        let snapshot = simulation.to_snapshot();
+        let snapshot = sim.to_snapshot();
 
         // Restore from snapshot
-        let mut restored = Simulation::from_snapshot(snapshot);
+        let mut restored_sim = Simulation::from_snapshot(snapshot);
 
-        // CRITICAL TEST: Check if creature has capabilities AFTER snapshot
-        {
-            let mut query: QueryState<(&CritId, &CanSeek)> = restored.world_mut().query();
-            let count = query
-                .iter(restored.world())
-                .filter(|(crit_id, _)| crit_id.0 == id)
-                .count();
+        // Query for Perception and AvoidanceBehavior components
+        use bevy_ecs::query::QueryState;
+        use crate::simulation::perception::{Perception, AvoidanceBehavior};
 
-            // This should fail if capabilities aren't preserved
-            assert_eq!(
-                count, 1,
-                "Creature lost CanSeek capability after snapshot restore"
-            );
-        }
+        let mut query: QueryState<(&Perception, &AvoidanceBehavior)> = restored_sim.world_mut().query();
+        let components: Vec<_> = query.iter(restored_sim.world()).collect();
 
-        {
-            let mut query: QueryState<(&CritId, &CanFlee)> = restored.world_mut().query();
-            let count = query
-                .iter(restored.world())
-                .filter(|(crit_id, _)| crit_id.0 == id)
-                .count();
-            assert_eq!(count, 1, "Creature lost CanFlee capability after snapshot restore");
-        }
+        assert_eq!(components.len(), 1, "Restored creature should have Perception and AvoidanceBehavior");
 
-        {
-            let mut query: QueryState<(&CritId, &CanWander)> = restored.world_mut().query();
-            let count = query
-                .iter(restored.world())
-                .filter(|(crit_id, _)| crit_id.0 == id)
-                .count();
-            assert_eq!(count, 1, "Creature lost CanWander capability after snapshot restore");
-        }
-
-        {
-            let mut query: QueryState<(&CritId, &CanAvoidObstacles)> = restored.world_mut().query();
-            let count = query
-                .iter(restored.world())
-                .filter(|(crit_id, _)| crit_id.0 == id)
-                .count();
-            assert_eq!(count, 1, "Creature lost CanAvoidObstacles capability after snapshot restore");
-        }
+        let (perception, avoidance) = components[0];
+        assert!(perception.range > 0.0, "Perception range should be restored");
+        assert!(avoidance.personal_space > 0.0, "Avoidance personal_space should be restored");
+        assert!(avoidance.max_force > 0.0, "Avoidance max_force should be restored");
     }
 }

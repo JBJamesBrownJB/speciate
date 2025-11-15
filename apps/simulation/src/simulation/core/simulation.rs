@@ -32,6 +32,49 @@ impl SimulationBuilder {
         let mut world = World::new();
         let mut schedule = Schedule::default();
 
+        // ========== Register all component types for Bevy Reflection ==========
+        // This enables automatic serialization via DynamicSceneBuilder
+        use bevy_ecs::prelude::AppTypeRegistry;
+        use crate::simulation::components::*;
+        use crate::simulation::core::components::*;
+        use crate::simulation::perception::{AvoidanceBehavior, Perception};
+
+        // Initialize type registry resource
+        world.init_resource::<AppTypeRegistry>();
+        {
+            let registry = world.resource::<AppTypeRegistry>();
+            let mut type_registry = registry.write();
+
+            // Core physics components
+            type_registry.register::<Position>();
+            type_registry.register::<Velocity>();
+            type_registry.register::<Acceleration>();
+            type_registry.register::<BodySize>();
+            type_registry.register::<Rotation>();
+            type_registry.register::<Catatonic>();
+
+            // Creature identity and state
+            type_registry.register::<CritId>();
+            type_registry.register::<CreatureState>();
+            type_registry.register::<BehaviorMode>();
+            type_registry.register::<HomePosition>();
+
+            // Capability markers (ZST)
+            type_registry.register::<CanSeek>();
+            type_registry.register::<CanFlee>();
+            type_registry.register::<CanWander>();
+            type_registry.register::<CanAvoidObstacles>();
+
+            // Perception and avoidance
+            type_registry.register::<Perception>();
+            type_registry.register::<AvoidanceBehavior>();
+            type_registry.register::<Target>();
+
+            // Behavior state components
+            type_registry.register::<WanderState>();
+            type_registry.register::<FleeState>();
+        }
+
         // Register ALL systems here - this is the only place systems should be added
         // Minimal constraints: Let Bevy parallelize automatically based on data access patterns
 

@@ -4,13 +4,14 @@
 //! Following the hybrid ECS pattern: BehaviorMode determines which systems execute.
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 /// Behavior modes for creatures (A-Life state machine)
 ///
 /// This enum represents mutually exclusive high-level behavioral modes.
 /// Systems check this to determine if they should execute for a given creature.
-#[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize, Reflect)]
 pub enum BehaviorMode {
     /// Stationary, no movement or behavior
     #[default]
@@ -32,7 +33,8 @@ pub enum BehaviorMode {
 ///
 /// Contains mutable state that changes during simulation.
 /// TODO: Migrate max_speed and other parameters to DNA system (DNA system (in progress))
-#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct CreatureState {
     pub behavior: BehaviorMode,
     pub energy: f32,
@@ -88,7 +90,8 @@ impl CreatureState {
 /// - Abandoned when starving (expand search)
 /// - Expanded during mating season
 /// - Inherited by offspring (territorial behavior)
-#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct HomePosition {
     pub x: f32,
     pub y: f32,

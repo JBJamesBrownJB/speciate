@@ -3,6 +3,8 @@
 //! See `/workspace/docs/biology/dna-driven-design.md` for future DNA integration.
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::Reflect;
+use serde::{Deserialize, Serialize};
 
 /// Spatial awareness component - what a creature can detect
 ///
@@ -21,7 +23,8 @@ use bevy_ecs::prelude::*;
 /// - Spatial hash for faster neighbor queries
 /// - Staggered updates (not all crits update same frame)
 /// - Different update rates based on movement speed
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, Reflect, Serialize, Deserialize)]
+#[reflect(Component)]
 pub struct Perception {
     /// Maximum detection distance in meters
     ///
@@ -43,6 +46,8 @@ pub struct Perception {
     ///
     /// **Performance:** Expected size ~5-20 entities in typical densities.
     /// May grow larger in crowded areas (bottlenecks, resource hotspots).
+    #[reflect(ignore)]  // Vec<Entity> doesn't impl Reflect
+    #[serde(skip)]      // Vec<Entity> doesn't impl Serialize/Deserialize
     pub nearby: Vec<Entity>,
 }
 
@@ -137,7 +142,8 @@ impl Default for Perception {
 /// Both parameters will be derived from DNA:
 /// - `personal_space = body_length * dna.spacing_multiplier`
 /// - `max_force` will remain constant (or scale with body mass)
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, Reflect, Serialize, Deserialize)]
+#[reflect(Component)]
 pub struct AvoidanceBehavior {
     /// Desired minimum distance from other creatures (meters)
     ///

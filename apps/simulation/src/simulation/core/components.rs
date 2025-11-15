@@ -5,17 +5,20 @@
 //! behavior-specific logic.
 
 use bevy_ecs::prelude::*;
+use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 /// Position component representing an entity's location in 2D space
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct Position {
     pub x: f32,
     pub y: f32,
 }
 
 /// Velocity component representing an entity's speed and direction
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct Velocity {
     pub vx: f32,
     pub vy: f32,
@@ -50,7 +53,8 @@ impl Velocity {
 
 /// Acceleration component for steering forces (Nature of Code pattern)
 /// Systems ADD to acceleration, physics integrates it into velocity
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct Acceleration {
     pub ax: f32,
     pub ay: f32,
@@ -58,7 +62,8 @@ pub struct Acceleration {
 
 /// Body size component (volumetric physics)
 /// Creatures occupy space on grid: 1m body = 1m × 1m area
-#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct BodySize {
     pub length: f32, // Body length in meters
 }
@@ -123,7 +128,8 @@ impl Default for ActualTickRate {
 }
 
 /// Marker component for catatonic (stationary) creatures
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
 pub struct Catatonic;
 
 /// Boundary configuration resource for world limits

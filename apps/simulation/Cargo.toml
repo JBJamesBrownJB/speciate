@@ -11,6 +11,8 @@ repository = "https://github.com/anthropics/speciate"
 # Bevy ECS Framework
 bevy_ecs = "0.14"
 bevy_app = "0.14"
+bevy_reflect = "0.14"  # Reflection for automatic component serialization
+bevy_scene = "0.14"    # DynamicScene for automatic snapshot serialization
 
 # Logging
 log = "0.4"
@@ -39,6 +41,7 @@ dev-tools = []
 
 [dev-dependencies]
 os_pipe = "1.2"  # For stdin simulation in command tests
+tempfile = "3.10"  # Temporary files for snapshot tests
 
 [profile.release]
 opt-level = 3

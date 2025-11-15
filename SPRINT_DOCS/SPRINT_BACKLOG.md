@@ -1,91 +1,103 @@
-# Sprint 8 Backlog
+# Sprint 9 Backlog: Trials - Regression Testing System
 
-## Sprint: sprint-8-refactor-foundation
-
----
-
-## Phase 1: Type Safety & Cleanup
-
-- [ ] Fix TypeScript `any` type in `main.ts:108` (updateInspectionPanel)
-- [ ] Fix TypeScript `any` type in `main.ts:508` (creatures.map)
-- [ ] Fix TypeScript `any` type in `main.ts:561` (sprite click event)
-- [ ] Fix TypeScript `any` type in `ElectronIPCClient.ts:8` (window.electron interface)
-- [ ] Fix TypeScript `any` type in `ElectronIPCClient.ts:31` (onStateUpdate callback)
-- [ ] Fix Rust unused variable warning in `seek.rs:48` (mut position)
-- [ ] Fix Rust unused variable warning in `perception/systems.rs:60` (range_sq)
-- [ ] Fix Rust unused variable warning in `perception/systems.rs:78` (combined_radii_sq)
-- [ ] Remove dead code: `list_snapshots()` function
-- [ ] Run `cargo clippy -- -D warnings` and address all suggestions
-- [ ] Verify all tests pass: `npm test`
-- [ ] Verify all tests pass: `cargo test`
+**Sprint:** Sprint 9
+**Branch:** `feat/sprint-9-trials-regression-testing`
+**Status:** 🚀 IN PROGRESS
 
 ---
 
-## Phase 2: Constant Extraction
+## Phase 1: Trial Infrastructure
 
-- [ ] Create `apps/simulation/src/simulation/creatures/constants.rs` module
-- [ ] Extract constants from `wander.rs`: COMFORT_RADIUS, BLEND_CENTER, MAX_WANDER_DISTANCE, WANDER_FORCE_MAGNITUDE, SEEK_FORCE_MAGNITUDE
-- [ ] Extract constants from `seek.rs`: MAX_SEEK_FORCE, BRAKE_FORCE, POUNCE_DISTANCE, POUNCE_SPEED_THRESHOLD
-- [ ] Extract constants from `avoidance.rs` if any magic numbers exist
-- [ ] Update `wander.rs` to use named constants
-- [ ] Update `seek.rs` to use named constants
-- [ ] Update `avoidance.rs` to use named constants if applicable
-- [ ] Add module documentation with DNA migration notes
-- [ ] Verify tests still pass after refactoring
+### P1 - Core Trial System
+- [ ] Design trial data structure (Trial, TrialScenario, TrialResult)
+- [ ] Implement RNG seed control for deterministic simulation
+- [ ] Create trial runner system (CLI flag: --trial <name>)
+- [ ] Add trial result logging/validation
+- [ ] Write tests for trial infrastructure
 
----
-
-## Phase 3: Architecture Documentation
-
-- [ ] Create `docs/architecture/behavior-engine.md`
-- [ ] Document force accumulation pattern
-- [ ] Document capability marker pattern (zero-sized types)
-- [ ] Explain hybrid ECS architecture
-- [ ] Create behavior flow diagram (ASCII art or mermaid)
-- [ ] Create ECS component/system interaction map
-- [ ] Document creature state machine (BehaviorMode transitions)
-- [ ] Document force priority hierarchy (panic > avoidance > wander)
-- [ ] Explain sigmoid blending curves in wander system
+### P1 - Scenario Definition
+- [ ] Define scenario format (JSON/TOML config file?)
+- [ ] Implement scenario loader
+- [ ] Create initial conditions system (spawn positions, creature properties)
+- [ ] Add validation for scenario configs
+- [ ] Write tests for scenario loading
 
 ---
 
-## Phase 4: Performance Baseline Metrics
+## Phase 2: Spawning Pattern Trial
 
-- [ ] Add "Performance Baseline" section to HUD in `index.html`
-- [ ] Implement target FPS tracking (60 Hz baseline)
-- [ ] Implement frame budget calculation (16.67ms target)
-- [ ] Add performance status indicators (Optimal/Degraded/Critical)
-- [ ] Create rolling average calculation (last 60 frames)
-- [ ] Add sparkline graphs for FPS trends
-- [ ] Add sparkline graphs for frame budget trends
-- [ ] Extract stats calculation logic to separate module
-- [ ] Add performance threshold constants
-- [ ] Test with live simulation to verify metrics accuracy
+### P1 - Default Spawn Trial
+- [ ] Capture current spawn logic as baseline trial
+- [ ] Name trial based on observed behavior issues (TBD after observation)
+- [ ] Document expected vs actual outcomes
+- [ ] Define pass/fail criteria
+- [ ] Implement trial scenario config
+- [ ] Add to trial library
 
 ---
 
-## Phase 5: Documentation Cleanup
+## Phase 3: Crowd Navigation Trial
 
-- [ ] Audit all 59 TODO comments in codebase
-- [ ] Categorize TODOs: DNA migration, performance, features, cleanup
-- [ ] Create `docs/technical-debt.md` tracking document
-- [ ] Link high-priority TODOs to future sprint items
-- [ ] Update `docs/architecture/electron-architecture.md`
-- [ ] Document MessagePack performance characteristics
-- [ ] Add bidirectional IPC section to architecture docs
-- [ ] Update `CLAUDE.md` sprint status to Sprint 8
-- [ ] Add "Performance Baseline Metrics" section to `CLAUDE.md`
-- [ ] Document constant extraction pattern in `CLAUDE.md`
+### P1 - Obstacle Grid Implementation
+- [ ] Read crowd-navigation.md requirements
+- [ ] Implement grid spawning system (catatonic creatures as obstacles)
+- [ ] Configure spacing smaller than creature comfort zone
+- [ ] Spawn seeking creature with target across grid
+- [ ] Define success criteria (no collisions, reaches target)
+- [ ] Implement trial scenario config
+- [ ] Add to trial library
+
+### P2 - Validation
+- [ ] Collision detection logging
+- [ ] Path tracking/visualization (optional)
+- [ ] Success/failure validation
+- [ ] Write tests for crowd navigation logic
 
 ---
 
-## Final Verification
+## Phase 4: Documentation & Integration
 
-- [ ] Run full test suite: `npm test`
-- [ ] Run full test suite: `cargo test`
-- [ ] Verify zero TypeScript `any` types: `grep -r "any" apps/portal/src/`
-- [ ] Verify zero Rust warnings: `cargo clippy -- -D warnings`
-- [ ] Verify clean compile: `cargo build`
-- [ ] Manual testing: Run Electron app and verify stats pane
-- [ ] Code review: Check all changes align with sprint goals
-- [ ] Prepare for merge: Update commit message with sprint summary
+### P1 - Documentation
+- [ ] Trial authoring guide (how to create new trials)
+- [ ] Trial execution guide (how to run trials)
+- [ ] Results interpretation guide
+- [ ] Update CLAUDE.md with trial workflow
+
+### P2 - Integration
+- [ ] Add trial command to README
+- [ ] Create trial library index (list of available trials)
+- [ ] Document future CI/CD integration plan
+
+---
+
+## Testing Tasks
+
+### Unit Tests
+- [ ] Trial data structure tests
+- [ ] RNG seed determinism tests
+- [ ] Scenario loader tests
+- [ ] Trial runner tests
+
+### Integration Tests
+- [ ] Full trial execution tests
+- [ ] Both scenarios end-to-end
+- [ ] Result validation tests
+
+---
+
+## Notes
+
+- Keep trials simple and focused (single behavior validation)
+- Trials should be fast (under 1 second execution)
+- Deterministic outcomes are critical (fixed RNG seed)
+- Document any observed behavior issues revealed by trials
+
+---
+
+## Future Enhancements (Out of Scope)
+
+- Automated CI/CD integration
+- Visual regression comparison
+- Performance benchmarking trials
+- Trial recording from live simulation
+- Additional trial scenarios

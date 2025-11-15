@@ -345,6 +345,7 @@ mod tests {
         // CRITICAL TEST: Verify ALL components are preserved
         // This is the test that will catch missing Perception/AvoidanceBehavior components!
         use bevy_ecs::query::QueryState;
+        use crate::simulation::core::components::Position;
         use crate::simulation::perception::{Perception, AvoidanceBehavior};
         use crate::simulation::creatures::components::perception::Target;
         use crate::simulation::creatures::components::capabilities::*;

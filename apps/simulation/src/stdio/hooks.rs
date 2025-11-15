@@ -58,20 +58,24 @@ impl RunnerHooks for StdioHooks {
             return;
         }
 
-        // Save shutdown snapshot to latest.msgpack (matches ConsoleHooks behavior)
+        // Create snapshot
         let snapshot = simulation.to_snapshot();
-        let latest_path = std::path::Path::new("snapshots/latest.msgpack");
 
-        match snapshot.save_to_file(latest_path) {
+        // Save timestamped snapshot only (no latest.msgpack)
+        let timestamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
+        let timestamped_filename = format!("simulation_{}.msgpack", timestamp);
+        let timestamped_path = snapshots_dir.join(&timestamped_filename);
+
+        match snapshot.save_to_file(&timestamped_path) {
             Ok(_) => {
                 eprintln!(
-                    "[stdio] Shutdown snapshot saved: {} ({} creatures)",
-                    latest_path.display(),
+                    "[stdio] Snapshot saved: {} ({} creatures)",
+                    timestamped_path.display(),
                     snapshot.metadata.creature_count
                 );
             }
             Err(e) => {
-                eprintln!("[stdio] Failed to save shutdown snapshot: {}", e);
+                eprintln!("[stdio] Failed to save snapshot: {}", e);
             }
         }
     }
@@ -169,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn test_stdio_hooks_shutdown_creates_latest_msgpack() {
+    fn test_stdio_hooks_shutdown_creates_only_timestamped_file() {
         cleanup_test_snapshots();
 
         // Create simulation
@@ -179,18 +183,139 @@ mod tests {
         // Call shutdown hook
         hooks.on_shutdown(100, &mut simulation);
 
-        // Verify latest.msgpack was created
+        // Verify NO latest.msgpack was created (timestamped-only approach)
         let latest_path = Path::new("snapshots/latest.msgpack");
         assert!(
-            latest_path.exists(),
-            "StdioHooks::on_shutdown() should create snapshots/latest.msgpack"
+            !latest_path.exists(),
+            "Should NOT create latest.msgpack (timestamped-only approach)"
         );
 
-        // Verify it's a valid snapshot file
-        let metadata = fs::metadata(latest_path).unwrap();
+        // Verify exactly ONE timestamped file was created
+        let snapshots_dir = Path::new("snapshots");
+        let timestamped_files: Vec<_> = fs::read_dir(snapshots_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let path = e.path();
+                path.is_file()
+                    && path.extension().and_then(|s| s.to_str()) == Some("msgpack")
+            })
+            .collect();
+
+        assert_eq!(
+            timestamped_files.len(),
+            1,
+            "Should create exactly one timestamped snapshot file"
+        );
+
+        // Verify the timestamped file is valid and non-empty
+        let timestamped_path = timestamped_files[0].path();
+        let metadata = fs::metadata(&timestamped_path).unwrap();
         assert!(
             metadata.len() > 0,
-            "Snapshot file should not be empty"
+            "Timestamped snapshot file should not be empty"
+        );
+
+        cleanup_test_snapshots();
+    }
+
+    #[test]
+    fn test_stdio_hooks_shutdown_timestamped_file_format() {
+        cleanup_test_snapshots();
+
+        // Create simulation
+        let mut simulation = SimulationBuilder::new().build();
+        let mut hooks = StdioHooks::new();
+
+        // Call shutdown hook
+        hooks.on_shutdown(100, &mut simulation);
+
+        // Verify NO latest.msgpack exists
+        let latest_path = Path::new("snapshots/latest.msgpack");
+        assert!(
+            !latest_path.exists(),
+            "Should NOT create latest.msgpack"
+        );
+
+        // Verify exactly one timestamped snapshot was created
+        let snapshots_dir = Path::new("snapshots");
+        let entries: Vec<_> = fs::read_dir(snapshots_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let path = e.path();
+                path.is_file()
+                    && path.extension().and_then(|s| s.to_str()) == Some("msgpack")
+            })
+            .collect();
+
+        assert_eq!(
+            entries.len(),
+            1,
+            "Should create exactly one timestamped snapshot file (found {} files)",
+            entries.len()
+        );
+
+        // Verify timestamped file naming format (simulation_YYYY-MM-DD_HH-MM-SS.msgpack)
+        let timestamped_file = &entries[0];
+        let filename = timestamped_file.file_name();
+        let filename_str = filename.to_str().unwrap();
+
+        assert!(
+            filename_str.starts_with("simulation_"),
+            "Timestamped file should start with 'simulation_', got: {}",
+            filename_str
+        );
+        assert!(
+            filename_str.ends_with(".msgpack"),
+            "Timestamped file should end with '.msgpack', got: {}",
+            filename_str
+        );
+
+        // Verify it contains a date (at least has the right number of dashes)
+        // Format: simulation_2025-11-15_17-54-32.msgpack (2 dashes in date, 2 dashes in time)
+        let dash_count = filename_str.matches('-').count();
+        assert!(
+            dash_count >= 4,
+            "Timestamped file should have date-time format with at least 4 dashes, got: {}",
+            filename_str
+        );
+
+        cleanup_test_snapshots();
+    }
+
+    #[test]
+    fn test_multiple_shutdowns_create_multiple_timestamped_files() {
+        cleanup_test_snapshots();
+
+        // Create and shutdown simulation twice
+        for i in 0..2 {
+            let mut simulation = SimulationBuilder::new().build();
+            let mut hooks = StdioHooks::new();
+            hooks.on_shutdown(100 + i, &mut simulation);
+
+            // Small delay to ensure different timestamps
+            std::thread::sleep(std::time::Duration::from_millis(1100));
+        }
+
+        // Count timestamped files (excluding latest.msgpack)
+        let snapshots_dir = Path::new("snapshots");
+        let timestamped_count = fs::read_dir(snapshots_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let path = e.path();
+                path.is_file()
+                    && path.extension().and_then(|s| s.to_str()) == Some("msgpack")
+                    && path.file_name().and_then(|s| s.to_str()).map(|s| s != "latest.msgpack").unwrap_or(false)
+            })
+            .count();
+
+        assert_eq!(
+            timestamped_count,
+            2,
+            "Two shutdowns should create two timestamped snapshot files (found {})",
+            timestamped_count
         );
 
         cleanup_test_snapshots();

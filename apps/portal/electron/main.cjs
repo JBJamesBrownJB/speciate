@@ -45,8 +45,8 @@ function startSimulation() {
   }
 
   // Spawn Rust binary as child process with auto-resume from last session
-  // --load-snapshot (no path) → defaults to snapshots/latest.msgpack
-  // If file doesn't exist → gracefully falls back to default config
+  // --load-snapshot (no path) → auto-discovers most recent snapshot in ./snapshots/
+  // If no snapshots found → gracefully falls back to default config
   simulationProcess = spawn(binaryPath, ['--load-snapshot'], {
     stdio: ['pipe', 'pipe', 'pipe'],  // stdin (pipe for commands), stdout (pipe), stderr (pipe)
   });

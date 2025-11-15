@@ -57,7 +57,6 @@ pub fn update_perception_system(
     for (entity, pos, size, mut perception) in query.iter_mut() {
         perception.clear();
 
-        let range_sq = perception.range * perception.range;
         let self_radius = size.radius();
 
         // Check distance to all other creatures
@@ -75,7 +74,6 @@ pub fn update_perception_system(
             // For performance, check if center distance is close enough before sqrt
             let other_radius = other_size.radius();
             let combined_radii = self_radius + other_radius;
-            let combined_radii_sq = combined_radii * combined_radii;
 
             // Early rejection: if centers are way too far apart, skip sqrt
             if center_dist_sq > (perception.range + combined_radii).powi(2) {

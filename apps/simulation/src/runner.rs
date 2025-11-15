@@ -111,15 +111,14 @@ impl<H: RunnerHooks> SimulationRunner<H> {
             simulation.update(delta_time);
             tick += 1;
 
-            // Measure tick duration
+            // Measure tick duration (execution time only, for performance monitoring)
             let tick_elapsed = tick_start.elapsed();
             tick_timer.record_tick(tick_elapsed);
 
-            // Update measured tick rate resource (for frontend display)
-            if let Some(avg_duration) = tick_timer.average_duration() {
-                let measured_tick_rate = 1.0 / avg_duration.as_secs_f32();
-                simulation.set_tick_rate(measured_tick_rate);
-            }
+            // Update measured tick rate from wall-clock interval (includes sleep)
+            // This gives the actual tick rate (e.g., 20 Hz), not execution speed
+            let measured_tick_rate = 1.0 / delta_time;
+            simulation.set_tick_rate(measured_tick_rate);
 
             // Call hook: per-tick callback
             self.hooks.on_tick(tick, tick_elapsed, &mut simulation);

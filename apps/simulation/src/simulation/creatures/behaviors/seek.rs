@@ -5,7 +5,7 @@
 
 use crate::simulation::components::*;
 use crate::simulation::core::components::*;
-use crate::simulation::movement::constants::{MAX_SPEED, SLOW_ZONE_MULTIPLIER};
+use crate::simulation::movement::constants::{MAX_SPEED, SEEKING, SLOW_ZONE_MULTIPLIER};
 use bevy_ecs::prelude::*;
 
 /// Seeking behavior: steer toward target with smooth arrival
@@ -26,6 +26,7 @@ use bevy_ecs::prelude::*;
 /// max reaction time, then brakes hard. Only overshoots if too fast with insufficient distance.
 ///
 /// TODO: Migrate to DNA-driven parameters
+#[allow(clippy::type_complexity)]
 pub fn seek_system(
     mut query: Query<
         (
@@ -39,13 +40,9 @@ pub fn seek_system(
         With<CanSeek>,
     >,
 ) {
-    // TODO(DNA Future DNA system): Derive from DNA genes
-    const MAX_SEEK_FORCE: f32 = 50.0; // TODO(DNA): dna.express_gene("strength")
-    const BRAKE_FORCE: f32 = 70.0; // TODO(DNA): MAX_SEEK_FORCE * 1.4
-    const POUNCE_DISTANCE: f32 = 0.5; // TODO(DNA): body_size * 0.5
-    const POUNCE_SPEED_THRESHOLD: f32 = 5.5; // TODO(DNA): dna.express_gene("precision")
+    // Seeking parameters from global constants (TODO: DNA Future DNA system)
 
-    for (mut position, mut acceleration, mut velocity, size, target, mut creature_state) in
+    for (position, mut acceleration, mut velocity, size, target, mut creature_state) in
         query.iter_mut()
     {
         if creature_state.behavior != BehaviorMode::Seeking {
@@ -66,16 +63,15 @@ pub fn seek_system(
         }
 
         // Arrival threshold accounts for body radius (stop when edge reaches target)
-        const TARGET_ARRIVAL_TOLERANCE: f32 = 0.5;
         let body_radius = size.radius() / 2.0;
-        let arrival_radius = TARGET_ARRIVAL_TOLERANCE + body_radius;
+        let arrival_radius = SEEKING.arrival_tolerance + body_radius;
         let slow_zone = arrival_radius * SLOW_ZONE_MULTIPLIER;
         let current_speed = (velocity.vx * velocity.vx + velocity.vy * velocity.vy).sqrt();
 
         // Pounce: stop when close and slow (prevents creeping)
         // Check center distance against pounce threshold + body radius
-        if center_distance < (POUNCE_DISTANCE + body_radius)
-            && current_speed < POUNCE_SPEED_THRESHOLD
+        if center_distance < (SEEKING.pounce_distance + body_radius)
+            && current_speed < SEEKING.pounce_speed
         {
             velocity.vx = 0.0;
             velocity.vy = 0.0;
@@ -85,8 +81,8 @@ pub fn seek_system(
 
         // Emergency brake: hard counter-force if within arrival radius
         if center_distance < arrival_radius {
-            acceleration.ax += -velocity.vx * BRAKE_FORCE;
-            acceleration.ay += -velocity.vy * BRAKE_FORCE;
+            acceleration.ax += -velocity.vx * SEEKING.brake_force;
+            acceleration.ay += -velocity.vy * SEEKING.brake_force;
             continue;
         }
 
@@ -99,8 +95,7 @@ pub fn seek_system(
             let slow_zone_distance = slow_zone - arrival_radius;
             let distance_into_zone = center_distance - arrival_radius;
             let ratio = distance_into_zone / slow_zone_distance;
-            let decay_factor = 1.5;
-            creature_max_speed * (decay_factor * ratio).exp() / decay_factor.exp()
+            creature_max_speed * (SEEKING.slow_zone_decay * ratio).exp() / SEEKING.slow_zone_decay.exp()
         };
 
         let desired_vx = (to_target_x / center_distance) * desired_speed;
@@ -110,8 +105,8 @@ pub fn seek_system(
 
         // Limit and accumulate steering force
         let steer_mag_sq = steer_x * steer_x + steer_y * steer_y;
-        if steer_mag_sq > MAX_SEEK_FORCE * MAX_SEEK_FORCE {
-            let scale = MAX_SEEK_FORCE / steer_mag_sq.sqrt();
+        if steer_mag_sq > SEEKING.max_force * SEEKING.max_force {
+            let scale = SEEKING.max_force / steer_mag_sq.sqrt();
             acceleration.ax += steer_x * scale;
             acceleration.ay += steer_y * scale;
         } else {

@@ -1,16 +1,7 @@
 import type { IPCClient } from './IPCClient';
 import type { GameState } from '../../types/GameState';
 
-// Type definition for window.electron (injected by preload.js)
-declare global {
-  interface Window {
-    electron?: {
-      onStateUpdate: (callback: (state: any) => void) => void;
-      removeStateUpdateListener: () => void;
-      getLatestState: () => Promise<any>;
-    };
-  }
-}
+// Note: window.electron types are defined in src/global.d.ts
 
 /**
  * Electron IPC client implementation
@@ -28,7 +19,7 @@ export class ElectronIPCClient implements IPCClient {
     }
 
     // Subscribe to state updates from main process
-    window.electron.onStateUpdate((state: any) => {
+    window.electron.onStateUpdate((state: GameState) => {
       // Cache latest state for synchronous access
       this.latestState = state;
 

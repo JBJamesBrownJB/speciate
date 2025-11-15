@@ -7,6 +7,7 @@
 
 use crate::simulation::components::*;
 use crate::simulation::core::components::*;
+use crate::simulation::movement::{STEERING, TERRITORY};
 use bevy_ecs::prelude::*;
 use rand::Rng;
 
@@ -40,6 +41,7 @@ use rand::Rng;
 /// - comfort_radius_multiplier (metabolic needs scale territory)
 /// - exploration_bias (bold vs cautious personalities)
 /// - stress_response (expand/contract under starvation, fleeing)
+#[allow(clippy::type_complexity)]
 pub fn territory_wandering_system(
     mut query: Query<
         (
@@ -53,12 +55,7 @@ pub fn territory_wandering_system(
         With<CanWander>,
     >,
 ) {
-    // Territory parameters (TODO: DNA Future DNA system)
-    const COMFORT_RADIUS: f32 = 10.0; // Territory core (low home bias)
-    const BLEND_CENTER: f32 = 20.0; // Distance where blend = 50%
-    const MAX_WANDER_DISTANCE: f32 = 30.0; // Hard limit for excursions
-    const WANDER_FORCE_MAGNITUDE: f32 = 5.0; // Gentle exploration
-    const SEEK_FORCE_MAGNITUDE: f32 = 50.0; // Strong homeward pull
+    // Territory parameters from global constants (TODO: DNA Future DNA system)
 
     let mut rng = rand::thread_rng();
 
@@ -122,8 +119,8 @@ pub fn territory_wandering_system(
 
         // Limit steering force magnitude
         let steer_magnitude = (steer_x * steer_x + steer_y * steer_y).sqrt();
-        let wander_force = if steer_magnitude > WANDER_FORCE_MAGNITUDE {
-            let scale = WANDER_FORCE_MAGNITUDE / steer_magnitude;
+        let wander_force = if steer_magnitude > STEERING.wander_force {
+            let scale = STEERING.wander_force / steer_magnitude;
             (steer_x * scale, steer_y * scale)
         } else {
             (steer_x, steer_y)
@@ -145,10 +142,10 @@ pub fn territory_wandering_system(
         };
 
         // Urgency factor: increases as creature approaches max wander distance
-        let urgency = (distance_from_home / MAX_WANDER_DISTANCE).min(1.0);
+        let urgency = (distance_from_home / TERRITORY.max_wander_distance).min(1.0);
 
         // Homeward force magnitude scales with urgency
-        let homeward_force_magnitude = SEEK_FORCE_MAGNITUDE * urgency;
+        let homeward_force_magnitude = TERRITORY.homeward_force * urgency;
         let homeward_force = (
             norm_to_home_x * homeward_force_magnitude,
             norm_to_home_y * homeward_force_magnitude,
@@ -156,7 +153,7 @@ pub fn territory_wandering_system(
 
         // ===== PART 3: Blend Forces Based on Distance =====
 
-        let blend = calculate_territory_blend(distance_from_home, COMFORT_RADIUS, BLEND_CENTER);
+        let blend = calculate_territory_blend(distance_from_home, TERRITORY.comfort_radius, TERRITORY.blend_center);
         let final_force = blend_forces(wander_force, homeward_force, blend);
 
         // ===== PART 4: Add to Acceleration (Force Accumulation) =====
@@ -287,14 +284,13 @@ pub fn calculate_territory_blend(
     // Steepness determines transition sharpness:
     // - Low k (0.1-0.5): Gradual transition over wide range
     // - High k (1.0-3.0): Sharp transition near center
-    // Using k=1.5 for biologically realistic "elastic tether" behavior
-    const SIGMOID_STEEPNESS: f32 = 1.5;
+    // Using k=1.5 for biologically realistic "elastic tether" behavior (from TERRITORY.sigmoid_steepness)
 
     // Normalize distance relative to blend center and comfort zone
     let normalized = (distance_from_home - blend_center) / comfort_radius;
 
     // Sigmoid function: 1 / (1 + e^(-k*x))
-    let sigmoid = 1.0 / (1.0 + (-SIGMOID_STEEPNESS * normalized).exp());
+    let sigmoid = 1.0 / (1.0 + (-TERRITORY.sigmoid_steepness * normalized).exp());
 
     // Clamp to [0, 1] for safety
     sigmoid.clamp(0.0, 1.0)

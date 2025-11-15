@@ -142,28 +142,28 @@ pub const DT: f32 = 0.05;
 /// TODO: Consider DNA-driven for different approach strategies
 pub const SLOW_ZONE_MULTIPLIER: f32 = 30.0;
 
-/// Locomotion noise base magnitude (Newtons)
-///
-/// **Value:** 0.5 N (~5% of seek force)
-///
-/// **Effect:** Adds lateral (side-to-side) wobble to movement, simulating:
-/// - Motor control variability (neuromuscular noise)
-/// - Terrain micro-irregularities (pebbles, grass, slopes)
-/// - Decision-making fluctuations (temporal smoothing lag)
-///
-/// **Scaling:**
-/// - Faster creatures: More wobble (inertial instability)
-/// - Smaller creatures: More wobble per unit speed (surface area effects)
-///
-/// **Formula:** `noise = BASE × (speed/MAX_SPEED)² × (1/sqrt(body_length))`
-///
-/// **Biological rationale:**
-/// - Animals don't move in perfect straight lines
-/// - Fixes collinear obstacle edge case (adds lateral component)
-/// - Magnitude: 2-10% of typical locomotor forces (biologically realistic)
-///
-/// **NOTE:** Locomotion noise magnitude is now configured via `MovementConfig` in `config.rs`
-/// TODO: Migrate to DNA gene: `motor_precision` (Future DNA system)
+// Locomotion noise base magnitude (Newtons)
+//
+// **Value:** 0.5 N (~5% of seek force)
+//
+// **Effect:** Adds lateral (side-to-side) wobble to movement, simulating:
+// - Motor control variability (neuromuscular noise)
+// - Terrain micro-irregularities (pebbles, grass, slopes)
+// - Decision-making fluctuations (temporal smoothing lag)
+//
+// **Scaling:**
+// - Faster creatures: More wobble (inertial instability)
+// - Smaller creatures: More wobble per unit speed (surface area effects)
+//
+// **Formula:** `noise = BASE × (speed/MAX_SPEED)² × (1/sqrt(body_length))`
+//
+// **Biological rationale:**
+// - Animals don't move in perfect straight lines
+// - Fixes collinear obstacle edge case (adds lateral component)
+// - Magnitude: 2-10% of typical locomotor forces (biologically realistic)
+//
+// NOTE: Locomotion noise magnitude is now configured via `MovementConfig` in `config.rs`
+// TODO: Migrate to DNA gene: `motor_precision` (Future DNA system)
 
 // ============================================================================
 // STEERING FORCE CONSTANTS
@@ -309,6 +309,227 @@ impl Default for PerceptionConstants {
     }
 }
 
+// ============================================================================
+// TERRITORY & WANDERING BEHAVIOR CONSTANTS
+// ============================================================================
+
+/// Territory and wandering behavior constants
+///
+/// These define how creatures patrol their home territories using the "elastic tether" model:
+/// exploration freedom near home, increasing urgency to return when far.
+///
+/// # Biological Rationale
+///
+/// From movement ecology research (docs/biology/biology-notes.md, zoologist consultation 2025-11-08):
+/// - Animals don't wander randomly - they patrol territories with soft boundaries
+/// - "Elastic tether" model: exploration freedom near home, urgency when far
+/// - Sigmoid transition creates smooth behavioral shift (not hard threshold)
+/// - Composite movement strategies are the norm in territorial species
+///
+/// # Force Blending Strategy
+///
+/// - **Near home (0-10m):** 90% wandering, 10% homeward (free exploration)
+/// - **Mid-range (10-20m):** 50% wandering, 50% homeward (balanced patrol)
+/// - **Far from home (20-30m):** 10% wandering, 90% homeward (emergency return)
+///
+/// See docs/biology/biology-notes.md for full ecological rationale and DNA integration plans.
+#[derive(Debug, Clone, Copy)]
+pub struct TerritoryConstants {
+    /// Territory core radius (meters)
+    ///
+    /// **Value:** 10.0 m
+    /// **Rationale:** Low home bias within this zone (90% wandering, 10% homeward)
+    ///
+    /// **Range for DNA (Future DNA system):**
+    /// - Min: 5.0 m (small territory, high-density habitat)
+    /// - Max: 50.0 m (large territory, abundant resources)
+    /// - Default: 10.0 m (typical forager)
+    ///
+    /// TODO: Migrate to DNA gene: `comfort_radius_multiplier` (metabolic needs scale territory)
+    pub comfort_radius: f32,
+
+    /// Blend center distance (meters)
+    ///
+    /// **Value:** 20.0 m
+    /// **Rationale:** 50% blend point, patrol boundary
+    ///
+    /// **Range for DNA (Future DNA system):**
+    /// - Min: 10.0 m (tight patrol)
+    /// - Max: 100.0 m (wide-ranging explorer)
+    /// - Default: 20.0 m (balanced patrol)
+    ///
+    /// TODO: Migrate to DNA gene: `territory_size`
+    pub blend_center: f32,
+
+    /// Maximum wander distance (meters)
+    ///
+    /// **Value:** 30.0 m
+    /// **Rationale:** Hard limit for excursions (emergency return beyond this)
+    ///
+    /// **Range for DNA (Future DNA system):**
+    /// - Min: 15.0 m (stay-at-home species)
+    /// - Max: 150.0 m (nomadic species)
+    /// - Default: 30.0 m (typical range)
+    ///
+    /// TODO: Migrate to DNA gene: `max_exploration_range`
+    pub max_wander_distance: f32,
+
+    /// Homeward seeking force magnitude (Newtons)
+    ///
+    /// **Value:** 50.0 N
+    /// **Rationale:** Strong homeward pull when far from territory (higher priority than general seeking)
+    ///
+    /// **Note:** This is distinct from `STEERING.seek_force` (10.0 N).
+    /// Returning home is higher priority than chasing food/goals.
+    ///
+    /// TODO: Migrate to DNA gene: `territory_attachment` (homing instinct strength)
+    pub homeward_force: f32,
+
+    /// Sigmoid steepness for blend curve
+    ///
+    /// **Value:** 1.5
+    /// **Rationale:** Biologically realistic "elastic tether" behavior
+    ///
+    /// **Effect:**
+    /// - Low k (0.1-0.5): Gradual transition over wide range
+    /// - High k (1.0-3.0): Sharp transition near center
+    /// - k=1.5: Smooth but definite transition (natural animal behavior)
+    ///
+    /// TODO: Migrate to DNA gene: `stress_response` (personality: bold vs cautious)
+    pub sigmoid_steepness: f32,
+}
+
+impl Default for TerritoryConstants {
+    fn default() -> Self {
+        Self {
+            comfort_radius: 10.0,
+            blend_center: 20.0,
+            max_wander_distance: 30.0,
+            homeward_force: 50.0,
+            sigmoid_steepness: 1.5,
+        }
+    }
+}
+
+// ============================================================================
+// SEEKING & ARRIVAL BEHAVIOR CONSTANTS
+// ============================================================================
+
+/// Seeking and arrival behavior constants
+///
+/// These control how creatures approach targets with smooth deceleration and precise arrival.
+///
+/// # Arrival Strategy
+///
+/// **Exponential deceleration** provides "land on a dime" behavior:
+/// - Maintains speed far from target (max reaction time)
+/// - Sharp deceleration near target (prevents overshoot)
+/// - Snap-to-target "pounce" when close and slow (prevents creeping)
+///
+/// # Arrival Zones
+///
+/// With `SLOW_ZONE_MULTIPLIER = 30.0`:
+/// - **Slow zone:** 15.0m (begin exponential deceleration)
+/// - **Pounce zone:** 0.5m at speed < 5.5 m/s (snap to target)
+/// - **Emergency brake:** < 0.5m (hard counter-force)
+///
+/// See seek.rs for full algorithmic details and arrival mathematics.
+#[derive(Debug, Clone, Copy)]
+pub struct SeekingConstants {
+    /// Maximum seeking force (Newtons)
+    ///
+    /// **Value:** 50.0 N
+    /// **Rationale:** Strong goal-directed pursuit
+    ///
+    /// **Note:** This is distinct from `STEERING.seek_force` (10.0 N).
+    /// `STEERING.seek_force` is for general force hierarchy documentation.
+    /// This value is the actual implementation force.
+    ///
+    /// **Range for DNA (Future DNA system):**
+    /// - Min: 10.0 N (weak seeker, easily distracted)
+    /// - Max: 100.0 N (relentless pursuer)
+    /// - Default: 50.0 N (determined forager)
+    ///
+    /// TODO: Migrate to DNA gene: `dna.express_gene("strength")`
+    pub max_force: f32,
+
+    /// Emergency brake force (Newtons)
+    ///
+    /// **Value:** 70.0 N (1.4× max_force)
+    /// **Rationale:** Hard counter-force when within arrival radius (prevent overshoot)
+    ///
+    /// **Range for DNA (Future DNA system):**
+    /// - Formula: `MAX_SEEK_FORCE * 1.4` (40% stronger than pursuit)
+    ///
+    /// TODO: Migrate to DNA gene: derived from `strength`
+    pub brake_force: f32,
+
+    /// Pounce distance threshold (meters)
+    ///
+    /// **Value:** 0.5 m
+    /// **Rationale:** Snap-to-target when this close (prevents creeping)
+    ///
+    /// **Range for DNA (Future DNA system):**
+    /// - Formula: `body_size * 0.5` (scales with creature size)
+    ///
+    /// TODO: Migrate to DNA gene: body-size-relative
+    pub pounce_distance: f32,
+
+    /// Pounce speed threshold (m/s)
+    ///
+    /// **Value:** 5.5 m/s
+    /// **Rationale:** Only pounce if moving slowly (prevents high-speed snap)
+    ///
+    /// **Range for DNA (Future DNA system):**
+    /// - Min: 2.0 m/s (cautious, slow approach)
+    /// - Max: 10.0 m/s (aggressive, fast snap)
+    /// - Default: 5.5 m/s (balanced)
+    ///
+    /// TODO: Migrate to DNA gene: `dna.express_gene("precision")`
+    pub pounce_speed: f32,
+
+    /// Target arrival tolerance (meters)
+    ///
+    /// **Value:** 0.5 m
+    /// **Rationale:** Stop when edge reaches target (accounts for body radius)
+    ///
+    /// **Range for DNA (Future DNA system):**
+    /// - Min: 0.1 m (precise, right on target)
+    /// - Max: 2.0 m (sloppy, "close enough")
+    /// - Default: 0.5 m (typical animal precision)
+    ///
+    /// TODO: Migrate to DNA gene: `arrival_precision`
+    pub arrival_tolerance: f32,
+
+    /// Exponential decay factor for slow zone deceleration
+    ///
+    /// **Value:** 1.5
+    /// **Rationale:** Controls deceleration curve shape
+    ///
+    /// **Effect:**
+    /// - Low k (0.5-1.0): Gentle deceleration, early slowdown
+    /// - High k (2.0-3.0): Sharp deceleration, late braking
+    /// - k=1.5: Balanced (maintains speed, then brakes hard)
+    ///
+    /// **Math:** `desired_speed = max_speed × e^(k×ratio) / e^k`
+    ///
+    /// TODO: Consider DNA-driven for different approach strategies
+    pub slow_zone_decay: f32,
+}
+
+impl Default for SeekingConstants {
+    fn default() -> Self {
+        Self {
+            max_force: 50.0,
+            brake_force: 70.0,
+            pounce_distance: 0.5,
+            pounce_speed: 5.5,
+            arrival_tolerance: 0.5,
+            slow_zone_decay: 1.5,
+        }
+    }
+}
+
 /// Global instance of steering constants
 ///
 /// Easy to access, easy to modify for tuning.
@@ -329,6 +550,31 @@ pub static PERCEPTION: PerceptionConstants = PerceptionConstants {
     perception_multiplier: 10.0,
     personal_space: 1.5,
     panic_threshold_ratio: 0.5,
+};
+
+/// Global instance of territory constants
+///
+/// Easy to access, easy to modify for tuning.
+/// Will be replaced by DNA-driven parameters in Future DNA system.
+pub static TERRITORY: TerritoryConstants = TerritoryConstants {
+    comfort_radius: 10.0,
+    blend_center: 20.0,
+    max_wander_distance: 30.0,
+    homeward_force: 50.0,
+    sigmoid_steepness: 1.5,
+};
+
+/// Global instance of seeking constants
+///
+/// Easy to access, easy to modify for tuning.
+/// Will be replaced by DNA-driven parameters in Future DNA system.
+pub static SEEKING: SeekingConstants = SeekingConstants {
+    max_force: 50.0,
+    brake_force: 70.0,
+    pounce_distance: 0.5,
+    pounce_speed: 5.5,
+    arrival_tolerance: 0.5,
+    slow_zone_decay: 1.5,
 };
 
 #[cfg(test)]
@@ -378,5 +624,92 @@ mod tests {
         assert!(perception.personal_space > 0.0);
         assert!(perception.panic_threshold_ratio > 0.0);
         assert!(perception.panic_threshold_ratio < 1.0);
+    }
+
+    #[test]
+    fn test_territory_constants_valid() {
+        let territory = TerritoryConstants::default();
+
+        // All values must be positive
+        assert!(territory.comfort_radius > 0.0);
+        assert!(territory.blend_center > 0.0);
+        assert!(territory.max_wander_distance > 0.0);
+        assert!(territory.homeward_force > 0.0);
+        assert!(territory.sigmoid_steepness > 0.0);
+
+        // Zone ordering: comfort < blend < max_wander
+        assert!(territory.comfort_radius < territory.blend_center,
+            "Comfort radius ({}) should be less than blend center ({})",
+            territory.comfort_radius, territory.blend_center);
+        assert!(territory.blend_center < territory.max_wander_distance,
+            "Blend center ({}) should be less than max wander distance ({})",
+            territory.blend_center, territory.max_wander_distance);
+
+        // Sigmoid steepness should be reasonable (0.1 - 5.0)
+        assert!(territory.sigmoid_steepness >= 0.1 && territory.sigmoid_steepness <= 5.0,
+            "Sigmoid steepness ({}) should be between 0.1 and 5.0",
+            territory.sigmoid_steepness);
+    }
+
+    #[test]
+    fn test_territory_global_instance() {
+        // Verify global TERRITORY instance is accessible and valid
+        assert!(TERRITORY.comfort_radius > 0.0);
+        assert!(TERRITORY.blend_center > TERRITORY.comfort_radius);
+        assert!(TERRITORY.max_wander_distance > TERRITORY.blend_center);
+    }
+
+    #[test]
+    fn test_seeking_constants_valid() {
+        let seeking = SeekingConstants::default();
+
+        // All values must be positive
+        assert!(seeking.max_force > 0.0);
+        assert!(seeking.brake_force > 0.0);
+        assert!(seeking.pounce_distance > 0.0);
+        assert!(seeking.pounce_speed > 0.0);
+        assert!(seeking.arrival_tolerance > 0.0);
+        assert!(seeking.slow_zone_decay > 0.0);
+
+        // Brake force should be stronger than max force
+        assert!(seeking.brake_force > seeking.max_force,
+            "Brake force ({}) should exceed max force ({}) for emergency stopping",
+            seeking.brake_force, seeking.max_force);
+
+        // Pounce distance should be small (< 5m for precise arrival)
+        assert!(seeking.pounce_distance < 5.0,
+            "Pounce distance ({}) should be small for precise arrival",
+            seeking.pounce_distance);
+
+        // Arrival tolerance should be reasonable (< 5m)
+        assert!(seeking.arrival_tolerance < 5.0,
+            "Arrival tolerance ({}) should be small for target precision",
+            seeking.arrival_tolerance);
+
+        // Decay factor should be reasonable (0.5 - 5.0)
+        assert!(seeking.slow_zone_decay >= 0.5 && seeking.slow_zone_decay <= 5.0,
+            "Slow zone decay ({}) should be between 0.5 and 5.0",
+            seeking.slow_zone_decay);
+    }
+
+    #[test]
+    fn test_seeking_global_instance() {
+        // Verify global SEEKING instance is accessible and valid
+        assert!(SEEKING.max_force > 0.0);
+        assert!(SEEKING.brake_force > SEEKING.max_force);
+        assert!(SEEKING.pounce_distance > 0.0);
+    }
+
+    #[test]
+    fn test_force_magnitudes_relative() {
+        // Territory homeward force should be strong (comparable to panic, stronger than seek)
+        assert!(TERRITORY.homeward_force > STEERING.seek_force,
+            "Homeward force ({}) should be stronger than general seeking ({})",
+            TERRITORY.homeward_force, STEERING.seek_force);
+
+        // Seeking max_force should be strong (comparable to territory homeward)
+        assert!(SEEKING.max_force >= STEERING.seek_force,
+            "Seeking max_force ({}) should be at least as strong as general seek ({})",
+            SEEKING.max_force, STEERING.seek_force);
     }
 }

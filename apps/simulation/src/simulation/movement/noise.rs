@@ -26,7 +26,7 @@ use noise::{NoiseFn, Perlin};
 /// let noise_y = perlin_locomotion_noise(entity_id, tick, 1, 0.05);
 /// ```
 pub fn perlin_locomotion_noise(entity_id: u32, tick: u64, axis: u8, time_scale: f32) -> f32 {
-    let perlin = Perlin::new((entity_id.wrapping_mul(37) + axis as u32 * 1009) as u32);
+    let perlin = Perlin::new(entity_id.wrapping_mul(37) + axis as u32 * 1009);
 
     // Sample Perlin noise using tick as time parameter
     // Use entity_id as spatial offset to ensure different creatures have different patterns

@@ -42,6 +42,7 @@ pub struct CritBundle {
 /// Capability flags for what a crit can do
 /// Following the hybrid ECS pattern: capabilities are permanent, behavior state is mutable
 #[derive(Clone, Copy, Debug)]
+#[derive(Default)]
 pub struct CritCapabilities {
     pub can_seek: bool,
     pub can_flee: bool,
@@ -49,16 +50,6 @@ pub struct CritCapabilities {
     pub can_avoid: bool,
 }
 
-impl Default for CritCapabilities {
-    fn default() -> Self {
-        Self {
-            can_seek: false,
-            can_flee: false,
-            can_wander: false,
-            can_avoid: false,
-        }
-    }
-}
 
 impl CritCapabilities {
     /// All capabilities enabled (useful for testing)

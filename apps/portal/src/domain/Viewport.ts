@@ -64,19 +64,16 @@ export class Viewport {
    * @returns World bounds in meters
    */
   getWorldBounds(camera: Camera): WorldBounds {
-    // Calculate half dimensions in screen space
-    const halfWidth = this._width / 2;
-    const halfHeight = this._height / 2;
-
-    // Convert to world space
-    const topLeft = camera.screenToWorld(-halfWidth, -halfHeight);
-    const bottomRight = camera.screenToWorld(halfWidth, halfHeight);
+    // Calculate viewport dimensions in world units
+    // Viewport center IS the camera position, so we calculate bounds directly
+    const halfWidthWorld = (this._width / 2) / camera.zoom;
+    const halfHeightWorld = (this._height / 2) / camera.zoom;
 
     return {
-      minX: topLeft.x,
-      maxX: bottomRight.x,
-      minY: topLeft.y,
-      maxY: bottomRight.y
+      minX: camera.x - halfWidthWorld,
+      maxX: camera.x + halfWidthWorld,
+      minY: camera.y - halfHeightWorld,
+      maxY: camera.y + halfHeightWorld
     };
   }
 

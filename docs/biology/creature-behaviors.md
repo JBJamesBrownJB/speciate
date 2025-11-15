@@ -78,4 +78,9 @@ Uses the Steering Behaviors / Repulsion.
 - **Action**: Every frame, the body calculates its movement vector. It gets a strong "Attract" force from the Current_Wander_Target (set by the brain) and "Repel" forces from any nearby obstacles, borders, or critters.
 - **Result**: The critter moves smoothly toward its goal while naturally flowing around impediments.
 
+### Questions
+- Avoiding obstacles should be less about 'repelling' and more about 'avoiding' So I feel like the applied force should be perpendicular / right angle from the vector between location and the target and the direct oposite vector. This means that within a comfort zone of another critter, it 'tends' to navigate round it, rather than 'bump into' the comfort zone sphere. For obstacles, we should ignore comfort zone, the crit doesn't mind being close to an obstacle, just navigate round it for logistics. Obstacles should also have clamping logic to it does actually represent a real impeneterable barrier, I wonder what the perf cost is if we do this and if we roll this out to crits as well?
+
+We will create 'trials' see docs/testing/trials which will tune this.
+
 This combined system means your critters will make smart decisions (like heading to a preferred habitat) and execute those decisions in a believable, non-robotic way.

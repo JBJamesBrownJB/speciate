@@ -1,13 +1,13 @@
-import { Application, Container, Graphics } from "pixi.js";
+import { Application, Container, Graphics, type FederatedPointerEvent } from "pixi.js";
 import { SpriteProvider } from "@/rendering/SpriteProvider";
-import { GridRenderer } from "@/rendering/GridRenderer";
 import { Camera } from "@/domain/Camera";
 import { Viewport } from "@/domain/Viewport";
 import { Creature } from "@/domain/Creature";
-import { RENDERING_CONFIG, GRID_CONFIG } from "@/core/constants";
+import { RENDERING_CONFIG } from "@/core/constants";
 import { SpritePool } from "@/infrastructure/SpritePool";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
 import { PerformanceMetrics } from "@/core/PerformanceMetrics";
+import type { CreatureData } from "@/types/GameState";
 
 /**
  * Helper to update the canvas container size to match viewport dimensions
@@ -105,7 +105,7 @@ class FPSSparkline {
 /**
  * Updates the inspection panel with creature data
  */
-function updateInspectionPanel(creatureData: any): void {
+function updateInspectionPanel(creatureData: CreatureData): void {
   // Identity
   const idElement = document.getElementById("inspect-id");
   if (idElement) idElement.textContent = `#${creatureData.id}`;
@@ -235,17 +235,10 @@ function selectScaleDistance(zoom: number): {
 }
 
 /**
- * Updates scale bar and grid based on current zoom level.
+ * Updates scale bar based on current zoom level.
  * Scale bar uses adaptive distances for readability across all zoom levels.
- * Grid uses fixed 1m spacing for consistent spatial reference.
- * Grid is only rendered when zoom >= MIN_ZOOM_FOR_GRID for performance.
  */
-function updateScaleAndGrid(
-  zoom: number,
-  gridRenderer: GridRenderer,
-  camera: Camera,
-  viewport: Viewport
-): void {
+function updateScale(zoom: number): void {
   const { distance, label } = selectScaleDistance(zoom);
 
   // Update scale bar
@@ -260,20 +253,15 @@ function updateScaleAndGrid(
   if (scaleLabel) {
     scaleLabel.textContent = label;
   }
-
-  // Only render grid when zoomed in enough (>= MIN_ZOOM_FOR_GRID)
-  if (zoom >= GRID_CONFIG.MIN_ZOOM_FOR_GRID) {
-    // Fixed 1m grid spacing for consistent spatial reference
-    const gridSpacing = 1;
-    gridRenderer.update(zoom, gridSpacing, camera, viewport);
-  } else {
-    // Clear grid when zoomed out
-    gridRenderer.clear();
-  }
 }
 
 async function main(): Promise<void> {
   try {
+    // Set CSS custom property from RENDERING_CONFIG (single source of truth)
+    // Convert 0.75 → "75" for use in calc(var(--viewport-size) * 1vw)
+    const viewportSizePercent = (RENDERING_CONFIG.VIEWPORT_SIZE_RATIO * 100).toString();
+    document.documentElement.style.setProperty('--viewport-size', viewportSizePercent);
+
     // Calculate viewport dimensions from config
     const viewportWidth = Math.floor(
       window.innerWidth * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
@@ -340,6 +328,7 @@ async function main(): Promise<void> {
 
     const container = document.getElementById("canvas-container");
     if (!container) throw new Error("canvas-container not found");
+    container.classList.add('glow-active'); // Apply default backlight
     container.appendChild(app.canvas);
 
     // Update container size to match viewport (overrides CSS)
@@ -362,21 +351,11 @@ async function main(): Promise<void> {
     app.stage.eventMode = "static";
     app.stage.hitArea = app.screen;
 
-    // Add reference grid for zoom/scale visualization
-    const gridRenderer = new GridRenderer(
-      worldContainer,
-      GRID_CONFIG.SPACING,
-      GRID_CONFIG.COLOR,
-      GRID_CONFIG.ALPHA,
-      GRID_CONFIG.LINE_WIDTH,
-      camera.zoom // Pass initial zoom
-    );
-
-    // Apply camera transform to world container (after grid is added)
+    // Apply camera transform to world container
     camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
 
-    // Initialize scale bar and grid with synchronized spacing
-    updateScaleAndGrid(camera.zoom, gridRenderer, camera, viewport);
+    // Initialize scale bar
+    updateScale(camera.zoom);
 
     // Initialize sprite pool for efficient entity management
     const spritePool = new SpritePool();
@@ -386,25 +365,14 @@ async function main(): Promise<void> {
     const hudElements = {
       fpsValue: document.getElementById("fps-value"),
       tickRateValue: document.getElementById("tick-rate-value"),
-      positionValue: document.getElementById("position-value"),
-      zoomValue: document.getElementById("zoom-value"),
       creatureCount: document.getElementById("creature-count"),
-      emptyStateWarning: document.getElementById("empty-state-warning"),
-      statusValue: document.getElementById("status-value"),
-      ipcLatencyValue: document.getElementById("ipc-latency-value"),
-      decodeTimeValue: document.getElementById("decode-time-value"),
-      payloadSizeValue: document.getElementById("payload-size-value"),
-      spriteUpdateValue: document.getElementById("sprite-update-value"),
-      domUpdateValue: document.getElementById("dom-update-value"),
-      frameBudgetValue: document.getElementById("frame-budget-value"),
-      tickFreshnessValue: document.getElementById("tick-freshness-value"),
+      zoomValue: document.getElementById("zoom-value"),
     };
 
     // Initialize FPS sparkline
     const fpsSparkline = new FPSSparkline("fps-sparkline");
 
     let lastFrameTime = performance.now();
-    let currentTick = 0;
     let currentCreatureCount = 0;
 
     // Track selected creature for inspection
@@ -467,14 +435,7 @@ async function main(): Promise<void> {
       // Defensive: Check both state AND state.creatures
       // This prevents crashes if malformed state somehow gets through validation
       if (state && state.creatures) {
-        currentTick = state.tick;
         currentCreatureCount = state.creatures.length;
-
-        // Update status to Connected (use cached element)
-        if (hudElements.statusValue && hudElements.statusValue.textContent !== "Connected") {
-          hudElements.statusValue.textContent = "Connected";
-          hudElements.statusValue.className = "value connected";
-        }
 
         // Update tick rate display (use cached element)
         if (hudElements.tickRateValue) {
@@ -489,13 +450,9 @@ async function main(): Promise<void> {
           hudElements.creatureCount.textContent = currentCreatureCount.toString();
         }
 
-        // Show/hide empty state warning (use cached element)
-        if (hudElements.emptyStateWarning) {
-          if (currentCreatureCount === 0 && currentTick > 5) {
-            hudElements.emptyStateWarning.style.display = 'block';
-          } else {
-            hudElements.emptyStateWarning.style.display = 'none';
-          }
+        // Update zoom display (use cached element)
+        if (hudElements.zoomValue) {
+          hudElements.zoomValue.textContent = `${camera.zoom.toFixed(2)}x`;
         }
 
         // Store full creature data for inspection panel
@@ -505,7 +462,7 @@ async function main(): Promise<void> {
         }
 
         // Convert to Creature domain objects for rendering
-        latestCreatures = state.creatures.map((c: any) => new Creature(
+        latestCreatures = state.creatures.map((c: CreatureData) => new Creature(
           c.id,
           c.x,
           c.y,
@@ -513,19 +470,6 @@ async function main(): Promise<void> {
           c.width,
           c.height
         ));
-      } else {
-        // Update status based on mode
-        if (hudElements.statusValue) {
-          if (!ipcClient) {
-            // Browser mode - no backend
-            hudElements.statusValue.textContent = "Browser Mode";
-            hudElements.statusValue.className = "value";
-          } else if (currentTick === 0) {
-            // Electron mode but still connecting
-            hudElements.statusValue.textContent = "Connecting...";
-            hudElements.statusValue.className = "value reconnecting";
-          }
-        }
       }
 
       // RENDER SPRITES (updated from latest state above)
@@ -558,7 +502,7 @@ async function main(): Promise<void> {
           sprite.cursor = 'pointer';
 
           // Add click handler ONCE when sprite is first added
-          sprite.on('click', (event: any) => {
+          sprite.on('click', (event: FederatedPointerEvent) => {
             event.stopPropagation(); // Prevent event bubbling
             const clickedId = (sprite as any).creatureId;
 
@@ -614,71 +558,11 @@ async function main(): Promise<void> {
       const spriteUpdateEnd = performance.now();
       perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
 
-      // DOM UPDATES
-      const domUpdateStart = performance.now();
-
       // Update FPS display and sparkline (use cached element)
       if (hudElements.fpsValue) {
         hudElements.fpsValue.textContent = fps.toString();
       }
       fpsSparkline.update(fps);
-
-      // Update camera position (use cached element)
-      if (hudElements.positionValue) {
-        const x = Math.round(camera.x);
-        const y = Math.round(camera.y);
-        hudElements.positionValue.textContent = `${x}m, ${y}m`;
-      }
-
-      // Update zoom level (use cached element)
-      if (hudElements.zoomValue) {
-        const zoom = camera.zoom.toFixed(2);
-        hudElements.zoomValue.textContent = `${zoom}px/m`;
-      }
-
-      const domUpdateEnd = performance.now();
-      perfMetrics.recordDomUpdateTime(domUpdateEnd - domUpdateStart);
-
-      // Calculate total render time (sprite + DOM)
-      const totalRenderTime = (spriteUpdateEnd - spriteUpdateStart) + (domUpdateEnd - domUpdateStart);
-      perfMetrics.recordTotalRenderTime(totalRenderTime);
-
-      // Update performance metrics in HUD
-      const perfSnapshot = perfMetrics.getSnapshot();
-
-      if (hudElements.ipcLatencyValue) {
-        hudElements.ipcLatencyValue.textContent = `${perfSnapshot.ipcLatencyAvg.toFixed(2)}ms`;
-      }
-
-      if (hudElements.decodeTimeValue) {
-        hudElements.decodeTimeValue.textContent = `${perfSnapshot.decodeTimeAvg.toFixed(2)}ms`;
-      }
-
-      if (hudElements.payloadSizeValue) {
-        hudElements.payloadSizeValue.textContent = `${(perfSnapshot.payloadSize / 1024).toFixed(2)}KB`;
-      }
-
-      if (hudElements.spriteUpdateValue) {
-        hudElements.spriteUpdateValue.textContent = `${perfSnapshot.spriteUpdateTime.toFixed(2)}ms`;
-      }
-
-      if (hudElements.domUpdateValue) {
-        hudElements.domUpdateValue.textContent = `${perfSnapshot.domUpdateTime.toFixed(2)}ms`;
-      }
-
-      if (hudElements.frameBudgetValue) {
-        const overhead = perfSnapshot.frameOverhead;
-        const color = overhead > 0 ? '#d94848' : '#6fb83f'; // Red if over budget, green otherwise
-        hudElements.frameBudgetValue.textContent = `${overhead >= 0 ? '+' : ''}${overhead.toFixed(2)}ms`;
-        hudElements.frameBudgetValue.style.color = color;
-      }
-
-      if (hudElements.tickFreshnessValue) {
-        const tickAge = perfSnapshot.tickAge;
-        const color = tickAge > 5 ? '#d94848' : (tickAge > 2 ? '#f0a830' : '#6fb83f');
-        hudElements.tickFreshnessValue.textContent = `${tickAge} frames`;
-        hudElements.tickFreshnessValue.style.color = color;
-      }
 
       // Update lastFrameTime for next frame
       lastFrameTime = frameStart;
@@ -704,7 +588,7 @@ async function main(): Promise<void> {
       app.renderer.resize(newWidth, newHeight);
       viewport.resize(newWidth, newHeight);
       camera.applyTransform(worldContainer, newWidth, newHeight);
-      updateScaleAndGrid(camera.zoom, gridRenderer, camera, viewport);
+      updateScale(camera.zoom);
     });
 
     // Handle mouse wheel zoom
@@ -719,7 +603,7 @@ async function main(): Promise<void> {
 
         camera.adjustZoom(zoomFactor);
         camera.applyTransform(worldContainer, viewport.width, viewport.height);
-        updateScaleAndGrid(camera.zoom, gridRenderer, camera, viewport);
+        updateScale(camera.zoom);
       },
       { passive: false }
     ); // passive: false required for preventDefault()
@@ -733,4 +617,9 @@ async function main(): Promise<void> {
   }
 }
 
-main();
+// Ensure CSS is fully loaded before initializing PixiJS (prevents canvas/container size mismatch)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => main());
+} else {
+  main(); // DOM already loaded (e.g., if script is deferred)
+}

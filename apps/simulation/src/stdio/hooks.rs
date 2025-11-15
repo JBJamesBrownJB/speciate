@@ -18,6 +18,12 @@ use std::time::Duration;
 /// Frame format: [4-byte length (big-endian u32)][MessagePack payload]
 pub struct StdioHooks;
 
+impl Default for StdioHooks {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StdioHooks {
     pub fn new() -> Self {
         Self

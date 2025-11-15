@@ -13,19 +13,12 @@ use rand::Rng;
 
 /// Request for spawning a creature with optional position and state
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct CreatureSpawnRequest {
     position: Option<(f32, f32)>,
     state: Option<CreatureState>,
 }
 
-impl Default for CreatureSpawnRequest {
-    fn default() -> Self {
-        Self {
-            position: None,
-            state: None,
-        }
-    }
-}
 
 impl CreatureSpawnRequest {
     /// Create a new spawn request with all defaults (random everything)

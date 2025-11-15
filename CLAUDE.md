@@ -223,27 +223,50 @@ npm run package    # Package with electron-builder (.exe, .dmg, .AppImage)
 - Rendering layer: PixiJS integration (GridRenderer, SpriteProvider)
 - Infrastructure: External services (WebSocketClient, SpritePool)
 
-## Current Sprint: Sprint 7 - Electron Standalone Desktop (COMPLETE ✅)
+## Current Sprint: Sprint 8 - Code Quality & Architecture Foundation (COMPLETE ✅)
 
 ### Sprint Focus
-Phase 1 (standalone desktop game) is prioritized over Phase 2 (MMO). This sprint established the Electron architecture and stdio IPC protocol.
+Refactor, understand code and architecture, small bug fixes. Clean understandable code and strategy for behavior engine. Stats pane cleanup and new baseline stats established.
 
 ### Completed Goals
+- ✅ **Phase 1:** Type safety cleanup (removed 5 TypeScript `any`, fixed 10 Rust warnings)
+- ✅ **Phase 2:** Constant extraction (created TERRITORY & SEEKING structs, 6 validation tests)
+- ✅ **Phase 3:** behavior-engine.md architecture documentation (17-page comprehensive guide)
+- ✅ **Phase 4:** Performance baseline section in stats pane (Target FPS, Frame Budget, Tick Rate)
+- ✅ **Phase 5:** Technical debt inventory (catalogued 52 items, categorized by priority)
+
+### Key Outcomes
+- **Code Quality:** Removed TypeScript `any` types, fixed clippy warnings, cleaner codebase
+- **Constants Refactor:** Extracted 13 magic numbers to named constants (TERRITORY, SEEKING)
+- **Documentation:** behavior-engine.md explains force accumulation, state machines, DNA roadmap
+- **Technical Debt:** Complete inventory with migration plans (46 DNA items, 5 behavior items)
+- **Performance Metrics:** Baseline targets visible in HUD (60 FPS, 16.67ms budget, 20 Hz tick)
+
+### Active Areas
+- `/workspace/docs/architecture/` - Architecture documentation
+- `/workspace/docs/technical-debt.md` - Technical debt tracking
+- `/workspace/apps/simulation/src/simulation/movement/constants.rs` - Centralized constants
+- `/workspace/apps/portal/index.html` - Performance baseline UI
+
+---
+
+## Previous Sprints
+
+### Sprint 7 - Electron Standalone Desktop (COMPLETE ✅)
+
+**Focus:** Phase 1 (standalone desktop game) prioritized over Phase 2 (MMO). Established Electron architecture and stdio IPC protocol.
+
+**Completed Goals:**
 - ✅ Electron desktop app with stdio IPC
 - ✅ MessagePack frame protocol (60 Hz streaming)
 - ✅ Rust simulation subprocess
 - ✅ Desktop packaging with electron-builder
 
-### Key Technologies
+**Key Technologies:**
 - **Electron:** Desktop application framework
 - **Rust/Bevy:** Backend simulation subprocess
 - **TypeScript + PixiJS:** Frontend rendering
 - **IPC:** stdio MessagePack frames
-
-### Active Areas
-- `/workspace/apps/simulation/` - Rust simulation (ECS, physics)
-- `/workspace/apps/portal/` - Frontend + Electron main/preload
-- `/workspace/apps/portal/electron/` - Electron IPC bridge
 
 ### Phase 1 vs Phase 2
 

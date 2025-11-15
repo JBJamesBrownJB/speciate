@@ -26,7 +26,7 @@ use bevy_ecs::prelude::*;
 /// 1. Query creatures with avoidance capability
 /// 2. For each nearby entity from perception:
 ///    - Calculate distance and direction
-///    - If within personal space: apply repulsion force
+///    - If within personal space: apply repulsion force :: TODO see 
 ///    - Use inverse square scaling (stronger when closer)
 ///    - Cap at panic force if collision imminent
 /// 3. Sum all repulsion forces
@@ -39,6 +39,7 @@ use bevy_ecs::prelude::*;
 /// - AvoidanceBehavior component (personal space parameters)
 ///
 /// TODO: Migrate hardcoded constants to DNA-driven parameters (Future DNA system)
+#[allow(clippy::type_complexity)]
 pub fn avoidance_system(
     mut query: Query<
         (

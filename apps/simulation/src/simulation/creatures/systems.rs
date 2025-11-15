@@ -24,8 +24,8 @@ impl Default for NextCreatureId {
 }
 
 impl NextCreatureId {
-    /// Get the next ID and increment the counter
-    pub fn next(&mut self) -> u32 {
+    /// Generate the next creature ID and increment the counter
+    pub fn generate(&mut self) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
         id
@@ -106,7 +106,7 @@ pub fn process_spawn_events(
 ) {
     for event in events.read() {
         // Assign unique ID
-        let id = next_id.next();
+        let id = next_id.generate();
 
         // Build the creature bundle
         let bundle = event.builder.clone().build(id);

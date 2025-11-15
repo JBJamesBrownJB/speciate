@@ -169,7 +169,7 @@ impl Simulation {
     /// ```
     pub fn spawn_crit(&mut self, builder: CritBuilder) -> u32 {
         // Get next ID from resource
-        let id = self.world.resource_mut::<NextCreatureId>().next();
+        let id = self.world.resource_mut::<NextCreatureId>().generate();
 
         // Spawn entity
         let entity = self.world.spawn(builder.build(id)).id();

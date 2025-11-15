@@ -96,29 +96,3 @@ pub fn cleanup_test_snapshots() {
         }
     }
 }
-
-/// Get list of all snapshot files sorted by name (which sorts by timestamp)
-pub fn list_snapshots() -> Vec<PathBuf> {
-    let snapshots_dir = PathBuf::from("snapshots");
-
-    if !snapshots_dir.exists() {
-        return Vec::new();
-    }
-
-    let mut snapshots: Vec<PathBuf> = fs::read_dir(&snapshots_dir)
-        .unwrap()
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.is_file()
-                && path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .map(|name| name.ends_with(".msgpack"))
-                    .unwrap_or(false)
-        })
-        .collect();
-
-    snapshots.sort();
-    snapshots
-}

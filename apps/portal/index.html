@@ -31,6 +31,9 @@
       /* Typography */
       --font-mono: 'Courier New', 'SF Mono', Monaco, monospace;
       --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+      /* Viewport sizing - set by JavaScript from RENDERING_CONFIG.VIEWPORT_SIZE_RATIO */
+      --viewport-size: 75; /* Default fallback (75%) - overridden at runtime */
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -57,8 +60,8 @@
       z-index: 1;
     }
     #canvas-container {
-      width: 80vw;
-      height: 80vh;
+      width: calc(var(--viewport-size) * 1vw);
+      height: calc(var(--viewport-size) * 1vh);
       border-radius: 20px;
       overflow: hidden;
       box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
@@ -70,41 +73,16 @@
       z-index: 10;
     }
 
-    /* Functional backlight states (3-state system) - changes color based on app state */
+    /* Backlight system - visual feedback for game states */
+    /* Future states: danger zones, extreme zoom levels, special events */
 
-    /* Connecting/Reconnecting - Orange (merged state for any connection attempt) */
-    #canvas-container.glow-connecting-reconnecting {
-      animation: pulse-orange 2s ease-in-out infinite;
+    /* Active state - Green caustic effect (default, normal operation) */
+    #canvas-container.glow-active {
+      animation: wave-active 7s ease-in-out infinite;
     }
 
-    /* Connected - Green with caustic effect (normal operational state) */
-    #canvas-container.glow-connected {
-      animation: wave-green 7s ease-in-out infinite;
-    }
-
-    /* Error/Disconnected - Red with pulse (rare, manual disconnect or critical error) */
-    #canvas-container.glow-error {
-      animation: pulse-red 2s ease-in-out infinite;
-    }
-
-    /* Animation: Amber pulse for connecting/reconnecting states */
-    @keyframes pulse-orange {
-      0%, 100% {
-        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
-                    inset 0 0 120px rgba(0,0,0,0.7),
-                    0 0 32px rgba(240,168,48,0.15),
-                    0 0 30px rgba(240,168,48,0.08);
-      }
-      50% {
-        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
-                    inset 0 0 120px rgba(0,0,0,0.7),
-                    0 0 56px rgba(240,168,48,0.20),
-                    0 0 54px rgba(240,168,48,0.10);
-      }
-    }
-
-    /* Animation: Life green caustic effect for connected state (organic, living pulse) */
-    @keyframes wave-green {
+    /* Animation: Life green caustic effect (organic, living pulse) */
+    @keyframes wave-active {
       0% {
         box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
                     inset 0 0 120px rgba(0,0,0,0.7),
@@ -132,22 +110,6 @@
                     0px 3px 10px rgba(111,184,63,0.12),
                     5px 2px 8px rgba(111,184,63,0.10),
                     -3px 0px 12px rgba(111,184,63,0.08);
-      }
-    }
-
-    /* Animation: Red pulse for error/disconnected state */
-    @keyframes pulse-red {
-      0%, 100% {
-        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
-                    inset 0 0 120px rgba(0,0,0,0.7),
-                    0 0 33px rgba(217,72,72,0.18),
-                    0 0 30px rgba(217,72,72,0.10);
-      }
-      50% {
-        box-shadow: inset 0 0 60px rgba(0,0,0,0.9),
-                    inset 0 0 120px rgba(0,0,0,0.7),
-                    0 0 67px rgba(217,72,72,0.25),
-                    0 0 64px rgba(217,72,72,0.12);
       }
     }
     #hud {
@@ -397,32 +359,7 @@
       <div class="section-title">World</div>
       <div class="stat"><span class="label">Tick Rate:</span><span class="value" id="tick-rate-value">0 Hz</span></div>
       <div class="stat"><span class="label">Creatures:</span><span class="value" id="creature-count">0</span></div>
-      <div id="empty-state-warning" style="margin-top: 12px; padding: 8px; background: rgba(240,168,48,0.15); border: 1px solid rgba(240,168,48,0.3); border-radius: 4px; color: var(--color-warning); font-size: 11px; text-align: center; display: none;">
-        ⚠️ No creatures in simulation
-      </div>
-    </div>
-
-    <!-- IPC Performance Section -->
-    <div class="section">
-      <div class="section-title">IPC Performance</div>
-      <div class="stat"><span class="label">IPC Latency:</span><span class="value" id="ipc-latency-value">0ms</span></div>
-      <div class="stat"><span class="label">Decode:</span><span class="value" id="decode-time-value">0ms</span></div>
-      <div class="stat"><span class="label">Payload:</span><span class="value" id="payload-size-value">0KB</span></div>
-    </div>
-
-    <!-- Render Performance Section -->
-    <div class="section">
-      <div class="section-title">Render Performance</div>
-      <div class="stat"><span class="label">Sprite Upd:</span><span class="value" id="sprite-update-value">0ms</span></div>
-      <div class="stat"><span class="label">DOM Upd:</span><span class="value" id="dom-update-value">0ms</span></div>
-      <div class="stat"><span class="label">Frame Budget:</span><span class="value" id="frame-budget-value">0ms</span></div>
-    </div>
-
-    <!-- Connection Section -->
-    <div class="section">
-      <div class="section-title">Connection</div>
-      <div class="stat"><span class="label">Status:</span><span class="value" id="status-value">Connecting...</span></div>
-      <div class="stat"><span class="label">Tick Freshness:</span><span class="value" id="tick-freshness-value">0</span></div>
+      <div class="stat"><span class="label">Zoom:</span><span class="value" id="zoom-value">0x</span></div>
     </div>
   </div>
 

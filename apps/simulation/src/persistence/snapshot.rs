@@ -150,6 +150,7 @@ impl WorldSnapshot {
 
 impl Simulation {
     /// Create a snapshot of the current simulation state
+    #[allow(clippy::type_complexity)]
     pub fn to_snapshot(&mut self) -> WorldSnapshot {
         use bevy_ecs::query::QueryState;
         use std::collections::HashMap;

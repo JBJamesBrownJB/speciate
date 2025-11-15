@@ -10,6 +10,10 @@ pub mod stdio;
 pub mod state;
 pub mod runner;
 
+// Trial system for regression testing (dev tools only)
+#[cfg(feature = "dev-tools")]
+pub mod trials;
+
 // Re-export commonly used types from simulation module
 pub use simulation::{components::*, core::*};
 

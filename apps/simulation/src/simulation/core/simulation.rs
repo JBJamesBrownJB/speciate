@@ -38,6 +38,10 @@ impl SimulationBuilder {
         // Spawn event processing (MUST run FIRST to process spawn requests)
         schedule.add_systems(process_spawn_events);
 
+        // Dev tools command executor (reads commands from stdin, spawns creatures)
+        #[cfg(feature = "dev-tools")]
+        schedule.add_systems(crate::ipc::command_executor_system);
+
         schedule.add_systems((
             // Perception systems - MUST run before behaviors
             perception::update_perception_system,
@@ -229,13 +233,13 @@ impl Simulation {
     }
 
     /// Get immutable access to the ECS world (test helper)
-    #[cfg(any(test, feature = "test-helpers"))]
+    #[cfg(any(test, feature = "test-helpers", feature = "dev-tools"))]
     pub fn world(&self) -> &World {
         &self.world
     }
 
-    /// Get mutable access to the ECS world (test helper)
-    #[cfg(any(test, feature = "test-helpers"))]
+    /// Get mutable access to the ECS world (test helper + dev tools)
+    #[cfg(any(test, feature = "test-helpers", feature = "dev-tools"))]
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.world
     }

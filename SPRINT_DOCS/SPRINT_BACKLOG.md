@@ -6,6 +6,9 @@
 
 ---
 
+## RULES
+The user is keen to direct this, so always ask claryfying questions before making decisions.
+
 ## Phase 1: Trial Infrastructure
 
 ### P1 - Core Trial System

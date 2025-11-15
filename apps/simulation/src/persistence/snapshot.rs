@@ -32,6 +32,10 @@
 //! ```
 
 use crate::simulation::components::*;
+use crate::simulation::core::components::BodySize;
+use crate::simulation::creatures::components::capabilities::*;
+use crate::simulation::creatures::components::perception::Target;
+use crate::simulation::creatures::components::state::HomePosition;
 use crate::simulation::creatures::systems::{EntityIdMap, NextCreatureId};
 use crate::simulation::{Simulation, SimulationBuilder};
 use serde::{Deserialize, Serialize};
@@ -81,6 +85,37 @@ pub struct SerializedCreature {
     pub wander_state: Option<WanderState>,
     /// Flee state component (optional - only present for fleeing creatures)
     pub flee_state: Option<FleeState>,
+    /// Body size component (always present, but optional for backward compatibility)
+    /// Defaults to 1.0m length if missing from old snapshots
+    #[serde(default = "default_body_size")]
+    pub body_size: BodySize,
+
+    // ========== Capability Markers (ZST components) ==========
+    /// Whether creature has seeking capability (ZST marker component)
+    #[serde(default)]
+    pub can_seek: bool,
+    /// Whether creature has fleeing capability (ZST marker component)
+    #[serde(default)]
+    pub can_flee: bool,
+    /// Whether creature has wandering capability (ZST marker component)
+    #[serde(default)]
+    pub can_wander: bool,
+    /// Whether creature has obstacle avoidance capability (ZST marker component)
+    #[serde(default)]
+    pub can_avoid_obstacles: bool,
+
+    // ========== Data Components (optional) ==========
+    /// Home position for wandering behavior (optional - only present for wanderers)
+    #[serde(default)]
+    pub home_position: Option<HomePosition>,
+    /// Target position for seeking behavior (optional - only present for seekers)
+    #[serde(default)]
+    pub target: Option<Target>,
+}
+
+/// Default body size for backward compatibility with old snapshots
+fn default_body_size() -> BodySize {
+    BodySize::default() // 1.0m length (wolf-sized)
 }
 
 /// Complete snapshot of the simulation world
@@ -167,7 +202,7 @@ impl Simulation {
             entity_to_id.insert(*entity, *id);
         }
 
-        // Query all creatures with required components
+        // Query all creatures with required components and optional capability markers
         let mut query_state: QueryState<(
             bevy_ecs::entity::Entity,
             &Position,
@@ -175,8 +210,15 @@ impl Simulation {
             &Acceleration,
             &Rotation,
             &CreatureState,
+            &BodySize,
             Option<&WanderState>,
             Option<&FleeState>,
+            Option<&CanSeek>,
+            Option<&CanFlee>,
+            Option<&CanWander>,
+            Option<&CanAvoidObstacles>,
+            Option<&HomePosition>,
+            Option<&Target>,
         )> = self.world.query();
 
         let mut creatures = Vec::new();
@@ -188,8 +230,15 @@ impl Simulation {
             acceleration,
             rotation,
             creature_state,
+            body_size,
             wander_state,
             flee_state,
+            can_seek,
+            can_flee,
+            can_wander,
+            can_avoid_obstacles,
+            home_position,
+            target,
         ) in query_state.iter(&self.world)
         {
             let id = entity_to_id.get(&entity).copied().unwrap_or(0);
@@ -201,8 +250,17 @@ impl Simulation {
                 acceleration: *acceleration,
                 rotation: *rotation,
                 creature_state: *creature_state,
+                body_size: *body_size,
                 wander_state: wander_state.copied(),
                 flee_state: flee_state.copied(),
+                // Capability markers (ZST) - serialize as bool flags
+                can_seek: can_seek.is_some(),
+                can_flee: can_flee.is_some(),
+                can_wander: can_wander.is_some(),
+                can_avoid_obstacles: can_avoid_obstacles.is_some(),
+                // Data components (optional)
+                home_position: home_position.copied(),
+                target: target.copied(),
             });
         }
 
@@ -248,13 +306,36 @@ impl Simulation {
             entity_mut.insert(creature.acceleration);
             entity_mut.insert(creature.rotation);
             entity_mut.insert(creature.creature_state);
+            entity_mut.insert(creature.body_size);
 
-            // Add optional components
+            // Add optional state components
             if let Some(wander_state) = creature.wander_state {
                 entity_mut.insert(wander_state);
             }
             if let Some(flee_state) = creature.flee_state {
                 entity_mut.insert(flee_state);
+            }
+
+            // Restore capability markers (ZST components) based on boolean flags
+            if creature.can_seek {
+                entity_mut.insert(CanSeek);
+            }
+            if creature.can_flee {
+                entity_mut.insert(CanFlee);
+            }
+            if creature.can_wander {
+                entity_mut.insert(CanWander);
+            }
+            if creature.can_avoid_obstacles {
+                entity_mut.insert(CanAvoidObstacles);
+            }
+
+            // Restore data components
+            if let Some(home_position) = creature.home_position {
+                entity_mut.insert(home_position);
+            }
+            if let Some(target) = creature.target {
+                entity_mut.insert(target);
             }
 
             // Register in entity map
@@ -300,6 +381,7 @@ mod tests {
                 age: 5.2,
                 max_speed: 20.0,
             },
+            body_size: BodySize::new(1.5),
             wander_state: Some(WanderState {
                 wander_angle: 0.5,
                 wander_radius: 25.0,
@@ -307,6 +389,12 @@ mod tests {
                 angle_change: 0.15,
             }),
             flee_state: None,
+            can_seek: false,
+            can_flee: false,
+            can_wander: true,
+            can_avoid_obstacles: false,
+            home_position: Some(HomePosition { x: 0.0, y: 0.0 }),
+            target: None,
         };
 
         let bytes = rmp_serde::to_vec(&creature).unwrap();
@@ -315,6 +403,7 @@ mod tests {
         assert_eq!(creature.id, deserialized.id);
         assert_eq!(creature.position.x, deserialized.position.x);
         assert_eq!(creature.velocity.vx, deserialized.velocity.vx);
+        assert_eq!(creature.body_size.length, deserialized.body_size.length);
         assert!(deserialized.wander_state.is_some());
         assert!(deserialized.flee_state.is_none());
     }
@@ -351,8 +440,15 @@ mod tests {
             acceleration: Acceleration { ax: 0.0, ay: 0.0 },
             rotation: Rotation { radians: 0.0 },
             creature_state: CreatureState::new(),
+            body_size: BodySize::default(),
             wander_state: Some(WanderState::default()),
             flee_state: None,
+            can_seek: false,
+            can_flee: false,
+            can_wander: true,
+            can_avoid_obstacles: false,
+            home_position: None,
+            target: None,
         };
 
         let creature2 = SerializedCreature {
@@ -367,8 +463,15 @@ mod tests {
                 age: 10.0,
                 max_speed: 25.0,
             },
+            body_size: BodySize::new(2.0),
             wander_state: None,
             flee_state: Some(FleeState::new(None)),
+            can_seek: false,
+            can_flee: true,
+            can_wander: false,
+            can_avoid_obstacles: false,
+            home_position: None,
+            target: None,
         };
 
         let snapshot = WorldSnapshot {
@@ -605,5 +708,236 @@ mod tests {
         assert!(crit_ids.contains(&id1));
         assert!(crit_ids.contains(&id2));
         assert!(crit_ids.contains(&id3));
+    }
+
+    #[test]
+    fn test_snapshot_restore_preserves_body_size_component() {
+        use crate::simulation::core::components::BodySize;
+        use bevy_ecs::query::QueryState;
+
+        let mut simulation = SimulationBuilder::new().build();
+        simulation.set_boundaries(50.0, 50.0);
+
+        // Spawn creatures with different body sizes
+        use crate::simulation::creatures::builder::CritBuilder;
+        simulation.spawn_crit(
+            CritBuilder::new()
+                .at(0.0, 0.0)
+                .with_size(1.0) // Default size
+                .with_all_capabilities(),
+        );
+        simulation.spawn_crit(
+            CritBuilder::new()
+                .at(10.0, 10.0)
+                .with_size(2.5) // Large creature
+                .with_all_capabilities(),
+        );
+        simulation.spawn_crit(
+            CritBuilder::new()
+                .at(20.0, 20.0)
+                .with_size(0.5) // Small creature
+                .with_all_capabilities(),
+        );
+
+        // Take snapshot
+        let snapshot = simulation.to_snapshot();
+
+        // Restore from snapshot
+        let mut restored = Simulation::from_snapshot(snapshot);
+
+        // Query for BodySize components
+        let mut query_state: QueryState<&BodySize> = restored.world.query();
+        let body_sizes: Vec<f32> = query_state
+            .iter(&restored.world)
+            .map(|body_size| body_size.length)
+            .collect();
+
+        // Verify all BodySize components are present
+        assert_eq!(
+            body_sizes.len(),
+            3,
+            "All restored entities should have BodySize component"
+        );
+
+        // Verify sizes match (order may differ due to entity ordering)
+        assert!(
+            body_sizes.contains(&1.0),
+            "Should have creature with size 1.0"
+        );
+        assert!(
+            body_sizes.contains(&2.5),
+            "Should have creature with size 2.5"
+        );
+        assert!(
+            body_sizes.contains(&0.5),
+            "Should have creature with size 0.5"
+        );
+    }
+
+    /// Comprehensive integration test for full snapshot lifecycle
+    ///
+    /// This test validates that ALL required components survive a save/load cycle.
+    /// Adding new required components? This test will fail if you forget to update
+    /// the snapshot schema!
+    #[test]
+    fn test_snapshot_full_lifecycle_preserves_all_components() {
+        use crate::simulation::core::components::BodySize;
+        use bevy_ecs::query::QueryState;
+
+        let mut simulation = SimulationBuilder::new().build();
+        simulation.set_boundaries(100.0, 100.0);
+
+        // Spawn test creatures with CritBuilder (ensures all components are added)
+        use crate::simulation::creatures::builder::CritBuilder;
+        let _id1 = simulation.spawn_crit(
+            CritBuilder::new()
+                .at(25.0, 25.0)
+                .with_size(1.5)
+                .with_energy(75.0)
+                .with_all_capabilities(),
+        );
+        let _id2 = simulation.spawn_crit(
+            CritBuilder::new()
+                .at(50.0, 50.0)
+                .with_size(0.8)
+                .with_energy(90.0)
+                .as_seeker(100.0, 100.0)
+                .with_all_capabilities(),
+        );
+
+        // Run simulation for a few ticks to change state
+        for _ in 0..5 {
+            simulation.update(0.05);
+        }
+
+        // Take snapshot
+        let snapshot = simulation.to_snapshot();
+
+        // Restore from snapshot
+        let mut restored = Simulation::from_snapshot(snapshot);
+
+        // Comprehensive validation: Query for ALL required components
+        let mut query_state: QueryState<(
+            &CritId,
+            &Position,
+            &Velocity,
+            &Acceleration,
+            &Rotation,
+            &CreatureState,
+            &BodySize,
+        )> = restored.world.query();
+
+        let results: Vec<_> = query_state.iter(&restored.world).collect();
+
+        // Verify correct count
+        assert_eq!(
+            results.len(),
+            2,
+            "All creatures should have all required components"
+        );
+
+        // Verify each component is present and has valid data
+        for (_crit_id, _pos, _vel, _accel, _rot, state, body_size) in results.iter() {
+            // BodySize should be preserved
+            assert!(
+                body_size.length > 0.0,
+                "BodySize should have valid length"
+            );
+
+            // CreatureState should be preserved
+            assert!(
+                state.energy > 0.0,
+                "Energy should be preserved and positive"
+            );
+        }
+
+        // Verify simulation can continue running after restore
+        for _ in 0..10 {
+            restored.update(0.05);
+        }
+
+        // Verify creatures still exist after running
+        assert_eq!(
+            restored.creature_count(),
+            2,
+            "Creatures should survive running after restore"
+        );
+    }
+
+    #[test]
+    fn test_snapshot_preserves_creature_capabilities_and_movement() {
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::components::capabilities::*;
+        use bevy_ecs::query::QueryState;
+
+        let mut simulation = SimulationBuilder::new().build();
+        simulation.set_boundaries(200.0, 200.0);
+
+        // Spawn a creature with all capabilities
+        let id = simulation.spawn_crit(
+            CritBuilder::new()
+                .at(0.0, 0.0)
+                .with_all_capabilities()
+                .with_size(1.0),
+        );
+
+        // Verify creature has capabilities BEFORE snapshot
+        {
+            let mut query: QueryState<(&CritId, &CanSeek, &CanFlee, &CanWander, &CanAvoidObstacles)> =
+                simulation.world_mut().query();
+            let count = query
+                .iter(simulation.world())
+                .filter(|(crit_id, _, _, _, _)| crit_id.0 == id)
+                .count();
+            assert_eq!(count, 1, "Creature should have all 4 capabilities before snapshot");
+        }
+
+        // Take snapshot
+        let snapshot = simulation.to_snapshot();
+
+        // Restore from snapshot
+        let mut restored = Simulation::from_snapshot(snapshot);
+
+        // CRITICAL TEST: Check if creature has capabilities AFTER snapshot
+        {
+            let mut query: QueryState<(&CritId, &CanSeek)> = restored.world_mut().query();
+            let count = query
+                .iter(restored.world())
+                .filter(|(crit_id, _)| crit_id.0 == id)
+                .count();
+
+            // This should fail if capabilities aren't preserved
+            assert_eq!(
+                count, 1,
+                "Creature lost CanSeek capability after snapshot restore"
+            );
+        }
+
+        {
+            let mut query: QueryState<(&CritId, &CanFlee)> = restored.world_mut().query();
+            let count = query
+                .iter(restored.world())
+                .filter(|(crit_id, _)| crit_id.0 == id)
+                .count();
+            assert_eq!(count, 1, "Creature lost CanFlee capability after snapshot restore");
+        }
+
+        {
+            let mut query: QueryState<(&CritId, &CanWander)> = restored.world_mut().query();
+            let count = query
+                .iter(restored.world())
+                .filter(|(crit_id, _)| crit_id.0 == id)
+                .count();
+            assert_eq!(count, 1, "Creature lost CanWander capability after snapshot restore");
+        }
+
+        {
+            let mut query: QueryState<(&CritId, &CanAvoidObstacles)> = restored.world_mut().query();
+            let count = query
+                .iter(restored.world())
+                .filter(|(crit_id, _)| crit_id.0 == id)
+                .count();
+            assert_eq!(count, 1, "Creature lost CanAvoidObstacles capability after snapshot restore");
+        }
     }
 }

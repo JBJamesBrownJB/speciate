@@ -12,6 +12,7 @@
     "dev": "npm-run-all --parallel dev:vite dev:electron",
     "dev:vite": "vite --host 0.0.0.0",
     "dev:electron": "cross-env NODE_ENV=development ELECTRON_DISABLE_SANDBOX=1 electron .",
+    "dev:tools": "cross-env NODE_ENV=development ELECTRON_DISABLE_SANDBOX=1 electron . --dev-tools",
     "dev:rust": "cd ../simulation && cargo build",
     "build": "npm-run-all build:*",
     "build:rust": "cd ../simulation && cargo build --release",
@@ -29,10 +30,15 @@
   "dependencies": {
     "@msgpack/msgpack": "^3.1.2",
     "msgpack-lite": "^0.1.26",
-    "pixi.js": "^8.14.0"
+    "pixi.js": "^8.14.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "@vitest/ui": "^4.0.6",
     "cross-env": "^10.1.0",
     "electron": "^32.3.3",

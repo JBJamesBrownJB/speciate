@@ -15,6 +15,12 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+// Dev tools command system (enabled with dev-tools feature)
+#[cfg(feature = "dev-tools")]
+use std::sync::Mutex;
+#[cfg(feature = "dev-tools")]
+use speciate::ipc::{spawn_stdin_reader_thread, CommandReceiver};
+
 #[derive(Parser, Debug)]
 #[command(name = "speciate")]
 #[command(about = "Speciate simulation server", long_about = None)]
@@ -29,8 +35,10 @@ struct Args {
     #[arg(
         long,
         value_name = "PATH",
-        help = "Load simulation from binary snapshot (MessagePack)",
-        conflicts_with = "state"
+        help = "Load simulation from binary snapshot (MessagePack). Defaults to ./snapshots/latest.msgpack if no path provided",
+        conflicts_with = "state",
+        num_args = 0..=1,
+        default_missing_value = "snapshots/latest.msgpack"
     )]
     load_snapshot: Option<PathBuf>,
 }
@@ -56,32 +64,83 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         r.store(false, Ordering::Relaxed);
     })?;
 
-    let simulation = if let Some(snapshot_path) = args.load_snapshot {
+    let mut simulation = if let Some(snapshot_path) = args.load_snapshot {
         // Load from binary snapshot (takes precedence over --state)
         info!(
             "Loading simulation from snapshot: {}",
             snapshot_path.display()
         );
-        let snapshot = WorldSnapshot::load_from_file(&snapshot_path)?;
 
-        info!(
-            "Snapshot loaded: v{} - {} creatures (created {})",
-            snapshot.metadata.version,
-            snapshot.metadata.creature_count,
-            snapshot.metadata.created_at
-        );
+        // Check if snapshot file exists
+        if !snapshot_path.exists() {
+            info!(
+                "Snapshot file not found: {} - starting with default configuration",
+                snapshot_path.display()
+            );
 
-        let simulation = Simulation::from_snapshot(snapshot);
-        let (min_x, max_x, min_y, max_y) = simulation.get_boundaries();
-        let world_width = max_x - min_x;
-        let world_height = max_y - min_y;
-        info!("Restored {} creatures", simulation.creature_count());
-        info!(
-            "World boundaries: {}x{} (centered: {} to {}, {} to {})\n",
-            world_width, world_height, min_x, max_x, min_y, max_y
-        );
+            // Fall back to default config
+            let config = WorldConfig::new();
+            let mut simulation = SimulationBuilder::new()
+                .set_boundaries(config.world.width / 2.0, config.world.height / 2.0)
+                .build();
 
-        simulation
+            spawn_initial_creatures(&mut simulation, &config.spawning);
+            let initial_count = simulation.creature_count();
+            info!("Spawned {} initial creatures", initial_count);
+            info!(
+                "World boundaries: {}x{}\n",
+                config.world.width, config.world.height
+            );
+
+            simulation
+        } else {
+            // Load snapshot from file (with error handling for corrupted files)
+            match WorldSnapshot::load_from_file(&snapshot_path) {
+                Ok(snapshot) => {
+                    info!(
+                        "Snapshot loaded: v{} - {} creatures (created {})",
+                        snapshot.metadata.version,
+                        snapshot.metadata.creature_count,
+                        snapshot.metadata.created_at
+                    );
+
+                    let simulation = Simulation::from_snapshot(snapshot);
+                    let (min_x, max_x, min_y, max_y) = simulation.get_boundaries();
+                    let world_width = max_x - min_x;
+                    let world_height = max_y - min_y;
+                    info!("Restored {} creatures", simulation.creature_count());
+                    info!(
+                        "World boundaries: {}x{} (centered: {} to {}, {} to {})\n",
+                        world_width, world_height, min_x, max_x, min_y, max_y
+                    );
+
+                    simulation
+                }
+                Err(e) => {
+                    // Corrupted snapshot → gracefully fall back to default config
+                    info!(
+                        "Failed to load snapshot ({}): {} - starting with default configuration",
+                        snapshot_path.display(),
+                        e
+                    );
+
+                    let config = WorldConfig::new();
+                    let mut simulation = SimulationBuilder::new()
+                        .set_boundaries(config.world.width / 2.0, config.world.height / 2.0)
+                        .build();
+
+                    spawn_initial_creatures(&mut simulation, &config.spawning);
+                    let initial_count = simulation.creature_count();
+                    info!("Spawned {} initial creatures", initial_count);
+                    info!(
+                        "World boundaries: {}x{}\n",
+                        config.world.width, config.world.height
+                    );
+
+                    simulation
+                }
+            }
+        }
     } else if let Some(state_path) = args.state {
         // Load configuration from TOML
         info!("Loading state from: {}", state_path.display());
@@ -128,6 +187,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         simulation
     };
+
+    // Start stdin command reader (dev tools only)
+    #[cfg(feature = "dev-tools")]
+    {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _stdin_thread = spawn_stdin_reader_thread(tx);
+        simulation.world_mut().insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
+        info!("Dev tools: stdin command reader started");
+    }
 
     // Create runner with stdio hooks (outputs MessagePack to stdout)
     let timing_config = TimingConfig::default();

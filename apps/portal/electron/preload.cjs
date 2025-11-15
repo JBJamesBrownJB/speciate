@@ -47,4 +47,20 @@ contextBridge.exposeInMainWorld('electron', {
   getLatestState: async () => {
     return await ipcRenderer.invoke('get-latest-state');
   },
+
+  /**
+   * Send command to simulation (dev tools only)
+   * Commands are validated and forwarded to simulation via stdin
+   *
+   * @param {Object} command - Command object with type and parameters
+   */
+  sendCommand: (command) => {
+    if (typeof command !== 'object' || command === null) {
+      throw new Error('sendCommand: command must be an object');
+    }
+    if (typeof command.type !== 'string') {
+      throw new Error('sendCommand: command.type must be a string');
+    }
+    ipcRenderer.send('send-command', command);
+  },
 });

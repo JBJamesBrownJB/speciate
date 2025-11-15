@@ -1,0 +1,42 @@
+# Crowd Navigation Trial
+#
+# Purpose: Test obstacle avoidance in dense crowd scenarios
+# Based on: docs/architecture/crowd-navigation.md
+# This trial spawns 200 stationary obstacles with 50 mobile seekers
+# to verify steering behaviors avoid collisions in cluttered environments.
+
+name = "Crowd Navigation Test"
+description = """
+Dense crowd navigation scenario with 200 static obstacles and 50 mobile seekers.
+Tests obstacle avoidance, seek behavior, and spatial collision detection.
+Mobile creatures should navigate to targets without getting stuck.
+"""
+
+# Static obstacles: Dense grid of catatonic creatures (obstacles)
+[[spawns]]
+type = "grid"
+start_x = -50.0
+start_y = -50.0
+spacing = 5.0
+rows = 20
+cols = 10
+creature_type = "catatonic"
+
+# Mobile seekers: Circle formation around obstacles
+[[spawns]]
+type = "circle"
+center_x = 0.0
+center_y = 0.0
+radius = 100.0
+count = 50
+creature_type = "seeker"
+
+# World configuration: Smaller boundary for focused testing
+[world]
+delta_time = 0.05  # 20 Hz simulation
+
+[world.boundary]
+min_x = -500.0
+max_x = 500.0
+min_y = -500.0
+max_y = 500.0

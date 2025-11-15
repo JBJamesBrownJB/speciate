@@ -1,0 +1,32 @@
+# Default Spawn Baseline Trial
+#
+# Purpose: Regression test for default world spawn configuration
+# This trial replicates the current default spawn pattern (10×10 grid)
+# to ensure future refactors don't break basic spawning logic.
+
+name = "Default Spawn Baseline"
+description = """
+Baseline regression test for default spawn configuration.
+Spawns 100 creatures in a 10×10 grid with 5m spacing at world center.
+Used to verify basic spawning, movement, and boundary behavior.
+"""
+
+# Primary spawn pattern: 10×10 grid at world center
+[[spawns]]
+type = "grid"
+start_x = -25.0    # Center grid at (0, 0): starts at -25m to span [-25, 25]
+start_y = -25.0
+spacing = 5.0      # 5m between creatures
+rows = 10
+cols = 10
+creature_type = "wanderer"
+
+# World configuration (default values, explicit for regression clarity)
+[world]
+delta_time = 0.05  # 20 Hz simulation rate
+
+[world.boundary]
+min_x = -1000000.0
+max_x = 1000000.0
+min_y = -1000000.0
+max_y = 1000000.0

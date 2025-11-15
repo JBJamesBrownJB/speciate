@@ -122,6 +122,10 @@ impl Default for ActualTickRate {
     }
 }
 
+/// Marker component for catatonic (stationary) creatures
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Catatonic;
+
 /// Boundary configuration resource for world limits
 /// Uses centered coordinate system: world extends from (min_x, min_y) to (max_x, max_y)
 /// with (0, 0) at the center

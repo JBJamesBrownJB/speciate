@@ -48,8 +48,32 @@ impl RunnerHooks for StdioHooks {
         // No-op for stdio mode (stats go to stderr if needed)
     }
 
-    fn on_shutdown(&mut self, tick: u64, _simulation: &mut Simulation) {
+    fn on_shutdown(&mut self, tick: u64, simulation: &mut Simulation) {
         eprintln!("[stdio] Simulation stopped at tick {}", tick);
+
+        // Create snapshots directory if it doesn't exist
+        let snapshots_dir = std::path::Path::new("snapshots");
+        if let Err(e) = std::fs::create_dir_all(snapshots_dir) {
+            eprintln!("[stdio] Failed to create snapshots directory: {}", e);
+            return;
+        }
+
+        // Save shutdown snapshot to latest.msgpack (matches ConsoleHooks behavior)
+        let snapshot = simulation.to_snapshot();
+        let latest_path = std::path::Path::new("snapshots/latest.msgpack");
+
+        match snapshot.save_to_file(latest_path) {
+            Ok(_) => {
+                eprintln!(
+                    "[stdio] Shutdown snapshot saved: {} ({} creatures)",
+                    latest_path.display(),
+                    snapshot.metadata.creature_count
+                );
+            }
+            Err(e) => {
+                eprintln!("[stdio] Failed to save shutdown snapshot: {}", e);
+            }
+        }
     }
 }
 
@@ -118,11 +142,57 @@ fn write_snapshot_frame(simulation: &mut Simulation) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simulation::SimulationBuilder;
+    use std::fs;
+    use std::path::Path;
+
+    /// Helper to clean up test snapshots
+    fn cleanup_test_snapshots() {
+        let snapshots_dir = Path::new("snapshots");
+        if snapshots_dir.exists() {
+            if let Ok(entries) = fs::read_dir(snapshots_dir) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("msgpack") {
+                        fs::remove_file(path).ok();
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_stdio_hooks_creation() {
         let hooks = StdioHooks::new();
         // Just verify it can be created
         drop(hooks);
+    }
+
+    #[test]
+    fn test_stdio_hooks_shutdown_creates_latest_msgpack() {
+        cleanup_test_snapshots();
+
+        // Create simulation
+        let mut simulation = SimulationBuilder::new().build();
+        let mut hooks = StdioHooks::new();
+
+        // Call shutdown hook
+        hooks.on_shutdown(100, &mut simulation);
+
+        // Verify latest.msgpack was created
+        let latest_path = Path::new("snapshots/latest.msgpack");
+        assert!(
+            latest_path.exists(),
+            "StdioHooks::on_shutdown() should create snapshots/latest.msgpack"
+        );
+
+        // Verify it's a valid snapshot file
+        let metadata = fs::metadata(latest_path).unwrap();
+        assert!(
+            metadata.len() > 0,
+            "Snapshot file should not be empty"
+        );
+
+        cleanup_test_snapshots();
     }
 }

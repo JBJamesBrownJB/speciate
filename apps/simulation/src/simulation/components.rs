@@ -7,7 +7,9 @@ use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // Re-export core components for backward compatibility during refactor
-pub use super::core::components::{Acceleration, BoundaryConfig, DeltaTime, Position, Velocity};
+pub use super::core::components::{
+    Acceleration, BoundaryConfig, Catatonic, DeltaTime, Position, Velocity,
+};
 
 // Re-export creature components for backward compatibility during refactor
 pub use super::creatures::components::{

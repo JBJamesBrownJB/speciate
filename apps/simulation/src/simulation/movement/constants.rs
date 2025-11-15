@@ -250,7 +250,7 @@ impl Default for SteeringConstants {
 /// # Biological Scaling
 /// Both parameters scale with body size:
 /// - `perception_range = body_length × perception_multiplier`
-/// - `personal_space = body_length × spacing_multiplier`
+/// - `personal_space = body_length + spacing_multiplier`
 ///
 /// See docs/biology/biology-notes.md for full biological rationale and DNA integration plans.
 #[derive(Debug, Clone, Copy)]
@@ -270,21 +270,21 @@ pub struct PerceptionConstants {
     /// TODO: Migrate to DNA gene: `perception_multiplier`
     pub perception_multiplier: f32,
 
-    /// Personal space multiplier (× body length)
+    /// Personal space buffer distance (meters, additive)
     ///
-    /// **Value:** 2.5× body length
-    /// **Example:** 1m creature maintains 2.5m spacing from others
+    /// **Value:** 1.5m buffer added to body length
+    /// **Example:** 1m creature maintains 2.5m spacing (1.0 + 1.5)
     ///
     /// **Range for DNA (Future DNA system):**
-    /// - Min: 1.5× (colonial/tolerant species)
-    /// - Max: 4.0× (territorial species)
-    /// - Default: 2.5× (solitary animal)
+    /// - Min: 0.5m (colonial/tolerant species)
+    /// - Max: 3.0m (territorial species)
+    /// - Default: 1.5m (solitary animal)
     ///
     /// **Behavioral impact:**
-    /// - Low spacing: Dense groups, schooling, herding
-    /// - High spacing: Territorial, solitary, aggressive
+    /// - Low buffer: Dense groups, schooling, herding
+    /// - High buffer: Territorial, solitary, aggressive
     ///
-    /// TODO: Migrate to DNA gene: `spacing_multiplier`
+    /// TODO: Migrate to DNA gene: `spacing_buffer`
     pub personal_space: f32,
 
     /// Panic threshold (fraction of personal space)
@@ -598,12 +598,12 @@ mod tests {
         // For 1m creature:
         let body_size = 1.0;
         let perception_range = body_size * perception.perception_multiplier;
-        let personal_space = body_size * perception.personal_space;
+        let personal_space = body_size + perception.personal_space;
         let panic_threshold = personal_space * perception.panic_threshold_ratio;
 
         assert_eq!(perception_range, 10.0); // 10m detection range
-        assert_eq!(personal_space, 1.5); // 1.5m comfort zone
-        assert_eq!(panic_threshold, 0.75); // 0.75m panic distance
+        assert_eq!(personal_space, 2.5); // 2.5m personal space (1.0 + 1.5)
+        assert_eq!(panic_threshold, 1.25); // 1.25m panic distance
 
         // Panic threshold should be less than personal space
         assert!(panic_threshold < personal_space);

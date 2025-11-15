@@ -11,7 +11,7 @@ echo "=========================================="
 echo "🔧 Building simulation (debug mode)..."
 echo "=========================================="
 cd "$ROOT_DIR/apps/simulation"
-cargo build --features dev-tools
+cargo build --features dev-tools # non-prod release build of simulation
 
 echo ""
 echo "=========================================="

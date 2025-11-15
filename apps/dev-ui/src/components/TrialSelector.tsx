@@ -3,27 +3,18 @@
  *
  * Load predefined trial templates for regression testing.
  * Sends DevLoadTrial command to simulation via Electron IPC.
+ *
+ * Trial templates are auto-discovered from apps/simulation/trials/*.toml at build time.
+ * See: scripts/generate-trial-list.cjs
  */
 
 import React, { useState } from 'react';
+import { TRIAL_TEMPLATES } from '../generated/trial-templates';
 
 interface TrialSelectorProps {
   onLoadTrial: (template: string) => void;
   disabled?: boolean;
 }
-
-const TRIAL_TEMPLATES = [
-  {
-    name: 'default-spawn-baseline',
-    label: 'Default Spawn Baseline',
-    description: '10×10 grid at world center (100 creatures)',
-  },
-  {
-    name: 'crowd-navigation',
-    label: 'Crowd Navigation Test',
-    description: '200 static obstacles + 50 mobile seekers',
-  },
-];
 
 export const TrialSelector: React.FC<TrialSelectorProps> = ({
   onLoadTrial,

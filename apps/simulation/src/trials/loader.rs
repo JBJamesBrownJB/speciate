@@ -4,11 +4,9 @@ use bevy_ecs::world::World;
 use std::fs;
 
 use super::{CreatureType, SpawnPattern, TrialConfig};
-use crate::simulation::core::components::{
-    Acceleration, BodySize, Catatonic, Position, Velocity,
-};
-use crate::simulation::components::{CritId, CreatureState, Rotation};
-use crate::simulation::creatures::components::Target;
+use crate::simulation::core::components::Catatonic;
+use crate::simulation::creatures::builder::CritBuilder;
+use crate::simulation::creatures::components::state::BehaviorMode;
 use crate::simulation::creatures::systems::NextCreatureId;
 
 /// Load a trial from TOML template file
@@ -95,8 +93,10 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
             x,
             y,
             creature_type,
+            target_x,
+            target_y,
         } => {
-            spawn_creature(world, *x, *y, *creature_type);
+            spawn_creature(world, *x, *y, *creature_type, *target_x, *target_y);
         }
 
         SpawnPattern::Grid {
@@ -111,7 +111,7 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
                 for col in 0..*cols {
                     let x = start_x + (col as f32 * spacing);
                     let y = start_y + (row as f32 * spacing);
-                    spawn_creature(world, x, y, *creature_type);
+                    spawn_creature(world, x, y, *creature_type, None, None);
                 }
             }
         }
@@ -122,60 +122,69 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
             radius,
             count,
             creature_type,
+            target_x,
+            target_y,
         } => {
             for i in 0..*count {
                 let angle = (i as f32 / *count as f32) * 2.0 * std::f32::consts::PI;
                 let x = center_x + radius * angle.cos();
                 let y = center_y + radius * angle.sin();
-                spawn_creature(world, x, y, *creature_type);
+                spawn_creature(world, x, y, *creature_type, *target_x, *target_y);
             }
         }
     }
 }
 
 /// Spawn a single creature with appropriate components based on type
-fn spawn_creature(world: &mut World, x: f32, y: f32, creature_type: CreatureType) {
+fn spawn_creature(
+    world: &mut World,
+    x: f32,
+    y: f32,
+    creature_type: CreatureType,
+    target_x: Option<f32>,
+    target_y: Option<f32>,
+) {
     // Get next creature ID
     let mut next_id = world.resource_mut::<NextCreatureId>();
     let creature_id = next_id.generate();
 
     match creature_type {
         CreatureType::Catatonic => {
-            world.spawn((
-                CritId(creature_id),
-                Position { x, y },
-                Velocity { vx: 0.0, vy: 0.0 },
-                Acceleration::default(),
-                Rotation::default(),
-                BodySize::default(),
-                CreatureState::new(),
-                Catatonic,
-            ));
+            // Use CritBuilder but set to Catatonic behavior
+            let builder = CritBuilder::new()
+                .at(x, y)
+                .in_behavior(BehaviorMode::Catatonic);
+            let bundle = builder.build(creature_id);
+
+            // Spawn with bundle and add Catatonic marker
+            world.spawn((bundle, Catatonic));
         }
 
         CreatureType::Seeker => {
-            world.spawn((
-                CritId(creature_id),
-                Position { x, y },
-                Velocity { vx: 0.0, vy: 0.0 },
-                Acceleration::default(),
-                Rotation::default(),
-                BodySize::default(),
-                CreatureState::new(),
-                Target { x: 0.0, y: 0.0 }, // Default target at origin
-            ));
+            // Use configured target or default to origin
+            let target_x = target_x.unwrap_or(0.0);
+            let target_y = target_y.unwrap_or(0.0);
+
+            // Use CritBuilder's as_seeker preset
+            let builder = CritBuilder::new()
+                .at(x, y)
+                .as_seeker(target_x, target_y);
+            let bundle = builder.build(creature_id);
+
+            world.spawn(bundle);
         }
 
         CreatureType::Wanderer => {
-            world.spawn((
-                CritId(creature_id),
-                Position { x, y },
-                Velocity { vx: 0.0, vy: 0.0 },
-                Acceleration::default(),
-                Rotation::default(),
-                BodySize::default(),
-                CreatureState::new(),
-            ));
+            // Use CritBuilder for wandering behavior
+            // Note: Can't use as_wanderer() because it requires WorldBounds
+            // Instead, configure manually
+            let builder = CritBuilder::new()
+                .at(x, y)
+                .with_wandering()
+                .in_behavior(BehaviorMode::Wandering);
+            let bundle = builder.build(creature_id);
+
+            world.spawn(bundle);
         }
     }
 }
@@ -183,6 +192,9 @@ fn spawn_creature(world: &mut World, x: f32, y: f32, creature_type: CreatureType
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
+    use crate::simulation::components::CreatureState;
+    use crate::simulation::creatures::components::Target;
 
     #[test]
     fn test_spawn_single_catatonic() {
@@ -193,6 +205,8 @@ mod tests {
             x: 123.45,
             y: 678.90,
             creature_type: CreatureType::Catatonic,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -216,20 +230,55 @@ mod tests {
             x: 100.0,
             y: 200.0,
             creature_type: CreatureType::Seeker,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
 
         // Verify seeker has Target component
-        let mut query = world.query::<(&Position, &Target)>();
+        let mut query = world.query::<(&Position, &Target, &CreatureState)>();
         let results: Vec<_> = query.iter(&world).collect();
 
         assert_eq!(results.len(), 1);
-        let (pos, target) = results[0];
+        let (pos, target, state) = results[0];
         assert_eq!(pos.x, 100.0);
         assert_eq!(pos.y, 200.0);
-        assert_eq!(target.x, 0.0); // Default target
+        assert_eq!(target.x, 0.0); // Default target at origin
         assert_eq!(target.y, 0.0);
+
+        // Verify BehaviorMode is Seeking
+        assert!(matches!(state.behavior, BehaviorMode::Seeking));
+    }
+
+    #[test]
+    fn test_spawn_seeker_with_custom_target() {
+        let mut world = World::new();
+        world.insert_resource(NextCreatureId::default());
+
+        let pattern = SpawnPattern::Single {
+            x: 20.0,
+            y: 0.0,
+            creature_type: CreatureType::Seeker,
+            target_x: Some(-10.0),
+            target_y: Some(5.0),
+        };
+
+        spawn_pattern(&mut world, &pattern);
+
+        // Verify seeker has custom target
+        let mut query = world.query::<(&Position, &Target, &CreatureState)>();
+        let results: Vec<_> = query.iter(&world).collect();
+
+        assert_eq!(results.len(), 1);
+        let (pos, target, state) = results[0];
+        assert_eq!(pos.x, 20.0);
+        assert_eq!(pos.y, 0.0);
+        assert_eq!(target.x, -10.0);
+        assert_eq!(target.y, 5.0);
+
+        // Verify BehaviorMode is Seeking
+        assert!(matches!(state.behavior, BehaviorMode::Seeking));
     }
 
     #[test]
@@ -273,6 +322,8 @@ mod tests {
             radius: 50.0,
             count: 8,
             creature_type: CreatureType::Wanderer,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -332,6 +383,8 @@ mod tests {
             radius: 100.0,
             count: 4,
             creature_type: CreatureType::Wanderer,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -354,17 +407,29 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(NextCreatureId::default());
 
-        spawn_creature(&mut world, 0.0, 0.0, CreatureType::Catatonic);
-        spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker);
-        spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer);
+        spawn_creature(&mut world, 0.0, 0.0, CreatureType::Catatonic, None, None);
+        spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker, None, None);
+        spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer, None, None);
 
         // Count each type
+        // Note: All creatures now have Target component (from CritBundle)
+        // We count by behavior mode instead
         let catatonic_count = world.query::<&Catatonic>().iter(&world).count();
-        let seeker_count = world.query::<&Target>().iter(&world).count();
+        let seeker_count = world
+            .query::<&CreatureState>()
+            .iter(&world)
+            .filter(|state| state.behavior == BehaviorMode::Seeking)
+            .count();
+        let wanderer_count = world
+            .query::<&CreatureState>()
+            .iter(&world)
+            .filter(|state| state.behavior == BehaviorMode::Wandering)
+            .count();
         let total_count = world.query::<&Position>().iter(&world).count();
 
         assert_eq!(catatonic_count, 1);
         assert_eq!(seeker_count, 1);
+        assert_eq!(wanderer_count, 1);
         assert_eq!(total_count, 3);
     }
 
@@ -407,6 +472,8 @@ mod tests {
             radius: 100.0,
             count: 4,
             creature_type: CreatureType::Wanderer,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -424,5 +491,34 @@ mod tests {
             && p.y.abs() < 0.01));
         assert!(positions.iter().any(|p| p.x.abs() < 0.01
             && (p.y + 100.0).abs() < 0.01));
+    }
+
+    #[test]
+    fn test_circle_seekers_with_shared_target() {
+        let mut world = World::new();
+        world.insert_resource(NextCreatureId::default());
+
+        let pattern = SpawnPattern::Circle {
+            center_x: 0.0,
+            center_y: 0.0,
+            radius: 50.0,
+            count: 4,
+            creature_type: CreatureType::Seeker,
+            target_x: Some(0.0),
+            target_y: Some(0.0),
+        };
+
+        spawn_pattern(&mut world, &pattern);
+
+        // Verify all seekers have the same target at origin
+        let mut query = world.query::<(&Target, &CreatureState)>();
+        let results: Vec<_> = query.iter(&world).collect();
+
+        assert_eq!(results.len(), 4);
+        for (target, state) in results {
+            assert_eq!(target.x, 0.0);
+            assert_eq!(target.y, 0.0);
+            assert!(matches!(state.behavior, BehaviorMode::Seeking));
+        }
     }
 }

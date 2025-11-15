@@ -50,6 +50,10 @@ apps/ledger/dist
 apps/ui/dist
 apps/ui/build
 
+# State snapshot directories
+/apps/portal/snapshots
+/apps/simulation/snapshots
+
 # Log files and npm debug
 npm-debug.log*
 .eslintcache

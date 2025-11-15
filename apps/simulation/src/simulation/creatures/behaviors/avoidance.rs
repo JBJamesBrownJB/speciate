@@ -3,9 +3,9 @@
 //! Implements separation steering using inverse square law for repulsion.
 //! Follows the force accumulation pattern: ADDs to Acceleration, never replaces.
 //!
-//! # Force Scaling
-//! - **Comfort zone** (distance > personal_space): No force
-//! - **Repulsion zone** (panic_threshold < distance ≤ personal_space): Inverse square
+//! # Force Zones
+//! - **Safe distance** (distance > personal_space): No avoidance force
+//! - **Repulsion zone** (panic_threshold < distance ≤ personal_space): Inverse square force
 //! - **Panic zone** (distance ≤ panic_threshold): Maximum force (capped)
 //!
 //! # Biological Rationale

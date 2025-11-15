@@ -288,6 +288,23 @@ mod tests {
     fn test_multiple_shutdowns_create_multiple_timestamped_files() {
         cleanup_test_snapshots();
 
+        let snapshots_dir = Path::new("snapshots");
+
+        // Record initial file count to handle test pollution from parallel runs
+        let initial_count = fs::read_dir(snapshots_dir)
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        let path = e.path();
+                        path.is_file()
+                            && path.extension().and_then(|s| s.to_str()) == Some("msgpack")
+                            && path.file_name().and_then(|s| s.to_str()).map(|s| s != "latest.msgpack").unwrap_or(false)
+                    })
+                    .count()
+            })
+            .unwrap_or(0);
+
         // Create and shutdown simulation twice
         for i in 0..2 {
             let mut simulation = SimulationBuilder::new().build();
@@ -298,9 +315,11 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(1100));
         }
 
+        // Allow file system to sync (fixes test flakiness in parallel test runs)
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
         // Count timestamped files (excluding latest.msgpack)
-        let snapshots_dir = Path::new("snapshots");
-        let timestamped_count = fs::read_dir(snapshots_dir)
+        let final_count = fs::read_dir(snapshots_dir)
             .unwrap()
             .filter_map(|e| e.ok())
             .filter(|e| {
@@ -311,11 +330,14 @@ mod tests {
             })
             .count();
 
+        let new_files = final_count - initial_count;
         assert_eq!(
-            timestamped_count,
+            new_files,
             2,
-            "Two shutdowns should create two timestamped snapshot files (found {})",
-            timestamped_count
+            "Two shutdowns should create two new timestamped snapshot files (initial: {}, final: {}, new: {})",
+            initial_count,
+            final_count,
+            new_files
         );
 
         cleanup_test_snapshots();

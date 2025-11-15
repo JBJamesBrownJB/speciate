@@ -174,7 +174,7 @@ pub fn spawn_initial_creatures_from_config(simulation: &mut Simulation, config: 
 /// Watch the seeker detect and navigate around the obstacle to reach its goal!
 pub fn spawn_initial_creatures(simulation: &mut Simulation, _config: &SpawningConfig) {
     // Spawn stationary obstacle slightly off the direct path
-    // Position: (15, 1) - close enough for early detection, off-axis for lateral steering
+    // Position: (0, 0) - central obstacle for seekers to navigate around
     let obstacle = CritBuilder::new()
         .at(0.0, 0.0)
         .in_behavior(BehaviorMode::Catatonic) // Stationary obstacle

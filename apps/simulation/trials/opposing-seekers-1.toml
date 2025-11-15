@@ -1,0 +1,44 @@
+# Opposing Seekers Trial #1
+#
+# Purpose: Replicates the original default spawn scenario (obstacle + 3 seekers)
+# This trial captures the hardcoded demo from spawner.rs::spawn_initial_creatures()
+# to serve as a regression test for basic seeking and obstacle avoidance behavior.
+
+name = "Opposing Seekers #1"
+description = """
+Three seekers approaching a central obstacle from different angles.
+Tests seeking behavior, target navigation, and obstacle avoidance.
+
+Layout:
+- 1 catatonic obstacle at origin (0, 0)
+- Seeker #1 at (20, 0) seeking (-10, 0) - approaches from east
+- Seeker #2 at (-20, 0) seeking (10, 0) - approaches from west
+- Seeker #3 at (0, 20) seeking (-10, -10) - approaches from north
+
+All seekers have targets beyond the obstacle, requiring navigation around it.
+"""
+
+# Central obstacle - stationary creature at origin
+[[spawns]]
+type = "single"
+x = 0.0
+y = 0.0
+creature_type = "catatonic"
+
+# Seeker #1 - East side, target beyond obstacle to the west
+[[spawns]]
+type = "single"
+x = 20.0
+y = 0.0
+creature_type = "seeker"
+target_x = -10.0
+target_y = 0.0
+
+# Seeker #2 - West side, target beyond obstacle to the east
+[[spawns]]
+type = "single"
+x = -20.0
+y = 0.0
+creature_type = "seeker"
+target_x = 10.0
+target_y = 0.0

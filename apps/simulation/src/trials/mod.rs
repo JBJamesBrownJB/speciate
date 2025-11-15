@@ -38,6 +38,11 @@ pub enum SpawnPattern {
         y: f32,
         #[serde(default)]
         creature_type: CreatureType,
+        /// Optional target position for seeker creatures (defaults to origin)
+        #[serde(default)]
+        target_x: Option<f32>,
+        #[serde(default)]
+        target_y: Option<f32>,
     },
 
     /// Grid of creatures with spacing
@@ -68,6 +73,11 @@ pub enum SpawnPattern {
         count: u32,
         #[serde(default)]
         creature_type: CreatureType,
+        /// Optional shared target position for all seeker creatures (defaults to origin)
+        #[serde(default)]
+        target_x: Option<f32>,
+        #[serde(default)]
+        target_y: Option<f32>,
     },
 }
 
@@ -139,10 +149,14 @@ mod tests {
                 x,
                 y,
                 creature_type,
+                target_x,
+                target_y,
             } => {
                 assert_eq!(*x, 10.0);
                 assert_eq!(*y, 20.0);
                 assert_eq!(*creature_type, CreatureType::Catatonic);
+                assert_eq!(*target_x, None);
+                assert_eq!(*target_y, None);
             }
             _ => panic!("Expected Single spawn pattern"),
         }
@@ -209,12 +223,16 @@ mod tests {
                 radius,
                 count,
                 creature_type,
+                target_x,
+                target_y,
             } => {
                 assert_eq!(*center_x, 100.0);
                 assert_eq!(*center_y, 200.0);
                 assert_eq!(*radius, 50.0);
                 assert_eq!(*count, 20);
                 assert_eq!(*creature_type, CreatureType::Seeker);
+                assert_eq!(*target_x, None);
+                assert_eq!(*target_y, None);
             }
             _ => panic!("Expected Circle spawn pattern"),
         }
@@ -344,5 +362,102 @@ mod tests {
         let world = config.world.as_ref().unwrap();
         assert_eq!(world.delta_time, Some(0.033));
         assert!(world.boundary.is_none());
+    }
+
+    #[test]
+    fn test_single_seeker_with_target() {
+        let toml = r#"
+            name = "Seeker with Target"
+
+            [[spawns]]
+            type = "single"
+            x = 20.0
+            y = 0.0
+            creature_type = "seeker"
+            target_x = -10.0
+            target_y = 0.0
+        "#;
+
+        let config: TrialConfig = toml::from_str(toml).unwrap();
+
+        match &config.spawns[0] {
+            SpawnPattern::Single {
+                x,
+                y,
+                creature_type,
+                target_x,
+                target_y,
+            } => {
+                assert_eq!(*x, 20.0);
+                assert_eq!(*y, 0.0);
+                assert_eq!(*creature_type, CreatureType::Seeker);
+                assert_eq!(*target_x, Some(-10.0));
+                assert_eq!(*target_y, Some(0.0));
+            }
+            _ => panic!("Expected Single spawn pattern"),
+        }
+    }
+
+    #[test]
+    fn test_circle_seekers_with_shared_target() {
+        let toml = r#"
+            name = "Circle Seekers Converging"
+
+            [[spawns]]
+            type = "circle"
+            center_x = 0.0
+            center_y = 0.0
+            radius = 50.0
+            count = 4
+            creature_type = "seeker"
+            target_x = 0.0
+            target_y = 0.0
+        "#;
+
+        let config: TrialConfig = toml::from_str(toml).unwrap();
+
+        match &config.spawns[0] {
+            SpawnPattern::Circle {
+                center_x,
+                center_y,
+                radius,
+                count,
+                creature_type,
+                target_x,
+                target_y,
+            } => {
+                assert_eq!(*center_x, 0.0);
+                assert_eq!(*center_y, 0.0);
+                assert_eq!(*radius, 50.0);
+                assert_eq!(*count, 4);
+                assert_eq!(*creature_type, CreatureType::Seeker);
+                assert_eq!(*target_x, Some(0.0));
+                assert_eq!(*target_y, Some(0.0));
+            }
+            _ => panic!("Expected Circle spawn pattern"),
+        }
+    }
+
+    #[test]
+    fn test_target_fields_default_to_none() {
+        let toml = r#"
+            name = "Backward Compatibility"
+
+            [[spawns]]
+            type = "single"
+            x = 10.0
+            y = 20.0
+            creature_type = "seeker"
+        "#;
+
+        let config: TrialConfig = toml::from_str(toml).unwrap();
+
+        match &config.spawns[0] {
+            SpawnPattern::Single { target_x, target_y, .. } => {
+                assert_eq!(*target_x, None);
+                assert_eq!(*target_y, None);
+            }
+            _ => panic!("Expected Single spawn pattern"),
+        }
     }
 }

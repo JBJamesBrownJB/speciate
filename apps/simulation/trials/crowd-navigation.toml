@@ -1,42 +1,31 @@
 # Crowd Navigation Trial
 #
-# Purpose: Test obstacle avoidance in dense crowd scenarios
-# Based on: docs/architecture/crowd-navigation.md
-# This trial spawns 200 stationary obstacles with 50 mobile seekers
-# to verify steering behaviors avoid collisions in cluttered environments.
+# Purpose: Test creature navigation through a tightly packed crowd
+# This trial creates a dense grid of stationary creatures with minimal spacing
+# and challenges a seeker to navigate through to the other side.
 
-name = "Crowd Navigation Test"
+name = "Crowd Navigation"
 description = """
-Dense crowd navigation scenario with 200 static obstacles and 50 mobile seekers.
-Tests obstacle avoidance, seek behavior, and spatial collision detection.
-Mobile creatures should navigate to targets without getting stuck.
+Dense crowd navigation scenario with a 10x10 grid of wanderers at 1m spacing.
+A seeker at (-30, 0) must navigate through the crowd to reach the origin.
+Tests obstacle avoidance, pathfinding, and collision handling in tight spaces.
 """
 
-# Static obstacles: Dense grid of catatonic creatures (obstacles)
+# Primary spawn pattern: 10×10 grid at world center
 [[spawns]]
 type = "grid"
-start_x = -50.0
-start_y = -50.0
-spacing = 5.0
+start_x = -10.0    # Center grid at (0, 0): starts at -25m to span [-25, 25]
+start_y = -10.0
+spacing = 1.0      
 rows = 20
-cols = 10
+cols = 20
 creature_type = "catatonic"
 
-# Mobile seekers: Circle formation around obstacles
+# Seeker #1 - Western starting position
 [[spawns]]
-type = "circle"
-center_x = 0.0
-center_y = 0.0
-radius = 100.0
-count = 50
+type = "single"
+x = -20.0
+y = 0.0
 creature_type = "seeker"
-
-# World configuration: Smaller boundary for focused testing
-[world]
-delta_time = 0.05  # 20 Hz simulation
-
-[world.boundary]
-min_x = -500.0
-max_x = 500.0
-min_y = -500.0
-max_y = 500.0
+target_x = 20.0
+target_y = 0.0

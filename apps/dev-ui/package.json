@@ -5,8 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5174",
-    "build": "tsc && vite build",
+    "generate:trials": "node scripts/generate-trial-list.cjs",
+    "dev": "npm run generate:trials && vite --port 5174",
+    "build": "npm run generate:trials && tsc && vite build",
     "preview": "vite preview",
     "test:ipc": "node test-ipc.cjs",
     "test:trial": "node test-trial-loading.cjs",

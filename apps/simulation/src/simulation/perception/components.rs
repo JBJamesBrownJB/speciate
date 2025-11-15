@@ -139,29 +139,28 @@ impl Default for Perception {
 /// ```
 ///
 /// # DNA Integration (Future DNA system)
-/// Both parameters will be derived from DNA:
-/// - `personal_space = body_length * dna.spacing_multiplier`
+/// - `personal_space = body_length + dna.spacing_buffer`
 /// - `max_force` will remain constant (or scale with body mass)
 #[derive(Component, Debug, Clone, Copy, Reflect, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct AvoidanceBehavior {
     /// Desired minimum distance from other creatures (meters)
     ///
-    /// **Current:** 2.5× body length (2.5m for 1m creature)
-    /// **Biological rationale:** Solitary animal comfort zone
+    /// **Current:** body length + 1.5m buffer (2.5m for 1m creature)
+    /// **Biological rationale:** Fixed buffer distance around body
     ///
-    /// **Future DNA gene:** `spacing_multiplier` (1.5-4.0×)
-    /// - 1.5×: Colonial/tolerant species (tight spacing)
-    /// - 2.5×: Solitary animal (default)
-    /// - 4.0×: Territorial species (wide spacing)
+    /// **Future DNA gene:** `spacing_buffer` (0.5-3.0m)
+    /// - 0.5m: Colonial/tolerant species (tight spacing)
+    /// - 1.5m: Solitary animal (default)
+    /// - 3.0m: Territorial species (wide spacing)
     ///
     /// **Behavioral zones:**
     /// - `distance > perception_range`: Not detected
-    /// - `personal_space < distance ≤ perception_range`: Detected but comfortable
+    /// - `distance > personal_space`: Detected but no avoidance
     /// - `panic_threshold < distance ≤ personal_space`: Repulsion active (inverse square)
     /// - `distance ≤ panic_threshold`: Panic mode (maximum force)
     ///
-    /// TODO: Replace with `body_length * dna.spacing_multiplier` (Future DNA system)
+    /// TODO: Replace with `body_length + dna.spacing_buffer` (Future DNA system)
     pub personal_space: f32,
 
     /// Maximum avoidance force magnitude (Newtons)
@@ -208,30 +207,30 @@ impl AvoidanceBehavior {
     pub fn default_params() -> Self {
         use crate::simulation::movement::{PERCEPTION, STEERING};
         // Assume 1m body length for now
-        let personal_space = 1.0 * PERCEPTION.personal_space;
+        let personal_space = 1.0 + PERCEPTION.personal_space;
         Self::new(personal_space, STEERING.avoidance_force)
     }
 
-    /// Create avoidance from body size using biological scaling
+    /// Create avoidance from body size using additive spacing
     ///
-    /// Uses `PERCEPTION.personal_space` constant (1.5× body length default).
+    /// Uses `PERCEPTION.personal_space` constant (1.5m buffer default).
     ///
     /// # Example
     /// ```
     /// use speciate::simulation::perception::AvoidanceBehavior;
-    /// // 0.5m creature: 0.5 * 1.5 = 0.75m personal space
+    /// // 0.5m creature: 0.5 + 1.5 = 2.0m personal space
     /// let avoidance = AvoidanceBehavior::from_body_size(0.5);
-    /// assert_eq!(avoidance.personal_space, 0.75);
+    /// assert_eq!(avoidance.personal_space, 2.0);
     ///
-    /// // 2.0m creature: 2.0 * 1.5 = 3.0m personal space
+    /// // 2.0m creature: 2.0 + 1.5 = 3.5m personal space
     /// let avoidance = AvoidanceBehavior::from_body_size(2.0);
-    /// assert_eq!(avoidance.personal_space, 3.0);
+    /// assert_eq!(avoidance.personal_space, 3.5);
     /// ```
     ///
-    /// TODO: Replace with DNA-driven multiplier (Future DNA system)
+    /// TODO: Replace with DNA-driven buffer distance (Future DNA system)
     pub fn from_body_size(body_length: f32) -> Self {
         use crate::simulation::movement::{PERCEPTION, STEERING};
-        let personal_space = body_length * PERCEPTION.personal_space;
+        let personal_space = body_length + PERCEPTION.personal_space;
         Self::new(personal_space, STEERING.avoidance_force)
     }
 
@@ -274,15 +273,15 @@ mod tests {
     fn test_avoidance_scaling_with_body_size() {
         // Small creature (0.5m)
         let small_avoid = AvoidanceBehavior::from_body_size(0.5);
-        assert_eq!(small_avoid.personal_space, 0.75); // 0.5 * 1.5
+        assert_eq!(small_avoid.personal_space, 2.0); // 0.5 + 1.5
 
         // Standard creature (1.0m)
         let standard_avoid = AvoidanceBehavior::from_body_size(1.0);
-        assert_eq!(standard_avoid.personal_space, 1.5); // 1.0 * 1.5
+        assert_eq!(standard_avoid.personal_space, 2.5); // 1.0 + 1.5
 
         // Large creature (2.0m)
         let large_avoid = AvoidanceBehavior::from_body_size(2.0);
-        assert_eq!(large_avoid.personal_space, 3.0); // 2.0 * 1.5
+        assert_eq!(large_avoid.personal_space, 3.5); // 2.0 + 1.5
     }
 
     #[test]

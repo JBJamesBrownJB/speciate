@@ -37,7 +37,13 @@ pub fn behavior_transition_system(
         Option<&WanderState>,
         Option<&FleeState>,
     )>,
+    #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
+        crate::instrumentation::SystemTimings,
+    >,
 ) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "behavior_transition");
+
     for (_entity, mut creature_state, _wander_state, _flee_state) in query.iter_mut() {
 
 

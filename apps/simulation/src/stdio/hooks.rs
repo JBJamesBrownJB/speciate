@@ -110,11 +110,21 @@ fn write_snapshot_frame(simulation: &mut Simulation) -> io::Result<()> {
     let tick = world.resource::<PhysicsTick>().0;
     let tick_rate = world.resource::<ActualTickRate>().0;
 
+    #[cfg(feature = "dev-tools")]
+    let entity_count = creatures.len();
+    #[cfg(feature = "dev-tools")]
+    let system_timings_us = world
+        .resource::<crate::instrumentation::SystemTimings>()
+        .snapshot();
 
     let state = GameState {
         tick,
         tick_rate_hz: tick_rate,
         creatures,
+        #[cfg(feature = "dev-tools")]
+        entity_count,
+        #[cfg(feature = "dev-tools")]
+        system_timings_us,
     };
 
 

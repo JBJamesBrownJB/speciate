@@ -11,6 +11,23 @@ pub mod runner;
 #[cfg(feature = "dev-tools")]
 pub mod trials;
 
+#[cfg(feature = "dev-tools")]
+pub mod instrumentation;
+
+#[cfg(feature = "dev-tools")]
+#[macro_export]
+macro_rules! time_system {
+    ($timings:expr, $name:expr) => {
+        let _guard = $timings.time($name);
+    };
+}
+
+#[cfg(not(feature = "dev-tools"))]
+#[macro_export]
+macro_rules! time_system {
+    ($timings:expr, $name:expr) => {};
+}
+
 
 pub use simulation::{components::*, core::*};
 

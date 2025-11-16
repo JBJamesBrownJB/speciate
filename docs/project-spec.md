@@ -54,12 +54,14 @@ A **DNA-driven artificial life simulation** where hundreds of autonomous creatur
 
 **Core Components:**
 * **Simulation Backend (Rust/Bevy ECS):** Runs AI, physics, and state logic locally on player's machine
-  - **FixedUpdate (20 Hz):** Expensive AI systems (decision-making, steering, pathfinding)
-  - **Update (90 Hz):** Cheap physics integration (position += velocity * dt)
+  - **30Hz Physics + Collision:** Smooth motion, grid updates, collision detection
+  - **20Hz AI + Perception:** Spatial queries, behavior decisions, steering forces
   - **Lock-free snapshot system:** Non-blocking state sharing with frontend
+  - **Target:** 150,000-200,000 creatures via dual-tick architecture
+  - **See:** `docs/architecture/dual-tick-simulation.md`
 
-* **Frontend (PixiJS):** Renders at 60 FPS, receives state via stdio MessagePack stream
-  - **Event-driven updates:** Listen for `state-update` events from main process
+* **Frontend (PixiJS):** Renders at 90 FPS with interpolation, receives state via stdio MessagePack stream
+  - **Interpolated smoothing:** 90Hz visuals from 30Hz physics snapshots
   - **Full f32 precision:** No quantization (local IPC, no network limitations)
 
 * **Wrapper (Electron):** Bundles Rust + TypeScript into single `.exe`/`.app`/`.AppImage` for Steam distribution
@@ -158,17 +160,19 @@ The core food chain is implemented through DNA-defined behaviors:
 **Backend:**
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
-| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | High-performance simulation at 20 Hz single-tick |
-| **IPC Protocol** | `stdio` + `MessagePack` | Length-prefixed binary frames at 60 Hz |
+| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | Dual-tick simulation: 30Hz physics, 20Hz AI |
+| **Spatial Grid** | `FxHashMap` + 200m cells | O(N) queries for 150K-200K creatures |
+| **IPC Protocol** | `stdio` + `MessagePack` | Length-prefixed binary frames at 30 Hz |
 | **Serialization** | `serde` + `rmp_serde` | GameState serialization to MessagePack |
 | **Save/Load** | `bincode` or `MessagePack` | World persistence to disk |
 
 **Frontend:**
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
-| **Rendering** | `Pixi.js` | 2D WebGL renderer at 60 FPS |
+| **Rendering** | `Pixi.js` | 2D WebGL renderer at 90 FPS (interpolated) |
 | **UI Framework** | HTML/DOM | Menus, inventory, HUD (standard web UI) |
 | **IPC Client** | `window.electron` (preload) | Receive state updates from main process |
+| **Interpolation** | Custom lerp system | 30 Hz snapshots → 90 FPS smooth visuals |
 
 **Deployment:**
 | Component | Technologies | Key Role/Purpose |

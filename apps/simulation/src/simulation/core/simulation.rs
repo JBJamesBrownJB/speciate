@@ -79,6 +79,9 @@ impl SimulationBuilder {
         world.insert_resource(ActualTickRate::default());
         world.insert_resource(MovementConfig::default());
 
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
         world.insert_resource(EntityIdMap::default());
@@ -166,7 +169,19 @@ impl Simulation {
     pub fn update(&mut self, delta_time: f32) {
         self.world.insert_resource(DeltaTime(delta_time));
 
+        #[cfg(feature = "dev-tools")]
+        let tick_start = std::time::Instant::now();
+
         self.schedule.run(&mut self.world);
+
+        #[cfg(feature = "dev-tools")]
+        {
+            let elapsed_us = tick_start.elapsed().as_micros() as u64;
+            self.world
+                .resource::<crate::instrumentation::SystemTimings>()
+                .total_tick_us
+                .store(elapsed_us, std::sync::atomic::Ordering::Relaxed);
+        }
 
         self.world
             .resource_mut::<Events<SpawnCreatureEvent>>()

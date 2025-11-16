@@ -18,7 +18,13 @@ pub fn avoidance_system(
         With<CanAvoidObstacles>,
     >,
     others: Query<(&Position, &BodySize)>,
+    #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
+        crate::instrumentation::SystemTimings,
+    >,
 ) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "avoidance");
+
     for (entity, position, size, mut acceleration, perception, avoidance) in query.iter_mut() {
         if !perception.has_neighbors() {
             continue;

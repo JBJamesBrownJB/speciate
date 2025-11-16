@@ -157,31 +157,17 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ---
 
-## Category 3: Performance Optimization (P2) [1 item]
+## Category 3: Performance Optimization (P2) [0 items]
 
 **Sprint Target:** Sprint 13+
-**Effort:** 1 week
+**Effort:** Variable
 **Risk:** Low (isolated optimization)
 
 ### Items
 
-#### 3.1 Spatial Hash for Perception
-**File:** `perception/systems.rs:46`
-**Status:** O(N²) brute-force (acceptable for <500 creatures)
-**TODO:**
-- [ ] Implement spatial grid/hash (O(N) average case)
-- [ ] Benchmark against brute-force (verify improvement)
-- [ ] Add grid cell size tuning based on perception range
-- [ ] Test with 1000+ creatures
-- **Effort:** 5-7 days
-- **Trigger:** When creature count consistently exceeds 500
-- **Rationale:** Enables larger populations without performance degradation
+*No items currently in this category.*
 
-**Expected Improvement:**
-- Current: 200 creatures @ 5-10ms perception time
-- Target: 1000 creatures @ 5-10ms perception time (5× improvement)
-
-**See:** `docs/architecture/behavior-engine.md` for scalability targets
+**Note:** Spatial partitioning optimization has been promoted from technical debt to core architecture. See `docs/architecture/spatial-partitioning.md` for the unified spatial query strategy that serves perception, collision detection, and viewport culling.
 
 ---
 

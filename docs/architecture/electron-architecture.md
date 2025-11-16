@@ -47,7 +47,7 @@ Speciate Phase 1 uses **Electron** to package the simulation as a standalone des
                             ▼
          ┌──────────────────────────────────────┐
          │     Rust Simulation (Subprocess)      │
-         │  - Bevy ECS (60 Hz tick)              │
+         │  - Bevy ECS (dual-tick: 30Hz/20Hz)    │
          │  - A-Life simulation                  │
          │  - Physics & behaviors                │
          │  - Writes MessagePack to stdout       │
@@ -67,7 +67,7 @@ Speciate Phase 1 uses **Electron** to package the simulation as a standalone des
 
 **vs. Shared Memory:**
 - stdio is simpler (no lock coordination complexity)
-- Good enough for 60 FPS @ 1 MB per frame (60 MB/s)
+- Good enough for 30 Hz physics tick @ 1.5 MB per frame (45 MB/s)
 - No platform-specific memory mapping APIs
 
 **vs. WebSocket/TCP:**
@@ -122,7 +122,7 @@ use std::io::{self, Write};
 
 /// Writes a MessagePack frame to stdout with length prefix.
 ///
-/// This is called at 60 Hz from the simulation thread.
+/// This is called at 30 Hz from the physics thread.
 pub fn write_msgpack_frame<T: Serialize>(data: &T) -> io::Result<()> {
     // Serialize to MessagePack (struct map format)
     let mut buf = Vec::new();
@@ -307,15 +307,15 @@ const mainWindow = new BrowserWindow({
 
 **Measurements (Intel i7, 16GB RAM):**
 - Frame size: ~500 KB - 1.5 MB (depends on creature count)
-- Frame rate: 60 Hz (16.67ms interval)
-- Throughput: ~60 MB/s average, ~90 MB/s peak
+- Frame rate: 30 Hz (33.3ms interval, physics tick rate)
+- Throughput: ~30-45 MB/s average, ~60 MB/s peak
 - stdout latency: <1ms (kernel pipe)
 
 **Bottlenecks:**
 1. **Serialization (Rust):** ~0.5-1.0ms per frame
 2. **Deserialization (Node.js):** ~0.3-0.8ms per frame
 3. **IPC to renderer:** ~0.1-0.3ms
-4. **Total IPC latency:** ~1-2ms (negligible vs. 16.67ms budget)
+4. **Total IPC latency:** ~1-2ms (negligible vs. 33.3ms budget)
 
 ### Memory Usage
 

@@ -31,13 +31,15 @@ fn avoidance_system(mut query: Query<(&Position, &mut Acceleration)>) {
 }
 
 // Physics system integrates accumulated forces (Euler integration)
-fn integrate_motion_system(mut query: Query<(&mut Position, &mut Velocity, &mut Acceleration)>) {
-    const DT: f32 = 0.05;  // 20 Hz
+fn integrate_motion_system(
+    mut query: Query<(&mut Position, &mut Velocity, &mut Acceleration)>,
+    dt: Res<DeltaTime>,  // Injected by physics tick (33.3ms at 30Hz)
+) {
     for (mut pos, mut vel, mut accel) in query.iter_mut() {
-        vel.vx += accel.ax * DT;  // Integrate acceleration
-        vel.vy += accel.ay * DT;
-        pos.x += vel.vx * DT;     // Integrate velocity
-        pos.y += vel.vy * DT;
+        vel.vx += accel.ax * dt.0;  // Integrate acceleration
+        vel.vy += accel.ay * dt.0;
+        pos.x += vel.vx * dt.0;     // Integrate velocity
+        pos.y += vel.vy * dt.0;
 
         // Reset acceleration for next frame
         accel.ax = 0.0;
@@ -424,8 +426,8 @@ perception::update_perception_system  →  behavior systems  →  physics
 - State transitions may depend on threat detection
 
 **Perception Performance:**
-- Spatial grid acceleration (planned for >1000 creatures)
-- Current: O(N²) brute-force (acceptable for <500 creatures)
+- Current: 200m bucket grid with FxHash (O(N) average case)
+- See: `docs/architecture/spatial-partitioning.md` for implementation details
 - See `src/simulation/perception/systems.rs`
 
 ## Force Hierarchy & Priority
@@ -458,37 +460,53 @@ After dodge: Avoidance drops to 0N, seek resumes, creature reaches food
 
 ## System Performance
 
-### Current Performance (20 Hz Tick)
+### Current Architecture: Dual-Tick Simulation
 
-**Single Tick Budget:**
-- **Target:** 50ms/tick (20 Hz update rate)
-- **Perception:** ~5-10ms (200 creatures)
-- **Behaviors:** ~2-5ms (force calculations)
-- **Physics:** ~1-2ms (Euler integration)
-- **Snapshot:** ~3-5ms (MessagePack serialization)
+The simulation uses separate tick rates for different concerns:
+- **30Hz Physics + Collision** (33.3ms budget)
+- **20Hz AI + Perception** (50ms budget)
+- **90Hz Frontend** (interpolated rendering)
 
-**Bottlenecks:**
-- Perception system (O(N²) brute-force)
-- Planned optimization: Spatial grid (O(N) average case)
+**See:** `docs/architecture/dual-tick-simulation.md` for complete architecture.
+
+**Physics Tick Budget (30Hz):**
+- Grid updates: ~3ms (incremental only)
+- Collision detection: ~10ms
+- Motion integration: ~5ms
+- Total: ~18ms ✅ (46% headroom)
+
+**AI Tick Budget (20Hz):**
+- Perception queries: ~40ms (100K creatures)
+- Behavior transition: ~2ms
+- Force calculation: ~8ms
+- Total: ~50ms ⚠️ (at budget limit)
+
+**Bottleneck:** Perception system (spatial grid queries). Optimized via 200m bucket grid with incremental updates.
 
 ### Scalability Targets
 
-| Creature Count | Tick Rate | Frame Time | Strategy |
-|----------------|-----------|------------|----------|
-| 0-200          | 20 Hz     | 5-20ms     | Current implementation |
-| 200-500        | 20 Hz     | 20-40ms    | Spatial grid for perception |
-| 500-1000       | 20 Hz     | 40-50ms    | Dual-tick (20 Hz AI, 60 Hz physics) |
-| 1000+          | 20 Hz     | 50ms+      | ECS parallelization, SIMD |
+| Creature Count | Physics | AI | Strategy |
+|----------------|---------|-----|----------|
+| 0-10,000       | 30 Hz   | 20 Hz | Current dual-tick implementation |
+| 10,000-50,000  | 30 Hz   | 20 Hz | Spatial grid + incremental updates |
+| 50,000-100,000 | 30 Hz   | 20 Hz | Parallel queries, SIMD distance calc |
+| 100,000-200,000| 30 Hz   | 20 Hz | Optimized dual-tick (target) |
+| 200,000+       | 30 Hz   | 10 Hz | LOD simulation (partial update) |
+
+**Target: 150,000-200,000 creatures** with dual-tick architecture.
 
 ### Future Optimizations
 
-**Planned (Sprint 9+):**
-1. **Spatial Grid:** O(N) perception queries
-2. **Dual-Tick Architecture:**
-   - 20 Hz: AI decisions, perception, state transitions
-   - 60 Hz: Physics integration, movement, collision
-3. **ECS Parallelization:** Leverage Bevy's automatic parallelization
-4. **SIMD Physics:** Vectorized integration for large populations
+**Available Now (Sprint 10+):**
+1. **Spatial Grid:** 200m bucket grid with FxHash (O(N) queries)
+2. **Dual-Tick Architecture:** 30Hz physics / 20Hz AI (implemented)
+3. **Incremental Updates:** Only update grid on cell changes
+
+**Planned (Sprint 12+):**
+1. **ECS Parallelization:** Bevy's `par_iter_mut()` for perception
+2. **SIMD Physics:** Vectorized distance calculations
+3. **LOD Simulation:** Full sim near player, statistical sim distant
+4. **GPU Compute:** Perception queries on GPU (research phase)
 
 ## DNA Integration (Future)
 

@@ -79,14 +79,14 @@
 │  RUST SUBPROCESS         │  FRONTEND (PixiJS)               │
 │  (Bevy ECS)              │                                   │
 │                          │                                   │
-│  FixedUpdate (20 Hz):    │  app.ticker (90 FPS):            │
+│  Simulation Loop:        │  app.ticker (60 FPS):            │
 │  • AI & Decision Making  │  • Receive state-update events   │
 │  • Steering Behaviors    │  • Update sprite positions       │
-│  • Pathfinding           │  • Render frame                  │
+│  • Physics Integration   │  • Render frame                  │
 │                          │                                   │
-│  Update (90 Hz):         │                                   │
-│  • Physics Integration   │  stdout MessagePack (60 Hz):     │
-│  • Write to stdout ──────┼──> Main Process → Renderer       │
+│  stdout MessagePack:     │                                   │
+│  • Stream at tick rate   │  Main Process → Renderer         │
+│  • Write to stdout ──────┼──> Decode and forward            │
 └──────────────────────────┴───────────────────────────────────┘
 ```
 

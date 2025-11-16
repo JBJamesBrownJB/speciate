@@ -1,10 +1,18 @@
 use super::components::*;
 use crate::simulation::core::components::{BodySize, Position};
+#[cfg(feature = "dev-tools")]
+use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
+#[cfg(feature = "dev-tools")]
+use bevy_ecs::system::Res;
 
 pub fn update_perception_system(
     mut query: Query<(Entity, &Position, &BodySize, &mut Perception)>,
+    #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "perception");
+
     let creatures: Vec<(Entity, Position, BodySize)> = query
         .iter()
         .map(|(entity, pos, size, _)| (entity, *pos, *size))

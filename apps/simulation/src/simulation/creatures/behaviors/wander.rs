@@ -17,7 +17,13 @@ pub fn territory_wandering_system(
         ),
         With<CanWander>,
     >,
+    #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
+        crate::instrumentation::SystemTimings,
+    >,
 ) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "wander");
+
     let mut rng = rand::thread_rng();
 
     for (mut acceleration, mut wander_state, velocity, position, home, creature_state) in

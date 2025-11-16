@@ -10,10 +10,25 @@ export interface DevCommand {
   template?: string;
 }
 
+export interface SystemTimingsSnapshot {
+  totalTickUs: number;
+  movementUs: number;
+  perceptionUs: number;
+  behaviorUs: number;
+  behaviorTransitionUs: number;
+  wanderUs: number;
+  fleeUs: number;
+  avoidanceUs: number;
+  rotationUs: number;
+}
+
 export interface GameState {
   tick: number;
   creatures: CreatureSnapshot[];
   timestamp_ms: number;
+  tickRateHz?: number;
+  entityCount?: number;
+  systemTimingsUs?: SystemTimingsSnapshot;
 }
 
 export interface CreatureSnapshot {

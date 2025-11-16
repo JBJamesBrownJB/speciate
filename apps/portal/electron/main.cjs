@@ -117,8 +117,10 @@ function startSimulation() {
  */
 async function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1920,
-    height: 1080,
+    width: 1600,
+    height: 1000,
+    x: 0,
+    y: 0,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,          // Security: Isolate renderer from main process
@@ -143,9 +145,6 @@ async function createWindow() {
       try {
         await mainWindow.loadURL(viteURL);
         console.log('[Electron] ✅ Connected to Vite dev server');
-        if (isDev) {
-          mainWindow.webContents.openDevTools();
-        }
         break;
       } catch (err) {
         retries++;
@@ -197,7 +196,9 @@ async function createWindow() {
 async function createDevToolsWindow() {
   devToolsWindow = new BrowserWindow({
     width: 900,
-    height: 800,
+    height: 1300,
+    x: 1920,
+    y: 0,
     title: 'Speciate Dev Tools',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -222,9 +223,6 @@ async function createDevToolsWindow() {
       try {
         await devToolsWindow.loadURL(viteURL);
         console.log('[Electron] ✅ Dev Tools window loaded');
-        if (isDev) {
-          devToolsWindow.webContents.openDevTools();
-        }
         break;
       } catch (err) {
         retries++;

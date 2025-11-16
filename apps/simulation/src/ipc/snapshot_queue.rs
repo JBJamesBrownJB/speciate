@@ -3,6 +3,8 @@ use crossbeam::queue::ArrayQueue;
 use serde::{Deserialize, Serialize};
 use bevy_ecs::system::Resource;
 use std::sync::Arc;
+#[cfg(feature = "dev-tools")]
+use crate::instrumentation::SystemTimingsSnapshot;
 
 #[derive(Clone, Resource)]
 pub struct SharedSnapshotQueue(pub Arc<SnapshotQueue>);
@@ -39,6 +41,10 @@ pub struct GameState {
     pub tick: u64,
     pub tick_rate_hz: f32,
     pub creatures: Vec<CreatureSnapshot>,
+    #[cfg(feature = "dev-tools")]
+    pub entity_count: usize,
+    #[cfg(feature = "dev-tools")]
+    pub system_timings_us: SystemTimingsSnapshot,
 }
 
 #[derive(Clone)]
@@ -88,6 +94,8 @@ mod tests {
             tick: 1,
             tick_rate_hz: 90.0,
             creatures: vec![],
+            entity_count: 0,
+            system_timings_us: Default::default(),
         };
 
         queue.push(state.clone());
@@ -109,9 +117,9 @@ mod tests {
     fn test_queue_overflow() {
         let queue = SnapshotQueue::new(2);
 
-        queue.push(GameState { tick: 1, tick_rate_hz: 90.0, creatures: vec![] });
-        queue.push(GameState { tick: 2, tick_rate_hz: 90.0, creatures: vec![] });
-        queue.push(GameState { tick: 3, tick_rate_hz: 90.0, creatures: vec![] });
+        queue.push(GameState { tick: 1, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
+        queue.push(GameState { tick: 2, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
+        queue.push(GameState { tick: 3, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
 
         assert_eq!(queue.len(), 2);
     }

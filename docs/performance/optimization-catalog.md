@@ -11,10 +11,15 @@ Catalog of performance optimization strategies for the Speciate simulation syste
 ## Current Architecture
 
 **Platform:** Electron desktop application (Windows/Mac/Linux)
-**Backend:** Rust/Bevy ECS simulation subprocess (20 Hz single-tick)
-**Frontend:** TypeScript/PixiJS renderer (60 FPS)
-**IPC:** stdio MessagePack frames (60 Hz streaming)
-**Target Scale:** 1,000-10,000 creatures @ 60 FPS rendering
+**Backend:** Rust/Bevy ECS simulation subprocess
+  - 30Hz Physics + Collision (dual-tick architecture)
+  - 20Hz AI + Perception
+  - 200m bucket grid with FxHash (O(N) queries)
+**Frontend:** TypeScript/PixiJS renderer (90 FPS interpolated)
+**IPC:** stdio MessagePack frames (30 Hz streaming)
+**Target Scale:** 150,000-200,000 creatures @ 90 FPS rendering
+
+**See:** `docs/architecture/dual-tick-simulation.md` for complete architecture.
 
 ---
 
@@ -205,7 +210,7 @@ cargo bench --bench systems         # ECS system performance
 cargo flamegraph --bin speciate     # CPU profiling
 
 # Frontend profiling (Chrome DevTools)
-- FPS stability (target: locked 60 FPS)
+- FPS stability (target: locked 90 FPS with interpolation)
 - Frame budget breakdown (JS vs GPU vs idle)
 - Memory usage (GC pauses < 5ms)
 ```
@@ -231,17 +236,21 @@ cargo flamegraph --bin speciate     # CPU profiling
 
 ## Priority Order
 
-**Phase 1 (Current - 1K creatures):**
+**Phase 1 (Current - 150K creatures):**
 - ✅ Viewport culling (grid)
 - ✅ Lock-free snapshot queue
+- ✅ Dual-tick architecture (30Hz physics, 20Hz AI)
+- ✅ 200m bucket grid with FxHash
 - Sprite pooling
 
-**Phase 2 (Target - 10K creatures):**
+**Phase 2 (Target - 200K creatures):**
 - ECS query optimization (Changed<>, With<>)
 - Viewport culling (creatures)
 - Save/load optimization
+- Parallel queries (par_iter)
 
-**Phase 3 (Stretch - 50K+ creatures):**
-- Spatial indexing (quadtree)
+**Phase 3 (Stretch - 1M creatures):**
+- LOD simulation (near: full, far: statistical)
+- Spatial indexing refinements
 - PixiJS batching & instancing
-- LOD system (point sprites)
+- GPU compute shaders

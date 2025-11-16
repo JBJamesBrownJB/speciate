@@ -1,5 +1,7 @@
 
 use crate::config::MovementConfig;
+#[cfg(feature = "dev-tools")]
+use crate::instrumentation::SystemTimings;
 use crate::simulation::components::*;
 use crate::simulation::core::components::*;
 use crate::simulation::movement::constants::{MAX_SPEED, VELOCITY_DAMPING};
@@ -18,7 +20,11 @@ pub fn integrate_motion_system(
     physics_tick: Res<PhysicsTick>,
     world_bounds: Res<crate::simulation::core::WorldBounds>,
     movement_config: Res<MovementConfig>,
+    #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "movement");
+
     let dt = delta_time.0;
     let max_speed_sq = MAX_SPEED * MAX_SPEED;
     let tick = physics_tick.get();

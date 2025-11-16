@@ -12,8 +12,22 @@ export interface CreatureData {
   age: number;
 }
 
+export interface SystemTimingsSnapshot {
+  totalTickUs: number;
+  movementUs: number;
+  perceptionUs: number;
+  behaviorUs: number;
+  behaviorTransitionUs: number;
+  wanderUs: number;
+  fleeUs: number;
+  avoidanceUs: number;
+  rotationUs: number;
+}
+
 export interface GameState {
   tick: number;
   tickRateHz: number;
   creatures: CreatureData[];
+  entityCount?: number;
+  systemTimingsUs?: SystemTimingsSnapshot;
 }

@@ -166,3 +166,59 @@ button.danger:disabled {
 .status-dot.disconnected {
   background: #f48771;
 }
+
+/* System Timings Panel */
+.timings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.timing-row {
+  background: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.timing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.timing-name {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  color: #858585;
+  font-weight: 600;
+}
+
+.timing-value {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  color: #4ec9b0;
+  font-weight: 600;
+}
+
+.timing-value.warning {
+  color: #f0a830;
+}
+
+.timing-value.danger {
+  color: #f48771;
+}
+
+.timing-sparkline {
+  width: 100%;
+  height: 32px;
+  border-radius: 4px;
+  background: #252526;
+}
+
+.muted {
+  color: #858585;
+  font-size: 12px;
+  font-style: italic;
+}

@@ -2,7 +2,15 @@
 use crate::simulation::components::*;
 use bevy_ecs::prelude::*;
 
-pub fn rotation_system(mut query: Query<(&mut Rotation, &Velocity)>) {
+pub fn rotation_system(
+    mut query: Query<(&mut Rotation, &Velocity)>,
+    #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
+        crate::instrumentation::SystemTimings,
+    >,
+) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "rotation");
+
     for (mut rotation, velocity) in query.iter_mut() {
         if velocity.vx != 0.0 || velocity.vy != 0.0 {
             rotation.radians = velocity.vy.atan2(velocity.vx);

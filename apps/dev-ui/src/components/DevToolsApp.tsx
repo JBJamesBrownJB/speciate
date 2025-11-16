@@ -11,11 +11,15 @@ import React, { useState, useEffect } from 'react';
 import { SpawnForm } from './SpawnForm';
 import { TrialSelector } from './TrialSelector';
 import { StateDisplay } from './StateDisplay';
+import { SystemTimingsPanel } from './SystemTimingsPanel';
+import type { SystemTimingsSnapshot } from '../types';
 
 export const DevToolsApp: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [tick, setTick] = useState(0);
   const [creatureCount, setCreatureCount] = useState(0);
+  const [tickRateHz, setTickRateHz] = useState(0);
+  const [systemTimings, setSystemTimings] = useState<SystemTimingsSnapshot | undefined>(undefined);
 
   useEffect(() => {
     // Check if Electron IPC is available
@@ -27,6 +31,12 @@ export const DevToolsApp: React.FC = () => {
     const handleStateUpdate = (state: any) => {
       setTick(state.tick || 0);
       setCreatureCount(state.creatures?.length || 0);
+      if (state.tickRateHz !== undefined) {
+        setTickRateHz(state.tickRateHz);
+      }
+      if (state.systemTimingsUs) {
+        setSystemTimings(state.systemTimingsUs);
+      }
     };
 
     window.electron?.onStateUpdate?.(handleStateUpdate);
@@ -88,7 +98,9 @@ export const DevToolsApp: React.FC = () => {
         </button>
       </div>
 
-      <StateDisplay tick={tick} creatureCount={creatureCount} />
+      <StateDisplay tick={tick} creatureCount={creatureCount} tickRateHz={tickRateHz} />
+
+      <SystemTimingsPanel timings={systemTimings} />
     </div>
   );
 };

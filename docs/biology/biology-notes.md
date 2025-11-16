@@ -685,3 +685,163 @@ if dexterity >= recipe.dexterity_required {
 
 **The DNA is the creature. Everything else is emergence.**
 
+---
+
+## 2025-11-16 | Collision Physics Parameters | Zoologist Consultation
+
+### Overview
+
+Design review for creature collision system physics parameters to ensure biologically plausible behavior and emergent gameplay.
+
+### Mass Scaling: Size^2.5 (Allometric Compromise)
+
+**Recommendation:** Mass = BodySize.length.powf(2.5)
+
+**Biological Rationale:**
+- Pure volume scaling (Size^3) makes large creatures immovable walls
+- Pure area scaling (Size^2) makes small creatures too light (get yeeted)
+- **Size^2.5** balances geometry with biological allometry
+
+**Real-world evidence:**
+- Mass scales ~Size^2.7 in terrestrial mammals (hollow structures, reduced bone density at scale)
+- Mouse (0.03m): ~20g, Cat (0.5m): ~4kg, Wolf (1.2m): ~40kg, Elephant (3m): ~5000kg
+- Creatures are not solid cubes - bones, lungs, digestive tracts reduce effective density
+
+**Implementation:**
+```rust
+pub fn mass_from_size(body_size: &BodySize) -> f32 {
+    body_size.length.powf(2.5)
+}
+```
+
+**Min/Max Bounds (for 0.5m - 10m creatures):**
+- Minimum: 0.5m → 0.35 mass units
+- Maximum: 10m → 316 mass units
+- Ratio: ~900:1 (realistic for terrestrial fauna)
+
+### Restitution Coefficient: 0.3 (Inelastic)
+
+**Recommendation:** Restitution = 0.3 (not 1.0)
+
+**Biological Rationale:**
+- Biological collisions are highly inelastic (energy absorbed by tissue)
+- Muscle tissue deforms and absorbs energy
+- Fat layers provide damping effect
+- Joint flexibility dissipates impact
+
+**Real-world coefficients:**
+- Human body: 0.2-0.4
+- Rugby tackle: ~0.3
+- Boxing punch: ~0.25
+- Car crash with crumple zones: 0.1-0.3
+
+**1.0 creates pinball physics** - creatures bounce wildly like billiard balls
+**0.3 creates weighty, biological feel** - sticky collisions, energy dissipation
+
+**Emergent effects:**
+- Creatures bunch up in dense areas (realistic herd behavior)
+- Large collisions slow everyone down (energy dissipation)
+- Corridor choke points become deadly (pile-ups)
+
+### Velocity Threshold: 3.0 m/s (Damage Guard)
+
+**Recommendation:** No damage below 3.0 m/s (~10 km/h jogging speed)
+
+**Biological Rationale:**
+- Gentle contact shouldn't cause injury
+- Real animals bump each other constantly without damage
+- Prevents low-speed "death by standing near each other" bugs
+
+**Threshold justification:**
+- Walking: 1-2 m/s → No damage (gentle contact)
+- Jogging: 3-5 m/s → Minor damage possible
+- Running: 8-15 m/s → Significant impact damage
+- Sprinting: 15+ m/s → Serious injury
+
+**Implementation:**
+```rust
+const VELOCITY_THRESHOLD: f32 = 3.0; // m/s
+
+if velocity_along_normal.abs() < VELOCITY_THRESHOLD {
+    return; // No damage for gentle contact
+}
+```
+
+### Normalized Collision Vector: Essential
+
+**Verdict:** Keep normalize() - mathematically essential for correct physics
+
+**Why normalization required:**
+- Collision normal must be unit vector for impulse direction correctness
+- Without normalization, force magnitude scales with distance (wrong!)
+- Impulse direction must be perpendicular to contact surface
+
+**Performance optimization:**
+- Only compute sqrt() AFTER broadphase confirms overlap
+- Use squared distance for initial collision detection
+- Fast inverse sqrt approximation available if needed (<1% error)
+
+**Code pattern:**
+```rust
+let dist_sq = dx * dx + dy * dy;
+if dist_sq < (radius_a + radius_b).powi(2) {
+    // Only NOW compute sqrt for narrowphase
+    let dist = dist_sq.sqrt();
+    let normal = (pos_a - pos_b) / dist;
+    // ... apply impulse
+}
+```
+
+### Damage Distribution: Mass-Based
+
+**Formula:**
+```rust
+let total_damage = (impulse - IMPULSE_THRESHOLD) * DAMAGE_MULTIPLIER;
+let damage_to_a = total_damage * (mass_b / total_mass);
+let damage_to_b = total_damage * (mass_a / total_mass);
+```
+
+**Biological validation:**
+- Large creature hits small creature → small takes most damage (trampling)
+- Equal-size collision → damage split evenly
+- Matches real-world injury patterns in stampedes, charges
+
+**Emergent behaviors:**
+- Large predators can trample small prey
+- Small creatures evolve high agility OR high armor
+- Mid-sized creatures balance speed vs durability
+
+### Future Considerations (Not This Sprint)
+
+**Armor DNA Trait:**
+```rust
+let armor_factor = 1.0 - creature.dna.armor; // 0.0 to 0.8
+let final_damage = base_damage * armor_factor;
+```
+
+**Collision Intent System (Opt-in Damage):**
+- Passive collisions (herd movement): No damage
+- Aggressive collisions (charging attack): Full damage
+- Defensive collisions (panic fleeing): Reduced damage
+- Prevents "trampling dominance" where biggest always wins
+
+**Resilience by Size:**
+```rust
+let resilience = 1.0 / creature.dna.size.powf(0.5);
+```
+- Small creatures more resilient to falls/impacts (square-cube law)
+- Counters size advantage in physics
+
+### Validation Status
+
+**Zoologist Approval:** ✅ APPROVED (2025-11-16)
+
+**Key validations:**
+- Size^2.5 mass scaling is biologically reasonable compromise
+- Restitution 0.3 matches real tissue inelasticity
+- Velocity threshold prevents gentle-contact damage bugs
+- Mass-based damage distribution matches trampling physics
+- Normalized vectors essential for correct physics (no shortcuts)
+
+**Trade-offs are physics-based, not arbitrary balance numbers.** Every advantage has systemic cost.
+

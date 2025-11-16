@@ -138,7 +138,7 @@ pub enum BehaviorMode {
 ## System Components
 
 ### Simulation
-**Definition:** Bevy ECS simulation engine running at 20 Hz as Rust subprocess.
+**Definition:** Bevy ECS simulation engine running as Rust subprocess.
 
 **Responsibility:** Single source of truth for all game state. Physics, creature behaviors, and state updates.
 
@@ -146,7 +146,7 @@ pub enum BehaviorMode {
 
 **Location:** `apps/simulation/`
 
-**IPC:** Writes MessagePack frames to stdout at 60 Hz
+**IPC:** Writes MessagePack frames to stdout at configured tick rate
 
 ---
 

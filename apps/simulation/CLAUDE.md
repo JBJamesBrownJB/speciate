@@ -8,6 +8,116 @@ This document defines the **Bevy ECS patterns and architectural decisions** for 
 2. **Archetype Stability**: Minimize archetype changes for performance
 3. **Force Accumulation**: Systems ADD to acceleration, physics integrates
 4. **DNA-Driven Parameters**: Behavior constants → DNA gene expression migration path
+5. **System Instrumentation**: All ECS systems MUST have timing instrumentation
+
+---
+
+## System Instrumentation Requirements (MANDATORY)
+
+**CRITICAL: Every new ECS system MUST be instrumented for timing.**
+
+When creating a new system function (any function with `Query<...>` parameters that gets registered with `.add_systems()`), you MUST:
+
+### 1. Add Timing to the System Function
+
+```rust
+pub fn my_new_system(
+    // ... existing parameters ...
+    #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
+        crate::instrumentation::SystemTimings,
+    >,
+) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "my_new_system");
+
+    // ... system logic ...
+}
+```
+
+### 2. Update SystemTimings Resource
+
+In `apps/simulation/src/instrumentation/mod.rs`:
+
+```rust
+pub struct SystemTimings {
+    // ... existing fields ...
+    pub my_new_system_us: AtomicU64,  // ADD
+}
+
+impl SystemTimings {
+    pub fn new() -> Self {
+        Self {
+            // ... existing fields ...
+            my_new_system_us: AtomicU64::new(0),  // ADD
+        }
+    }
+
+    pub fn time(&self, name: &str) -> TimingGuard<'_> {
+        let target = match name {
+            // ... existing arms ...
+            "my_new_system" => &self.my_new_system_us,  // ADD
+            _ => panic!("Unknown system: {}", name),
+        };
+        TimingGuard::new(target)
+    }
+
+    pub fn snapshot(&self) -> SystemTimingsSnapshot {
+        SystemTimingsSnapshot {
+            // ... existing fields ...
+            my_new_system_us: self.my_new_system_us.load(Ordering::Relaxed),  // ADD
+        }
+    }
+}
+
+pub struct SystemTimingsSnapshot {
+    // ... existing fields ...
+    pub my_new_system_us: u64,  // ADD (serde renames to camelCase: myNewSystemUs)
+}
+```
+
+### 3. Update TypeScript Interfaces
+
+**Dev-UI** (`apps/dev-ui/src/types.ts`):
+```typescript
+export interface SystemTimingsSnapshot {
+  // ... existing fields ...
+  myNewSystemUs: number;  // ADD (camelCase)
+}
+```
+
+**Portal** (`apps/portal/src/types/GameState.ts`):
+```typescript
+export interface SystemTimingsSnapshot {
+  // ... existing fields ...
+  myNewSystemUs: number;  // ADD (camelCase)
+}
+```
+
+### 4. Update SystemTimingsPanel
+
+In `apps/dev-ui/src/components/SystemTimingsPanel.tsx`:
+- Add new canvas ref: `const myNewSystemCanvasRef = useRef<HTMLCanvasElement>(null);`
+- Add new history ref: `const myNewSystemHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });`
+- Update history in useEffect: `updateHistory(myNewSystemHistoryRef.current, timings.myNewSystemUs);`
+- Render sparkline in useEffect
+- Add entry to `timingEntries` array: `{ name: 'my_new_system', valueUs: timings.myNewSystemUs, canvasRef: myNewSystemCanvasRef }`
+
+### Why This Matters
+
+- **Visibility**: Every system's performance is tracked in dev-ui sparklines
+- **Bottleneck Detection**: Auto-sorted display shows slowest systems first
+- **Zero Production Cost**: Feature-gated, compiles to nothing in release builds
+- **Debugging**: Instant insight when performance degrades
+
+### Verification
+
+After adding instrumentation:
+1. `cargo build --features dev-tools` (must compile)
+2. `cargo build --no-default-features` (must compile without instrumentation)
+3. `npm run build` in dev-ui (TypeScript must compile)
+4. Run simulation and verify sparkline appears in dev-ui
+
+**See**: `docs/testing/metrics/README.md` for complete instrumentation guide
 
 ---
 
@@ -555,7 +665,7 @@ Phase 1 uses **Electron** to bundle the Rust simulation subprocess with the Type
 │  RUST SUBPROCESS         │  FRONTEND (PixiJS)               │
 │  (Bevy ECS)              │  (Renderer Process)              │
 │                          │                                   │
-│  Update (20 Hz):         │  app.ticker (60 FPS):            │
+│  Simulation Loop:        │  app.ticker (60 FPS):            │
 │  • AI & Decision Making  │  • Receive state-update events   │
 │  • Steering Behaviors    │  • Update sprite positions       │
 │  • Physics Integration   │  • Render frame                  │
@@ -564,7 +674,7 @@ Phase 1 uses **Electron** to bundle the Rust simulation subprocess with the Type
 │  • Serialize GameState   │  Main Process:                   │
 │  • 4-byte length prefix  │  • Read stdout frames            │
 │  • Binary payload   ─────┼──> Decode MessagePack            │
-│  • 60 Hz streaming       │  • Forward to renderer           │
+│  • Stream at tick rate   │  • Forward to renderer           │
 └──────────────────────────┴───────────────────────────────────┘
 ```
 
@@ -660,104 +770,77 @@ enum Frame {
 
 ### Overview
 
-The simulation currently uses a **single-tick architecture** running at **20 Hz** (50ms per tick).
+The simulation uses a **dual-tick architecture** to separate concerns and enable massive scale:
 
-| System | Tick Rate | Purpose |
-|--------|-----------|---------|
-| **All Systems** | 20 Hz (50ms) | Perception, AI, physics, movement, rendering |
+- **30Hz Physics + Collision** (33.3ms period)
+- **20Hz AI + Perception** (50ms period)
+- **90Hz Frontend Rendering** (interpolated smoothing)
 
-**Current Status:** All systems run on the same `Schedule::default()` at 20 Hz. This provides:
-- Consistent timing across all systems
-- Simplified system ordering (no cross-schedule dependencies)
-- Predictable performance characteristics
+This enables **150,000-200,000 creatures** vs ~10,000 with single-tick.
 
-### Implementation
+**See:** `docs/architecture/dual-tick-simulation.md` for complete architecture details.
+
+### Implementation (Planned)
 
 ```rust
-impl SimulationBuilder {
-    pub fn new() -> Self {
-        let mut world = World::new();
-        let mut schedule = Schedule::default();
+pub struct DualTickSimulation {
+    world: World,
+    physics_schedule: Schedule,  // 30Hz
+    ai_schedule: Schedule,       // 20Hz
 
-        // ALL systems registered on the same schedule (20 Hz)
-        schedule.add_systems(process_spawn_events);
-
-        schedule.add_systems((
-            // Perception
-            perception::update_perception_system,
-
-            // Behaviors (force accumulation)
-            behavior_transition_system,
-            territory_wandering_system,
-            flee_system,
-            seek_system,
-            behaviors::avoidance_system,
-
-            // Physics integration
-            integrate_motion_system,
-            rotation_system,
-
-            // Snapshot for Electron stdout
-            snapshot_system,
-        ));
-
-        Self { world, schedule }
-    }
+    physics_accumulator: f32,
+    ai_accumulator: f32,
 }
 
-// Update loop runs at 20 Hz
-pub fn update(&mut self, delta_time: f32) {
-    self.world.insert_resource(DeltaTime(delta_time));
-    self.world.resource_mut::<PhysicsTick>().increment();
-    self.schedule.run(&mut self.world);  // All systems run here
+impl DualTickSimulation {
+    const PHYSICS_TICK: f32 = 1.0 / 30.0;  // 33.3ms
+    const AI_TICK: f32 = 1.0 / 20.0;        // 50ms
+
+    pub fn update(&mut self, real_delta_time: f32) {
+        self.physics_accumulator += real_delta_time;
+        self.ai_accumulator += real_delta_time;
+
+        // AI tick first (calculates forces)
+        while self.ai_accumulator >= Self::AI_TICK {
+            self.ai_schedule.run(&mut self.world);
+            self.ai_accumulator -= Self::AI_TICK;
+        }
+
+        // Physics tick (integrates forces)
+        while self.physics_accumulator >= Self::PHYSICS_TICK {
+            self.physics_schedule.run(&mut self.world);
+            self.physics_accumulator -= Self::PHYSICS_TICK;
+        }
+    }
 }
 ```
 
-### System Ordering
+### System Distribution
 
-All systems run sequentially within the 20 Hz tick:
+**Physics Schedule (30Hz):**
+1. **Grid Updates** - Incremental spatial grid updates during movement
+2. **Collision Detection** - Detect overlapping creatures
+3. **Collision Response** - Apply impulse forces
+4. **Motion Integration** - Velocity += Acceleration, Position += Velocity
+5. **Boundary Enforcement** - Clamp positions to world bounds
+6. **Rotation** - Update creature orientation
+7. **Reset Acceleration** - Clear for next tick
+8. **Snapshot** - Create state for frontend
 
-1. **Spawn Events** - Process queued creature spawns
-2. **Perception** - Update spatial awareness
-3. **Behaviors** - Accumulate steering forces
-4. **Physics** - Integrate motion (Euler)
-5. **Rotation** - Update creature orientation
-6. **Snapshot** - Create state snapshot for frontend
+**AI Schedule (20Hz):**
+1. **Perception** - Query spatial grid for nearby entities
+2. **Behavior Transition** - Update behavioral state machine
+3. **Steering Forces** - Calculate seek, flee, wander, avoidance forces
+4. **Force Persistence** - Forces persist until next AI tick
 
 ### Frontend Synchronization
 
-**Frontend polls at 60 FPS:**
-- Frontend renders at 60 FPS, simulation updates at 20 Hz
-- Some frames show new simulation state (every 50ms)
-- Other frames show stale state (interpolation could be added later)
+Frontend renders at 90Hz with interpolation between physics snapshots:
+- Receives position updates at 30Hz
+- Interpolates between previous and current positions
+- Smooth visuals despite lower physics tick rate
 
-**Example:**
-```
-Time: 0ms    → Simulation tick (all systems run)
-Time: 16ms   → Frontend poll (stale state)
-Time: 33ms   → Frontend poll (stale state)
-Time: 50ms   → Simulation tick (all systems run)
-Time: 66ms   → Frontend poll (stale state)
-```
-
-### Future: Dual-Tick Architecture
-
-**Planned optimization (future sprint):**
-- **20 Hz tick:** AI decisions, perception, behavior transitions
-- **90 Hz tick:** Physics integration, movement, collision detection
-
-**Benefits:**
-- AI doesn't need to run every physics frame
-- 60-80% CPU savings on perception/decision systems
-- Smoother movement without wasting AI cycles
-
-**Implementation path:**
-1. Identify systems that benefit from higher tick rate (physics, movement)
-2. Split schedule into `FixedUpdate` (20 Hz) and `Update` (90 Hz)
-3. Benchmark to validate performance improvement
-4. Add interpolation for smooth visuals
-
-**Current decision:** Single-tick is simpler and adequate for current creature counts. Optimize when performance becomes a bottleneck.
+The actual tick rate is sent with each GameState message (`tick_rate_hz` field) so the frontend always knows the current simulation speed.
 
 ---
 

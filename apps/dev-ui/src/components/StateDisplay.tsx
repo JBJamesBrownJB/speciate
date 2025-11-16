@@ -10,11 +10,13 @@ import React from 'react';
 interface StateDisplayProps {
   tick: number;
   creatureCount: number;
+  tickRateHz?: number;
 }
 
 export const StateDisplay: React.FC<StateDisplayProps> = ({
   tick,
   creatureCount,
+  tickRateHz,
 }) => {
   return (
     <div className="section">
@@ -25,7 +27,7 @@ export const StateDisplay: React.FC<StateDisplayProps> = ({
             {
               tick,
               creature_count: creatureCount,
-              tick_rate: '20 Hz',
+              tick_rate_hz: tickRateHz ?? 0,
               frame_protocol: 'MessagePack (stdio)',
             },
             null,
@@ -34,8 +36,7 @@ export const StateDisplay: React.FC<StateDisplayProps> = ({
         </pre>
       </div>
       <p className="info-text">
-        State updates received from simulation subprocess via Electron IPC (60
-        Hz).
+        State updates received from simulation subprocess via Electron IPC.
       </p>
     </div>
   );

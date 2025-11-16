@@ -2,15 +2,12 @@ use super::components::*;
 use super::world_bounds::WorldBounds;
 use crate::config::MovementConfig;
 use crate::simulation::creatures::behaviors::{
-    self, behavior_transition_system, flee_system, seek_system,
-    territory_wandering_system,
+    self, behavior_transition_system, flee_system, seek_system, territory_wandering_system,
 };
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
 use crate::simulation::creatures::systems::{process_spawn_events, EntityIdMap, NextCreatureId};
-use crate::simulation::movement::{
-    integrate_motion_system, rotation_system,
-};
+use crate::simulation::movement::{integrate_motion_system, rotation_system};
 use crate::simulation::perception;
 use bevy_ecs::prelude::*;
 
@@ -24,10 +21,10 @@ impl SimulationBuilder {
         let mut world = World::new();
         let mut schedule = Schedule::default();
 
-        use bevy_ecs::prelude::AppTypeRegistry;
         use crate::simulation::components::*;
         use crate::simulation::core::components::*;
         use crate::simulation::perception::{AvoidanceBehavior, Perception};
+        use bevy_ecs::prelude::AppTypeRegistry;
 
         world.init_resource::<AppTypeRegistry>();
         {
@@ -75,7 +72,6 @@ impl SimulationBuilder {
             rotation_system,
         ));
 
-
         world.insert_resource(DeltaTime::default());
         world.insert_resource(BoundaryConfig::default());
         world.insert_resource(WorldBounds::default());
@@ -99,7 +95,8 @@ impl SimulationBuilder {
             margin: (extent_x / 100.0).max(1000.0),
             max_force: 1.0,
         });
-        self.world.insert_resource(WorldBounds::new(-extent_x, extent_x, -extent_y, extent_y));
+        self.world
+            .insert_resource(WorldBounds::new(-extent_x, extent_x, -extent_y, extent_y));
         self
     }
 
@@ -132,7 +129,8 @@ impl Simulation {
             margin: (extent_x / 100.0).max(1000.0),
             max_force: 1.0,
         });
-        self.world.insert_resource(WorldBounds::new(-extent_x, extent_x, -extent_y, extent_y));
+        self.world
+            .insert_resource(WorldBounds::new(-extent_x, extent_x, -extent_y, extent_y));
     }
 
     pub fn get_boundaries(&self) -> (f32, f32, f32, f32) {
@@ -170,7 +168,9 @@ impl Simulation {
 
         self.schedule.run(&mut self.world);
 
-        self.world.resource_mut::<Events<SpawnCreatureEvent>>().update();
+        self.world
+            .resource_mut::<Events<SpawnCreatureEvent>>()
+            .update();
 
         self.world.resource_mut::<PhysicsTick>().increment();
     }

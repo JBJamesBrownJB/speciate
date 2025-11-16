@@ -845,3 +845,112 @@ let resilience = 1.0 / creature.dna.size.powf(0.5);
 
 **Trade-offs are physics-based, not arbitrary balance numbers.** Every advantage has systemic cost.
 
+---
+
+## 2025-11-16 | AI Tick Rate Validation (20Hz / 50ms) | Zoologist Consultation
+
+### Context
+
+Validating whether 20Hz AI tick rate (50ms decision cycle) is biologically appropriate for dual-tick simulation architecture.
+
+### Verdict: 50ms is Biologically Sound
+
+**50ms matches small-to-medium prey reaction times:**
+- Insects: 15-30ms
+- Small prey (mouse): 50-80ms ← **Our baseline**
+- Medium predators (wolf): 80-150ms
+- Large herbivores (deer): 150-230ms
+- Megafauna (elephant): 300-600ms+
+
+**Brains operate in discrete sampling cycles, NOT continuous streams:**
+- Visual system: 40-80ms integration windows (gamma oscillations 25-40 Hz)
+- Our 20Hz AI tick mirrors real neural "frame rates"
+- This is scientifically accurate, not a limitation
+
+### DNA-Encoded Reaction Latency (Future Sprint)
+
+**Recommendation:** Rather than different tick rates per creature (computational nightmare), encode reaction latency in DNA.
+
+**Formula:**
+```rust
+// Linear scaling from 100ms (≤1m) to 1000ms (20m)
+reaction_time_ms = 100 + ((body_length_m - 1.0).max(0.0) / 19.0) * 900
+```
+
+**Examples:**
+- 1m creature: 100ms reaction (fast, responsive)
+- 5m creature: 290ms reaction (medium, deliberate)
+- 10m creature: 526ms reaction (slow but powerful)
+- 20m creature: 1000ms reaction (massive, ponderous)
+
+**Minimum:** 100ms (even 1m or smaller creatures)
+**Maximum:** 1000ms (creatures 20m or larger)
+
+**Implementation Pattern:**
+```rust
+fn behavior_update(
+    time: Res<Time>,
+    mut query: Query<(&Dna, &mut BehaviorState, &mut LastDecisionTime)>
+) {
+    for (dna, mut state, mut last_decision) in query.iter_mut() {
+        let elapsed_ms = (time.elapsed_seconds() - last_decision.0) * 1000.0;
+        let reaction_threshold_ms = 100.0 + ((dna.body_length - 1.0).max(0.0) / 19.0) * 900.0;
+
+        if elapsed_ms >= reaction_threshold_ms {
+            *state = evaluate_environment();
+            last_decision.0 = time.elapsed_seconds();
+        }
+        // Otherwise, continue executing previous decision (commitment)
+    }
+}
+```
+
+**Key Insight:** The AI ticks at 20Hz for ALL creatures, but larger creatures only ACT when their reaction delay threshold is met. This creates realistic sluggishness without synchronization issues.
+
+### Biological Rationale
+
+**Neural Conduction Velocity:**
+- Relatively constant (~100 m/s for myelinated axons)
+- Larger bodies = longer neural pathways = slower total processing
+- Smaller bodies = shorter pathways but simpler decisions
+
+**Why NOT Different Tick Rates:**
+1. Computational complexity: Different update schedules create synchronization nightmares
+2. Fairness issues: Smaller creatures get more "turns" per second (gaming the system)
+3. Emergence breaks: Interactions become unpredictable when entities operate on different timescales
+
+**Why DNA-Driven Reaction Delays:**
+- All creatures tick at same rate (consistent simulation)
+- Individual reaction times emerge from genes
+- Larger creatures are slower but more deliberate
+- Trade-offs enforced: Fast reactions require high metabolism → energy drain
+
+### Systemic Trade-offs
+
+**Fast Reactions (100ms, small creatures):**
+- ✅ Dodge predators quickly
+- ✅ React to threats immediately
+- ❌ High metabolic cost (constant vigilance)
+- ❌ Can't overpower larger creatures
+
+**Slow Reactions (1000ms, large creatures):**
+- ✅ Low metabolic cost (less frequent processing)
+- ✅ Powerful when they do act
+- ❌ Vulnerable to fast attackers during commit
+- ❌ Can't chase agile prey effectively
+
+**No god-tier combinations** - physics enforces trade-offs.
+
+### Validation Status
+
+**Zoologist Approval:** ✅ APPROVED (2025-11-16)
+
+**Key validations:**
+- 50ms (20Hz) matches neural gamma oscillations (25-40 Hz)
+- Discrete sampling cycles biologically accurate
+- Size-based reaction delays create emergent behavior diversity
+- 100ms-1000ms range spans appropriate terrestrial fauna
+- Trade-offs systemic (speed vs power, not arbitrary balance)
+
+**Reference:** Future optimization backlog entry for implementation details.
+

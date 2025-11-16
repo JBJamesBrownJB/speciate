@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import type { SystemTimingsSnapshot } from '../types';
 
 interface Props {
@@ -124,6 +124,18 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
   const movementHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
   const rotationHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
 
+  const [sortOrder, setSortOrder] = useState<string[]>([
+    'total_tick',
+    'perception',
+    'behavior_transition',
+    'wander',
+    'flee',
+    'seek',
+    'avoidance',
+    'movement',
+    'rotation',
+  ]);
+
   useEffect(() => {
     if (!timings) return;
 
@@ -218,21 +230,35 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
     );
   }
 
-  const timingEntries = [
-    { name: 'total_tick', valueUs: timings.totalTickUs, canvasRef: totalTickCanvasRef },
-    { name: 'perception', valueUs: timings.perceptionUs, canvasRef: perceptionCanvasRef },
-    { name: 'behavior_transition', valueUs: timings.behaviorTransitionUs, canvasRef: behaviorTransitionCanvasRef },
-    { name: 'wander', valueUs: timings.wanderUs, canvasRef: wanderCanvasRef },
-    { name: 'flee', valueUs: timings.fleeUs, canvasRef: fleeCanvasRef },
-    { name: 'seek', valueUs: timings.behaviorUs, canvasRef: behaviorCanvasRef },
-    { name: 'avoidance', valueUs: timings.avoidanceUs, canvasRef: avoidanceCanvasRef },
-    { name: 'movement', valueUs: timings.movementUs, canvasRef: movementCanvasRef },
-    { name: 'rotation', valueUs: timings.rotationUs, canvasRef: rotationCanvasRef },
-  ].sort((a, b) => b.valueUs - a.valueUs);
+  const timingEntriesMap: Record<string, { name: string; valueUs: number; canvasRef: React.RefObject<HTMLCanvasElement | null> }> = {
+    'total_tick': { name: 'total_tick', valueUs: timings.totalTickUs, canvasRef: totalTickCanvasRef },
+    'perception': { name: 'perception', valueUs: timings.perceptionUs, canvasRef: perceptionCanvasRef },
+    'behavior_transition': { name: 'behavior_transition', valueUs: timings.behaviorTransitionUs, canvasRef: behaviorTransitionCanvasRef },
+    'wander': { name: 'wander', valueUs: timings.wanderUs, canvasRef: wanderCanvasRef },
+    'flee': { name: 'flee', valueUs: timings.fleeUs, canvasRef: fleeCanvasRef },
+    'seek': { name: 'seek', valueUs: timings.behaviorUs, canvasRef: behaviorCanvasRef },
+    'avoidance': { name: 'avoidance', valueUs: timings.avoidanceUs, canvasRef: avoidanceCanvasRef },
+    'movement': { name: 'movement', valueUs: timings.movementUs, canvasRef: movementCanvasRef },
+    'rotation': { name: 'rotation', valueUs: timings.rotationUs, canvasRef: rotationCanvasRef },
+  };
+
+  const handleSort = () => {
+    const sorted = Object.values(timingEntriesMap)
+      .sort((a, b) => b.valueUs - a.valueUs)
+      .map((entry) => entry.name);
+    setSortOrder(sorted);
+  };
+
+  const timingEntries = sortOrder.map((name) => timingEntriesMap[name]);
 
   return (
     <div className="section">
-      <h2>System Timings</h2>
+      <div className="section-header">
+        <h2>System Timings</h2>
+        <button onClick={handleSort} className="sort-button">
+          Sort
+        </button>
+      </div>
       <div className="timings-grid">
         {timingEntries.map((entry) => (
           <TimingRow

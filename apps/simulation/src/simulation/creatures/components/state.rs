@@ -9,13 +9,12 @@ pub enum BehaviorMode {
     Catatonic,
     Seeking,
     Wandering,
+}
 
-
-
-
-
-
-
+impl BehaviorMode {
+    pub fn is_active(&self) -> bool {
+        !matches!(self, BehaviorMode::Catatonic)
+    }
 }
 
 #[derive(Component, Clone, Copy, Debug, Serialize, Deserialize, Reflect)]
@@ -24,7 +23,7 @@ pub struct CreatureState {
     pub behavior: BehaviorMode,
     pub energy: f32,
     pub age: f32,
-    pub max_speed: f32, // TODO: from DNA
+    pub max_speed: f32,
 }
 
 impl Default for CreatureState {

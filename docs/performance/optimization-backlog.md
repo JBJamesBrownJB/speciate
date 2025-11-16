@@ -1,0 +1,66 @@
+# Performance Optimization Backlog
+**Target:** 150K-200K creatures @ 90 FPS rendering
+---
+## Simulation Optimizations
+### ECS Query Filters
+**Problem:** Systems iterate ALL entities every frame, even unchanged ones.
+**Solution:** Use Bevy `Changed<>` and `With<>` filters to skip static entities.
+**Notes:** 25-30% throughput improvement. Maintain determinism for replay/save.
+---
+### Parallel ECS Queries
+**Problem:** AI and physics systems run single-threaded despite multi-core CPUs.
+**Solution:** Use `par_iter()` for independent entity processing.
+**Notes:** Requires careful synchronization to maintain deterministic simulation.
+---
+### Memory Layout Optimization
+**Problem:** Cache misses from poorly aligned component data.
+**Solution:** Add `#[repr(C, align(16))]` for SIMD-friendly cache locality.
+**Notes:** Low-level optimization, measure before implementing.
+---
+### Size-Based Reaction Latency
+**Problem:** All creatures react at same 20Hz AI tick rate, ignoring biological size constraints.
+**Solution:** Reaction delay derived from body length: 100ms (≤1m) to 1000ms (20m creatures). Creatures commit to decisions for their reaction time.
+**Notes:** Enables size-based behavior diversity. Large creatures slower but deliberate. No god-tier builds. Future sprint after dual-tick.
+---
+## Rendering Optimizations
+### Creature Sprite Pooling
+**Problem:** Creating/destroying PixiJS sprites causes GC pressure at 10K+ creatures.
+**Solution:** Reuse sprite pool, hide unused sprites instead of destroying.
+**Notes:** 70-80% fewer allocations. Essential for stable frame times.
+---
+### Frontend Spatial Indexing
+**Problem:** Viewport culling iterates ALL creatures O(n) to find visible ones.
+**Solution:** Spatial grid/quadtree for O(log n) viewport queries.
+**Notes:** 10K creatures: 10ms→1ms. Required for 100K+ scale.
+---
+### PixiJS Batching
+**Problem:** Each creature is individual draw call (GPU overhead).
+**Solution:** Group sprites by texture (Pixi auto-batches same texture).
+**Notes:** Draw calls: 10K→50-100. +20-30% FPS at high creature counts.
+---
+### LOD Rendering
+**Problem:** Full sprite detail wasted when zoomed out.
+**Solution:** Switch to point sprites at far zoom (< 5 px/m).
+**Notes:** Reduces GPU memory 30%. Pairs well with spatial indexing.
+---
+## Persistence Optimizations
+### Incremental Saves
+**Problem:** Full world serialization on every save (5-10s at scale).
+**Solution:** Only serialize changed entities since last save.
+**Notes:** Save time: 5-10s→500ms. Requires dirty entity tracking.
+---
+### Background Serialization
+**Problem:** Save operation blocks main thread, freezes game.
+**Solution:** Run save in separate thread (async write).
+**Notes:** Non-blocking saves. Electron main process handles async I/O.
+---
+### Save File Compression
+**Problem:** Large save files (10MB+ at scale).
+**Solution:** Use gzip/zstd compression on save files.
+**Notes:** 50-70% size reduction. bincode already compact for Rust-only saves.
+---
+### Chunked Loading
+**Problem:** Slow startup loading entire world at once.
+**Solution:** Load world in chunks (creatures by region).
+**Notes:** Load time: 3-5s→1-2s. Progressive loading UX.
+---

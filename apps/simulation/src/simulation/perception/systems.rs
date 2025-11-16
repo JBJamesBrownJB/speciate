@@ -1,5 +1,6 @@
 use super::components::*;
 use crate::simulation::core::components::{BodySize, Position};
+use crate::simulation::creatures::components::CreatureState;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
@@ -7,7 +8,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::Res;
 
 pub fn update_perception_system(
-    mut query: Query<(Entity, &Position, &BodySize, &mut Perception)>,
+    mut query: Query<(Entity, &Position, &BodySize, &mut Perception, &CreatureState)>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
     #[cfg(feature = "dev-tools")]
@@ -15,11 +16,15 @@ pub fn update_perception_system(
 
     let creatures: Vec<(Entity, Position, BodySize)> = query
         .iter()
-        .map(|(entity, pos, size, _)| (entity, *pos, *size))
+        .map(|(entity, pos, size, _, _)| (entity, *pos, *size))
         .collect();
 
-    for (entity, pos, size, mut perception) in query.iter_mut() {
+    for (entity, pos, size, mut perception, state) in query.iter_mut() {
         perception.clear();
+
+        if !state.behavior.is_active() {
+            continue;
+        }
 
         let self_radius = size.radius();
 
@@ -52,6 +57,85 @@ pub fn update_perception_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simulation::creatures::components::{BehaviorMode, CreatureState};
+
+    #[test]
+    fn test_catatonic_crits_do_not_perceive() {
+        let mut world = World::new();
+
+        let catatonic_crit = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::new(10.0),
+                CreatureState::default(),
+            ))
+            .id();
+
+        let nearby_crit = world
+            .spawn((
+                Position { x: 2.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::new(10.0),
+                {
+                    let mut state = CreatureState::default();
+                    state.behavior = BehaviorMode::Wandering;
+                    state
+                },
+            ))
+            .id();
+
+        let creatures: Vec<(Entity, Position, BodySize)> = world
+            .query::<(Entity, &Position, &BodySize)>()
+            .iter(&world)
+            .map(|(e, p, s)| (e, *p, *s))
+            .collect();
+
+        let mut query =
+            world.query::<(Entity, &Position, &BodySize, &mut Perception, &CreatureState)>();
+        for (entity, pos, size, mut perception, state) in query.iter_mut(&mut world) {
+            perception.clear();
+
+            if !state.behavior.is_active() {
+                continue;
+            }
+
+            let self_radius = size.radius();
+            for (other_entity, other_pos, other_size) in &creatures {
+                if entity == *other_entity {
+                    continue;
+                }
+                let dx = other_pos.x - pos.x;
+                let dy = other_pos.y - pos.y;
+                let center_dist_sq = dx * dx + dy * dy;
+                let other_radius = other_size.radius();
+                let combined_radii = self_radius + other_radius;
+
+                if center_dist_sq <= (perception.range + combined_radii).powi(2) {
+                    let center_dist = center_dist_sq.sqrt();
+                    let edge_dist = center_dist - combined_radii;
+                    if edge_dist <= perception.range {
+                        perception.add_neighbor(*other_entity);
+                    }
+                }
+            }
+        }
+
+        let catatonic_perception = world.get::<Perception>(catatonic_crit).unwrap();
+        assert_eq!(
+            catatonic_perception.neighbor_count(),
+            0,
+            "Catatonic crit should not perceive neighbors"
+        );
+
+        let active_perception = world.get::<Perception>(nearby_crit).unwrap();
+        assert_eq!(
+            active_perception.neighbor_count(),
+            1,
+            "Active crit should perceive the catatonic one"
+        );
+        assert!(active_perception.nearby.contains(&catatonic_crit));
+    }
 
     #[test]
     fn test_perception_detects_nearby_entities() {

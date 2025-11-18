@@ -6,17 +6,16 @@ export class SpatialQuery {
   }
 
   static isInViewport(
-    entity: { x: number; y: number; width: number; height: number },
+    entity: { x: number; y: number; size: number },
     viewportBounds: { minX: number; maxX: number; minY: number; maxY: number }
   ): boolean {
-    const halfW = entity.width / 2;
-    const halfH = entity.height / 2;
+    const halfSize = entity.size / 2;
 
     return !(
-      entity.x + halfW < viewportBounds.minX ||
-      entity.x - halfW > viewportBounds.maxX ||
-      entity.y + halfH < viewportBounds.minY ||
-      entity.y - halfH > viewportBounds.maxY
+      entity.x + halfSize < viewportBounds.minX ||
+      entity.x - halfSize > viewportBounds.maxX ||
+      entity.y + halfSize < viewportBounds.minY ||
+      entity.y - halfSize > viewportBounds.maxY
     );
   }
 }

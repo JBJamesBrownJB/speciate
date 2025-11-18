@@ -1,5 +1,6 @@
 import type { IPCClient } from './IPCClient';
 import type { GameState } from '../../types/GameState';
+import { decode } from '@msgpack/msgpack';
 
 export class ElectronIPCClient implements IPCClient {
   private latestState: GameState | null = null;
@@ -10,16 +11,21 @@ export class ElectronIPCClient implements IPCClient {
       throw new Error('ElectronIPCClient: window.electron not available (not running in Electron)');
     }
 
-    window.electron.onStateUpdate((state: GameState) => {
-      this.latestState = state;
+    window.electron.onStateUpdateBinary((binaryData: Uint8Array) => {
+      try {
+        const state = decode(binaryData) as GameState;
+        this.latestState = state;
 
-      this.stateCallbacks.forEach(callback => {
-        try {
-          callback(state);
-        } catch (error) {
-          console.error('[ElectronIPCClient] Error in state update callback:', error);
-        }
-      });
+        this.stateCallbacks.forEach(callback => {
+          try {
+            callback(state);
+          } catch (error) {
+            console.error('[ElectronIPCClient] Error in state update callback:', error);
+          }
+        });
+      } catch (error) {
+        console.error('[ElectronIPCClient] Failed to decode binary data:', error, binaryData);
+      }
     });
   }
 

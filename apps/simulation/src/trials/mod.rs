@@ -38,6 +38,8 @@ pub enum SpawnPattern {
         cols: u32,
         #[serde(default)]
         creature_type: CreatureType,
+        #[serde(default)]
+        grid_offset_y: Option<f32>,
     },
 
     Circle {
@@ -153,6 +155,7 @@ mod tests {
                 rows,
                 cols,
                 creature_type,
+                grid_offset_y,
             } => {
                 assert_eq!(*start_x, 0.0);
                 assert_eq!(*start_y, 0.0);
@@ -160,6 +163,7 @@ mod tests {
                 assert_eq!(*rows, 10);
                 assert_eq!(*cols, 10);
                 assert_eq!(*creature_type, CreatureType::Wanderer);
+                assert_eq!(*grid_offset_y, None);
             }
             _ => panic!("Expected Grid spawn pattern"),
         }
@@ -423,6 +427,32 @@ mod tests {
                 assert_eq!(*target_y, None);
             }
             _ => panic!("Expected Single spawn pattern"),
+        }
+    }
+
+    #[test]
+    fn test_grid_offset_y_deserialize() {
+        let toml = r#"
+            name = "Grid with Offset"
+
+            [[spawns]]
+            type = "grid"
+            start_x = 0.0
+            start_y = 0.0
+            spacing = 1.0
+            rows = 5
+            cols = 5
+            creature_type = "catatonic"
+            grid_offset_y = 0.5
+        "#;
+
+        let config: TrialConfig = toml::from_str(toml).unwrap();
+
+        match &config.spawns[0] {
+            SpawnPattern::Grid { grid_offset_y, .. } => {
+                assert_eq!(*grid_offset_y, Some(0.5));
+            }
+            _ => panic!("Expected Grid spawn pattern"),
         }
     }
 }

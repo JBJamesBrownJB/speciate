@@ -16,12 +16,11 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "msgpack-lite": "^0.1.26"
+    "@msgpack/msgpack": "^3.0.0-beta2"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@types/msgpack-lite": "^0.1.11",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.9.3",
     "vite": "^7.2.2"

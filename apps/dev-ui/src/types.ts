@@ -20,6 +20,19 @@ export interface SystemTimingsSnapshot {
   fleeUs: number;
   avoidanceUs: number;
   rotationUs: number;
+  ipcQueryUs: number;
+  ipcSerializeUs: number;
+  ipcWriteUs: number;
+  ipcFrameDropsTotal: number;
+  ipcChannelUtilizationPct: number;
+  ipcWriterThreadUs: number;
+}
+
+export interface TelemetryFrame {
+  tick: number;
+  creatureCount: number;
+  tickRateHz: number;
+  systemTimingsUs: SystemTimingsSnapshot;
 }
 
 export interface GameState {
@@ -44,7 +57,8 @@ declare global {
   interface Window {
     electron?: {
       sendCommand?: (command: DevCommand) => void;
-      onStateUpdate?: (callback: (state: GameState) => void) => void;
+      onStateUpdateBinary?: (callback: (binaryData: Uint8Array) => void) => void;
+      onTelemetryUpdate?: (callback: (telemetry: TelemetryFrame) => void) => void;
       removeStateUpdateListener?: () => void;
     };
   }

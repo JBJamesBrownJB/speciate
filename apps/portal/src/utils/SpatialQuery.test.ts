@@ -33,62 +33,62 @@ describe('SpatialQuery', () => {
     };
 
     it('should return true when entity is fully inside viewport', () => {
-      const entity = { x: 50, y: 50, width: 10, height: 10 };
+      const entity = { x: 50, y: 50, size: 10 };
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(true);
     });
 
     it('should return true when entity is at viewport center', () => {
-      const entity = { x: 50, y: 50, width: 20, height: 20 };
+      const entity = { x: 50, y: 50, size: 20 };
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(true);
     });
 
     it('should return true when entity partially overlaps left edge', () => {
-      const entity = { x: 5, y: 50, width: 12, height: 10 }; // Left edge at -1
+      const entity = { x: 5, y: 50, size: 12 }; // Left edge at -1
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(true);
     });
 
     it('should return true when entity partially overlaps right edge', () => {
-      const entity = { x: 95, y: 50, width: 12, height: 10 }; // Right edge at 101
+      const entity = { x: 95, y: 50, size: 12 }; // Right edge at 101
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(true);
     });
 
     it('should return true when entity partially overlaps top edge', () => {
-      const entity = { x: 50, y: 5, width: 10, height: 12 }; // Top edge at -1
+      const entity = { x: 50, y: 5, size: 12 }; // Top edge at -1
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(true);
     });
 
     it('should return true when entity partially overlaps bottom edge', () => {
-      const entity = { x: 50, y: 95, width: 10, height: 12 }; // Bottom edge at 101
+      const entity = { x: 50, y: 95, size: 12 }; // Bottom edge at 101
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(true);
     });
 
     it('should return false when entity is completely to the left', () => {
-      const entity = { x: -20, y: 50, width: 10, height: 10 }; // Right edge at -15
+      const entity = { x: -20, y: 50, size: 10 }; // Right edge at -15
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(false);
     });
 
     it('should return false when entity is completely to the right', () => {
-      const entity = { x: 120, y: 50, width: 10, height: 10 }; // Left edge at 115
+      const entity = { x: 120, y: 50, size: 10 }; // Left edge at 115
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(false);
     });
 
     it('should return false when entity is completely above', () => {
-      const entity = { x: 50, y: -20, width: 10, height: 10 }; // Bottom edge at -15
+      const entity = { x: 50, y: -20, size: 10 }; // Bottom edge at -15
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(false);
     });
 
     it('should return false when entity is completely below', () => {
-      const entity = { x: 50, y: 120, width: 10, height: 10 }; // Top edge at 115
+      const entity = { x: 50, y: 120, size: 10 }; // Top edge at 115
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(false);
     });
 
     it('should return true when entity touches viewport edge exactly', () => {
-      const entity = { x: 5, y: 5, width: 10, height: 10 }; // Edges at 0, 10
+      const entity = { x: 5, y: 5, size: 10 }; // Edges at 0, 10
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(true);
     });
 
     it('should handle large entities that encompass entire viewport', () => {
-      const entity = { x: 50, y: 50, width: 200, height: 200 };
+      const entity = { x: 50, y: 50, size: 200 };
       expect(SpatialQuery.isInViewport(entity, viewportBounds)).toBe(true);
     });
   });

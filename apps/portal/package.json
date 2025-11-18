@@ -10,10 +10,13 @@
     "setup:rust": "cd ../simulation && cargo build",
     "setup:frontend": "vite build",
     "dev": "npm-run-all --parallel dev:vite dev:electron",
+    "dev:release": "npm-run-all dev:rust-release --parallel dev:vite dev:electron-release",
     "dev:vite": "vite --host 0.0.0.0",
     "dev:electron": "cross-env NODE_ENV=development ELECTRON_DISABLE_SANDBOX=1 electron .",
+    "dev:electron-release": "cross-env NODE_ENV=development RUST_BUILD_TYPE=release ELECTRON_DISABLE_SANDBOX=1 electron .",
     "dev:tools": "cross-env NODE_ENV=development ELECTRON_DISABLE_SANDBOX=1 electron . --dev-tools",
-    "dev:rust": "cd ../simulation && cargo build",
+    "dev:rust": "cd ../simulation && cargo build --features dev-tools",
+    "dev:rust-release": "cd ../simulation && cargo build --release --features dev-tools",
     "build": "npm-run-all build:*",
     "build:rust": "cd ../simulation && cargo build --release",
     "build:frontend": "tsc && vite build",
@@ -29,7 +32,6 @@
   },
   "dependencies": {
     "@msgpack/msgpack": "^3.1.2",
-    "msgpack-lite": "^0.1.26",
     "pixi.js": "^8.14.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

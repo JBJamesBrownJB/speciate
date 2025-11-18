@@ -11,8 +11,9 @@ import React, { useState, useEffect } from 'react';
 import { SpawnForm } from './SpawnForm';
 import { TrialSelector } from './TrialSelector';
 import { StateDisplay } from './StateDisplay';
+import { IPCHealthPanel } from './IPCHealthPanel';
 import { SystemTimingsPanel } from './SystemTimingsPanel';
-import type { SystemTimingsSnapshot } from '../types';
+import type { SystemTimingsSnapshot, TelemetryFrame } from '../types';
 
 export const DevToolsApp: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -22,24 +23,18 @@ export const DevToolsApp: React.FC = () => {
   const [systemTimings, setSystemTimings] = useState<SystemTimingsSnapshot | undefined>(undefined);
 
   useEffect(() => {
-    // Check if Electron IPC is available
     if (window.electron?.sendCommand) {
       setIsConnected(true);
     }
 
-    // Listen for state updates from simulation
-    const handleStateUpdate = (state: any) => {
-      setTick(state.tick || 0);
-      setCreatureCount(state.creatures?.length || 0);
-      if (state.tickRateHz !== undefined) {
-        setTickRateHz(state.tickRateHz);
-      }
-      if (state.systemTimingsUs) {
-        setSystemTimings(state.systemTimingsUs);
-      }
+    const handleTelemetryUpdate = (telemetry: TelemetryFrame) => {
+      setTick(telemetry.tick);
+      setCreatureCount(telemetry.creatureCount);
+      setTickRateHz(telemetry.tickRateHz);
+      setSystemTimings(telemetry.systemTimingsUs);
     };
 
-    window.electron?.onStateUpdate?.(handleStateUpdate);
+    window.electron?.onTelemetryUpdate?.(handleTelemetryUpdate);
 
     return () => {
       window.electron?.removeStateUpdateListener?.();
@@ -99,6 +94,8 @@ export const DevToolsApp: React.FC = () => {
       </div>
 
       <StateDisplay tick={tick} creatureCount={creatureCount} tickRateHz={tickRateHz} />
+
+      <IPCHealthPanel timings={systemTimings} />
 
       <SystemTimingsPanel timings={systemTimings} />
     </div>

@@ -85,11 +85,17 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
             rows,
             cols,
             creature_type,
+            grid_offset_y,
         } => {
             for row in 0..*rows {
                 for col in 0..*cols {
                     let x = start_x + (col as f32 * spacing);
-                    let y = start_y + (row as f32 * spacing);
+                    let offset = if col % 2 == 1 {
+                        grid_offset_y.unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
+                    let y = start_y + (row as f32 * spacing) + offset;
                     spawn_creature(world, x, y, *creature_type, None, None);
                 }
             }
@@ -271,6 +277,7 @@ mod tests {
             rows: 3,
             cols: 4,
             creature_type: CreatureType::Wanderer,
+            grid_offset_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -332,6 +339,7 @@ mod tests {
             rows: 2,
             cols: 3,
             creature_type: CreatureType::Wanderer,
+            grid_offset_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -423,6 +431,7 @@ mod tests {
             rows: 2,
             cols: 2,
             creature_type: CreatureType::Wanderer,
+            grid_offset_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -498,5 +507,64 @@ mod tests {
             assert_eq!(target.y, 0.0);
             assert!(matches!(state.behavior, BehaviorMode::Seeking));
         }
+    }
+
+    #[test]
+    fn test_grid_with_column_offset() {
+        let mut world = World::new();
+        world.insert_resource(NextCreatureId::default());
+
+        let pattern = SpawnPattern::Grid {
+            start_x: 0.0,
+            start_y: 0.0,
+            spacing: 10.0,
+            rows: 2,
+            cols: 4,
+            creature_type: CreatureType::Catatonic,
+            grid_offset_y: Some(5.0),
+        };
+
+        spawn_pattern(&mut world, &pattern);
+
+        let mut query = world.query::<&Position>();
+        let positions: Vec<_> = query.iter(&world).collect();
+
+        assert!(positions.iter().any(|p| p.x == 0.0 && p.y == 0.0));
+        assert!(positions.iter().any(|p| p.x == 10.0 && p.y == 5.0));
+        assert!(positions.iter().any(|p| p.x == 20.0 && p.y == 0.0));
+        assert!(positions.iter().any(|p| p.x == 30.0 && p.y == 5.0));
+
+        assert!(positions.iter().any(|p| p.x == 0.0 && p.y == 10.0));
+        assert!(positions.iter().any(|p| p.x == 10.0 && p.y == 15.0));
+        assert!(positions.iter().any(|p| p.x == 20.0 && p.y == 10.0));
+        assert!(positions.iter().any(|p| p.x == 30.0 && p.y == 15.0));
+    }
+
+    #[test]
+    fn test_grid_without_offset_backward_compatible() {
+        let mut world = World::new();
+        world.insert_resource(NextCreatureId::default());
+
+        let pattern = SpawnPattern::Grid {
+            start_x: 0.0,
+            start_y: 0.0,
+            spacing: 10.0,
+            rows: 2,
+            cols: 3,
+            creature_type: CreatureType::Wanderer,
+            grid_offset_y: None,
+        };
+
+        spawn_pattern(&mut world, &pattern);
+
+        let mut query = world.query::<&Position>();
+        let positions: Vec<_> = query.iter(&world).collect();
+
+        assert!(positions.iter().any(|p| p.x == 0.0 && p.y == 0.0));
+        assert!(positions.iter().any(|p| p.x == 10.0 && p.y == 0.0));
+        assert!(positions.iter().any(|p| p.x == 20.0 && p.y == 0.0));
+        assert!(positions.iter().any(|p| p.x == 0.0 && p.y == 10.0));
+        assert!(positions.iter().any(|p| p.x == 10.0 && p.y == 10.0));
+        assert!(positions.iter().any(|p| p.x == 20.0 && p.y == 10.0));
     }
 }

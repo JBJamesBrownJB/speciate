@@ -768,79 +768,54 @@ enum Frame {
 
 ## Tick Architecture
 
-### Overview
+### Current Implementation (Single-Tick)
 
-The simulation uses a **dual-tick architecture** to separate concerns and enable massive scale:
+The simulation runs at a **configurable tick rate** (default 30Hz for balance). Future work will lower this to 20Hz with frontend interpolation for scaling.
 
-- **30Hz Physics + Collision** (33.3ms period)
-- **20Hz AI + Perception** (50ms period)
-- **90Hz Frontend Rendering** (interpolated smoothing)
-
-This enables **150,000-200,000 creatures** vs ~10,000 with single-tick.
-
-**See:** `docs/architecture/dual-tick-simulation.md` for complete architecture details.
-
-### Implementation (Planned)
-
+**Current Architecture:**
 ```rust
-pub struct DualTickSimulation {
+pub struct Simulation {
     world: World,
-    physics_schedule: Schedule,  // 30Hz
-    ai_schedule: Schedule,       // 20Hz
-
-    physics_accumulator: f32,
-    ai_accumulator: f32,
+    schedule: Schedule,  // All systems run together
 }
 
-impl DualTickSimulation {
-    const PHYSICS_TICK: f32 = 1.0 / 30.0;  // 33.3ms
-    const AI_TICK: f32 = 1.0 / 20.0;        // 50ms
-
-    pub fn update(&mut self, real_delta_time: f32) {
-        self.physics_accumulator += real_delta_time;
-        self.ai_accumulator += real_delta_time;
-
-        // AI tick first (calculates forces)
-        while self.ai_accumulator >= Self::AI_TICK {
-            self.ai_schedule.run(&mut self.world);
-            self.ai_accumulator -= Self::AI_TICK;
-        }
-
-        // Physics tick (integrates forces)
-        while self.physics_accumulator >= Self::PHYSICS_TICK {
-            self.physics_schedule.run(&mut self.world);
-            self.physics_accumulator -= Self::PHYSICS_TICK;
-        }
+impl Simulation {
+    pub fn update(&mut self, delta_time: f32) {
+        self.world.insert_resource(DeltaTime(delta_time));
+        self.schedule.run(&mut self.world);
     }
 }
 ```
 
-### System Distribution
-
-**Physics Schedule (30Hz):**
-1. **Grid Updates** - Incremental spatial grid updates during movement
-2. **Collision Detection** - Detect overlapping creatures
-3. **Collision Response** - Apply impulse forces
-4. **Motion Integration** - Velocity += Acceleration, Position += Velocity
-5. **Boundary Enforcement** - Clamp positions to world bounds
-6. **Rotation** - Update creature orientation
-7. **Reset Acceleration** - Clear for next tick
-8. **Snapshot** - Create state for frontend
-
-**AI Schedule (20Hz):**
+**System Order (Sequential):**
 1. **Perception** - Query spatial grid for nearby entities
 2. **Behavior Transition** - Update behavioral state machine
-3. **Steering Forces** - Calculate seek, flee, wander, avoidance forces
-4. **Force Persistence** - Forces persist until next AI tick
+3. **Steering Behaviors** - Calculate seek, flee, wander, avoidance forces (accumulate into Acceleration)
+4. **Motion Integration** - Velocity += Acceleration, Position += Velocity (Euler)
+5. **Rotation** - Update creature orientation based on velocity
+6. **Reset Acceleration** - Clear acceleration for next tick
+7. **Snapshot** - Create state for frontend (IPC via background writer thread)
 
-### Frontend Synchronization
+### Future Direction: Frontend Interpolation
 
-Frontend renders at 90Hz with interpolation between physics snapshots:
-- Receives position updates at 30Hz
-- Interpolates between previous and current positions
-- Smooth visuals despite lower physics tick rate
+**Goal:** Scale to 150K-200K creatures by lowering simulation tick rate while maintaining smooth visuals.
 
-The actual tick rate is sent with each GameState message (`tick_rate_hz` field) so the frontend always knows the current simulation speed.
+**Planned Approach:**
+- Lower simulation to 20Hz (50ms per tick = 2.5x more creatures per frame budget)
+- Frontend interpolates to 90Hz for smooth rendering
+- lerp(prev_pos, curr_pos, alpha) where alpha = time_since_last_tick / tick_period
+
+**Why not dual-tick?** Dual-tick architecture (separate AI/Physics schedules) was explored and abandoned. Sequential execution on single thread provides no benefit - when schedules align, you still get the same spike. Only true parallelism (separate threads) would help, which requires major architectural changes.
+
+**See Sprint 12 plan for interpolation implementation details.**
+
+### IPC Optimization (Completed)
+
+Current implementation uses background writer thread for efficient IPC:
+- Main thread overhead: 30ms → <1ms (97% reduction)
+- Crossbeam channel with bounded buffer (size=2)
+- Graceful frame dropping when frontend lags
+- MessagePack serialization on background thread
 
 ---
 

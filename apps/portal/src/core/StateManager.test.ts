@@ -89,8 +89,8 @@ describe('StateManager', () => {
         tick: 50,
         server_time: Date.now(),
         creatures: [
-          { id: 1, x: 10, y: 20, rotation: 0.5, width: 10, height: 10 },
-          { id: 2, x: 30, y: 40, rotation: 1.0, width: 10, height: 10 },
+          { id: 1, x: 10, y: 20, rotation: 0.5, size: 10 },
+          { id: 2, x: 30, y: 40, rotation: 1.0, size: 10 },
         ],
       };
 

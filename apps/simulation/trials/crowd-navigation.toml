@@ -16,16 +16,17 @@ Tests obstacle avoidance, pathfinding, and collision handling in tight spaces.
 type = "grid"
 start_x = -10.0    # Center grid at (0, 0): starts at -25m to span [-25, 25]
 start_y = -10.0
-spacing = 1.0      
-rows = 20
-cols = 20
+spacing = 2.0
+rows = 10
+cols = 10
 creature_type = "catatonic"
+grid_offset_y = 1.0  # Offset even columns by half spacing for staggered pattern
 
 # Seeker #1 - Western starting position
 [[spawns]]
 type = "single"
-x = -20.0
+x = -30.0
 y = 0.0
 creature_type = "seeker"
-target_x = 20.0
+target_x = 30.0
 target_y = 0.0

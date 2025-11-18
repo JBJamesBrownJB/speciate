@@ -37,18 +37,13 @@ Cargo.lock
 # NODE.JS/TYPESCRIPT (Frontend Client & Economy Microservice)
 # Stack: Node.js, npm/Yarn, TypeScript, Pixi.js, Vite
 # --------------------------------------------------------------------------
-# Dependency directory
-/node_modules
-apps/ledger/node_modules
-apps/ui/node_modules
+# Dependency directory (all node_modules at any depth)
+**/node_modules
 
-# Build output directories
-/dist
-/build
-/out
-apps/ledger/dist
-apps/ui/dist
-apps/ui/build
+# Build output directories (all build artifacts at any depth)
+**/dist
+**/build
+**/out
 
 # State snapshot directories
 *.msgpack

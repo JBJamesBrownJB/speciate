@@ -1,6 +1,15 @@
 # Performance Optimization Backlog
 **Target:** 150K-200K creatures @ 90 FPS rendering
 ---
+## IPC Optimizations
+### Zero-Copy Serialization (FlatBuffers/Cap'n Proto)
+**Problem:** MessagePack requires Node.js to allocate memory for buffer read, then allocate objects to decode (copy-and-parse).
+**Solution:** Migrate to FlatBuffers or Cap'n Proto for zero-copy reads where binary payload IS the in-memory object.
+**Benefits:** Access `creatures[0].x` without decoding entire frame. Reduces Electron-side deserialization overhead.
+**Trade-offs:** Requires schema definition file (`.fbs`), code generation step in build. Violates Phase 1 "schema-free" simplicity.
+**Timeline:** Later towards release day on steam (when schema stabilizes toward release). MessagePack serialization (3ms) is NOT current bottleneck—IO blocking is.
+**Consultant Recommendation:** Stick with MessagePack for Phase 1. Optimize right bottleneck first (background writer thread).
+---
 ## Simulation Optimizations
 ### ECS Query Filters
 **Problem:** Systems iterate ALL entities every frame, even unchanged ones.
@@ -22,21 +31,15 @@
 **Solution:** Reaction delay derived from body length: 100ms (≤1m) to 1000ms (20m creatures). Creatures commit to decisions for their reaction time.
 **Notes:** Enables size-based behavior diversity. Large creatures slower but deliberate. No god-tier builds. Future sprint after dual-tick.
 ---
-## Rendering Optimizations
-### Creature Sprite Pooling
-**Problem:** Creating/destroying PixiJS sprites causes GC pressure at 10K+ creatures.
-**Solution:** Reuse sprite pool, hide unused sprites instead of destroying.
-**Notes:** 70-80% fewer allocations. Essential for stable frame times.
----
-### Frontend Spatial Indexing
-**Problem:** Viewport culling iterates ALL creatures O(n) to find visible ones.
-**Solution:** Spatial grid/quadtree for O(log n) viewport queries.
+### Frontend -> Sim Spatial Indexing communication
+**Problem:** We send and render all crits, even if they are not in view of camera
+**Solution:** Sim sends camera viewbox to sim, in world coordinates and sim only sends data for crits within view
 **Notes:** 10K creatures: 10ms→1ms. Required for 100K+ scale.
 ---
-### PixiJS Batching
-**Problem:** Each creature is individual draw call (GPU overhead).
-**Solution:** Group sprites by texture (Pixi auto-batches same texture).
-**Notes:** Draw calls: 10K→50-100. +20-30% FPS at high creature counts.
+### Zoom LOD sim payload
+**Problem:** We send unecessary info as we zoom out, such as rotation.
+**Solution:** Frontend notifies sim when zoom changes and sim reduces payload by removing things like rotation, size, maybe even reduces precision of x,y to just int or something.
+**Notes:** 
 ---
 ### LOD Rendering
 **Problem:** Full sprite detail wasted when zoomed out.

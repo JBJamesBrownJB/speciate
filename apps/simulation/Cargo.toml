@@ -31,6 +31,7 @@ noise = "0.9"  # Perlin noise for locomotion variability
 chrono = { version = "0.4", features = ["serde"] }  # Timestamp generation for snapshots
 ctrlc = { version = "3.4", features = ["termination"] }  # Signal handling for graceful shutdown
 crossbeam = "0.8"  # Lock-free data structures for snapshot queue
+crossbeam-channel = "0.5"  # High-performance MPSC for background IPC writer
 
 [features]
 # Enable test helper methods for integration tests

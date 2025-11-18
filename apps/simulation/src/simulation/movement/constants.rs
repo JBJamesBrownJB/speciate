@@ -1,5 +1,3 @@
-use bevy_ecs::prelude::*;
-
 pub const DEFAULT_BODY_LENGTH: f32 = 1.0; // Default creature body length in meters
 pub const DEFAULT_MASS: f32 = 65.0; // Default mass for 1m creature (kg)
 pub const MAX_SPEED: f32 = 50.0; // Maximum creature speed in m/s

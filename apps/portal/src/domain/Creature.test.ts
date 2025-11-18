@@ -4,18 +4,17 @@ import { Creature } from './Creature';
 describe('Creature', () => {
   describe('construction', () => {
     it('should create a creature with all required properties', () => {
-      const creature = new Creature(1, 100, 200, 1.5, 2.0, 1.5);
+      const creature = new Creature(1, 100, 200, 1.5, 2.0);
 
       expect(creature.id).toBe(1);
       expect(creature.x).toBe(100);
       expect(creature.y).toBe(200);
       expect(creature.rotation).toBe(1.5);
-      expect(creature.width).toBe(2.0);
-      expect(creature.height).toBe(1.5);
+      expect(creature.size).toBe(2.0);
     });
 
     it('should handle zero position', () => {
-      const creature = new Creature(1, 0, 0, 0, 1, 1);
+      const creature = new Creature(1, 0, 0, 0, 1);
 
       expect(creature.x).toBe(0);
       expect(creature.y).toBe(0);
@@ -23,7 +22,7 @@ describe('Creature', () => {
     });
 
     it('should handle negative positions', () => {
-      const creature = new Creature(2, -500, -300, -Math.PI, 1, 1);
+      const creature = new Creature(2, -500, -300, -Math.PI, 1);
 
       expect(creature.x).toBe(-500);
       expect(creature.y).toBe(-300);
@@ -31,7 +30,7 @@ describe('Creature', () => {
     });
 
     it('should handle large world coordinates', () => {
-      const creature = new Creature(3, 999999, -999999, 0, 1, 1);
+      const creature = new Creature(3, 999999, -999999, 0, 1);
 
       expect(creature.x).toBe(999999);
       expect(creature.y).toBe(-999999);
@@ -40,7 +39,7 @@ describe('Creature', () => {
 
   describe('withTransform', () => {
     it('should create a new creature with updated position and rotation', () => {
-      const original = new Creature(1, 100, 200, 0, 1, 1);
+      const original = new Creature(1, 100, 200, 0, 1);
       const updated = original.withTransform(150, 250, Math.PI);
 
       expect(updated.x).toBe(150);
@@ -56,7 +55,7 @@ describe('Creature', () => {
 
   describe('immutability', () => {
     it('should not allow direct mutation of properties', () => {
-      const creature = new Creature(1, 100, 200, 0, 1, 1);
+      const creature = new Creature(1, 100, 200, 0, 1);
 
       // TypeScript will prevent this at compile time, but let's verify at runtime
       expect(() => {
@@ -72,8 +71,7 @@ describe('Creature', () => {
         x: 123.456,
         y: -789.012,
         rotation: 1.23,
-        width: 2.5,
-        height: 1.8
+        size: 2.5
       };
 
       const creature = Creature.fromMessage(message);
@@ -82,8 +80,7 @@ describe('Creature', () => {
       expect(creature.x).toBe(123.456);
       expect(creature.y).toBe(-789.012);
       expect(creature.rotation).toBe(1.23);
-      expect(creature.width).toBe(2.5);
-      expect(creature.height).toBe(1.8);
+      expect(creature.size).toBe(2.5);
     });
 
     it('should handle optional properties with defaults', () => {
@@ -96,8 +93,7 @@ describe('Creature', () => {
       const creature = Creature.fromMessage(message);
 
       expect(creature.rotation).toBe(0);
-      expect(creature.width).toBe(1);
-      expect(creature.height).toBe(1);
+      expect(creature.size).toBe(1);
     });
   });
 });

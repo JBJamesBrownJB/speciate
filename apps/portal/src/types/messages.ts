@@ -5,11 +5,7 @@ export interface Creature {
   x: number;
   y: number;
   rotation: number;
-  width: number;
-  height: number;
-  behavior?: BehaviorMode;
-  energy?: number;
-  species_id?: number;
+  size: number;
 }
 
 export interface SimulationStateMessage {

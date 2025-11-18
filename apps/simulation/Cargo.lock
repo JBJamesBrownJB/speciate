@@ -2195,6 +2195,7 @@ dependencies = [
  "chrono",
  "clap",
  "crossbeam",
+ "crossbeam-channel",
  "ctrlc",
  "env_logger",
  "log",

@@ -140,6 +140,7 @@ fn test_gamestate_includes_timing_fields() {
     use speciate::instrumentation::SystemTimingsSnapshot;
 
     let state = GameState {
+        protocol_version: 1,
         tick: 100,
         tick_rate_hz: 60.0,
         creatures: vec![],
@@ -154,6 +155,12 @@ fn test_gamestate_includes_timing_fields() {
             flee_us: 10,
             avoidance_us: 20,
             rotation_us: 5,
+            ipc_query_us: 100,
+            ipc_serialize_us: 200,
+            ipc_write_us: 50,
+            ipc_frame_drops_total: 0,
+            ipc_channel_utilization_pct: 0,
+            ipc_writer_thread_us: 0,
         },
     };
 

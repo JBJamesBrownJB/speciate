@@ -12,4 +12,13 @@ export const WORLD_CONFIG = {
 export const CAMERA_CONFIG = {
   MIN_ZOOM: 0.0005, // Minimum zoom (px/m) - view full 2000km world
   MAX_ZOOM: 400, // Maximum zoom (px/m) - 1 meter = 200 pixels
+  ZOOM_SENSITIVITY: 0.001, // Mouse wheel zoom sensitivity
+} as const;
+
+export const SCALE_BAR_CONFIG = {
+  TARGET_PIXEL_WIDTH: 120,
+  NICE_INTERVALS: [
+    1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000,
+    100000, 200000, 500000, 1000000,
+  ] as readonly number[],
 } as const;

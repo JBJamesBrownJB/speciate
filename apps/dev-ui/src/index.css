@@ -184,6 +184,13 @@ button.danger:disabled {
 }
 
 /* System Timings Panel */
+.critical-timings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .timings-grid {
   display: flex;
   flex-direction: column;
@@ -231,6 +238,79 @@ button.danger:disabled {
   height: 32px;
   border-radius: 4px;
   background: #252526;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 20px;
+  background: #252526;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #3e3e42;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #6fb83f;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.progress-bar-fill.warning {
+  background: #f0a830;
+}
+
+.progress-bar-fill.danger {
+  background: #d94848;
+}
+
+/* IPC Health Panel */
+.ipc-status-banner {
+  padding: 8px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.ipc-status-banner.ok {
+  background: #2d4a2d;
+  color: #4ec9b0;
+}
+
+.ipc-status-banner.danger {
+  background: #d94848;
+  color: white;
+}
+
+.ipc-health-row {
+  margin-bottom: 12px;
+}
+
+.ipc-health-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.label-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.ipc-health-value {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 16px;
+  color: #4ec9b0;
+  font-weight: 600;
+}
+
+.ipc-health-value.warning {
+  color: #f0a830;
+}
+
+.ipc-health-value.danger {
+  color: #f48771;
 }
 
 .muted {

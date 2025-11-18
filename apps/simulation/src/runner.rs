@@ -69,15 +69,25 @@ impl<H: RunnerHooks> SimulationRunner<H> {
             last_time = now;
 
             simulation.update(delta_time);
-            tick += 1;
-
-            let tick_elapsed = tick_start.elapsed();
-            tick_timer.record_tick(tick_elapsed);
 
             let measured_tick_rate = 1.0 / delta_time;
             simulation.set_tick_rate(measured_tick_rate);
 
-            self.hooks.on_tick(tick, tick_elapsed, &mut simulation);
+            self.hooks.on_tick(tick, tick_start.elapsed(), &mut simulation);
+
+            let total_tick_elapsed = tick_start.elapsed();
+
+            #[cfg(feature = "dev-tools")]
+            {
+                let elapsed_us = total_tick_elapsed.as_micros() as u64;
+                simulation.world()
+                    .resource::<crate::instrumentation::SystemTimings>()
+                    .total_tick_us
+                    .store(elapsed_us, std::sync::atomic::Ordering::Relaxed);
+            }
+
+            tick += 1;
+            tick_timer.record_tick(total_tick_elapsed);
 
             if last_stats_log.elapsed() >= stats_interval {
                 self.hooks.on_stats_interval(
@@ -89,8 +99,8 @@ impl<H: RunnerHooks> SimulationRunner<H> {
                 last_stats_log = Instant::now();
             }
 
-            if tick_elapsed < tick_duration {
-                std::thread::sleep(tick_duration - tick_elapsed);
+            if total_tick_elapsed < tick_duration {
+                std::thread::sleep(tick_duration - total_tick_elapsed);
             }
         }
 

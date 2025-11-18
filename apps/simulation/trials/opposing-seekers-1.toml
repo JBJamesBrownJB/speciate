@@ -31,7 +31,7 @@ type = "single"
 x = 20.0
 y = 0.0
 creature_type = "seeker"
-target_x = -10.0
+target_x = -20.0
 target_y = 0.0
 
 # Seeker #2 - West side, target beyond obstacle to the east
@@ -40,5 +40,5 @@ type = "single"
 x = -20.0
 y = 0.0
 creature_type = "seeker"
-target_x = 10.0
+target_x = 20.0
 target_y = 0.0

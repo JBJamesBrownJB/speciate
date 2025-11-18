@@ -103,123 +103,55 @@ const TimingRow: React.FC<TimingRowProps> = ({ name, valueUs, canvasRef }) => (
   </div>
 );
 
+// Reserved metrics that should always appear at the top
+const CRITICAL_METRICS = ['totalTickUs', 'ipcWriterThreadUs'];
+
+// Convert camelCase to snake_case for display
+const toSnakeCase = (str: string): string => {
+  return str.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
+};
+
 export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
-  const totalTickCanvasRef = useRef<HTMLCanvasElement>(null);
-  const perceptionCanvasRef = useRef<HTMLCanvasElement>(null);
-  const behaviorTransitionCanvasRef = useRef<HTMLCanvasElement>(null);
-  const wanderCanvasRef = useRef<HTMLCanvasElement>(null);
-  const fleeCanvasRef = useRef<HTMLCanvasElement>(null);
-  const behaviorCanvasRef = useRef<HTMLCanvasElement>(null);
-  const avoidanceCanvasRef = useRef<HTMLCanvasElement>(null);
-  const movementCanvasRef = useRef<HTMLCanvasElement>(null);
-  const rotationCanvasRef = useRef<HTMLCanvasElement>(null);
-
-  const totalTickHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-  const perceptionHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-  const behaviorTransitionHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-  const wanderHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-  const fleeHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-  const behaviorHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-  const avoidanceHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-  const movementHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-  const rotationHistoryRef = useRef<SparklineData>({ history: [], maxHistory: 120 });
-
-  const [sortOrder, setSortOrder] = useState<string[]>([
-    'total_tick',
-    'perception',
-    'behavior_transition',
-    'wander',
-    'flee',
-    'seek',
-    'avoidance',
-    'movement',
-    'rotation',
-  ]);
+  // Dynamic refs and history storage
+  const canvasRefs = useRef<Record<string, React.RefObject<HTMLCanvasElement>>>({});
+  const historyRefs = useRef<Record<string, SparklineData>>({});
+  const [sortedKeys, setSortedKeys] = useState<string[]>([]);
 
   useEffect(() => {
     if (!timings) return;
 
-    const updateHistory = (data: SparklineData, value: number) => {
-      data.history.push(value);
-      if (data.history.length > data.maxHistory) {
-        data.history.shift();
+    // Dynamically create refs and history for each metric
+    const allKeys = Object.keys(timings).filter(key => typeof timings[key as keyof SystemTimingsSnapshot] === 'number');
+
+    allKeys.forEach(key => {
+      if (!canvasRefs.current[key]) {
+        canvasRefs.current[key] = React.createRef<HTMLCanvasElement>();
       }
-    };
+      if (!historyRefs.current[key]) {
+        historyRefs.current[key] = { history: [], maxHistory: 120 };
+      }
 
-    updateHistory(totalTickHistoryRef.current, timings.totalTickUs);
-    updateHistory(perceptionHistoryRef.current, timings.perceptionUs);
-    updateHistory(behaviorTransitionHistoryRef.current, timings.behaviorTransitionUs);
-    updateHistory(wanderHistoryRef.current, timings.wanderUs);
-    updateHistory(fleeHistoryRef.current, timings.fleeUs);
-    updateHistory(behaviorHistoryRef.current, timings.behaviorUs);
-    updateHistory(avoidanceHistoryRef.current, timings.avoidanceUs);
-    updateHistory(movementHistoryRef.current, timings.movementUs);
-    updateHistory(rotationHistoryRef.current, timings.rotationUs);
+      // Update history
+      const value = timings[key as keyof SystemTimingsSnapshot] as number;
+      const history = historyRefs.current[key];
+      history.history.push(value);
+      if (history.history.length > history.maxHistory) {
+        history.history.shift();
+      }
 
-    if (totalTickCanvasRef.current) {
-      renderSparkline(
-        totalTickCanvasRef.current,
-        totalTickHistoryRef.current.history,
-        totalTickHistoryRef.current.maxHistory
-      );
+      // Render sparkline
+      const canvas = canvasRefs.current[key]?.current;
+      if (canvas) {
+        renderSparkline(canvas, history.history, history.maxHistory);
+      }
+    });
+
+    // Initial sort if not yet sorted
+    if (sortedKeys.length === 0) {
+      const nonCritical = allKeys.filter(k => !CRITICAL_METRICS.includes(k));
+      setSortedKeys(nonCritical);
     }
-    if (perceptionCanvasRef.current) {
-      renderSparkline(
-        perceptionCanvasRef.current,
-        perceptionHistoryRef.current.history,
-        perceptionHistoryRef.current.maxHistory
-      );
-    }
-    if (behaviorTransitionCanvasRef.current) {
-      renderSparkline(
-        behaviorTransitionCanvasRef.current,
-        behaviorTransitionHistoryRef.current.history,
-        behaviorTransitionHistoryRef.current.maxHistory
-      );
-    }
-    if (wanderCanvasRef.current) {
-      renderSparkline(
-        wanderCanvasRef.current,
-        wanderHistoryRef.current.history,
-        wanderHistoryRef.current.maxHistory
-      );
-    }
-    if (fleeCanvasRef.current) {
-      renderSparkline(
-        fleeCanvasRef.current,
-        fleeHistoryRef.current.history,
-        fleeHistoryRef.current.maxHistory
-      );
-    }
-    if (behaviorCanvasRef.current) {
-      renderSparkline(
-        behaviorCanvasRef.current,
-        behaviorHistoryRef.current.history,
-        behaviorHistoryRef.current.maxHistory
-      );
-    }
-    if (avoidanceCanvasRef.current) {
-      renderSparkline(
-        avoidanceCanvasRef.current,
-        avoidanceHistoryRef.current.history,
-        avoidanceHistoryRef.current.maxHistory
-      );
-    }
-    if (movementCanvasRef.current) {
-      renderSparkline(
-        movementCanvasRef.current,
-        movementHistoryRef.current.history,
-        movementHistoryRef.current.maxHistory
-      );
-    }
-    if (rotationCanvasRef.current) {
-      renderSparkline(
-        rotationCanvasRef.current,
-        rotationHistoryRef.current.history,
-        rotationHistoryRef.current.maxHistory
-      );
-    }
-  }, [timings]);
+  }, [timings, sortedKeys.length]);
 
   if (!timings) {
     return (
@@ -230,39 +162,63 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
     );
   }
 
-  const timingEntriesMap: Record<string, { name: string; valueUs: number; canvasRef: React.RefObject<HTMLCanvasElement | null> }> = {
-    'total_tick': { name: 'total_tick', valueUs: timings.totalTickUs, canvasRef: totalTickCanvasRef },
-    'perception': { name: 'perception', valueUs: timings.perceptionUs, canvasRef: perceptionCanvasRef },
-    'behavior_transition': { name: 'behavior_transition', valueUs: timings.behaviorTransitionUs, canvasRef: behaviorTransitionCanvasRef },
-    'wander': { name: 'wander', valueUs: timings.wanderUs, canvasRef: wanderCanvasRef },
-    'flee': { name: 'flee', valueUs: timings.fleeUs, canvasRef: fleeCanvasRef },
-    'seek': { name: 'seek', valueUs: timings.behaviorUs, canvasRef: behaviorCanvasRef },
-    'avoidance': { name: 'avoidance', valueUs: timings.avoidanceUs, canvasRef: avoidanceCanvasRef },
-    'movement': { name: 'movement', valueUs: timings.movementUs, canvasRef: movementCanvasRef },
-    'rotation': { name: 'rotation', valueUs: timings.rotationUs, canvasRef: rotationCanvasRef },
-  };
-
   const handleSort = () => {
-    const sorted = Object.values(timingEntriesMap)
-      .sort((a, b) => b.valueUs - a.valueUs)
-      .map((entry) => entry.name);
-    setSortOrder(sorted);
+    const allKeys = Object.keys(timings).filter(key => typeof timings[key as keyof SystemTimingsSnapshot] === 'number');
+    const nonCritical = allKeys.filter(k => !CRITICAL_METRICS.includes(k));
+
+    const sorted = nonCritical.sort((a, b) => {
+      const aValue = timings[a as keyof SystemTimingsSnapshot] as number;
+      const bValue = timings[b as keyof SystemTimingsSnapshot] as number;
+      return bValue - aValue;
+    });
+
+    setSortedKeys(sorted);
   };
 
-  const timingEntries = sortOrder.map((name) => timingEntriesMap[name]);
+  // Critical metrics (always at top)
+  const criticalMetrics = CRITICAL_METRICS
+    .filter(key => key in timings)
+    .map(key => ({
+      key,
+      name: toSnakeCase(key),
+      valueUs: timings[key as keyof SystemTimingsSnapshot] as number,
+      canvasRef: canvasRefs.current[key],
+    }));
+
+  // All other metrics (sorted or default order)
+  const otherMetrics = sortedKeys
+    .filter(key => key in timings)
+    .map(key => ({
+      key,
+      name: toSnakeCase(key),
+      valueUs: timings[key as keyof SystemTimingsSnapshot] as number,
+      canvasRef: canvasRefs.current[key],
+    }));
 
   return (
     <div className="section">
-      <div className="section-header">
-        <h2>System Timings</h2>
+      <h2>Critical Timings</h2>
+      <div className="critical-timings-grid">
+        {criticalMetrics.map((entry) => (
+          <TimingRow
+            key={entry.key}
+            name={entry.name}
+            valueUs={entry.valueUs}
+            canvasRef={entry.canvasRef}
+          />
+        ))}
+      </div>
+
+      <div className="section-header" style={{ marginTop: '24px' }}>
+        <h2>Detailed System Timings</h2>
         <button onClick={handleSort} className="sort-button">
           Sort
         </button>
       </div>
       <div className="timings-grid">
-        {timingEntries.map((entry) => (
+        {otherMetrics.map((entry) => (
           <TimingRow
-            key={entry.name}
+            key={entry.key}
             name={entry.name}
             valueUs={entry.valueUs}
             canvasRef={entry.canvasRef}

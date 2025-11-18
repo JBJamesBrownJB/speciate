@@ -14,20 +14,34 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Expose ONLY specific methods to renderer process
 contextBridge.exposeInMainWorld('electron', {
   /**
-   * Subscribe to state updates from simulation
-   * Callback receives plain JS object (not binary data)
+   * Subscribe to state updates from simulation (BINARY)
+   * Callback receives Uint8Array of raw MessagePack data
    *
-   * @param {Function} callback - Function to call with state updates
+   * @param {Function} callback - Function to call with binary state updates
    */
-  onStateUpdate: (callback) => {
-    // Validate callback is a function
+  onStateUpdateBinary: (callback) => {
     if (typeof callback !== 'function') {
-      throw new Error('onStateUpdate: callback must be a function');
+      throw new Error('onStateUpdateBinary: callback must be a function');
     }
 
-    // Listen for state-update events from main process
-    ipcRenderer.on('state-update', (event, state) => {
-      callback(state);
+    ipcRenderer.on('state-update-binary', (event, binaryData) => {
+      callback(binaryData);
+    });
+  },
+
+  /**
+   * Subscribe to telemetry updates from simulation (dev-tools only)
+   * Callback receives plain JavaScript object with metrics
+   *
+   * @param {Function} callback - Function to call with telemetry updates
+   */
+  onTelemetryUpdate: (callback) => {
+    if (typeof callback !== 'function') {
+      throw new Error('onTelemetryUpdate: callback must be a function');
+    }
+
+    ipcRenderer.on('telemetry-update', (event, telemetry) => {
+      callback(telemetry);
     });
   },
 
@@ -35,7 +49,8 @@ contextBridge.exposeInMainWorld('electron', {
    * Remove all state update listeners (cleanup)
    */
   removeStateUpdateListener: () => {
-    ipcRenderer.removeAllListeners('state-update');
+    ipcRenderer.removeAllListeners('state-update-binary');
+    ipcRenderer.removeAllListeners('telemetry-update');
   },
 
   /**

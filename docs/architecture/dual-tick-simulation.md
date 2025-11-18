@@ -1,14 +1,28 @@
-# Dual-Tick Simulation Architecture
+# ⚠️ ABANDONED ARCHITECTURE - FOR REFERENCE ONLY ⚠️
+
+**Status:** Explored in Sprint 11 and abandoned on November 18, 2025.
+
+**Why abandoned:** Sequential execution on a single thread provides no performance benefit. When AI (20Hz) and Physics (30Hz) schedules align (every 100ms at LCM), you get the same combined spike as running both together. Must budget for worst-case anyway, nullifying any advantage from lighter frames.
+
+**Key insight:** Dual-tick only provides benefit with true parallelism (separate threads with lock-free data structures). Without it, it's just architectural complexity with no scaling gain.
+
+**New direction:** Lower single tick rate (20Hz) + frontend interpolation (90Hz) achieves the same scaling goal with simpler architecture. See Sprint 12 for interpolation implementation.
+
+**This document is kept for reference and learning purposes.**
+
+---
+
+# Dual-Tick Simulation Architecture (ABANDONED)
 
 ## Overview
 
-The simulation uses a **dual-tick architecture** to separate concerns and enable massive scale:
+This architecture was designed to separate concerns and enable massive scale:
 
 - **30Hz Physics + Collision** (33.3ms period)
 - **20Hz AI + Perception** (50ms period)
 - **90Hz Frontend Rendering** (interpolated smoothing)
 
-This architecture enables **150,000-200,000 creatures** vs ~10,000 with single-tick.
+Target: **150,000-200,000 creatures** vs ~10,000 with single-tick.
 
 ---
 

@@ -2,14 +2,8 @@ export interface CreatureData {
   id: number;
   x: number;
   y: number;
-  vx: number;
-  vy: number;
   rotation: number;
-  width: number;
-  height: number;
-  behavior: string;
-  energy?: number;
-  age: number;
+  size: number;
 }
 
 export interface SystemTimingsSnapshot {
@@ -22,9 +16,13 @@ export interface SystemTimingsSnapshot {
   fleeUs: number;
   avoidanceUs: number;
   rotationUs: number;
+  ipcQueryUs: number;
+  ipcSerializeUs: number;
+  ipcWriteUs: number;
 }
 
 export interface GameState {
+  protocolVersion: number;
   tick: number;
   tickRateHz: number;
   creatures: CreatureData[];

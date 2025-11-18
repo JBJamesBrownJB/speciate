@@ -8,10 +8,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 echo "=========================================="
+echo "📦 Installing dependencies..."
+echo "=========================================="
+cd "$ROOT_DIR/apps/dev-ui"
+if [ ! -d "node_modules" ] || [ ! -f "node_modules/.bin/vite" ]; then
+  echo "  Dev-UI dependencies missing, installing..."
+  npm install
+else
+  echo "  Dev-UI dependencies OK"
+fi
+
+cd "$ROOT_DIR/apps/portal"
+if [ ! -d "node_modules" ]; then
+  echo "  Portal dependencies missing, installing..."
+  npm install
+else
+  echo "  Portal dependencies OK"
+fi
+
+echo ""
+echo "=========================================="
 echo "🔧 Building simulation (debug mode)..."
 echo "=========================================="
 cd "$ROOT_DIR/apps/simulation"
-cargo build --features dev-tools # non-prod release build of simulation
+cargo build --features dev-tools
 
 echo ""
 echo "=========================================="
@@ -29,6 +49,9 @@ trap 'kill $(jobs -p) 2>/dev/null' EXIT
 # Start dev-ui server in background
 cd "$ROOT_DIR/apps/dev-ui"
 npm run dev &
+
+# Give dev-ui time to start
+sleep 2
 
 # Start portal/Electron (this blocks until user quits)
 cd "$ROOT_DIR/apps/portal"

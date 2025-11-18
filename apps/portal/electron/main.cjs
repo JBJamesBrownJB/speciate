@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
-const msgpack = require('msgpack-lite');
+const { decode, encode } = require('@msgpack/msgpack');
 const path = require('path');
 const fs = require('fs');
 
@@ -22,7 +22,8 @@ console.log(`[Electron] Mode: ${isDev ? 'DEVELOPMENT' : 'PRODUCTION'}`);
  */
 function startSimulation() {
   // Path to Rust binary (debug in dev, release in production)
-  const buildType = isDev ? 'debug' : 'release';
+  // Use RUST_BUILD_TYPE env var to override, otherwise auto-detect
+  const buildType = process.env.RUST_BUILD_TYPE || (isDev ? 'debug' : 'release');
   const binaryName = platform === 'win32' ? 'speciate.exe' : 'speciate';
   const binaryPath = path.join(__dirname, '../../simulation/target', buildType, binaryName);
 
@@ -51,49 +52,70 @@ function startSimulation() {
     stdio: ['pipe', 'pipe', 'pipe'],  // stdin (pipe for commands), stdout (pipe), stderr (pipe)
   });
 
-  let buffer = Buffer.alloc(0);
+  let buffers = [];
+  let totalLength = 0;
 
   // Read stdout frames (length-prefixed MessagePack)
   simulationProcess.stdout.on('data', (chunk) => {
-    buffer = Buffer.concat([buffer, chunk]);
+    buffers.push(chunk);
+    totalLength += chunk.length;
 
     // Process all complete frames in buffer
-    while (buffer.length >= 4) {
+    while (totalLength >= 4) {
+      // Concatenate only when we need to read
+      let buffer = buffers.length === 1 ? buffers[0] : Buffer.concat(buffers);
+
       // Read 4-byte length prefix (big-endian u32)
       const frameLength = buffer.readUInt32BE(0);
 
       // Wait for complete frame
-      if (buffer.length < 4 + frameLength) {
+      if (totalLength < 4 + frameLength) {
+        // Store back if we concatenated
+        if (buffers.length > 1) {
+          buffers = [buffer];
+        }
         break;
       }
 
       // Extract MessagePack payload
       const payload = buffer.slice(4, 4 + frameLength);
-      buffer = buffer.slice(4 + frameLength);
+
+      // Keep remainder
+      const remainder = buffer.slice(4 + frameLength);
+      buffers = remainder.length > 0 ? [remainder] : [];
+      totalLength = remainder.length;
 
       try {
-        // Deserialize MessagePack in main process (Node.js Buffers are fast!)
-        const state = msgpack.decode(payload);
+        // Send raw binary to portal (zero-copy, avoid re-encoding overhead)
+        const binaryData = new Uint8Array(payload);
 
-        // Store latest state (in-memory cache for getLatestState())
-        latestState = state;
-
-        // Notify main renderer (send plain JS object, not binary data)
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('state-update', state);
+          mainWindow.webContents.send('state-update-binary', binaryData);
         }
 
-        // Notify dev tools window
+        // Decode ONLY for telemetry extraction (dev-ui) and latestState
+        const state = decode(payload);
+
+        // Send lightweight telemetry to dev-ui (no creature positions!)
         if (devToolsWindow && !devToolsWindow.isDestroyed()) {
-          devToolsWindow.webContents.send('state-update', state);
+          const telemetry = {
+            tick: state.tick,
+            creatureCount: state.creatures?.length || 0,
+            tickRateHz: state.tickRateHz,
+            systemTimingsUs: state.systemTimingsUs,
+          };
+          devToolsWindow.webContents.send('telemetry-update', telemetry);
         }
+
+        // Cache decoded state for latestState IPC handler
+        latestState = state;
       } catch (error) {
-        console.error('[Electron] Failed to decode MessagePack:', error);
+        console.error('[Electron] Failed to process MessagePack:', error);
       }
     }
   });
 
-  // Log stderr output
+  // Log stderr output (errors and debug messages from Rust)
   simulationProcess.stderr.on('data', (data) => {
     console.error('[Simulation stderr]', data.toString());
   });
@@ -336,7 +358,7 @@ ipcMain.on('send-command', (event, command) => {
 
   // Serialize command to MessagePack
   try {
-    const payload = msgpack.encode(command);
+    const payload = encode(command);
     const length = Buffer.alloc(4);
     length.writeUInt32BE(payload.length, 0);
 

@@ -4,11 +4,12 @@ use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize, Reflect)]
+#[repr(u8)]
 pub enum BehaviorMode {
     #[default]
-    Catatonic,
-    Seeking,
-    Wandering,
+    Catatonic = 0,
+    Seeking = 1,
+    Wandering = 2,
 }
 
 impl BehaviorMode {

@@ -25,19 +25,14 @@ pub struct CreatureSnapshot {
     pub id: u32,
     pub x: f32,
     pub y: f32,
-    pub vx: f32,
-    pub vy: f32,
     pub rotation: f32,
-    pub width: f32,
-    pub height: f32,
-    pub behavior: String,
-    pub energy: Option<f32>,
-    pub age: f32,
+    pub size: f32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct GameState {
+    pub protocol_version: u8,
     pub tick: u64,
     pub tick_rate_hz: f32,
     pub creatures: Vec<CreatureSnapshot>,
@@ -46,6 +41,7 @@ pub struct GameState {
     #[cfg(feature = "dev-tools")]
     pub system_timings_us: SystemTimingsSnapshot,
 }
+
 
 #[derive(Clone)]
 pub struct SnapshotQueue {
@@ -91,6 +87,7 @@ mod tests {
         let queue = SnapshotQueue::new(5);
 
         let state = GameState {
+            protocol_version: 1,
             tick: 1,
             tick_rate_hz: 90.0,
             creatures: vec![],
@@ -117,9 +114,9 @@ mod tests {
     fn test_queue_overflow() {
         let queue = SnapshotQueue::new(2);
 
-        queue.push(GameState { tick: 1, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
-        queue.push(GameState { tick: 2, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
-        queue.push(GameState { tick: 3, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
+        queue.push(GameState { protocol_version: 1, tick: 1, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
+        queue.push(GameState { protocol_version: 1, tick: 2, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
+        queue.push(GameState { protocol_version: 1, tick: 3, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
 
         assert_eq!(queue.len(), 2);
     }

@@ -149,13 +149,13 @@ export const CacheFirewall: React.FC<Props> = ({ l1dMissRate, llcMissRate, backe
 
   const getRAMTooltip = () => (
     <CockpitTooltip
-      header="Main Memory (RAM)"
+      header="RAM Stall (Backend Pipeline)"
       current={`Current: ${ramState.label} ✓`}
       sections={[
         {
           title: 'What this means:',
           items: [
-            { text: 'CPU is not waiting for main memory' },
+            { text: 'Backend pipeline not stalled on memory' },
             { text: 'Memory bandwidth is sufficient' },
             { text: 'Prefetcher is keeping up' },
           ],
@@ -190,7 +190,6 @@ export const CacheFirewall: React.FC<Props> = ({ l1dMissRate, llcMissRate, backe
                 backgroundColor: l1State.color,
               }}
             >
-              <div className="cache-bar-value">{l1State.value}</div>
             </div>
           </div>
           <div className="cache-bar-label">L1</div>
@@ -213,7 +212,6 @@ export const CacheFirewall: React.FC<Props> = ({ l1dMissRate, llcMissRate, backe
                 backgroundColor: l3State.color,
               }}
             >
-              <div className="cache-bar-value">{l3State.value}</div>
             </div>
           </div>
           <div className="cache-bar-label">L3</div>
@@ -236,10 +234,9 @@ export const CacheFirewall: React.FC<Props> = ({ l1dMissRate, llcMissRate, backe
                 backgroundColor: ramState.color,
               }}
             >
-              <div className="cache-bar-value">{ramState.value}</div>
             </div>
           </div>
-          <div className="cache-bar-label">RAM</div>
+          <div className="cache-bar-label">RAM Stall</div>
           <div className="cache-bar-status" style={{ color: ramState.color }}>
             {ramState.label}
           </div>

@@ -106,6 +106,9 @@ const TimingRow: React.FC<TimingRowProps> = ({ name, valueUs, canvasRef }) => (
 // Reserved metrics that should always appear at the top
 const CRITICAL_METRICS = ['totalTickUs', 'ipcWriterThreadUs'];
 
+// Non-timing metrics that should be excluded from sparklines
+const NON_TIMING_METRICS = ['archetypeCount', 'entityCount'];
+
 // Convert camelCase to snake_case for display
 const toSnakeCase = (str: string): string => {
   return str.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
@@ -115,13 +118,20 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
   // Dynamic refs and history storage
   const canvasRefs = useRef<Record<string, React.RefObject<HTMLCanvasElement>>>({});
   const historyRefs = useRef<Record<string, SparklineData>>({});
+  const averageRefs = useRef<Record<string, number>>({});
   const [sortedKeys, setSortedKeys] = useState<string[]>([]);
+
+  // Rolling average window: 1 second at ~30Hz = ~30 frames
+  const ROLLING_WINDOW_FRAMES = 30;
 
   useEffect(() => {
     if (!timings) return;
 
     // Dynamically create refs and history for each metric
-    const allKeys = Object.keys(timings).filter(key => typeof timings[key as keyof SystemTimingsSnapshot] === 'number');
+    const allKeys = Object.keys(timings).filter(key =>
+      typeof timings[key as keyof SystemTimingsSnapshot] === 'number' &&
+      !NON_TIMING_METRICS.includes(key)
+    );
 
     allKeys.forEach(key => {
       if (!canvasRefs.current[key]) {
@@ -131,13 +141,18 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
         historyRefs.current[key] = { history: [], maxHistory: 120 };
       }
 
-      // Update history
+      // Update history (for sparkline)
       const value = timings[key as keyof SystemTimingsSnapshot] as number;
       const history = historyRefs.current[key];
       history.history.push(value);
       if (history.history.length > history.maxHistory) {
         history.history.shift();
       }
+
+      // Calculate rolling average for display (last 1 second)
+      const rollingWindow = history.history.slice(-ROLLING_WINDOW_FRAMES);
+      const average = rollingWindow.reduce((sum, v) => sum + v, 0) / rollingWindow.length;
+      averageRefs.current[key] = average;
 
       // Render sparkline
       const canvas = canvasRefs.current[key]?.current;
@@ -163,12 +178,16 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
   }
 
   const handleSort = () => {
-    const allKeys = Object.keys(timings).filter(key => typeof timings[key as keyof SystemTimingsSnapshot] === 'number');
+    const allKeys = Object.keys(timings).filter(key =>
+      typeof timings[key as keyof SystemTimingsSnapshot] === 'number' &&
+      !NON_TIMING_METRICS.includes(key)
+    );
     const nonCritical = allKeys.filter(k => !CRITICAL_METRICS.includes(k));
 
     const sorted = nonCritical.sort((a, b) => {
-      const aValue = timings[a as keyof SystemTimingsSnapshot] as number;
-      const bValue = timings[b as keyof SystemTimingsSnapshot] as number;
+      // Sort by averaged values for more stable ordering
+      const aValue = averageRefs.current[a] || (timings[a as keyof SystemTimingsSnapshot] as number);
+      const bValue = averageRefs.current[b] || (timings[b as keyof SystemTimingsSnapshot] as number);
       return bValue - aValue;
     });
 
@@ -181,7 +200,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
     .map(key => ({
       key,
       name: toSnakeCase(key),
-      valueUs: timings[key as keyof SystemTimingsSnapshot] as number,
+      valueUs: averageRefs.current[key] || (timings[key as keyof SystemTimingsSnapshot] as number),
       canvasRef: canvasRefs.current[key],
     }));
 
@@ -191,7 +210,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
     .map(key => ({
       key,
       name: toSnakeCase(key),
-      valueUs: timings[key as keyof SystemTimingsSnapshot] as number,
+      valueUs: averageRefs.current[key] || (timings[key as keyof SystemTimingsSnapshot] as number),
       canvasRef: canvasRefs.current[key],
     }));
 

@@ -223,6 +223,11 @@
   letter-spacing: 0.05em;
   margin-top: 0.25rem;
   text-align: center;
+  min-height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 /* Parallelism Panel Styles */

@@ -542,58 +542,9 @@ pub fn update_vision_system(
 
 ---
 
-## Phase 5: Async Zoom (GPU Decoupling)
-
-**Duration:** Day 10 (2 hours)
-
-**Goal:** Smooth zoom at all creature counts (no GPU/DOM race conditions)
-
-**Problem:** Wheel events trigger GPU transforms synchronously → stutters at high counts
-
-**Solution:** State-only wheel handler, GPU work in render loop
-
-**File:** `apps/portal/src/main.ts`
-
-```typescript
-// Wheel handler: STATE ONLY
-window.addEventListener("wheel", (event) => {
-    event.preventDefault();
-    const zoomFactor = 1 - event.deltaY * CAMERA_CONFIG.ZOOM_SENSITIVITY;
-    camera.adjustZoom(zoomFactor);  // Just update zoom value
-    // NO GPU work, NO DOM manipulation
-});
-
-// Render loop: GPU + DOM throttled
-let framesSinceScaleBarUpdate = 0;
-let lastAppliedZoom = camera.zoom;
-
-app.ticker.add(() => {
-    // Only apply transform if zoom changed (dirty check)
-    if (camera.zoom !== lastAppliedZoom) {
-        camera.applyTransform(worldContainer, viewport.width, viewport.height);
-        lastAppliedZoom = camera.zoom;
-    }
-
-    // Throttle ScaleBar to 30Hz (not every frame)
-    if (framesSinceScaleBarUpdate >= 2) {
-        scaleBarManager.update(camera.zoom);
-        framesSinceScaleBarUpdate = 0;
-    } else {
-        framesSinceScaleBarUpdate++;
-    }
-});
-```
-
-**Benefits:**
-- GPU transforms synchronized with vsync (no tearing)
-- DOM updates throttled to 30Hz (less overhead)
-- Zero race conditions (single loop)
-
-**Success:** Zoom feels instant, no jitter at 10K+ creatures
-
 ---
 
-## Phase 6: Performance Validation
+## Phase 5: Performance Validation
 
 **Duration:** Day 11
 

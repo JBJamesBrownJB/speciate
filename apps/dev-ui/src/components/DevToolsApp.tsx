@@ -123,7 +123,6 @@ export const DevToolsApp: React.FC = () => {
             <CacheFirewall
               l1dMissRate={hardwareMetrics.l1dMissRate}
               llcMissRate={hardwareMetrics.llcMissRate}
-              backendStallRatio={hardwareMetrics.backendStallRatio}
             />
             <BranchScope branchMissRate={hardwareMetrics.branchMissRate} />
           </div>

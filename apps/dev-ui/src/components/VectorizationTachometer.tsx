@@ -7,7 +7,7 @@ interface Props {
 }
 
 const IPC_MIN = 0;
-const IPC_MAX = 4.0;
+const IPC_MAX = 5.0;
 const SCALAR_LIMIT = 1.5;
 
 const GAUGE_RADIUS = 80;
@@ -19,7 +19,7 @@ const COLOR_ZONES: ColorZone[] = [
   { start: 0.0, end: 1.0, color: COLORS.critical, label: 'Scalar/Stalled' },
   { start: 1.0, end: 1.5, color: COLORS.warning, label: 'Scalar Peak' },
   { start: 1.5, end: 2.5, color: COLORS.success, label: 'SIMD Active' },
-  { start: 2.5, end: 4.0, color: COLORS.streaming, label: 'AVX2/512' },
+  { start: 2.5, end: 5.0, color: COLORS.streaming, label: 'AVX2/512' },
 ];
 
 const ipcToAngle = (ipc: number): number => {
@@ -29,12 +29,25 @@ const ipcToAngle = (ipc: number): number => {
 
 export const VectorizationTachometer: React.FC<Props> = ({ ipc }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [targetAngle, setTargetAngle] = useState(ipcToAngle(ipc));
   const [currentAngle, setCurrentAngle] = useState(ipcToAngle(ipc));
+  const angleHistoryRef = useRef<number[]>([]);
   const [showTooltip, setShowTooltip] = useState(false);
 
+  // Rolling average for smooth needle motion
+  const ROLLING_WINDOW = 10;  // Average over ~10 frames (~166ms at 60fps)
+
   useEffect(() => {
-    setTargetAngle(ipcToAngle(ipc));
+    const targetAngle = ipcToAngle(ipc);
+
+    // Add to history
+    angleHistoryRef.current.push(targetAngle);
+    if (angleHistoryRef.current.length > ROLLING_WINDOW) {
+      angleHistoryRef.current.shift();
+    }
+
+    // Calculate rolling average
+    const avg = angleHistoryRef.current.reduce((sum, a) => sum + a, 0) / angleHistoryRef.current.length;
+    setCurrentAngle(avg);
   }, [ipc]);
 
   useEffect(() => {
@@ -48,13 +61,6 @@ export const VectorizationTachometer: React.FC<Props> = ({ ipc }) => {
     const height = canvas.height;
     const centerX = width / 2;
     const centerY = height / 2 + 20;
-
-    const smoothing = 0.15;
-    const angleDiff = targetAngle - currentAngle;
-
-    if (Math.abs(angleDiff) > 0.001) {
-      setCurrentAngle((prev) => prev + angleDiff * smoothing);
-    }
 
     let animationFrameId: number;
     const render = () => {
@@ -108,7 +114,7 @@ export const VectorizationTachometer: React.FC<Props> = ({ ipc }) => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [currentAngle, targetAngle, ipc]);
+  }, [currentAngle, ipc]);
 
   return (
     <div

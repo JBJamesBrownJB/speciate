@@ -51,7 +51,9 @@ const getL3State = (llcMissRate: number): BarState => {
       value: `${llcMissRate.toFixed(1)}%`,
     };
   }
-  if (llcMissRate > 10) {
+  // Adjusted: 15% is industry-standard threshold for "good" L3 performance
+  // Still conservative for streaming workloads but reduces false positives
+  if (llcMissRate > 15) {
     return {
       color: COLORS.warning,
       label: 'Stressed',

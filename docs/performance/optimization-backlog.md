@@ -67,3 +67,7 @@
 **Solution:** Load world in chunks (creatures by region).
 **Notes:** Load time: 3-5s→1-2s. Progressive loading UX.
 ---
+### Object Pooling ("Ghost" Pool)
+**Problem:** Dying and spawning cits cause memory allocator churn.
+**Solution:**Recycle dead entities instead of spawn/despawn to prevent memory allocator churn.
+**Notes:** Leak Prevention: Automatic cleanup of interpolation history buffers (PreviousPositions) upon entity death

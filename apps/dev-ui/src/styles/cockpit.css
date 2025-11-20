@@ -1,0 +1,322 @@
+.hardware-cockpit-section {
+  margin: 2rem 0;
+}
+
+.hardware-cockpit-section,
+.cockpit-container,
+.cockpit-panel {
+  box-sizing: border-box;
+}
+
+.cockpit-container {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+  min-width: 0;
+  width: 100%;
+}
+
+.cockpit-row-2 {
+  margin-top: 0.75rem;
+}
+
+.cockpit-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  border-radius: 8px;
+  min-width: 200px;
+  flex: 1;
+}
+
+.cockpit-panel-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tachometer-canvas {
+  display: block;
+  margin: 0 auto;
+}
+
+.tachometer-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-top: 0.5rem;
+}
+
+.tachometer-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+.cockpit-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 0.5rem;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(100, 116, 139, 0.5);
+  border-radius: 6px;
+  padding: 1rem;
+  min-width: 320px;
+  max-width: 400px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #cbd5e1;
+  pointer-events: none;
+}
+
+.tooltip-header {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.3);
+  padding-bottom: 0.5rem;
+}
+
+.tooltip-current {
+  font-weight: 600;
+  color: #4ade80;
+  margin-bottom: 0.75rem;
+}
+
+.tooltip-section {
+  margin-bottom: 0.75rem;
+}
+
+.tooltip-section-title {
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 0.25rem;
+}
+
+.tooltip-section ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style-type: disc;
+}
+
+.tooltip-section li {
+  margin-bottom: 0.25rem;
+}
+
+.tooltip-success {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.tooltip-warning {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.tooltip-target {
+  font-weight: 600;
+  color: #60a5fa;
+  font-size: 0.8125rem;
+}
+
+.cache-bars-container {
+  display: flex;
+  gap: 0.1rem;
+  padding: 0.5rem 0;
+  align-items: flex-end;
+}
+
+.cache-bar-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cache-bar-background {
+  width: 50px;
+  height: 120px;
+  background: rgba(156, 163, 175, 0.2);
+  border-radius: 4px;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+.cache-bar-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  border-radius: 4px;
+  transition: height 0.3s ease-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.775rem;
+  font-weight: 600;
+}
+
+.cache-bar-wrapper:hover .cache-bar-background {
+  transform: scale(1.05);
+}
+
+.cache-bar-value {
+  writing-mode: horizontal-tb;
+  color: rgba(15, 23, 42, 0.95);
+  font-weight: 700;
+}
+
+.cache-bar-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  text-transform: uppercase;
+}
+
+.cache-bar-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+  min-height: 2.5rem;
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scope-canvas {
+  display: block;
+  margin: 0 auto;
+}
+
+.scope-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.scope-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
+/* Parallelism Panel Styles */
+.cockpit-panel-wide {
+  width: 100%;
+  min-width: 0;
+}
+
+.parallelism-factor-bar {
+  width: 100%;
+  height: 20px;
+  background: rgba(156, 163, 175, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  overflow: hidden;
+  margin: 0.75rem 0 0.5rem 0;
+}
+
+.parallelism-factor-fill {
+  height: 100%;
+  transition: width 0.3s ease-out, background-color 0.3s ease;
+  border-radius: 10px;
+}
+
+.parallelism-factor-label {
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.parallelism-grids-container {
+  display: flex;
+  gap: 0;
+  margin-top: 1rem;
+  justify-content: flex-start;
+  align-items: flex-start;
+  width: 100%;
+  align-self: flex-start;
+}
+
+.parallelism-section {
+  margin: 0;
+}
+
+.parallelism-section.cpu-section {
+  flex: 0 0 180px;
+  padding-right: 1.5rem;
+  border-right: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.parallelism-section.ecs-section {
+  flex: 1;
+  padding-left: 1.5rem;
+}
+
+.parallelism-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.parallelism-cpu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.parallelism-cpu-block {
+  aspect-ratio: 1;
+  min-width: 35px;
+  min-height: 35px;
+  border-radius: 4px;
+  transition: opacity 0.3s ease, background-color 0.3s ease;
+  will-change: opacity, background-color;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.parallelism-system-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(35px, 35px));
+  gap: 0.5rem;
+}
+
+.parallelism-system-block {
+  aspect-ratio: 1;
+  min-width: 35px;
+  min-height: 35px;
+  border-radius: 4px;
+  transition: opacity 0.3s ease, background-color 0.3s ease;
+  will-change: opacity, background-color;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}

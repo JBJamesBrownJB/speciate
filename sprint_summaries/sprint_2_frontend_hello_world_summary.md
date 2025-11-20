@@ -81,7 +81,7 @@ Establish a complete client-server communication system connecting the Rust simu
 - [x] Configure production build
 
 ### Phase 3: Code Reviews & Cleanup (Session 5)
-- [x] Backend code review by backend-simulation-sam
+- [x] Backend code review by rusty-ron
 - [x] Frontend code review by frontend-fanny
 - [x] Architecture review by architect-andy
 - [x] Final bug fixes and optimizations
@@ -244,7 +244,7 @@ The system is ready for Phase 2 (multiple entities, genetics) with these caveats
 4. **Incremental Integration** - Building both systems in parallel allowed verification at each step
 
 ### Team Coordination
-1. **Agent Specialization Works** - Having frontend-fanny, backend-simulation-sam, architect-andy each do reviews was effective
+1. **Agent Specialization Works** - Having frontend-fanny, rusty-ron, architect-andy each do reviews was effective
 2. **Clear Requirements** - README update helped keep all agents aligned on tech stack
 3. **Feedback Loops** - Each agent's review informed next steps and priorities
 

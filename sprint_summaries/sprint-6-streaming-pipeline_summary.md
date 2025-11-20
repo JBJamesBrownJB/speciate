@@ -69,7 +69,7 @@ Establish the end-to-end streaming pipeline: Simulation publishes state updates 
   - Event-driven architecture
   - TDD mandatory (>85% coverage)
 
-- **Simulation NATS Publishing** (backend-simulation-sam agent)
+- **Simulation NATS Publishing** (rusty-ron agent)
   - `apps/simulation/src/nats_publisher.rs` (201 lines)
   - Dependencies: async-nats, tokio, serde_json, chrono
   - Resilient publisher with auto-reconnect
@@ -295,7 +295,7 @@ interface AgentTransform {
 3. **Incremental Progress:** Breaking work into 7 sessions prevented scope creep
 4. **Docker Networking:** Once understood, Docker DNS made cross-container communication trivial
 5. **Documentation:** Comprehensive session logging enabled easy context switching
-6. **Agent Specialization:** Using specialized Claude agents (backend-simulation-sam, broadcaster-brian, frontend-fanny) improved code quality
+6. **Agent Specialization:** Using specialized Claude agents (rusty-ron, broadcaster-brian, frontend-fanny) improved code quality
 7. **Bug Fix Process:** Research-first approach (Bevy best practices) validated the fix before implementation
 
 ### Challenges Overcome 🔧

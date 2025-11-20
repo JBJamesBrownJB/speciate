@@ -10,6 +10,34 @@ export interface DevCommand {
   template?: string;
 }
 
+export interface HardwareMetrics {
+  cyclesDelta: number;
+  instructionsDelta: number;
+  cacheRefsDelta: number;
+  cacheMissesDelta: number;
+  l1dMissesDelta: number;
+  l1iMissesDelta: number;
+  branchInstructionsDelta: number;
+  branchMissesDelta: number;
+  stalledFrontendDelta: number;
+  stalledBackendDelta: number;
+  ipc: number;
+  l1dMissRate: number;
+  l1iMissRate: number;
+  llcMissRate: number;
+  branchMissRate: number;
+  frontendStallRatio: number;
+  backendStallRatio: number;
+}
+
+export interface ParallelizationMetrics {
+  cpuCoresTotal: number;
+  cpuCoresActive: number;
+  cpuUtilizationPct: number;
+  estimatedParallelismFactor: number;
+  concurrentSystemsEstimate: number;
+}
+
 export interface SystemTimingsSnapshot {
   totalTickUs: number;
   movementUs: number;
@@ -33,6 +61,8 @@ export interface TelemetryFrame {
   creatureCount: number;
   tickRateHz: number;
   systemTimingsUs: SystemTimingsSnapshot;
+  hardwareMetrics?: HardwareMetrics;
+  parallelizationMetrics?: ParallelizationMetrics;
 }
 
 export interface GameState {

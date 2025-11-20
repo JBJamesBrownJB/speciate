@@ -161,7 +161,11 @@ fn test_gamestate_includes_timing_fields() {
             ipc_frame_drops_total: 0,
             ipc_channel_utilization_pct: 0,
             ipc_writer_thread_us: 0,
+            archetype_count: 5,
+            entity_count: 100,
         },
+        hardware_metrics: None,
+        parallelization_metrics: None,
     };
 
     let serialized = rmp_serde::to_vec(&state).unwrap();

@@ -211,9 +211,16 @@ fn serialize_snapshot_frame(simulation: &mut Simulation) -> io::Result<Vec<u8>> 
     }
 
     #[cfg(feature = "dev-tools")]
-    let system_timings_us = world
-        .resource::<crate::instrumentation::SystemTimings>()
-        .snapshot();
+    let system_timings_us = {
+        use crate::instrumentation::extract_ecs_metrics;
+        let (archetype_count, entity_count_u64) = extract_ecs_metrics(world);
+        let mut timings = world
+            .resource::<crate::instrumentation::SystemTimings>()
+            .snapshot();
+        timings.archetype_count = archetype_count;
+        timings.entity_count = entity_count_u64;
+        timings
+    };
 
     let state = GameState {
         protocol_version: PROTOCOL_VERSION,
@@ -224,6 +231,16 @@ fn serialize_snapshot_frame(simulation: &mut Simulation) -> io::Result<Vec<u8>> 
         entity_count,
         #[cfg(feature = "dev-tools")]
         system_timings_us,
+        #[cfg(feature = "dev-tools")]
+        hardware_metrics: {
+            let mut hw_metrics = world.resource_mut::<crate::instrumentation::HardwareMetrics>();
+            hw_metrics.read()
+        },
+        #[cfg(feature = "dev-tools")]
+        parallelization_metrics: {
+            let mut para_metrics = world.resource_mut::<crate::instrumentation::ParallelizationMetrics>();
+            Some(para_metrics.read())
+        },
     };
 
     #[cfg(feature = "dev-tools")]

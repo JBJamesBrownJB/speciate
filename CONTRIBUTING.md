@@ -141,15 +141,36 @@ cargo test -- --nocapture  # Run tests with output
 
 **CRITICAL: Test-Driven Development (TDD) is MANDATORY for all contributions.**
 
-See [CLAUDE.md](CLAUDE.md#test-driven-development-tdd---mandatory) for complete TDD workflow and requirements.
+### The Red-Green-Refactor Cycle
 
-**Quick reference:**
-- Run tests BEFORE and AFTER every change
-- Write tests FIRST for new features
-- Write failing test FIRST when fixing bugs
-- Never commit without all tests passing
+All code changes must follow the complete TDD workflow:
 
-**Running tests:**
+#### 🔴 RED - Write a Failing Test
+1. Write a test that describes the desired behavior
+2. Run the test and watch it fail (proves it's testing something new)
+3. For bugs: Write a test that reproduces the bug first
+
+#### 🟢 GREEN - Make it Pass
+1. Write the minimum code to make the test pass
+2. Don't worry about code quality yet
+3. Run tests and verify they pass
+
+#### 🔵 REFACTOR - Make it Right
+1. Improve code quality WITHOUT changing behavior:
+   - Remove duplication (DRY principle)
+   - Apply SOLID principles
+   - Improve naming and structure
+   - Extract methods for clarity
+   - Simplify complex logic
+2. Run tests after EACH refactoring step to ensure they still pass
+3. **Never skip this step** - passing tests don't mean good code
+
+#### 🔁 REPEAT
+- Each cycle should be small (2-10 minutes)
+- Commit after completing a full cycle with all tests passing
+
+### Running Tests
+
 ```bash
 # Frontend
 cd apps/portal && npm test
@@ -157,6 +178,14 @@ cd apps/portal && npm test
 # Backend
 cd apps/simulation && cargo test
 ```
+
+### Before Committing
+1. Ensure you've completed the REFACTOR phase
+2. Run ALL tests (frontend AND backend)
+3. Verify all tests pass
+4. Only then commit your changes
+
+See [CLAUDE.md](CLAUDE.md#test-driven-development-tdd---mandatory) for complete TDD workflow details.
 
 ---
 
@@ -244,7 +273,9 @@ Speciate uses specialized AI agents (via Claude Code) for development assistance
 
 ### Core Engineering
 - **architect-andy** - Technical architecture, system design, performance analysis
-- **backend-simulation-sam** - Rust simulation, A-Life systems, ECS implementation
+- **rusty-ron** - Rust simulation, A-Life systems, ECS implementation
+- **ecs-eddy** - ECS optimization, performance profiling, Data-Oriented Design
+- **instrumentation-ian** - Linux performance analysis, telemetry pipelines, empirical validation
 - **frontend-fanny** - PixiJS rendering, UI/UX, client optimization
 
 ### Domain Experts

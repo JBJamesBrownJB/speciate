@@ -435,5 +435,5 @@ if (creature.tamed && distance_to_player < perception_range) {
 ---
 
 **Status:** Design complete, pending Phase 1.5 implementation
-**Owner:** backend-simulation-sam (taming logic), frontend-fanny (UI/commands)
+**Owner:** rusty-ron (taming logic), frontend-fanny (UI/commands)
 **Consultant:** zoologist-tom (DNA trait validation)

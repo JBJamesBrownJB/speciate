@@ -33,16 +33,26 @@ ctrlc = { version = "3.4", features = ["termination"] }  # Signal handling for g
 crossbeam = "0.8"  # Lock-free data structures for snapshot queue
 crossbeam-channel = "0.5"  # High-performance MPSC for background IPC writer
 
+# Development-only dependencies (feature-gated)
+perf-event = { version = "0.4", optional = true }  # Hardware performance counters
+git2 = { version = "0.18", optional = true }  # Git metadata for snapshots
+sysinfo = { version = "0.31", optional = true }  # System metrics (CPU, memory)
+
 [features]
 # Enable test helper methods for integration tests
 test-helpers = []
-# Enable development tools (trial system, command IPC)
-default = ["dev-tools"]
-dev-tools = []
+
+# Development tools (trial system, command IPC, performance instrumentation)
+# PRODUCTION-SAFE: dev-tools is NOT in default features
+# - Production builds: cargo build --release (no dev-tools)
+# - Dev builds: cargo build --features dev-tools
+default = []
+dev-tools = ["dep:perf-event", "dep:git2", "dep:sysinfo"]
 
 [dev-dependencies]
 os_pipe = "1.2"  # For stdin simulation in command tests
 tempfile = "3.10"  # Temporary files for snapshot tests
+regex = "1.10"  # For system timing validation test
 
 [profile.release]
 opt-level = 3

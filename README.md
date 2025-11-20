@@ -109,7 +109,10 @@
 - **Node.js** 18+ (`node --version`) - For Electron + frontend
 - **npm** 10+ (`npm --version`)
 - **System dependencies:**
-  - **Linux:** None (Electron bundles Chromium)
+  - **Linux:**
+    - `perf` (performance metrics) - Install: `sudo apt-get install linux-tools-generic linux-tools-$(uname -r)`
+    - Configure: `sudo sysctl -w kernel.perf_event_paranoid=1` (allows hardware counter access)
+    - Electron bundles Chromium
   - **macOS:** None (Electron bundles Chromium)
   - **Windows:** None (Electron bundles Chromium)
 
@@ -299,7 +302,9 @@ Speciate uses specialized AI agents (via Claude Code) for development:
 
 ### Core Engineering
 - **architect-andy** - Technical architecture, system design, performance analysis
-- **backend-simulation-sam** - Rust simulation, A-Life systems, ECS implementation
+- **rusty-ron** - Rust simulation, A-Life systems, ECS implementation
+- **ecs-eddy** - ECS optimization, performance profiling, Data-Oriented Design
+- **instrumentation-ian** - Linux performance analysis, telemetry pipelines, empirical validation
 - **frontend-fanny** - PixiJS rendering, UI/UX, client optimization
 
 ### Domain Experts

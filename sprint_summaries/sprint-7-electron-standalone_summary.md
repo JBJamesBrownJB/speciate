@@ -349,7 +349,7 @@ CLAUDE.md                                 # Updated TDD workflow, removed Tauri
 - Validated performance assumptions (debug builds fast enough for 20 Hz sim)
 - IPC performance analysis (validation overhead negligible)
 
-**Backend Engineer (backend-simulation-sam):**
+**Backend Engineer (rusty-ron):**
 - Implemented stdio MessagePack frame protocol in Rust
 - Bevy ECS integration with Electron subprocess model
 - Binary path detection and validation

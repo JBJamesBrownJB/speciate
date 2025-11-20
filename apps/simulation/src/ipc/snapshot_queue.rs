@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use bevy_ecs::system::Resource;
 use std::sync::Arc;
 #[cfg(feature = "dev-tools")]
-use crate::instrumentation::SystemTimingsSnapshot;
+use crate::instrumentation::{SystemTimingsSnapshot, HardwareSnapshot, ParallelizationSnapshot};
 
 #[derive(Clone, Resource)]
 pub struct SharedSnapshotQueue(pub Arc<SnapshotQueue>);
@@ -40,6 +40,10 @@ pub struct GameState {
     pub entity_count: usize,
     #[cfg(feature = "dev-tools")]
     pub system_timings_us: SystemTimingsSnapshot,
+    #[cfg(feature = "dev-tools")]
+    pub hardware_metrics: Option<HardwareSnapshot>,
+    #[cfg(feature = "dev-tools")]
+    pub parallelization_metrics: Option<ParallelizationSnapshot>,
 }
 
 
@@ -91,8 +95,14 @@ mod tests {
             tick: 1,
             tick_rate_hz: 90.0,
             creatures: vec![],
+            #[cfg(feature = "dev-tools")]
             entity_count: 0,
+            #[cfg(feature = "dev-tools")]
             system_timings_us: Default::default(),
+            #[cfg(feature = "dev-tools")]
+            hardware_metrics: None,
+            #[cfg(feature = "dev-tools")]
+            parallelization_metrics: None,
         };
 
         queue.push(state.clone());
@@ -114,9 +124,48 @@ mod tests {
     fn test_queue_overflow() {
         let queue = SnapshotQueue::new(2);
 
-        queue.push(GameState { protocol_version: 1, tick: 1, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
-        queue.push(GameState { protocol_version: 1, tick: 2, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
-        queue.push(GameState { protocol_version: 1, tick: 3, tick_rate_hz: 90.0, creatures: vec![], entity_count: 0, system_timings_us: Default::default() });
+        queue.push(GameState {
+            protocol_version: 1,
+            tick: 1,
+            tick_rate_hz: 90.0,
+            creatures: vec![],
+            #[cfg(feature = "dev-tools")]
+            entity_count: 0,
+            #[cfg(feature = "dev-tools")]
+            system_timings_us: Default::default(),
+            #[cfg(feature = "dev-tools")]
+            hardware_metrics: None,
+            #[cfg(feature = "dev-tools")]
+            parallelization_metrics: None,
+        });
+        queue.push(GameState {
+            protocol_version: 1,
+            tick: 2,
+            tick_rate_hz: 90.0,
+            creatures: vec![],
+            #[cfg(feature = "dev-tools")]
+            entity_count: 0,
+            #[cfg(feature = "dev-tools")]
+            system_timings_us: Default::default(),
+            #[cfg(feature = "dev-tools")]
+            hardware_metrics: None,
+            #[cfg(feature = "dev-tools")]
+            parallelization_metrics: None,
+        });
+        queue.push(GameState {
+            protocol_version: 1,
+            tick: 3,
+            tick_rate_hz: 90.0,
+            creatures: vec![],
+            #[cfg(feature = "dev-tools")]
+            entity_count: 0,
+            #[cfg(feature = "dev-tools")]
+            system_timings_us: Default::default(),
+            #[cfg(feature = "dev-tools")]
+            hardware_metrics: None,
+            #[cfg(feature = "dev-tools")]
+            parallelization_metrics: None,
+        });
 
         assert_eq!(queue.len(), 2);
     }

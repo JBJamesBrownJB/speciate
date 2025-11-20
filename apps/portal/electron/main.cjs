@@ -103,6 +103,8 @@ function startSimulation() {
             creatureCount: state.creatures?.length || 0,
             tickRateHz: state.tickRateHz,
             systemTimingsUs: state.systemTimingsUs,
+            hardwareMetrics: state.hardwareMetrics,
+            parallelizationMetrics: state.parallelizationMetrics,
           };
           devToolsWindow.webContents.send('telemetry-update', telemetry);
         }
@@ -217,7 +219,7 @@ async function createWindow() {
  */
 async function createDevToolsWindow() {
   devToolsWindow = new BrowserWindow({
-    width: 900,
+    width: 950,
     height: 1300,
     x: 1920,
     y: 0,

@@ -472,5 +472,5 @@ if dexterity >= recipe.dexterity_required {
 ---
 
 **Status:** Design complete, zoologist-validated, pending Phase 1.5 implementation
-**Owner:** backend-simulation-sam (social learning, tool use systems)
+**Owner:** rusty-ron (social learning, tool use systems)
 **Consultant:** zoologist-tom (biological validation, DNA trait balance)

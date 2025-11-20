@@ -7,13 +7,19 @@
  * - View simulation state
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SpawnForm } from './SpawnForm';
 import { TrialSelector } from './TrialSelector';
 import { StateDisplay } from './StateDisplay';
 import { IPCHealthPanel } from './IPCHealthPanel';
 import { SystemTimingsPanel } from './SystemTimingsPanel';
-import type { SystemTimingsSnapshot, TelemetryFrame } from '../types';
+import { VectorizationTachometer } from './VectorizationTachometer';
+import { CacheFirewall } from './CacheFirewall';
+import { BranchScope } from './BranchScope';
+import { Parallelism } from './Parallelism';
+import { useSmoothedMetrics } from '../hooks/useSmoothedMetrics';
+import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, TelemetryFrame } from '../types';
+import '../styles/cockpit.css';
 
 export const DevToolsApp: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -21,6 +27,10 @@ export const DevToolsApp: React.FC = () => {
   const [creatureCount, setCreatureCount] = useState(0);
   const [tickRateHz, setTickRateHz] = useState(0);
   const [systemTimings, setSystemTimings] = useState<SystemTimingsSnapshot | undefined>(undefined);
+  const [rawHardwareMetrics, setRawHardwareMetrics] = useState<HardwareMetrics | undefined>(undefined);
+  const [parallelizationMetrics, setParallelizationMetrics] = useState<ParallelizationMetrics | undefined>(undefined);
+  const hardwareMetrics = useSmoothedMetrics(rawHardwareMetrics, 0.3);
+  const lastHardwareUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     if (window.electron?.sendCommand) {
@@ -32,6 +42,16 @@ export const DevToolsApp: React.FC = () => {
       setCreatureCount(telemetry.creatureCount);
       setTickRateHz(telemetry.tickRateHz);
       setSystemTimings(telemetry.systemTimingsUs);
+
+      const now = Date.now();
+      if (telemetry.hardwareMetrics && (now - lastHardwareUpdateRef.current) >= 200) {
+        setRawHardwareMetrics(telemetry.hardwareMetrics);
+        lastHardwareUpdateRef.current = now;
+      }
+
+      if (telemetry.parallelizationMetrics) {
+        setParallelizationMetrics(telemetry.parallelizationMetrics);
+      }
     };
 
     window.electron?.onTelemetryUpdate?.(handleTelemetryUpdate);
@@ -94,6 +114,26 @@ export const DevToolsApp: React.FC = () => {
       </div>
 
       <StateDisplay tick={tick} creatureCount={creatureCount} tickRateHz={tickRateHz} />
+
+      {hardwareMetrics && (
+        <div className="hardware-cockpit-section">
+          <h2>Hardware Performance Cockpit</h2>
+          <div className="cockpit-container">
+            <VectorizationTachometer ipc={hardwareMetrics.ipc} />
+            <CacheFirewall
+              l1dMissRate={hardwareMetrics.l1dMissRate}
+              llcMissRate={hardwareMetrics.llcMissRate}
+              backendStallRatio={hardwareMetrics.backendStallRatio}
+            />
+            <BranchScope branchMissRate={hardwareMetrics.branchMissRate} />
+          </div>
+          {parallelizationMetrics && systemTimings && (
+            <div className="cockpit-container cockpit-row-2">
+              <Parallelism metrics={parallelizationMetrics} systemTimings={systemTimings} />
+            </div>
+          )}
+        </div>
+      )}
 
       <IPCHealthPanel timings={systemTimings} />
 

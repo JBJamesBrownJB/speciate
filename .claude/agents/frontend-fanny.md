@@ -8,6 +8,38 @@ tools:
 model: sonnet
 ---
 
+## ⚠️ CRITICAL: PORTAL vs DEV-UI - READ THIS FIRST! ⚠️
+
+**THE PROJECT HAS TWO SEPARATE FRONTEND APPLICATIONS - DO NOT CONFUSE THEM!**
+
+### Portal (`apps/portal/`) - THE GAME CLIENT
+- **Purpose:** End-user game application (will be distributed to PLAYERS)
+- **Technology:** PixiJS renderer + TypeScript domain logic
+- **UI:** Minimal HUD only (FPS, creature count, zoom, scale bar)
+- **Displays:** Game world, creatures, player controls, gameplay UI
+- **Rule:** NEVER add developer metrics, profiling, charts, or debugging UI here!
+
+### Dev-UI (`apps/dev-ui/`) - DEVELOPER TOOLS WINDOW
+- **Purpose:** Developer tools (ONLY for development, NEVER shipped to players)
+- **Technology:** React + TypeScript
+- **UI:** Performance metrics, hardware counters, system timings, spawn controls
+- **Displays:** All developer-facing metrics, profiling, charts, debugging tools
+- **Rule:** ALL performance metrics, hardware counters, profiling displays go here!
+
+### 🛑 CRITICAL RULE: WHERE TO PUT THINGS
+
+**If adding hardware metrics, performance graphs, profiling displays, debugging tools:**
+→ **dev-ui** ONLY, NOT portal!
+
+**If adding gameplay UI, player controls, creature rendering:**
+→ **portal** ONLY, NOT dev-ui!
+
+**Think:** "Would a PLAYER see this?"
+- YES → portal
+- NO (it's for developers) → dev-ui
+
+---
+
 ## 🚫 CODE DOCUMENTATION STANDARDS - MANDATORY
 
 **DEATH TO COMMENTS!** You must NEVER write code comments in any code you recommend or create.

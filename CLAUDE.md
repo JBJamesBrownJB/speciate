@@ -18,20 +18,51 @@
 
 ## Test-Driven Development (TDD) - MANDATORY
 
-**CRITICAL: Run tests before AND after every change.**
+**CRITICAL: Follow the Red-Green-Refactor cycle for ALL changes.**
 
-### TDD Workflow
+### TDD Workflow: Red-Green-Refactor
 
-1. **Before ANY change:** Run tests, ensure they pass
-2. **When adding features:** Write tests FIRST
-3. **When fixing bugs:** Write failing test FIRST, then fix
-4. **After changes:** Run tests IMMEDIATELY
+The complete TDD cycle has three mandatory stages:
+
+#### 1. 🔴 RED - Write a Failing Test
+- **Before ANY change:** Write a test that describes the desired behavior
+- The test MUST fail initially (proving it tests something new)
+- Write the test for the interface you wish existed
+- **For bugs:** Write a test that reproduces the bug
+
+#### 2. 🟢 GREEN - Make it Pass
+- Write the **minimum** code to make the test pass
+- Don't worry about perfection yet
+- Focus on getting to green as quickly as possible
+- Verify the test passes
+
+#### 3. 🔵 REFACTOR - Make it Right
+- **Improve code quality WITHOUT changing behavior**
+- Apply SOLID principles
+- Remove duplication (DRY)
+- Improve naming and structure
+- Extract methods/functions for clarity
+- Simplify complex logic
+- **Verify tests still pass after each refactoring step**
+
+#### 4. 🔁 REPEAT
+- Start the cycle again for the next small increment
+- Each cycle should be 2-10 minutes, not hours
+
+### Before Starting Any Work
+- Run ALL tests, ensure they pass (clean baseline)
+
+### After Completing Red-Green-Refactor
+- Run ALL tests IMMEDIATELY
+- Commit only when all tests pass
 
 **NEVER:**
+- Skip the RED phase (no test = no code)
+- Skip the REFACTOR phase (passing tests ≠ good code)
 - Make changes without running tests
 - Assume code works without verification
 - Skip tests for "small changes"
-- Jump into fixing without a failing test
+- Jump into fixing without a failing test first
 
 **Exception:** Environment issues (GPU drivers, Docker config) don't need tests.
 
@@ -69,6 +100,41 @@ Every advantage must have a cost (built into physics/biology):
 4. Implement trait expression (DNA → phenotype → behavior)
 
 **Full details:** `docs/biology/dna-driven-design.md`
+
+---
+
+## Application Architecture: Portal vs Dev-UI - MANDATORY
+
+**CRITICAL: The project has TWO separate frontend applications. Do NOT confuse them!**
+
+### Portal (`apps/portal/`)
+- **Purpose:** End-user game client (will be distributed to PLAYERS)
+- **Technology:** PixiJS renderer + TypeScript domain logic
+- **UI:** Minimal HUD (FPS, creature count, zoom, scale bar)
+- **Displays:** Game world, creatures, player controls, gameplay UI ONLY
+- **Rule:** NEVER add developer metrics, profiling, charts, or debugging UI to portal
+
+### Dev-UI (`apps/dev-ui/`)
+- **Purpose:** Developer tools window (ONLY for development, NEVER shipped)
+- **Technology:** React + TypeScript
+- **UI:** Performance metrics, hardware counters, system timings, spawn controls
+- **Displays:** ALL developer-facing metrics, profiling, charts, debugging tools
+- **Rule:** ALL performance metrics and debugging displays belong in dev-ui, NOT portal
+
+### Critical Distinction
+
+**Portal = Game (for players)**
+**Dev-UI = Metrics (for developers)**
+
+**If adding hardware counters, profiling, performance graphs:**
+→ **dev-ui**, NOT portal!
+
+**If adding gameplay UI, creature rendering, player controls:**
+→ **portal**, NOT dev-ui!
+
+**Think:** "Would a PLAYER see this?"
+- YES → portal
+- NO (it's for developers) → dev-ui
 
 ---
 

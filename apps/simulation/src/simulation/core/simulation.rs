@@ -82,6 +82,9 @@ impl SimulationBuilder {
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
 
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::HardwareMetrics::new());
+
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
         world.insert_resource(EntityIdMap::default());

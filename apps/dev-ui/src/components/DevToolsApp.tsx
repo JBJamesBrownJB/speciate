@@ -82,8 +82,6 @@ export const DevToolsApp: React.FC = () => {
       const totalInstructions = samplesWithHardware.reduce((sum, s) => sum + (s.hardwareMetrics!.instructionsDelta || 0), 0);
       const totalCacheRefs = samplesWithHardware.reduce((sum, s) => sum + (s.hardwareMetrics!.cacheRefsDelta || 0), 0);
       const totalCacheMisses = samplesWithHardware.reduce((sum, s) => sum + (s.hardwareMetrics!.cacheMissesDelta || 0), 0);
-      const totalL1dMisses = samplesWithHardware.reduce((sum, s) => sum + (s.hardwareMetrics!.l1dMissesDelta || 0), 0);
-      const totalL1iMisses = samplesWithHardware.reduce((sum, s) => sum + (s.hardwareMetrics!.l1iMissesDelta || 0), 0);
       const totalBranchInstructions = samplesWithHardware.reduce((sum, s) => sum + (s.hardwareMetrics!.branchInstructionsDelta || 0), 0);
       const totalBranchMisses = samplesWithHardware.reduce((sum, s) => sum + (s.hardwareMetrics!.branchMissesDelta || 0), 0);
       const totalStalledFrontend = samplesWithHardware.reduce((sum, s) => sum + (s.hardwareMetrics!.stalledFrontendDelta || 0), 0);
@@ -91,8 +89,8 @@ export const DevToolsApp: React.FC = () => {
 
       hardwareMetricsDerived = {
         ipc: totalCycles > 0 ? totalInstructions / totalCycles : 0,
-        l1dMissRate: totalCacheRefs > 0 ? (totalL1dMisses / totalCacheRefs) * 100 : 0,
-        l1iMissRate: totalCacheRefs > 0 ? (totalL1iMisses / totalCacheRefs) * 100 : 0,
+        l1dMissRate: hardwareMetricsStats.l1dMissRate?.avg ?? 0,
+        l1iMissRate: hardwareMetricsStats.l1iMissRate?.avg ?? 0,
         llcMissRate: totalCacheRefs > 0 ? (totalCacheMisses / totalCacheRefs) * 100 : 0,
         branchMissRate: totalBranchInstructions > 0 ? (totalBranchMisses / totalBranchInstructions) * 100 : 0,
         frontendStallRatio: totalCycles > 0 ? (totalStalledFrontend / totalCycles) * 100 : 0,

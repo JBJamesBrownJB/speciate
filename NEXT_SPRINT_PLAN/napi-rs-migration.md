@@ -12,6 +12,9 @@ The current stdio IPC architecture hits a hard performance ceiling at ~27.5k ent
 
 ## Phase 0: Baseline Metrics
 
+First, perform a rigourous and thorough review of all our hardware metrics calculations, visualisations, metrics snapshot logic and use the team and gemini to make sure it all looks correct, create tests, unit and integration to confirm this. 
+Its critical it is correct now as we will start relying on this heavily.
+
 **CRITICAL:** Ensure we have baseline metrics snapshots from before we do the migration.
 
 - Name the snapshot: `pre-napi-re-migration.json`

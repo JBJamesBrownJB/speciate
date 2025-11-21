@@ -86,6 +86,9 @@ impl SimulationBuilder {
         world.insert_resource(crate::instrumentation::HardwareMetrics::new());
 
         #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::HardwareSnapshotResource::default());
+
+        #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::ParallelizationMetrics::new());
 
         world.init_resource::<Events<SpawnCreatureEvent>>();

@@ -232,10 +232,7 @@ fn serialize_snapshot_frame(simulation: &mut Simulation) -> io::Result<Vec<u8>> 
         #[cfg(feature = "dev-tools")]
         system_timings_us,
         #[cfg(feature = "dev-tools")]
-        hardware_metrics: {
-            let mut hw_metrics = world.resource_mut::<crate::instrumentation::HardwareMetrics>();
-            hw_metrics.read()
-        },
+        hardware_metrics: world.resource::<crate::instrumentation::HardwareSnapshotResource>().0.clone(),
         #[cfg(feature = "dev-tools")]
         parallelization_metrics: {
             let mut para_metrics = world.resource_mut::<crate::instrumentation::ParallelizationMetrics>();

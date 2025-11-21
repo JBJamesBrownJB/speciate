@@ -70,6 +70,18 @@ impl<H: RunnerHooks> SimulationRunner<H> {
 
             simulation.update(delta_time);
 
+            #[cfg(feature = "dev-tools")]
+            {
+                // Read hardware counters (they stay enabled continuously from initialization)
+                let hw_snapshot = simulation.world_mut()
+                    .resource_mut::<crate::instrumentation::HardwareMetrics>()
+                    .read();
+
+                simulation.world_mut()
+                    .resource_mut::<crate::instrumentation::HardwareSnapshotResource>()
+                    .0 = hw_snapshot;
+            }
+
             let measured_tick_rate = 1.0 / delta_time;
             simulation.set_tick_rate(measured_tick_rate);
 

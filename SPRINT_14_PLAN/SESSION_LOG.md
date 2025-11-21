@@ -1,6 +1,6 @@
 # Sprint 13: Session Log
 
-**Branch:** `feat/sprint-13-interpolation-perception`
+**Branch:** `feat/sprint-14-interpolation-perception`
 **Start Date:** 2025-11-20
 
 ---
@@ -16,9 +16,9 @@
    - SPRINT_DOCS folder didn't exist (created)
    - No conflicting sprint branch
 
-2. ✅ Branch created: `feat/sprint-13-interpolation-perception`
+2. ✅ Branch created: `feat/sprint-14-interpolation-perception`
 
-3. ✅ Sprint plan moved to `SPRINT_DOCS/SPRINT_PLAN_sprint-13-interpolation-perception.md`
+3. ✅ Sprint plan moved to `SPRINT_DOCS/SPRINT_PLAN_sprint-14-interpolation-perception.md`
 
 4. ✅ Backlog initialized at `SPRINT_DOCS/SPRINT_BACKLOG.md`
 

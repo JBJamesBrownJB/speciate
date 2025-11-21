@@ -125,7 +125,7 @@ export const VectorizationTachometer: React.FC<Props> = ({ ipc }) => {
       <div className="cockpit-panel-title">IPC</div>
       <canvas
         ref={canvasRef}
-        width={200}
+        width={220}
         height={160}
         className="tachometer-canvas"
       />

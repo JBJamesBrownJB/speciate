@@ -65,6 +65,42 @@ export interface TelemetryFrame {
   parallelizationMetrics?: ParallelizationMetrics;
 }
 
+export interface MetricStatistics {
+  avg: number;
+  min: number;
+  max: number;
+  stdDev: number;
+  p50: number;
+  p95: number;
+  p99: number;
+}
+
+export interface HardwareMetricsDerived {
+  ipc: number;
+  l1dMissRate: number;
+  l1iMissRate: number;
+  llcMissRate: number;
+  branchMissRate: number;
+  frontendStallRatio: number;
+  backendStallRatio: number;
+}
+
+export interface MetricsSnapshot {
+  metadata: {
+    sampleCount: number;
+    durationMs: number;
+    startTime: string;
+    endTime: string;
+  };
+  tick: MetricStatistics;
+  creatureCount: MetricStatistics;
+  tickRateHz: MetricStatistics;
+  systemTimings: Record<string, MetricStatistics>;
+  hardwareMetrics?: Record<string, MetricStatistics>;
+  hardwareMetricsDerived?: HardwareMetricsDerived;
+  parallelizationMetrics?: Record<string, MetricStatistics>;
+}
+
 export interface GameState {
   tick: number;
   creatures: CreatureSnapshot[];
@@ -90,6 +126,9 @@ declare global {
       onStateUpdateBinary?: (callback: (binaryData: Uint8Array) => void) => void;
       onTelemetryUpdate?: (callback: (telemetry: TelemetryFrame) => void) => void;
       removeStateUpdateListener?: () => void;
+      saveMetricsSnapshot?: (snapshot: MetricsSnapshot) => Promise<{ success: boolean; path?: string; error?: string }>;
+      loadMetricsSnapshot?: () => Promise<MetricsSnapshot | null>;
+      resizeWindow?: (width: number) => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

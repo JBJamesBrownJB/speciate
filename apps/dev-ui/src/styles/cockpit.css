@@ -11,9 +11,10 @@
 .cockpit-container {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-width: 0;
   width: 100%;
+  justify-content: center;
 }
 
 .cockpit-row-2 {
@@ -29,7 +30,7 @@
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(100, 116, 139, 0.3);
   border-radius: 8px;
-  min-width: 200px;
+  min-width: 220px;
   flex: 1;
 }
 
@@ -135,7 +136,7 @@
 
 .cache-bars-container {
   display: flex;
-  gap: 0.1rem;
+  gap: 3rem;
   padding: 0.5rem 0;
   align-items: flex-end;
 }
@@ -191,13 +192,12 @@
 }
 
 .cache-bar-status {
-  font-size: 0.75rem;
+  font-size: 1.25rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   text-align: center;
   min-height: 2.5rem;
-  width: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -324,4 +324,47 @@
   transition: opacity 0.3s ease, background-color 0.3s ease;
   will-change: opacity, background-color;
   border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.comparison-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  padding: 1rem 0;
+  justify-content: center;
+}
+
+.comparison-column {
+  flex: 1 1 600px;
+  max-width: 700px;
+  min-width: 600px;
+  padding: 0 0.5rem;
+}
+
+.comparison-column:first-child {
+  border-right: 2px solid rgba(100, 116, 139, 0.5);
+}
+
+.comparison-header {
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.live-header {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.snapshot-header {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }

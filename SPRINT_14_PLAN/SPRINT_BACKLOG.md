@@ -1,6 +1,6 @@
 # Sprint 13: Interpolation, Vision Refactor & Data-Oriented Design
 
-**Branch:** `feat/sprint-13-interpolation-perception`
+**Branch:** `feat/sprint-14-interpolation-perception`
 **Duration:** 11 days
 **Status:** IN PROGRESS
 
@@ -8,7 +8,7 @@
 
 ## Sprint Goal
 
-**MORE DETAIL IN:** SPRINT_PLAN_sprint-13-interpolation-perception.md, check this to confirm your approach
+**MORE DETAIL IN:** SPRINT_PLAN_sprint-14-interpolation-perception.md, check this to confirm your approach
 
 Scale to 150K-200K creatures through:
 1. 20Hz simulation → 60Hz interpolated rendering

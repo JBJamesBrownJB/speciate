@@ -17,7 +17,7 @@ body {
 }
 
 #root {
-  max-width: 900px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -269,6 +269,9 @@ button.danger:disabled {
   margin-bottom: 12px;
   border-radius: 4px;
   font-weight: bold;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
 }
 
 .ipc-status-banner.ok {

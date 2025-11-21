@@ -1,6 +1,6 @@
 # Sprint 13: Interpolation, Vision Refactor & Data-Oriented Design
 
-**Branch:** `feat/sprint-13-interpolation-perception`
+**Branch:** `feat/sprint-14-interpolation-perception`
 **Status:** PLANNED
 **Prerequisites:** Sprint 12 complete (Hardware Metrics Cockpit)
 **Duration:** 11 days

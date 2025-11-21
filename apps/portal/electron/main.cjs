@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const { spawn } = require('child_process');
 const { decode, encode } = require('@msgpack/msgpack');
 const path = require('path');
@@ -219,7 +219,7 @@ async function createWindow() {
  */
 async function createDevToolsWindow() {
   devToolsWindow = new BrowserWindow({
-    width: 950,
+    width: 750,
     height: 1300,
     x: 1920,
     y: 0,
@@ -382,6 +382,102 @@ ipcMain.on('send-command', (event, command) => {
  */
 ipcMain.handle('get-latest-state', () => {
   return latestState;
+});
+
+/**
+ * IPC handler: Save metrics snapshot (dev tools only)
+ *
+ * Opens save dialog with prepopulated path and filename
+ * Writes JSON snapshot to user-selected location
+ */
+ipcMain.handle('save-metrics-snapshot', async (event, snapshot) => {
+  try {
+    const timestamp = new Date(snapshot.metadata.endTime);
+    const dateStr = timestamp.toISOString().replace(/:/g, '-').split('.')[0];
+    const defaultFilename = `snapshot_${dateStr}.json`;
+
+    const snapshotsDir = path.join(__dirname, '../../..', 'docs/performance/snapshots');
+    const defaultPath = path.join(snapshotsDir, defaultFilename);
+
+    const result = await dialog.showSaveDialog(devToolsWindow || mainWindow, {
+      title: 'Save Metrics Snapshot',
+      defaultPath: defaultPath,
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, error: 'Save cancelled' };
+    }
+
+    const jsonData = JSON.stringify(snapshot, null, 2);
+    fs.writeFileSync(result.filePath, jsonData, 'utf8');
+
+    console.log(`[Electron] Metrics snapshot saved to: ${result.filePath}`);
+    return { success: true, path: result.filePath };
+  } catch (error) {
+    console.error('[Electron] Failed to save metrics snapshot:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * IPC handler: Load metrics snapshot (dev tools only)
+ *
+ * Opens file dialog to select snapshot JSON file
+ * Reads and parses snapshot, returns to renderer
+ */
+ipcMain.handle('load-metrics-snapshot', async (event) => {
+  try {
+    const snapshotsDir = path.join(__dirname, '../../..', 'docs/performance/snapshots');
+
+    const result = await dialog.showOpenDialog(devToolsWindow || mainWindow, {
+      title: 'Load Metrics Snapshot',
+      defaultPath: snapshotsDir,
+      filters: [
+        { name: 'JSON Files', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    const filePath = result.filePaths[0];
+    const jsonData = fs.readFileSync(filePath, 'utf8');
+    const snapshot = JSON.parse(jsonData);
+
+    console.log(`[Electron] Metrics snapshot loaded from: ${filePath}`);
+    return snapshot;
+  } catch (error) {
+    console.error('[Electron] Failed to load metrics snapshot:', error);
+    return null;
+  }
+});
+
+/**
+ * IPC handler: Resize dev tools window (dev tools only)
+ *
+ * Changes the window width while preserving height
+ * Used for dynamic resizing when loading/clearing snapshots
+ */
+ipcMain.handle('resize-window', async (event, width) => {
+  try {
+    if (devToolsWindow && !devToolsWindow.isDestroyed()) {
+      const [currentWidth, currentHeight] = devToolsWindow.getSize();
+      devToolsWindow.setSize(width, currentHeight);
+      console.log(`[Electron] Dev tools window resized to ${width}x${currentHeight}`);
+      return { success: true };
+    }
+    return { success: false, error: 'Dev tools window not available' };
+  } catch (error) {
+    console.error('[Electron] Failed to resize window:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 /**

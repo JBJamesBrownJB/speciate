@@ -8,7 +8,7 @@ interface Props {
 
 const SCOPE_RADIUS = 100;
 const PARTICLE_COUNT = 50;
-const CANVAS_SIZE = 220;
+const CANVAS_SIZE = 200;
 
 interface Particle {
   angle: number;

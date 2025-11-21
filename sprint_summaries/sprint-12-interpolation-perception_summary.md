@@ -297,7 +297,7 @@ This pattern is now documented in Sprint 13 Phase 4A.
 ### Key Documents
 - `SPRINT_DOCS/PARALLELISM_VISUALIZATION_PLAN.md` - Phase 0 completion details
 - `SPRINT_DOCS/HARDWARE_METRICS_PLAN.md` - Cockpit architecture & metrics spec
-- `SPRINT_DOCS/SPRINT_PLAN_sprint-13-interpolation-perception.md` - Next sprint details
+- `SPRINT_DOCS/SPRINT_PLAN_sprint-14-interpolation-perception.md` - Next sprint details
 - `docs/biology/biology-notes.md` - Biological model (size-based reaction times)
 
 ### Relevant Code
@@ -306,7 +306,7 @@ This pattern is now documented in Sprint 13 Phase 4A.
 - `apps/simulation/src/instrumentation/mod.rs` - Hardware metrics collection
 
 ### Future Planning
-- `SPRINT_DOCS/SPRINT_PLAN_sprint-13-interpolation-perception.md` - Comprehensive ECS optimization roadmap
+- `SPRINT_DOCS/SPRINT_PLAN_sprint-14-interpolation-perception.md` - Comprehensive ECS optimization roadmap
 
 ---
 

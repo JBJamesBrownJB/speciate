@@ -17,13 +17,13 @@ const getL1State = (missRate: number): BarState => {
   if (missRate > 10) {
     return {
       color: COLORS.streaming,
-      label: 'Streaming',
+      label: '⚡',
       value: `${missRate.toFixed(1)}%`,
     };
   }
   return {
     color: COLORS.success,
-    label: 'Perfect Locality',
+    label: '✓',
     value: `${missRate.toFixed(1)}%`,
   };
 };
@@ -32,14 +32,14 @@ const getL3State = (llcMissRate: number): BarState => {
   if (llcMissRate < 0) {
     return {
       color: COLORS.neutral,
-      label: 'N/A',
+      label: '—',
       value: 'N/A',
     };
   }
   if (llcMissRate > 20) {
     return {
       color: COLORS.critical,
-      label: '⚠️ RAM Bound',
+      label: '⚠️',
       value: `${llcMissRate.toFixed(1)}%`,
     };
   }
@@ -48,13 +48,13 @@ const getL3State = (llcMissRate: number): BarState => {
   if (llcMissRate > 15) {
     return {
       color: COLORS.warning,
-      label: 'Stressed',
+      label: '⚠️',
       value: `${llcMissRate.toFixed(1)}%`,
     };
   }
   return {
     color: COLORS.success,
-    label: 'Catching',
+    label: '✓',
     value: `${llcMissRate.toFixed(1)}%`,
   };
 };

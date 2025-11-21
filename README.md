@@ -111,7 +111,14 @@
 - **System dependencies:**
   - **Linux:**
     - `perf` (performance metrics) - Install: `sudo apt-get install linux-tools-generic linux-tools-$(uname -r)`
-    - Configure: `sudo sysctl -w kernel.perf_event_paranoid=1` (allows hardware counter access)
+    - **Hardware counter permissions** (required for dev-tools):
+      ```bash
+      sudo sysctl -w kernel.perf_event_paranoid=1
+      ```
+      - **Why:** Allows CPU performance counters (cycles, cache misses, IPC)
+      - **When:** Run this if you see `Permission denied (os error 13)` errors
+      - **Verify:** `cat /proc/sys/kernel/perf_event_paranoid` (should show 1 or lower)
+      - **Permanent:** `echo "kernel.perf_event_paranoid=1" | sudo tee -a /etc/sysctl.conf`
     - Electron bundles Chromium
   - **macOS:** None (Electron bundles Chromium)
   - **Windows:** None (Electron bundles Chromium)
@@ -236,6 +243,16 @@ npm run dev  # Starts Vite + Electron in parallel
 **"npm install fails"**
 - Check Node.js version: `node --version` (need 18+)
 - Clear npm cache: `npm cache clean --force && npm install`
+
+**"Permission denied (os error 13)" / Hardware counter errors:**
+```
+Failed to build CPU_CYCLES counter: Permission denied (os error 13)
+⚠️  Failed to initialize hardware counters: Permission denied (os error 13)
+   Falling back to disabled state
+```
+- **Fix:** Set kernel permission: `sudo sysctl -w kernel.perf_event_paranoid=1`
+- **Verify:** `cat /proc/sys/kernel/perf_event_paranoid` (should show 1 or lower)
+- **Note:** Simulation continues running without hardware metrics (graceful fallback)
 
 ---
 

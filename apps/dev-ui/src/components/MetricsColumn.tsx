@@ -11,7 +11,6 @@
  */
 
 import React from 'react';
-import { StateDisplay } from './StateDisplay';
 import { IPCHealthPanel } from './IPCHealthPanel';
 import { SystemTimingsPanel } from './SystemTimingsPanel';
 import { VectorizationTachometer } from './VectorizationTachometer';
@@ -43,9 +42,6 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
   ({
     label,
     labelClass,
-    tick,
-    creatureCount,
-    tickRateHz,
     systemTimings,
     hardwareMetrics,
     parallelizationMetrics,
@@ -53,8 +49,6 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
     return (
       <div className="comparison-column">
         <h2 className={`comparison-header ${labelClass}`}>{label}</h2>
-
-        <StateDisplay tick={tick} creatureCount={creatureCount} tickRateHz={tickRateHz} />
 
         {hardwareMetrics && (
           <div className="hardware-cockpit-section">

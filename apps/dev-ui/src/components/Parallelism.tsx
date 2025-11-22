@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { COLORS } from '../utils/cockpit';
 import type { ParallelizationMetrics, SystemTimingsSnapshot } from '../types';
+import { CockpitTooltip } from './CockpitTooltip';
 
 interface Props {
   metrics: ParallelizationMetrics;
@@ -13,6 +14,19 @@ interface SystemInfo {
   isActive: boolean;
 }
 
+const getSystemTooltipContent = (systemName: string): { header: string; description: string } => {
+  const tooltips: Record<string, { header: string; description: string }> = {
+    'perception': { header: 'Perception', description: 'Detects nearby creatures' },
+    'behavior_transition': { header: 'Behavior Transition', description: 'Switches behaviors (flee/wander)' },
+    'wander': { header: 'Wander', description: 'Random movement when safe' },
+    'flee': { header: 'Flee', description: 'Escapes from threats' },
+    'avoidance': { header: 'Avoidance', description: 'Prevents collisions' },
+    'movement': { header: 'Movement', description: 'Applies velocity & physics' },
+    'rotation': { header: 'Rotation', description: 'Updates facing direction' },
+  };
+  return tooltips[systemName] || { header: systemName.replace(/_/g, ' '), description: '' };
+};
+
 const extractSystemsFromTimings = (timings: SystemTimingsSnapshot): SystemInfo[] => {
   const systems: SystemInfo[] = [
     { name: 'perception', timeUs: timings.perceptionUs, isActive: timings.perceptionUs > 0 },
@@ -24,13 +38,17 @@ const extractSystemsFromTimings = (timings: SystemTimingsSnapshot): SystemInfo[]
     { name: 'rotation', timeUs: timings.rotationUs, isActive: timings.rotationUs > 0 },
   ];
 
-  return systems.sort((a, b) => b.timeUs - a.timeUs);
+  return systems.sort((a, b) => a.name.localeCompare(b.name));
 };
 
 export const Parallelism: React.FC<Props> = ({ metrics, systemTimings }) => {
   const { cpuCoresTotal, cpuCoresActive } = metrics;
+  const [hoveredSystem, setHoveredSystem] = useState<string | null>(null);
 
-  const systems = extractSystemsFromTimings(systemTimings);
+  const systems = useMemo(
+    () => extractSystemsFromTimings(systemTimings),
+    [systemTimings]
+  );
 
   const cpuCores = Array.from({ length: cpuCoresTotal }, (_, i) => ({
     index: i,
@@ -59,7 +77,7 @@ export const Parallelism: React.FC<Props> = ({ metrics, systemTimings }) => {
           </div>
         </div>
 
-        <div className="parallelism-section ecs-section">
+        <div className="parallelism-section ecs-section" style={{ position: 'relative' }}>
           <div className="parallelism-section-label">ECS Systems</div>
           <div className="parallelism-system-grid">
             {systems.map((system) => (
@@ -70,10 +88,21 @@ export const Parallelism: React.FC<Props> = ({ metrics, systemTimings }) => {
                   backgroundColor: system.isActive ? COLORS.streaming : 'rgba(156, 163, 175, 0.2)',
                   opacity: system.isActive ? 1 : 0.3,
                 }}
-                title={system.name.replace(/_/g, ' ')}
+                onMouseEnter={() => setHoveredSystem(system.name)}
+                onMouseLeave={() => setHoveredSystem(null)}
               />
             ))}
           </div>
+          {hoveredSystem && (() => {
+            const tooltipContent = getSystemTooltipContent(hoveredSystem);
+            return (
+              <CockpitTooltip
+                header={tooltipContent.header}
+                current={tooltipContent.description}
+                sections={[]}
+              />
+            );
+          })()}
         </div>
       </div>
     </div>

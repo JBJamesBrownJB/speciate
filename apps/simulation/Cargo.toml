@@ -33,6 +33,11 @@ ctrlc = { version = "3.4", features = ["termination"] }  # Signal handling for g
 crossbeam = "0.8"  # Lock-free data structures for snapshot queue
 crossbeam-channel = "0.5"  # High-performance MPSC for background IPC writer
 
+# NAPI-RS (Node.js Native Addon)
+napi = { version = "2.12", features = ["napi4", "serde-json"] }
+napi-derive = "2.12"
+parking_lot = "0.12"  # Faster mutex for DoubleBuffer
+
 # Development-only dependencies (feature-gated)
 perf-event = { version = "0.4", optional = true }  # Hardware performance counters
 git2 = { version = "0.18", optional = true }  # Git metadata for snapshots
@@ -48,6 +53,10 @@ test-helpers = []
 # - Dev builds: cargo build --features dev-tools
 default = []
 dev-tools = ["dep:perf-event", "dep:git2", "dep:sysinfo"]
+napi = []
+
+[build-dependencies]
+napi-build = "2.0"
 
 [dev-dependencies]
 os_pipe = "1.2"  # For stdin simulation in command tests
@@ -63,9 +72,9 @@ panic = "abort"
 [profile.dev]
 opt-level = 0
 
-[[bin]]
-name = "speciate"
-path = "src/main.rs"
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
 
 # Integration tests that require test-helpers feature
 [[test]]

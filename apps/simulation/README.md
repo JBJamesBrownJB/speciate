@@ -94,66 +94,69 @@ size_max = 2.0
 **Optional fields:** size range (defaults to 0.5-2.0)
 **Note:** Creatures now spawn at world center (0, 0) for tuning purposes
 
-### 3. Resume from Snapshot
+### 3. Resume from Save State
 
-Load a complete simulation state from a binary snapshot file (MessagePack):
+Load a complete simulation state from a binary save file (MessagePack):
 
 ```bash
-cargo run -- --load-snapshot snapshots/my_simulation.msgpack
-# Or use the latest automatic snapshot:
-cargo run -- --load-snapshot snapshots/latest.msgpack
+# Load a specific save state:
+cargo run -- --load-snapshot save-states/2025-11-23_14-30-00.msgpack
+
+# Or let the app auto-load the most recent save:
+# (In NAPI/Electron mode, this happens automatically)
 ```
 
-Snapshots preserve exact creature states including:
+Save states preserve exact creature states including:
 - Position, velocity, acceleration
 - Creature energy, age, behavior mode
 - World boundaries
 - Entity IDs
 
-## Automatic Snapshots
+## Automatic Save States
 
-The simulation automatically saves snapshots to protect against data loss:
+The simulation automatically saves state to protect against data loss:
 
 ### Periodic Saves
 - **Automatic**: Saves every 5 minutes by default (configurable)
 - **Non-blocking**: Runs on separate thread, doesn't slow down simulation
-- **Auto-cleanup**: Keeps last 10 periodic snapshots, deletes older ones
+- **Auto-cleanup**: Keeps last 20 save states, deletes older ones
 - **Performance**: Only 1-2ms impact on main thread every 5 minutes
 
 ### Shutdown Saves
-- **On Ctrl+C**: Gracefully saves snapshot when you press Ctrl+C
+- **On Ctrl+C**: Gracefully saves state when you press Ctrl+C
 - **On SIGTERM**: Also saves on termination signals
 - **Guaranteed**: Waits for all pending saves to complete before exiting
 
-### Snapshot Files
+### Save State Files
 
-Snapshots are stored in the `snapshots/` directory:
+Save states are stored in the `save-states/` directory:
 
 ```
-snapshots/
-  ├── simulation_2025-11-04_12-00-00.msgpack  (periodic)
-  ├── simulation_2025-11-04_12-05-00.msgpack  (periodic)
-  ├── simulation_2025-11-04_12-10-00.msgpack  (periodic)
-  └── latest.msgpack                           (always current, updated on shutdown)
+save-states/
+  ├── 2025-11-23_12-00-00.msgpack
+  ├── 2025-11-23_12-05-00.msgpack
+  ├── 2025-11-23_12-10-00.msgpack
+  └── 2025-11-23_12-15-00.msgpack  (most recent)
 ```
 
-- **Timestamped snapshots**: `simulation_YYYY-MM-DD_HH-MM-SS.msgpack` (periodic saves only)
-- **Latest snapshot**: `latest.msgpack` always contains most recent state (updated by both periodic saves and shutdown)
-- **Retention**: Only last 10 periodic snapshots kept. Shutdown saves update `latest.msgpack` without creating timestamped files
+- **Format**: `YYYY-MM-DD_HH-MM-SS.msgpack` (timestamp-based naming)
+- **Both periodic and shutdown** saves create timestamped files
+- **Auto-load**: On startup, Electron app automatically loads the most recent file
+- **Retention**: Only last 20 save states kept, older ones automatically deleted
 
 ### Configuration
 
-Snapshot behavior is configured in `src/config.rs` via `SnapshotConfig`:
+Save behavior is configured in `src/config.rs` via `SaveStateConfig`:
 
 ```rust
-pub struct SnapshotConfig {
-    pub enabled: bool,         // Enable/disable periodic snapshots (default: true)
+pub struct SaveStateConfig {
+    pub enabled: bool,         // Enable/disable saves (default: true)
     pub interval_secs: u64,    // Seconds between saves (default: 300 = 5 min)
-    pub keep_last_n: usize,    // Max periodic snapshots to keep (default: 10)
+    pub keep_last_n: usize,    // Max saves to keep (default: 20)
 }
 ```
 
-To change defaults, modify `SnapshotConfig::default()` in `src/config.rs`.
+To change defaults, modify `SaveStateConfig::default()` in `src/config.rs`.
 
 ### Logging
 
@@ -172,10 +175,10 @@ cargo test --lib
 cargo test --bin speciate
 
 # Run integration tests (must be serial to avoid race conditions)
-cargo test --test snapshot_integration -- --test-threads=1
+cargo test --test save_state_integration -- --test-threads=1
 
 # Run ALL tests properly
-cargo test --lib && cargo test --bin speciate && cargo test --test snapshot_integration -- --test-threads=1
+cargo test --lib && cargo test --bin speciate && cargo test --test save_state_integration -- --test-threads=1
 
 # Run tests with output
 cargo test -- --nocapture
@@ -187,7 +190,7 @@ cargo test simulation::
 RUST_LOG=debug cargo test -- --nocapture
 ```
 
-**Note**: Integration tests share the `snapshots/` directory and must run with `--test-threads=1` to avoid race conditions.
+**Note**: Integration tests share the `save-states/` directory and must run with `--test-threads=1` to avoid race conditions.
 ## Building for Release
 
 ```bash

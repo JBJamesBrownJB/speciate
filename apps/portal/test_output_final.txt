@@ -1,0 +1,28 @@
+
+> @simulation/portal@1.0.0 test
+> vitest
+
+
+[1m[44m DEV [49m[22m [34mv4.0.6 [39m[90m/home/dev/dev/speciate/apps/portal[39m
+
+ [32m✓[39m src/infrastructure/ipc/ElectronIPCClient.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/domain/Camera.test.ts [2m([22m[2m29 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/ui/ScaleBarManager.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/domain/Viewport.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/ui/HUDManager.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/rendering/CreatureRenderer.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/ui/FPSSparkline.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/infrastructure/SpritePool.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/types/GameState.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/core/StateManager.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/utils/SpatialQuery.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/types/messages.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/domain/Creature.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m      Tests [22m [1m[32m207 passed[39m[22m[90m (207)[39m
+[2m   Start at [22m 09:59:05
+[2m   Duration [22m 1.05s[2m (transform 490ms, setup 183ms, collect 694ms, tests 105ms, environment 4.65s, prepare 79ms)[22m
+
+[1m[42m PASS [49m[22m [32mWaiting for file changes...[39m
+       [2mpress [22m[1mh[22m[2m to show help[22m[2m, [22m[2mpress [22m[1mq[22m[2m to quit[22m

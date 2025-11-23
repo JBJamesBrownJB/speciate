@@ -6,7 +6,7 @@ export interface DevCommand {
   type: 'dev_spawn_creature' | 'dev_load_trial' | 'dev_clear_creatures';
   x?: number;
   y?: number;
-  dna?: any;
+  dna?: Record<string, unknown>;
   template?: string;
 }
 
@@ -48,21 +48,21 @@ export interface SystemTimingsSnapshot {
   fleeUs: number;
   avoidanceUs: number;
   rotationUs: number;
-  ipcQueryUs: number;
-  ipcSerializeUs: number;
-  ipcWriteUs: number;
-  ipcFrameDropsTotal: number;
-  ipcChannelUtilizationPct: number;
-  ipcWriterThreadUs: number;
+  archetypeCount: number;
+  entityCount: number;
 }
 
 export interface TelemetryFrame {
   tick: number;
   creatureCount: number;
   tickRateHz: number;
-  systemTimingsUs: SystemTimingsSnapshot;
+  systemTimings: SystemTimingsSnapshot;
   hardwareMetrics?: HardwareMetrics;
   parallelizationMetrics?: ParallelizationMetrics;
+  timestamp: number;
+  napiBufferCapacityPct?: number;
+  napiBufferUsed?: number;
+  napiBufferCapacity?: number;
 }
 
 export interface MetricStatistics {

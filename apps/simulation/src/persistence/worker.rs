@@ -1,5 +1,5 @@
-use super::snapshot::WorldSnapshot;
-use crate::config::SnapshotConfig;
+use super::snapshot::WorldSaveState;
+use crate::config::SaveStateConfig;
 use chrono::Local;
 use log::{error, info, warn};
 use std::fs;
@@ -8,23 +8,23 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
 enum WorkerMessage {
-    SaveSnapshot(WorldSnapshot, SnapshotType),
+    SaveWorldState(WorldSaveState, SaveType),
     Shutdown,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum SnapshotType {
+pub enum SaveType {
     Periodic,
     Shutdown,
 }
 
-pub struct SnapshotWorker {
+pub struct SaveStateWorker {
     sender: Sender<WorkerMessage>,
     thread_handle: Option<JoinHandle<()>>,
 }
 
-impl SnapshotWorker {
-    pub fn start(config: SnapshotConfig) -> Self {
+impl SaveStateWorker {
+    pub fn start(config: SaveStateConfig) -> Self {
         let (sender, receiver) = channel();
 
         let thread_handle = thread::spawn(move || {
@@ -37,12 +37,12 @@ impl SnapshotWorker {
         }
     }
 
-    pub fn save_snapshot(&self, snapshot: WorldSnapshot, snapshot_type: SnapshotType) {
+    pub fn save_world_state(&self, save_state: WorldSaveState, save_type: SaveType) {
         if let Err(e) = self
             .sender
-            .send(WorkerMessage::SaveSnapshot(snapshot, snapshot_type))
+            .send(WorkerMessage::SaveWorldState(save_state, save_type))
         {
-            error!("Failed to send snapshot to worker thread: {}", e);
+            error!("Failed to send save state to worker thread: {}", e);
         }
     }
 
@@ -53,25 +53,25 @@ impl SnapshotWorker {
 
         if let Some(handle) = self.thread_handle.take() {
             if let Err(e) = handle.join() {
-                error!("Snapshot worker thread panicked: {:?}", e);
+                error!("Save state worker thread panicked: {:?}", e);
             }
         }
     }
 }
 
-fn worker_thread_loop(receiver: Receiver<WorkerMessage>, config: SnapshotConfig) {
-    if let Err(e) = fs::create_dir_all("snapshots") {
-        error!("Failed to create snapshots directory: {}", e);
+fn worker_thread_loop(receiver: Receiver<WorkerMessage>, config: SaveStateConfig) {
+    if let Err(e) = fs::create_dir_all("save-states") {
+        error!("Failed to create save-states directory: {}", e);
         return;
     }
 
     loop {
         match receiver.recv() {
-            Ok(WorkerMessage::SaveSnapshot(snapshot, snapshot_type)) => {
-                handle_save_snapshot(snapshot, snapshot_type, &config);
+            Ok(WorkerMessage::SaveWorldState(save_state, save_type)) => {
+                handle_save_world_state(save_state, save_type, &config);
             }
             Ok(WorkerMessage::Shutdown) => {
-                info!("Snapshot worker shutting down gracefully");
+                info!("Save state worker shutting down gracefully");
                 break;
             }
             Err(_) => {
@@ -81,71 +81,56 @@ fn worker_thread_loop(receiver: Receiver<WorkerMessage>, config: SnapshotConfig)
     }
 }
 
-fn handle_save_snapshot(
-    snapshot: WorldSnapshot,
-    snapshot_type: SnapshotType,
-    config: &SnapshotConfig,
+fn handle_save_world_state(
+    save_state: WorldSaveState,
+    save_type: SaveType,
+    config: &SaveStateConfig,
 ) {
-    match snapshot_type {
-        SnapshotType::Periodic => {
-            let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
-            let timestamped_path =
-                PathBuf::from(format!("snapshots/simulation_{}.msgpack", timestamp));
+    let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
+    let save_path = PathBuf::from(format!("save-states/{}.msgpack", timestamp));
 
-            match snapshot.save_to_file(&timestamped_path) {
-                Ok(_) => {
-                    info!(
-                        "Saved periodic snapshot: {} ({} creatures)",
-                        timestamped_path.display(),
-                        snapshot.metadata.creature_count
-                    );
-                }
-                Err(e) => {
-                    error!(
-                        "Failed to save snapshot {}: {}",
-                        timestamped_path.display(),
-                        e
-                    );
-                    return;
-                }
-            }
+    let type_label = match save_type {
+        SaveType::Periodic => "periodic",
+        SaveType::Shutdown => "shutdown",
+    };
 
-            let latest_path = PathBuf::from("snapshots/latest.msgpack");
-            if let Err(e) = snapshot.save_to_file(&latest_path) {
-                error!("Failed to update latest snapshot: {}", e);
-            }
-
-            cleanup_old_snapshots(config.keep_last_n);
+    match save_state.save_to_file(&save_path) {
+        Ok(_) => {
+            info!(
+                "Saved {} save state: {} ({} creatures)",
+                type_label,
+                save_path.display(),
+                save_state.metadata.creature_count
+            );
         }
-        SnapshotType::Shutdown => {
-            let latest_path = PathBuf::from("snapshots/latest.msgpack");
-            match snapshot.save_to_file(&latest_path) {
-                Ok(_) => {
-                    info!(
-                        "Saved shutdown snapshot to latest.msgpack ({} creatures)",
-                        snapshot.metadata.creature_count
-                    );
-                }
-                Err(e) => {
-                    error!("Failed to save shutdown snapshot: {}", e);
-                }
-            }
+        Err(e) => {
+            error!(
+                "Failed to save {} save state {}: {}",
+                type_label,
+                save_path.display(),
+                e
+            );
+            return;
         }
     }
+
+    // Run cleanup after every save (periodic or shutdown)
+    cleanup_old_save_states(config.keep_last_n);
 }
 
-fn cleanup_old_snapshots(keep_last_n: usize) {
-    let snapshots_dir = PathBuf::from("snapshots");
+fn cleanup_old_save_states(keep_last_n: usize) {
+    let snapshots_dir = PathBuf::from("save-states");
 
     let entries = match fs::read_dir(&snapshots_dir) {
         Ok(entries) => entries,
         Err(e) => {
-            warn!("Failed to read snapshots directory: {}", e);
+            warn!("Failed to read save-states directory: {}", e);
             return;
         }
     };
 
-    let mut periodic_snapshots: Vec<PathBuf> = entries
+    // Collect all .msgpack files (no prefix filtering)
+    let mut save_states: Vec<PathBuf> = entries
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
         .filter(|path| {
@@ -153,23 +138,24 @@ fn cleanup_old_snapshots(keep_last_n: usize) {
                 && path
                     .file_name()
                     .and_then(|name| name.to_str())
-                    .map(|name| name.starts_with("simulation_") && name.ends_with(".msgpack"))
+                    .map(|name| name.ends_with(".msgpack"))
                     .unwrap_or(false)
         })
         .collect();
 
-    periodic_snapshots.sort();
+    // Sort by filename (which is timestamp-based: YYYY-MM-DD_HH-MM-SS.msgpack)
+    save_states.sort();
 
-    if periodic_snapshots.len() > keep_last_n {
-        let to_delete = periodic_snapshots.len() - keep_last_n;
+    if save_states.len() > keep_last_n {
+        let to_delete = save_states.len() - keep_last_n;
 
-        for path in periodic_snapshots.iter().take(to_delete) {
+        for path in save_states.iter().take(to_delete) {
             match fs::remove_file(path) {
                 Ok(_) => {
-                    info!("Deleted old snapshot: {}", path.display());
+                    info!("Deleted old save state: {}", path.display());
                 }
                 Err(e) => {
-                    warn!("Failed to delete old snapshot {}: {}", path.display(), e);
+                    warn!("Failed to delete old save state {}: {}", path.display(), e);
                 }
             }
         }
@@ -181,21 +167,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_snapshot_config_default() {
-        let config = SnapshotConfig::default();
+    fn test_save_state_config_default() {
+        let config = SaveStateConfig::default();
         assert!(config.enabled);
         assert_eq!(config.interval_secs, 300);
-        assert_eq!(config.keep_last_n, 10);
+        assert_eq!(config.keep_last_n, 20);
     }
 
     #[test]
     fn test_cleanup_with_no_files() {
-        cleanup_old_snapshots(10);
+        cleanup_old_save_states(10);
     }
 
     #[test]
     fn test_cleanup_with_fewer_than_keep() {
-        let test_dir = PathBuf::from("snapshots");
+        let test_dir = PathBuf::from("save-states");
         fs::create_dir_all(&test_dir).ok();
 
         if let Ok(entries) = fs::read_dir(&test_dir) {
@@ -214,7 +200,7 @@ mod tests {
             fs::write(&path, b"test").ok();
         }
 
-        cleanup_old_snapshots(10);
+        cleanup_old_save_states(10);
 
         let count = fs::read_dir(&test_dir)
             .unwrap()

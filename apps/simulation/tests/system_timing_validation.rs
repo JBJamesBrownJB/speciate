@@ -1,4 +1,3 @@
-use std::fs;
 
 #[cfg(feature = "dev-tools")]
 #[test]

@@ -32,17 +32,29 @@ pub use parallelization_stub::{ParallelizationMetrics, ParallelizationSnapshot};
 mod hardware_metrics_stub {
     use serde::{Deserialize, Serialize};
 
+    /// Stub HardwareSnapshot that matches the real structure exactly
+    /// (used when dev-tools feature is disabled)
     #[derive(Debug, Clone, Serialize, Deserialize, Default)]
     #[serde(rename_all = "camelCase")]
     pub struct HardwareSnapshot {
-        pub cycles: u64,
-        pub instructions: u64,
-        pub cache_references: u64,
-        pub cache_misses: u64,
-        pub l1_misses: u64,
+        pub cycles_delta: u64,
+        pub instructions_delta: u64,
+        pub cache_refs_delta: u64,
+        pub cache_misses_delta: u64,
+        pub l1d_misses_delta: u64,
+        pub l1i_misses_delta: u64,
+        pub branch_instructions_delta: u64,
+        pub branch_misses_delta: u64,
+        pub stalled_frontend_delta: u64,
+        pub stalled_backend_delta: u64,
+
         pub ipc: f64,
-        pub cache_miss_rate: f64,
-        pub l1_miss_rate: f64,
+        pub l1d_miss_rate: f64,
+        pub l1i_miss_rate: f64,
+        pub llc_miss_rate: f64,
+        pub branch_miss_rate: f64,
+        pub frontend_stall_ratio: f64,
+        pub backend_stall_ratio: f64,
     }
 
     pub struct HardwareMetrics;
@@ -108,12 +120,6 @@ pub struct SystemTimings {
     pub flee_us: AtomicU64,
     pub avoidance_us: AtomicU64,
     pub rotation_us: AtomicU64,
-    pub ipc_query_us: AtomicU64,
-    pub ipc_serialize_us: AtomicU64,
-    pub ipc_write_us: AtomicU64,
-    pub ipc_frame_drops_total: AtomicU64,
-    pub ipc_channel_utilization_pct: AtomicU64,
-    pub ipc_writer_thread_us: AtomicU64,
 }
 
 impl SystemTimings {
@@ -128,12 +134,6 @@ impl SystemTimings {
             flee_us: AtomicU64::new(0),
             avoidance_us: AtomicU64::new(0),
             rotation_us: AtomicU64::new(0),
-            ipc_query_us: AtomicU64::new(0),
-            ipc_serialize_us: AtomicU64::new(0),
-            ipc_write_us: AtomicU64::new(0),
-            ipc_frame_drops_total: AtomicU64::new(0),
-            ipc_channel_utilization_pct: AtomicU64::new(0),
-            ipc_writer_thread_us: AtomicU64::new(0),
         }
     }
 
@@ -148,9 +148,6 @@ impl SystemTimings {
             "flee" => &self.flee_us,
             "avoidance" => &self.avoidance_us,
             "rotation" => &self.rotation_us,
-            "ipc_query" => &self.ipc_query_us,
-            "ipc_serialize" => &self.ipc_serialize_us,
-            "ipc_write" => &self.ipc_write_us,
             _ => panic!("Unknown system: {}", name),
         };
         TimingGuard::new(target)
@@ -167,12 +164,6 @@ impl SystemTimings {
             flee_us: self.flee_us.load(Ordering::Relaxed),
             avoidance_us: self.avoidance_us.load(Ordering::Relaxed),
             rotation_us: self.rotation_us.load(Ordering::Relaxed),
-            ipc_query_us: self.ipc_query_us.load(Ordering::Relaxed),
-            ipc_serialize_us: self.ipc_serialize_us.load(Ordering::Relaxed),
-            ipc_write_us: self.ipc_write_us.load(Ordering::Relaxed),
-            ipc_frame_drops_total: self.ipc_frame_drops_total.load(Ordering::Relaxed),
-            ipc_channel_utilization_pct: self.ipc_channel_utilization_pct.load(Ordering::Relaxed),
-            ipc_writer_thread_us: self.ipc_writer_thread_us.load(Ordering::Relaxed),
             archetype_count: 0,
             entity_count: 0,
         }
@@ -218,12 +209,6 @@ pub struct SystemTimingsSnapshot {
     pub flee_us: u64,
     pub avoidance_us: u64,
     pub rotation_us: u64,
-    pub ipc_query_us: u64,
-    pub ipc_serialize_us: u64,
-    pub ipc_write_us: u64,
-    pub ipc_frame_drops_total: u64,
-    pub ipc_channel_utilization_pct: u64,
-    pub ipc_writer_thread_us: u64,
 
     pub archetype_count: u64,
     pub entity_count: u64,

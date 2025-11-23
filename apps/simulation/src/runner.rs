@@ -1,6 +1,7 @@
 use crate::config::TimingConfig;
 use crate::simulation::core::timing::TickTimer;
 use crate::Simulation;
+use log::error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -89,7 +90,7 @@ impl<H: RunnerHooks> SimulationRunner<H> {
 
             let total_tick_elapsed = tick_start.elapsed();
 
-            #[cfg(feature = "dev-tools")]
+            // Record total tick timing (always enabled - negligible overhead ~1μs)
             {
                 let elapsed_us = total_tick_elapsed.as_micros() as u64;
                 simulation.world()
@@ -139,38 +140,44 @@ impl RunnerHooks for NoOpHooks {
     fn on_shutdown(&mut self, _tick: u64, _simulation: &mut Simulation) {}
 }
 
-use crate::config::SnapshotConfig;
-use crate::persistence::{SnapshotType, SnapshotWorker};
+use crate::config::SaveStateConfig;
+use crate::persistence::{SaveType, SaveStateWorker};
 use log::{info, warn};
 
 pub struct ConsoleHooks {
-    snapshot_worker: Option<SnapshotWorker>,
-    snapshot_config: SnapshotConfig,
-    last_snapshot: Instant,
+    save_state_worker: Option<SaveStateWorker>,
+    save_state_config: SaveStateConfig,
+    last_save: Instant,
 }
 
 impl ConsoleHooks {
     pub fn new(
-        snapshot_worker: SnapshotWorker,
-        snapshot_config: SnapshotConfig,
+        save_state_worker: SaveStateWorker,
+        save_state_config: SaveStateConfig,
     ) -> Self {
         Self {
-            snapshot_worker: Some(snapshot_worker),
-            snapshot_config,
-            last_snapshot: Instant::now(),
+            save_state_worker: Some(save_state_worker),
+            save_state_config,
+            last_save: Instant::now(),
         }
     }
 }
 
 impl RunnerHooks for ConsoleHooks {
     fn on_tick(&mut self, _tick: u64, _tick_elapsed: Duration, simulation: &mut Simulation) {
-        let snapshot_interval = Duration::from_secs(self.snapshot_config.interval_secs);
-        if self.snapshot_config.enabled && self.last_snapshot.elapsed() >= snapshot_interval {
-            let snapshot = simulation.to_snapshot();
-            if let Some(ref worker) = self.snapshot_worker {
-                worker.save_snapshot(snapshot, SnapshotType::Periodic);
+        let save_interval = Duration::from_secs(self.save_state_config.interval_secs);
+        if self.save_state_config.enabled && self.last_save.elapsed() >= save_interval {
+            match simulation.to_save_state() {
+                Ok(save_state) => {
+                    if let Some(ref worker) = self.save_state_worker {
+                        worker.save_world_state(save_state, SaveType::Periodic);
+                    }
+                    self.last_save = Instant::now();
+                }
+                Err(e) => {
+                    error!("Failed to create periodic save state: {}", e);
+                }
             }
-            self.last_snapshot = Instant::now();
         }
     }
 
@@ -209,15 +216,23 @@ impl RunnerHooks for ConsoleHooks {
 
     fn on_shutdown(&mut self, tick: u64, simulation: &mut Simulation) {
         info!("Simulation stopped at tick {}", tick);
-        info!("Creating final shutdown snapshot...");
+        info!("Creating final shutdown save state...");
 
-        let final_snapshot = simulation.to_snapshot();
-
-        if let Some(worker) = self.snapshot_worker.take() {
-            worker.save_snapshot(final_snapshot, SnapshotType::Shutdown);
-            info!("Waiting for snapshot worker to finish...");
-            worker.shutdown();
-            info!("Snapshot worker finished. Shutdown complete.");
+        match simulation.to_save_state() {
+            Ok(final_save_state) => {
+                if let Some(worker) = self.save_state_worker.take() {
+                    worker.save_world_state(final_save_state, SaveType::Shutdown);
+                    info!("Waiting for save state worker to finish...");
+                    worker.shutdown();
+                    info!("Save state worker finished. Shutdown complete.");
+                }
+            }
+            Err(e) => {
+                error!("Failed to create shutdown save state: {}", e);
+                if let Some(worker) = self.save_state_worker.take() {
+                    worker.shutdown();
+                }
+            }
         }
     }
 }

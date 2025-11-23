@@ -121,6 +121,30 @@ After adding instrumentation:
 
 ---
 
+## Naming Conventions
+
+### Creature vs. Crit
+
+The codebase uses both "Creature" and "Crit" intentionally with distinct meanings:
+
+**"Crit" (Informal, Identifiers):**
+- `CritId` - Entity identifier (short, used frequently in queries)
+- `CritBuilder` - Fluent builder API (short, used in spawn calls)
+- **Rationale:** Brevity for high-frequency usage, friendlier feel
+
+**"Creature" (Formal, Complete States):**
+- `CreatureState` - Full biological state (energy, age, etc.)
+- `CreatureSnapshot` - IPC data structure
+- `CreatureSpawnRequest` - Spawn configuration
+- `spawn_creature()` - Public API function
+- **Rationale:** Clarity for complete data structures, formal API surface
+
+**Pattern:** Use "Crit" for lightweight identifiers/builders, "Creature" for stateful components and public APIs.
+
+**Migration:** No mass renaming planned. This is an intentional dual-naming convention, not technical debt.
+
+---
+
 ## Component Architecture: The Hybrid Pattern
 
 We use a **three-tier component architecture** that balances ECS performance with biological state machines:

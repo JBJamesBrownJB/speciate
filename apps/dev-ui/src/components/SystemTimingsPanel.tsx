@@ -104,7 +104,7 @@ const TimingRow: React.FC<TimingRowProps> = ({ name, valueUs, canvasRef }) => (
 );
 
 // Reserved metrics that should always appear at the top
-const CRITICAL_METRICS = ['totalTickUs', 'ipcWriterThreadUs'];
+const CRITICAL_METRICS = ['totalTickUs'];
 
 // Non-timing metrics that should be excluded from sparklines
 const NON_TIMING_METRICS = ['archetypeCount', 'entityCount'];

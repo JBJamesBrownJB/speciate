@@ -12,8 +12,8 @@
   ],
   "extraResources": [
     {
-      "from": "../../../target/release/simulation",
-      "to": "simulation",
+      "from": "../simulation/speciate.*.node",
+      "to": "native",
       "filter": ["**/*"]
     }
   ],

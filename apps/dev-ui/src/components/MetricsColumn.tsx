@@ -11,7 +11,6 @@
  */
 
 import React from 'react';
-import { IPCHealthPanel } from './IPCHealthPanel';
 import { SystemTimingsPanel } from './SystemTimingsPanel';
 import { VectorizationTachometer } from './VectorizationTachometer';
 import { CacheFirewall } from './CacheFirewall';
@@ -68,8 +67,6 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
             )}
           </div>
         )}
-
-        <IPCHealthPanel timings={systemTimings} />
 
         <SystemTimingsPanel timings={systemTimings} />
       </div>

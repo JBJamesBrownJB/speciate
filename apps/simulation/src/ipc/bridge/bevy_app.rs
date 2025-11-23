@@ -1,0 +1,264 @@
+//! Bevy App wrapper for NAPI integration
+//!
+//! This module bridges the existing Bevy simulation with the NAPI custom run loop.
+//! It handles:
+//! - Command processing from JavaScript (spawn, kill_all, load_trial)
+//! - Position export to DoubleBuffer (SoA layout)
+//! - Telemetry collection and reporting
+
+use crate::simulation::core::{Simulation, SimulationBuilder};
+use crate::simulation::components::*;
+use crate::simulation::creatures::builder::CritBuilder;
+use super::{DoubleBuffer, TelemetrySnapshot};
+use crate::ipc::SimCommand;
+use crossbeam_channel::Receiver;
+use parking_lot::Mutex;
+use std::sync::Arc;
+
+/// NAPI-specific Bevy app wrapper
+pub struct NapiApp {
+    simulation: Simulation,
+    command_rx: Receiver<SimCommand>,
+}
+
+impl NapiApp {
+    /// Create new NapiApp with command receiver
+    ///
+    /// If `save_state_path` is provided and the file exists, loads simulation from save state.
+    /// Otherwise, creates a new simulation and spawns `initial_count` creatures.
+    pub fn new(
+        command_rx: Receiver<SimCommand>,
+        initial_count: u32,
+        assets_path: String,
+        save_state_path: Option<String>,
+    ) -> Self {
+        use crate::persistence::WorldSaveState;
+        use std::path::Path;
+
+        let mut simulation = if let Some(ref path_str) = save_state_path {
+            let path = Path::new(path_str);
+
+            if path.exists() {
+                eprintln!("[NAPI] Loading save state from: {}", path_str);
+                match WorldSaveState::load_from_file(path) {
+                    Ok(save_state) => {
+                        eprintln!("[NAPI] ✅ Loaded save state: {} creatures at tick {}",
+                            save_state.metadata.creature_count,
+                            save_state.metadata.tick_number);
+                        match Simulation::from_save_state(save_state) {
+                            Ok(sim) => sim,
+                            Err(e) => {
+                                eprintln!("[NAPI] ⚠️  Failed to restore simulation from save state: {}. Starting fresh.", e);
+                                SimulationBuilder::new()
+                                    .set_boundaries(100_000.0, 100_000.0)
+                                    .build()
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[NAPI] ⚠️  Failed to load save state: {}. Starting fresh.", e);
+                        SimulationBuilder::new()
+                            .set_boundaries(100_000.0, 100_000.0)
+                            .build()
+                    }
+                }
+            } else {
+                eprintln!("[NAPI] Save state not found at: {}. Starting fresh.", path_str);
+                SimulationBuilder::new()
+                    .set_boundaries(100_000.0, 100_000.0)
+                    .build()
+            }
+        } else {
+            eprintln!("[NAPI] No save state provided. Starting fresh.");
+            SimulationBuilder::new()
+                .set_boundaries(100_000.0, 100_000.0)
+                .build()
+        };
+
+        // Set assets path for trial loading
+        simulation.set_assets_path(&assets_path);
+
+        // Spawn initial creatures ONLY if save state was not loaded
+        if save_state_path.is_none() || !save_state_path.as_ref().map(|p| Path::new(p).exists()).unwrap_or(false) {
+            for _i in 0..initial_count {
+                let x = (rand::random::<f32>() - 0.5) * 1000.0;  // ±500 units
+                let y = (rand::random::<f32>() - 0.5) * 1000.0;  // ±500 units
+
+                let builder = CritBuilder::new()
+                    .at(x, y)
+                    .with_all_capabilities()
+                    .in_behavior(BehaviorMode::Wandering);
+
+                simulation.spawn_crit(builder);
+            }
+        }
+
+        Self {
+            simulation,
+            command_rx,
+        }
+    }
+
+    /// Process commands from JavaScript (non-blocking)
+    pub fn process_commands(&mut self) {
+        while let Ok(cmd) = self.command_rx.try_recv() {
+            match cmd {
+                SimCommand::Spawn(count) => {
+                    for _ in 0..count {
+                        let x = (rand::random::<f32>() - 0.5) * 1000.0;  // ±500 units
+                        let y = (rand::random::<f32>() - 0.5) * 1000.0;  // ±500 units
+
+                        let builder = CritBuilder::new()
+                            .at(x, y)
+                            .with_all_capabilities()
+                            .in_behavior(BehaviorMode::Wandering);
+
+                        self.simulation.spawn_crit(builder);
+                    }
+                    // Flush world to ensure entities are added to archetypes immediately
+                    // Without this, queries in export_positions() won't see newly spawned entities
+                    self.simulation.world.flush();
+                }
+                SimCommand::SpawnAt { x, y } => {
+                    self.simulation.spawn_crit_at(x, y);
+                    self.simulation.world.flush();
+                }
+                SimCommand::KillAll => {
+                    self.simulation.despawn_all();
+                    // Flush to ensure entities are removed from archetypes immediately
+                    self.simulation.world.flush();
+                }
+                SimCommand::LoadTrial { trial_name } => {
+                    self.simulation.load_trial(&trial_name, |result| {
+                        if result.success {
+                            eprintln!("[NAPI] ✅ {}", result.message);
+                        } else {
+                            eprintln!("[NAPI] ❌ {}", result.message);
+                        }
+                    });
+                    self.simulation.world.flush();
+                }
+            }
+        }
+    }
+
+    /// Update simulation one tick
+    pub fn update(&mut self, delta_time: f32) {
+        self.simulation.update(delta_time);
+    }
+
+    /// Export positions to DoubleBuffer (SoA layout)
+    ///
+    /// Layout: [ID₁, ID₂..., X₁, X₂..., Y₁, Y₂..., Rot₁, Rot₂...]
+    ///
+    /// Returns: The number of creatures actually exported to the buffer
+    pub fn export_positions(&mut self, buffer: &Arc<Mutex<DoubleBuffer>>) -> usize {
+        let world = &mut self.simulation.world;
+
+        // Query all living creatures
+        let mut query = world.query::<(&CritId, &Position, &Rotation)>();
+
+        let creatures: Vec<_> = query.iter(world).collect();
+        let creature_count = creatures.len();
+
+        if creature_count == 0 {
+            return 0;
+        }
+
+        // Lock buffer and get write slice
+        let mut buffer_guard = buffer.lock();
+        let buffer_size = buffer_guard.size();
+
+        // Check if buffer capacity (in creatures, not f32s)
+        let buffer_capacity = buffer_size / 4;
+
+        // Only export what fits in the buffer
+        let export_count = creature_count.min(buffer_capacity);
+
+        let write_slice = buffer_guard.get_write_slice();
+
+        // SoA offsets
+        let id_offset = 0;
+        let x_offset = export_count;
+        let y_offset = export_count * 2;
+        let rot_offset = export_count * 3;
+
+        // Write data in SoA layout (only up to export_count)
+        for (i, (id, pos, rot)) in creatures.iter().take(export_count).enumerate() {
+            write_slice[id_offset + i] = id.0 as f32;
+            write_slice[x_offset + i] = pos.x;
+            write_slice[y_offset + i] = pos.y;
+            write_slice[rot_offset + i] = rot.radians;
+        }
+
+        export_count
+    }
+
+    /// Get telemetry snapshot
+    pub fn get_telemetry(&mut self, tick: u64, tick_rate_hz: f32) -> TelemetrySnapshot {
+        // Query creature count directly (no EntityIdMap dependency)
+        let count = self.simulation.world
+            .query::<&CritId>()
+            .iter(&self.simulation.world)
+            .count();
+        let system_timings = self.simulation.get_system_timings();
+
+        #[cfg(feature = "dev-tools")]
+        {
+            let hardware_metrics = self.simulation.get_hardware_metrics();
+            let parallelization_metrics = self.simulation.get_parallelization_metrics();
+
+            TelemetrySnapshot::new(
+                tick,
+                count,
+                tick_rate_hz,
+                system_timings,
+                hardware_metrics,
+                parallelization_metrics,
+            )
+        }
+
+        #[cfg(not(feature = "dev-tools"))]
+        {
+            TelemetrySnapshot::new(
+                tick,
+                count,
+                tick_rate_hz,
+                system_timings,
+            )
+        }
+    }
+
+    /// Record total tick timing (for NAPI run loop)
+    #[cfg(feature = "dev-tools")]
+    pub fn record_total_tick_timing(&mut self, elapsed_us: u64) {
+        self.simulation.world()
+            .resource::<crate::instrumentation::SystemTimings>()
+            .total_tick_us
+            .store(elapsed_us, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Record total tick timing (for NAPI run loop) - no-op without dev-tools
+    #[cfg(not(feature = "dev-tools"))]
+    pub fn record_total_tick_timing(&mut self, _elapsed_us: u64) {
+        // No-op: SystemTimings resource doesn't exist without dev-tools feature
+    }
+
+    /// Read hardware counters and store snapshot (for NAPI run loop, dev-tools only)
+    #[cfg(feature = "dev-tools")]
+    pub fn read_hardware_counters(&mut self) {
+        // Read hardware counters (they stay enabled continuously from initialization)
+        let hw_snapshot = self.simulation.world_mut()
+            .resource_mut::<crate::instrumentation::HardwareMetrics>()
+            .read();
+
+        self.simulation.world_mut()
+            .resource_mut::<crate::instrumentation::HardwareSnapshotResource>()
+            .0 = hw_snapshot;
+    }
+
+    /// Create save state from current simulation (for periodic/shutdown saves)
+    pub fn to_save_state(&mut self) -> Result<crate::persistence::WorldSaveState, crate::persistence::SaveStateError> {
+        self.simulation.to_save_state()
+    }
+}

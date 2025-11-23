@@ -40,8 +40,9 @@ export function snapshotToTelemetry(snapshot: MetricsSnapshot): TelemetryFrame {
     tick: Math.round(snapshot.tick.avg),
     creatureCount: Math.round(snapshot.creatureCount.avg),
     tickRateHz: snapshot.tickRateHz.avg,
-    systemTimingsUs: systemTimings,
+    systemTimings: systemTimings,
     hardwareMetrics,
     parallelizationMetrics,
+    timestamp: Date.now(),
   };
 }

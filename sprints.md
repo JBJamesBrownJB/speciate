@@ -1,0 +1,3 @@
+- NAPI-RS migration
+- ECS tick optimisation: SPRINT_14_PLAN/
+- Frontend shader based movement: docs/visuals/shader-smooth-and-wiggle.md

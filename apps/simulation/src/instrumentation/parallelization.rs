@@ -52,7 +52,12 @@ impl ParallelizationMetrics {
     }
 
     pub fn read(&mut self) -> ParallelizationSnapshot {
-        let mut system = self.system.lock().unwrap();
+        let mut system = self.system.lock()
+            .unwrap_or_else(|poisoned| {
+                // Mutex poisoned due to panic in another thread
+                // Recover by accessing the data anyway (safe for our use case)
+                poisoned.into_inner()
+            });
 
         system.refresh_cpu_all();
 

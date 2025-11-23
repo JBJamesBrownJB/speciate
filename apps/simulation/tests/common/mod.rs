@@ -1,6 +1,6 @@
 //! Common test utilities for integration tests
 
-use speciate::config::SnapshotConfig;
+use speciate::config::SaveStateConfig;
 use speciate::simulation::{Simulation, SimulationBuilder};
 use speciate::{spawn_creature, CreatureSpawnRequest};
 use std::fs;
@@ -19,18 +19,21 @@ pub fn setup_test_simulation(creature_count: usize) -> Simulation {
     simulation
 }
 
-/// Create a snapshot config with fast intervals for testing
-pub fn test_snapshot_config(interval_secs: u64, keep_last_n: usize) -> SnapshotConfig {
-    SnapshotConfig {
+/// Create a save state config with fast intervals for testing
+pub fn test_save_state_config(interval_secs: u64, keep_last_n: usize) -> SaveStateConfig {
+    SaveStateConfig {
         enabled: true,
         interval_secs,
         keep_last_n,
     }
 }
 
-/// Count number of periodic snapshots in the snapshots directory
-pub fn count_periodic_snapshots() -> usize {
-    let snapshots_dir = PathBuf::from("snapshots");
+/// Count total number of save states (all .msgpack files)
+///
+/// In the new simplified save system, all saves (periodic and shutdown) create
+/// timestamped files with no prefix, so we just count all .msgpack files.
+pub fn count_save_states() -> usize {
+    let snapshots_dir = PathBuf::from("save-states");
 
     if !snapshots_dir.exists() {
         return 0;
@@ -45,43 +48,76 @@ pub fn count_periodic_snapshots() -> usize {
                 && path
                     .file_name()
                     .and_then(|name| name.to_str())
-                    .map(|name| name.starts_with("simulation_") && name.ends_with(".msgpack"))
+                    .map(|name| name.ends_with(".msgpack"))
                     .unwrap_or(false)
         })
         .count()
 }
 
-/// Count number of shutdown snapshots in the snapshots directory
-pub fn count_shutdown_snapshots() -> usize {
-    let snapshots_dir = PathBuf::from("snapshots");
+/// Count number of periodic save states (DEPRECATED - returns same as count_save_states())
+///
+/// In the new simplified system, there's no distinction between periodic and shutdown saves.
+/// This function is kept for backwards compatibility with existing tests.
+#[deprecated(note = "Use count_save_states() instead - no distinction between periodic/shutdown")]
+pub fn count_periodic_save_states() -> usize {
+    count_save_states()
+}
+
+/// Count number of shutdown save states (DEPRECATED - always returns 0)
+///
+/// In the new simplified system, shutdown saves create the same timestamped files as periodic saves.
+/// This function is kept for backwards compatibility with existing tests.
+#[deprecated(note = "No longer distinguishes shutdown saves - use count_save_states()")]
+pub fn count_shutdown_save_states() -> usize {
+    0  // No separate shutdown saves in new system
+}
+
+/// Check if latest.msgpack exists (DEPRECATED - always returns false)
+///
+/// In the new simplified system, we no longer maintain a latest.msgpack file.
+/// All saves are timestamped files. Use get_most_recent_save_state() instead.
+#[deprecated(note = "latest.msgpack no longer exists - use get_most_recent_save_state()")]
+pub fn latest_save_state_exists() -> bool {
+    false  // latest.msgpack no longer exists in new system
+}
+
+/// Get the most recent save state file path (sorted by timestamp in filename)
+pub fn get_most_recent_save_state() -> Option<PathBuf> {
+    let snapshots_dir = PathBuf::from("save-states");
 
     if !snapshots_dir.exists() {
-        return 0;
+        return None;
     }
 
-    fs::read_dir(&snapshots_dir)
-        .unwrap()
+    let mut save_files: Vec<PathBuf> = fs::read_dir(&snapshots_dir)
+        .ok()?
         .filter_map(|entry| entry.ok())
-        .filter(|entry| {
+        .filter_map(|entry| {
             let path = entry.path();
-            path.is_file()
+            if path.is_file()
                 && path
                     .file_name()
                     .and_then(|name| name.to_str())
-                    .map(|name| name.starts_with("shutdown_") && name.ends_with(".msgpack"))
+                    .map(|name| name.ends_with(".msgpack"))
                     .unwrap_or(false)
+            {
+                Some(path)
+            } else {
+                None
+            }
         })
-        .count()
+        .collect();
+
+    // Sort by filename (which is timestamp: YYYY-MM-DD_HH-MM-SS.msgpack)
+    save_files.sort();
+
+    // Return the last one (most recent)
+    save_files.last().cloned()
 }
 
-/// Check if latest.msgpack exists
-pub fn latest_snapshot_exists() -> bool {
-    PathBuf::from("snapshots/latest.msgpack").exists()
-}
-
-/// Clean up all test snapshots
-pub fn cleanup_test_snapshots() {
-    let snapshots_dir = PathBuf::from("snapshots");
+/// Clean up all test save states
+pub fn cleanup_test_save_states() {
+    let snapshots_dir = PathBuf::from("save-states");
 
     if !snapshots_dir.exists() {
         return;

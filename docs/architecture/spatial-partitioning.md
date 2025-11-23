@@ -74,15 +74,12 @@ pub struct SpatialCell(pub (i32, i32));               // Tracks current cell per
 
 ## Tick Architecture Integration
 
-The spatial grid operates within a dual-tick simulation architecture:
+The spatial grid operates within a single-tick simulation:
 
-- **Physics tick (30Hz):** Grid updated incrementally during movement
-- **AI tick (20Hz):** Grid queried for perception
-- **Frontend (90Hz):** Interpolated rendering
+- **Simulation tick (~22Hz):** Grid updated and queried each frame
+- **Frontend (60+ FPS):** Interpolated rendering
 
-**Key insight:** Grid is always fresh for collision (updated every physics tick), slightly stale for perception (0-33ms old), which is acceptable.
-
-**See:** `docs/architecture/dual-tick-simulation.md` for complete tick architecture details.
+**Note:** Originally designed for dual-tick architecture (Sprint 11), now simplified to single-tick. See `docs/archive/dual-tick/` for historical context.
 
 ---
 

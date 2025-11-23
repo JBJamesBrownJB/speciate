@@ -1,0 +1,38 @@
+{
+  "name": "@speciate/simulation",
+  "version": "0.1.0",
+  "description": "Rust simulation engine NAPI addon",
+  "main": "index.node",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "speciate",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "x86_64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc"
+      ]
+    }
+  },
+  "scripts": {
+    "check-freshness": "./scripts/check-napi-freshness.sh || echo 'Note: Freshness check failed or not applicable'",
+    "prebuild": "npm run check-freshness",
+    "build": "napi build --platform --release --features dev-tools,napi",
+    "build:debug": "napi build --platform --features dev-tools,napi",
+    "artifacts": "napi artifacts",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "engines": {
+    "node": ">= 16"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "repository": "https://github.com/yourusername/speciate"
+}

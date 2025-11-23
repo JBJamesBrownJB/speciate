@@ -27,6 +27,7 @@ Scale to 150K-200K creatures through:
 - [ ] Test 20K creatures: <40ms avg tick
 
 ### Phase 2: Frontend Interpolation (60Hz) - Days 2-3
+**URGENT: This is under review and will move to a GPU shader based approach**
 - [ ] Add PreviousPositions resource to backend
 - [ ] Update CreatureSnapshot with prev_x, prev_y, prev_rotation
 - [ ] Implement cleanup system for despawned creatures

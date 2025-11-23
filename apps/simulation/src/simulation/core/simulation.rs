@@ -6,7 +6,7 @@ use crate::simulation::creatures::behaviors::{
 };
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
-use crate::simulation::creatures::systems::{process_spawn_events, EntityIdMap, NextCreatureId};
+use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
 use crate::simulation::movement::{integrate_motion_system, rotation_system};
 use crate::simulation::perception;
 use bevy_ecs::prelude::*;
@@ -58,9 +58,6 @@ impl SimulationBuilder {
 
         schedule.add_systems(process_spawn_events);
 
-        #[cfg(feature = "dev-tools")]
-        schedule.add_systems(crate::ipc::command_executor_system);
-
         schedule.add_systems((
             perception::update_perception_system,
             behavior_transition_system,
@@ -93,7 +90,6 @@ impl SimulationBuilder {
 
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(EntityIdMap::default());
 
         Self { world, schedule }
     }
@@ -116,6 +112,7 @@ impl SimulationBuilder {
         Simulation {
             world: self.world,
             schedule: self.schedule,
+            assets_path: None,
         }
     }
 }
@@ -129,6 +126,7 @@ impl Default for SimulationBuilder {
 pub struct Simulation {
     pub(crate) world: World,
     schedule: Schedule,
+    assets_path: Option<std::path::PathBuf>,
 }
 
 impl Simulation {
@@ -157,14 +155,12 @@ impl Simulation {
     pub fn spawn_crit(&mut self, builder: CritBuilder) -> u32 {
         let id = self.world.resource_mut::<NextCreatureId>().generate();
 
-        let entity = self.world.spawn(builder.build(id)).id();
-
-        self.world.resource_mut::<EntityIdMap>().insert(entity, id);
+        let _entity = self.world.spawn(builder.build(id)).id();
 
         id
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-helpers"))]
     pub fn spawn_test_crit(&mut self, x: f32, y: f32) -> u32 {
         let builder = CritBuilder::new().at(x, y).with_all_capabilities();
         self.spawn_crit(builder)
@@ -188,15 +184,122 @@ impl Simulation {
     }
 
     pub fn creature_count(&self) -> usize {
-        self.world.resource::<EntityIdMap>().len()
+        use crate::simulation::creatures::components::CritId;
+
+        unsafe {
+            let world_cell = self.world.as_unsafe_world_cell_readonly();
+            let mut query = world_cell.world_mut().query::<&CritId>();
+            query.iter(world_cell.world()).count()
+        }
     }
 
-    #[cfg(any(test, feature = "test-helpers", feature = "dev-tools"))]
+    pub fn despawn_all(&mut self) {
+        use crate::simulation::creatures::components::CritId;
+
+        let entities: Vec<Entity> = self.world
+            .query::<(Entity, &CritId)>()
+            .iter(&self.world)
+            .map(|(entity, _)| entity)
+            .collect();
+
+        for entity in entities {
+            self.world.despawn(entity);
+        }
+    }
+
+    pub fn set_assets_path(&mut self, path: &str) {
+        self.assets_path = Some(std::path::PathBuf::from(path));
+    }
+
+    pub fn spawn_crit_at(&mut self, x: f32, y: f32) -> u32 {
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::components::state::BehaviorMode;
+
+        let builder = CritBuilder::new()
+            .at(x, y)
+            .with_all_capabilities()
+            .in_behavior(BehaviorMode::Wandering);
+
+        self.spawn_crit(builder)
+    }
+
+    #[cfg_attr(not(feature = "dev-tools"), allow(unused_variables))]
+    pub fn load_trial<F>(&mut self, trial_name: &str, callback: F)
+    where
+        F: FnOnce(crate::ipc::CommandResult) + 'static,
+    {
+        use crate::ipc::CommandResult;
+
+        let Some(ref _assets_path) = self.assets_path else {
+            callback(CommandResult {
+                success: false,
+                message: "Assets path not set. Call set_assets_path() first.".to_string(),
+                command_type: "LoadTrial".to_string(),
+            });
+            return;
+        };
+
+        #[cfg(feature = "dev-tools")]
+        {
+            use crate::trials;
+            match trials::loader::load_trial(&mut self.world, trial_name) {
+                Ok(config) => {
+                    callback(CommandResult {
+                        success: true,
+                        message: format!("Loaded trial '{}' ({} spawn patterns)", config.name, config.spawns.len()),
+                        command_type: "LoadTrial".to_string(),
+                    });
+                }
+                Err(e) => {
+                    callback(CommandResult {
+                        success: false,
+                        message: format!("Failed to load trial '{}': {}", trial_name, e),
+                        command_type: "LoadTrial".to_string(),
+                    });
+                }
+            }
+        }
+
+        #[cfg(not(feature = "dev-tools"))]
+        {
+            callback(CommandResult {
+                success: false,
+                message: "Trial loading requires dev-tools feature".to_string(),
+                command_type: "LoadTrial".to_string(),
+            });
+        }
+    }
+
+    pub fn get_system_timings(&self) -> crate::instrumentation::SystemTimingsSnapshot {
+        #[cfg(feature = "dev-tools")]
+        {
+            self.world.resource::<crate::instrumentation::SystemTimings>().snapshot()
+        }
+
+        #[cfg(not(feature = "dev-tools"))]
+        {
+            crate::instrumentation::SystemTimingsSnapshot::default()
+        }
+    }
+
+    #[cfg(feature = "dev-tools")]
+    pub fn get_hardware_metrics(&self) -> crate::instrumentation::HardwareSnapshot {
+        self.world
+            .resource::<crate::instrumentation::HardwareSnapshotResource>()
+            .0
+            .clone()
+            .unwrap_or_default()
+    }
+
+    #[cfg(feature = "dev-tools")]
+    pub fn get_parallelization_metrics(&mut self) -> crate::instrumentation::ParallelizationSnapshot {
+        self.world.resource_mut::<crate::instrumentation::ParallelizationMetrics>().read()
+    }
+
     pub fn world(&self) -> &World {
         &self.world
     }
 
-    #[cfg(any(test, feature = "test-helpers", feature = "dev-tools"))]
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.world
     }
@@ -270,5 +373,133 @@ mod tests {
         assert_ne!(id2, id3);
         assert_ne!(id1, id3);
         assert_eq!(simulation.creature_count(), 3);
+    }
+
+    // Trial loading tests
+    #[test]
+    #[cfg(feature = "dev-tools")]
+    fn test_trial_opposing_seekers_loads() {
+        use crate::simulation::creatures::components::CritId;
+        use std::time::Duration;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_assets_path(".");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        sim.load_trial("opposing-seekers-1", move |result| {
+            tx.send(result).unwrap();
+        });
+
+        let result = rx.recv_timeout(Duration::from_secs(1))
+            .expect("Trial load should complete within 1 second");
+
+        assert!(result.success, "Trial load should succeed: {}", result.message);
+
+        let count = sim.world_mut().query::<&CritId>()
+            .iter(sim.world_mut())
+            .count();
+        assert_eq!(count, 3, "Should spawn 3 creatures from trial");
+    }
+
+    #[test]
+    #[cfg(feature = "dev-tools")]
+    fn test_trial_additive_spawning() {
+        use crate::simulation::creatures::components::CritId;
+        use std::time::Duration;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_assets_path(".");
+
+        for _ in 0..10 {
+            sim.spawn_test_crit(0.0, 0.0);
+        }
+
+        let count_before = sim.world_mut().query::<&CritId>()
+            .iter(sim.world_mut())
+            .count();
+        assert_eq!(count_before, 10, "Should have 10 runtime-spawned creatures");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        sim.load_trial("opposing-seekers-1", move |result| {
+            tx.send(result).unwrap();
+        });
+
+        let result = rx.recv_timeout(Duration::from_secs(1))
+            .expect("Trial load should complete within 1 second");
+        assert!(result.success, "Trial load should succeed: {}", result.message);
+
+        let count_after = sim.world_mut().query::<&CritId>()
+            .iter(sim.world_mut())
+            .count();
+        assert_eq!(count_after, 13, "Should have 13 total creatures (10 + 3)");
+    }
+
+    // Despawn all tests
+    #[test]
+    fn test_despawn_all_removes_runtime_spawned() {
+        use crate::simulation::creatures::components::CritId;
+
+        let mut sim = SimulationBuilder::new().build();
+
+        for i in 0..100 {
+            let x = (i as f32 % 10.0) * 10.0;
+            let y = (i as f32 / 10.0) * 10.0;
+            sim.spawn_test_crit(x, y);
+        }
+
+        let count_before = sim.world_mut().query::<&CritId>()
+            .iter(sim.world_mut())
+            .count();
+        assert_eq!(count_before, 100, "Should have 100 spawned creatures");
+
+        sim.despawn_all();
+
+        let count_after = sim.world_mut().query::<&CritId>()
+            .iter(sim.world_mut())
+            .count();
+        assert_eq!(count_after, 0, "Should have 0 creatures after clear all");
+    }
+
+    #[test]
+    fn test_despawn_all_removes_all_entities() {
+        use crate::simulation::creatures::components::CritId;
+
+        let mut sim = SimulationBuilder::new().build();
+
+        for _ in 0..20 {
+            sim.spawn_test_crit(0.0, 0.0);
+        }
+
+        let count_before = sim.world_mut().query::<&CritId>()
+            .iter(sim.world_mut())
+            .count();
+        assert_eq!(count_before, 20, "Should have 20 creatures");
+
+        sim.despawn_all();
+
+        let count_after = sim.world_mut().query::<&CritId>()
+            .iter(sim.world_mut())
+            .count();
+        assert_eq!(count_after, 0, "Should have 0 creatures after despawn_all");
+    }
+
+    #[test]
+    fn test_multiple_despawns_idempotent() {
+        use crate::simulation::creatures::components::CritId;
+
+        let mut sim = SimulationBuilder::new().build();
+
+        for _ in 0..20 {
+            sim.spawn_test_crit(0.0, 0.0);
+        }
+
+        sim.despawn_all();
+        sim.despawn_all();
+        sim.despawn_all();
+
+        let count = sim.world_mut().query::<&CritId>()
+            .iter(sim.world_mut())
+            .count();
+        assert_eq!(count, 0, "Should still be 0 after multiple clears");
     }
 }

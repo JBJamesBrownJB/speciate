@@ -33,6 +33,10 @@ Cargo.lock
 /rustfmt.toml
 /clippy.toml
 
+# NAPI-RS build artifacts (native Node.js addons)
+# These are platform-specific binaries that should never be committed
+*.node
+
 # --------------------------------------------------------------------------
 # NODE.JS/TYPESCRIPT (Frontend Client & Economy Microservice)
 # Stack: Node.js, npm/Yarn, TypeScript, Pixi.js, Vite

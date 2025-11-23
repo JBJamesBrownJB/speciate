@@ -11,6 +11,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SpawnForm } from './SpawnForm';
 import { TrialSelector } from './TrialSelector';
 import { ControlBar } from './ControlBar';
+import { NAPIBufferPanel } from './NAPIBufferPanel';
 import { useSmoothedMetrics } from '../hooks/useSmoothedMetrics';
 import { calculateStatistics } from '../utils/statistics';
 import { snapshotToTelemetry } from '../utils/snapshotConverter';
@@ -29,6 +30,7 @@ export const DevToolsApp: React.FC = () => {
   const [systemTimings, setSystemTimings] = useState<SystemTimingsSnapshot | undefined>(undefined);
   const [rawHardwareMetrics, setRawHardwareMetrics] = useState<HardwareMetrics | undefined>(undefined);
   const [parallelizationMetrics, setParallelizationMetrics] = useState<ParallelizationMetrics | undefined>(undefined);
+  const [currentTelemetry, setCurrentTelemetry] = useState<TelemetryFrame | null>(null);
   const hardwareMetrics = useSmoothedMetrics(rawHardwareMetrics, 0.3);
   const lastHardwareUpdateRef = useRef<number>(0);
 
@@ -50,12 +52,12 @@ export const DevToolsApp: React.FC = () => {
     const tickRateValues = collectedSamples.map(s => s.tickRateHz);
 
     const systemTimingsStats: Record<string, any> = {};
-    if (collectedSamples[0].systemTimingsUs) {
-      const keys = Object.keys(collectedSamples[0].systemTimingsUs) as Array<keyof SystemTimingsSnapshot>;
+    if (collectedSamples[0].systemTimings) {
+      const keys = Object.keys(collectedSamples[0].systemTimings) as Array<keyof SystemTimingsSnapshot>;
       for (const key of keys) {
         const values = collectedSamples
-          .filter(s => s.systemTimingsUs && typeof s.systemTimingsUs[key] === 'number')
-          .map(s => s.systemTimingsUs![key] as number);
+          .filter(s => s.systemTimings && typeof s.systemTimings[key] === 'number')
+          .map(s => s.systemTimings![key] as number);
         if (values.length > 0) {
           systemTimingsStats[key] = calculateStatistics(values);
         }
@@ -149,7 +151,8 @@ export const DevToolsApp: React.FC = () => {
       setTick(telemetry.tick);
       setCreatureCount(telemetry.creatureCount);
       setTickRateHz(telemetry.tickRateHz);
-      setSystemTimings(telemetry.systemTimingsUs);
+      setSystemTimings(telemetry.systemTimings);
+      setCurrentTelemetry(telemetry);
 
       const now = Date.now();
       if (telemetry.hardwareMetrics && (now - lastHardwareUpdateRef.current) >= 200) {
@@ -189,7 +192,6 @@ export const DevToolsApp: React.FC = () => {
       type: 'dev_spawn_creature',
       x,
       y,
-      dna: null,
     });
   };
 
@@ -258,6 +260,8 @@ export const DevToolsApp: React.FC = () => {
         onClearSnapshot={handleClearSnapshot}
       />
 
+      <NAPIBufferPanel telemetry={currentTelemetry} />
+
       <SpawnForm onSpawn={handleSpawn} disabled={!isConnected} />
       <TrialSelector onLoadTrial={handleLoadTrial} disabled={!isConnected} />
 
@@ -290,7 +294,7 @@ export const DevToolsApp: React.FC = () => {
             tick={snapshotTelemetry.tick}
             creatureCount={snapshotTelemetry.creatureCount}
             tickRateHz={snapshotTelemetry.tickRateHz}
-            systemTimings={snapshotTelemetry.systemTimingsUs}
+            systemTimings={snapshotTelemetry.systemTimings}
             hardwareMetrics={snapshotTelemetry.hardwareMetrics}
             parallelizationMetrics={snapshotTelemetry.parallelizationMetrics}
           />

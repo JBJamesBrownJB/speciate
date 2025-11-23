@@ -26,12 +26,19 @@ else
   echo "  Portal dependencies OK"
 fi
 
+cd "$ROOT_DIR/apps/simulation"
+if [ ! -d "node_modules" ]; then
+  echo "  Simulation npm dependencies missing, installing..."
+  npm install
+else
+  echo "  Simulation dependencies OK"
+fi
+
 echo ""
 echo "=========================================="
-echo "🔧 Building simulation (debug mode)..."
+echo "🔧 Building NAPI module (debug mode)..."
 echo "=========================================="
-cd "$ROOT_DIR/apps/simulation"
-cargo build --features dev-tools
+npm run build:debug
 
 echo ""
 echo "=========================================="

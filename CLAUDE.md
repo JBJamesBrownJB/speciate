@@ -3,16 +3,20 @@
 ## Quick Reference
 
 **Key Documentation:**
-- `docs/architecture/dual-tick-simulation.md` - Current performance architecture (30Hz physics, 20Hz AI, 90Hz render)
+- `docs/archive/dual-tick/` - ⚠️ ABANDONED architecture (Sprint 11, archived for learning)
+- `docs/architecture/napi-architecture.md` - Current NAPI-RS integration (zero-copy buffers)
 - `docs/biology/dna-driven-design.md` - DNA-driven design principles (detailed)
 - `docs/architecture/electron-architecture.md` - IPC protocol and Electron patterns
 - `docs/biology/biology-notes.md` - Zoologist consultation log
 - `SPRINT_DOCS/` - Current and past sprint plans
 
-**Current Sprint:** Sprint 11 - Dual-Tick Architecture
-- Branch: `feat/sprint-11-dual-tick-architecture`
-- Focus: Physics/AI tick separation for 150K-200K creature scale
-- See: `SPRINT_DOCS/SPRINT_PLAN_sprint-11-dual-tick-architecture.md`
+**Current Sprint:** Sprint 13 - NAPI-RS Migration (COMPLETE)
+- Branch: `feat/sprint-13-napi-rs-migration`
+- Focus: Replace stdio IPC with native NAPI addon for 10x performance improvement
+- Status: ✅ Migration complete, stdio code archived
+- See: `SPRINT_DOCS/SPRINT_PLAN_sprint-13-napi-rs-migration.md`
+
+**Recent Completion:** Sprint 13 delivered zero-copy double-buffer architecture, replacing stdio MessagePack IPC
 
 ---
 

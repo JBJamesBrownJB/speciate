@@ -58,7 +58,7 @@ A **DNA-driven artificial life simulation** where hundreds of autonomous creatur
   - **20Hz AI + Perception:** Spatial queries, behavior decisions, steering forces
   - **Lock-free snapshot system:** Non-blocking state sharing with frontend
   - **Target:** 150,000-200,000 creatures via dual-tick architecture
-  - **See:** `docs/architecture/dual-tick-simulation.md`
+  - **See:** `docs/archive/dual-tick/` (ABANDONED - kept for reference)
 
 * **Frontend (PixiJS):** Renders at 90 FPS with interpolation, receives state via stdio MessagePack stream
   - **Interpolated smoothing:** 90Hz visuals from 30Hz physics snapshots

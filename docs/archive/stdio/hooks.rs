@@ -9,21 +9,11 @@ use crate::Simulation;
 use crossbeam_channel::{bounded, Sender, TrySendError};
 use serde::Serialize;
 use std::io::{self, Write};
-#[cfg(feature = "dev-tools")]
-use std::sync::atomic::AtomicU64;
-#[cfg(feature = "dev-tools")]
-use std::sync::atomic::Ordering;
-#[cfg(feature = "dev-tools")]
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-#[cfg(feature = "dev-tools")]
-use std::time::Instant;
 
 pub struct StdioHooks {
     send_tx: Sender<Vec<u8>>,
-    #[cfg(feature = "dev-tools")]
-    writer_thread_timing: Arc<AtomicU64>,
 }
 
 impl Default for StdioHooks {
@@ -35,10 +25,6 @@ impl Default for StdioHooks {
 impl StdioHooks {
     pub fn new() -> Self {
         let (send_tx, send_rx) = bounded::<Vec<u8>>(2);
-        #[cfg(feature = "dev-tools")]
-        let writer_thread_timing = Arc::new(AtomicU64::new(0));
-        #[cfg(feature = "dev-tools")]
-        let writer_thread_timing_clone = writer_thread_timing.clone();
 
         thread::Builder::new()
             .name("ipc-writer".to_string())
@@ -46,9 +32,6 @@ impl StdioHooks {
                 let mut stdout = io::stdout().lock();
 
                 while let Ok(buf) = send_rx.recv() {
-                    #[cfg(feature = "dev-tools")]
-                    let write_start = Instant::now();
-
                     let len = buf.len() as u32;
                     if let Err(e) = stdout
                         .write_all(&len.to_be_bytes())
@@ -58,12 +41,6 @@ impl StdioHooks {
                         eprintln!("[ipc-writer] Write error: {}", e);
                         break;
                     }
-
-                    #[cfg(feature = "dev-tools")]
-                    {
-                        let write_elapsed_us = write_start.elapsed().as_micros() as u64;
-                        writer_thread_timing_clone.store(write_elapsed_us, Ordering::Relaxed);
-                    }
                 }
                 eprintln!("[ipc-writer] Writer thread exiting");
             })
@@ -71,8 +48,6 @@ impl StdioHooks {
 
         Self {
             send_tx,
-            #[cfg(feature = "dev-tools")]
-            writer_thread_timing,
         }
     }
 }
@@ -81,41 +56,16 @@ impl RunnerHooks for StdioHooks {
     fn on_tick(&mut self, _tick: u64, _tick_elapsed: Duration, simulation: &mut Simulation) {
         match serialize_snapshot_frame(simulation) {
             Ok(buf) => {
-                #[cfg(feature = "dev-tools")]
-                let write_start = Instant::now();
-
-                #[cfg(feature = "dev-tools")]
-                use std::sync::atomic::Ordering;
-
                 match self.send_tx.try_send(buf) {
                     Ok(()) => {},
                     Err(TrySendError::Full(_)) => {
                         eprintln!("[stdio] Frame dropped: writer thread falling behind");
-                        #[cfg(feature = "dev-tools")]
-                        {
-                            let timings = simulation.world.resource::<crate::instrumentation::SystemTimings>();
-                            timings.ipc_frame_drops_total.fetch_add(1, Ordering::Relaxed);
-                        }
                     },
                     Err(TrySendError::Disconnected(_)) => {
                         eprintln!("[stdio] ERROR: Writer thread disconnected");
                     },
                 }
 
-                #[cfg(feature = "dev-tools")]
-                {
-                    let write_elapsed_us = write_start.elapsed().as_micros() as u64;
-                    let timings = simulation.world.resource::<crate::instrumentation::SystemTimings>();
-                    timings.ipc_write_us.store(write_elapsed_us, Ordering::Relaxed);
-
-                    let channel_len = self.send_tx.len();
-                    let channel_capacity = self.send_tx.capacity().unwrap_or(2);
-                    let utilization_pct = (channel_len * 100) / channel_capacity.max(1);
-                    timings.ipc_channel_utilization_pct.store(utilization_pct as u64, Ordering::Relaxed);
-
-                    let writer_thread_us = self.writer_thread_timing.load(Ordering::Relaxed);
-                    timings.ipc_writer_thread_us.store(writer_thread_us, Ordering::Relaxed);
-                }
             },
             Err(e) => {
                 eprintln!("[stdio] Failed to serialize snapshot: {}", e);
@@ -137,30 +87,30 @@ impl RunnerHooks for StdioHooks {
         eprintln!("[stdio] Simulation stopped at tick {}", tick);
 
 
-        let snapshots_dir = std::path::Path::new("snapshots");
+        let snapshots_dir = std::path::Path::new("save-states");
         if let Err(e) = std::fs::create_dir_all(snapshots_dir) {
-            eprintln!("[stdio] Failed to create snapshots directory: {}", e);
+            eprintln!("[stdio] Failed to create save-states directory: {}", e);
             return;
         }
 
 
-        let snapshot = simulation.to_snapshot();
+        let save_state = simulation.to_save_state();
 
 
         let timestamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
-        let timestamped_filename = format!("simulation_{}.msgpack", timestamp);
+        let timestamped_filename = format!("{}.msgpack", timestamp);
         let timestamped_path = snapshots_dir.join(&timestamped_filename);
 
-        match snapshot.save_to_file(&timestamped_path) {
+        match save_state.save_to_file(&timestamped_path) {
             Ok(_) => {
                 eprintln!(
-                    "[stdio] Snapshot saved: {} ({} creatures)",
+                    "[stdio] Save state saved: {} ({} creatures)",
                     timestamped_path.display(),
-                    snapshot.metadata.creature_count
+                    save_state.metadata.creature_count
                 );
             }
             Err(e) => {
-                eprintln!("[stdio] Failed to save snapshot: {}", e);
+                eprintln!("[stdio] Failed to save world state: {}", e);
             }
         }
     }
@@ -170,9 +120,6 @@ fn serialize_snapshot_frame(simulation: &mut Simulation) -> io::Result<Vec<u8>> 
     const PROTOCOL_VERSION: u8 = 1;
 
     let world = &mut simulation.world;
-
-    #[cfg(feature = "dev-tools")]
-    let query_start = Instant::now();
 
     let mut query = world.query::<(
         &Position,
@@ -195,20 +142,11 @@ fn serialize_snapshot_frame(simulation: &mut Simulation) -> io::Result<Vec<u8>> 
         })
         .collect();
 
-    #[cfg(feature = "dev-tools")]
-    let query_elapsed_us = query_start.elapsed().as_micros() as u64;
-
     let entity_count = creatures.len();
 
     let tick = world.resource::<PhysicsTick>().0;
     let tick_rate = world.resource::<ActualTickRate>().0;
 
-    #[cfg(feature = "dev-tools")]
-    {
-        use std::sync::atomic::Ordering;
-        let timings = world.resource::<crate::instrumentation::SystemTimings>();
-        timings.ipc_query_us.store(query_elapsed_us, Ordering::Relaxed);
-    }
 
     #[cfg(feature = "dev-tools")]
     let system_timings_us = {
@@ -240,22 +178,12 @@ fn serialize_snapshot_frame(simulation: &mut Simulation) -> io::Result<Vec<u8>> 
         },
     };
 
-    #[cfg(feature = "dev-tools")]
-    let serialize_start = Instant::now();
-
     let mut buf = Vec::with_capacity(entity_count * 70 + 200);
     let mut serializer = rmp_serde::Serializer::new(&mut buf).with_struct_map();
     state
         .serialize(&mut serializer)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-    #[cfg(feature = "dev-tools")]
-    {
-        let serialize_elapsed_us = serialize_start.elapsed().as_micros() as u64;
-        use std::sync::atomic::Ordering;
-        let timings = world.resource::<crate::instrumentation::SystemTimings>();
-        timings.ipc_serialize_us.store(serialize_elapsed_us, Ordering::Relaxed);
-    }
 
     Ok(buf)
 }
@@ -270,7 +198,7 @@ mod tests {
     use std::time::Instant;
 
     fn cleanup_test_snapshots() {
-        let snapshots_dir = Path::new("snapshots");
+        let snapshots_dir = Path::new("save-states");
         if snapshots_dir.exists() {
             if let Ok(entries) = fs::read_dir(snapshots_dir) {
                 for entry in entries.filter_map(|e| e.ok()) {
@@ -294,22 +222,25 @@ mod tests {
     fn test_stdio_hooks_shutdown_creates_only_timestamped_file() {
         cleanup_test_snapshots();
 
+        // Wait for filesystem after cleanup
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         let mut simulation = SimulationBuilder::new().build();
         let mut hooks = StdioHooks::new();
 
-
         hooks.on_shutdown(100, &mut simulation);
 
+        // Wait for file write to complete (stdio hooks doesn't use background worker)
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
-        let latest_path = Path::new("snapshots/latest.msgpack");
+        let latest_path = Path::new("save-states/latest.msgpack");
         assert!(
             !latest_path.exists(),
             "Should NOT create latest.msgpack (timestamped-only approach)"
         );
 
 
-        let snapshots_dir = Path::new("snapshots");
+        let snapshots_dir = Path::new("save-states");
         let timestamped_files: Vec<_> = fs::read_dir(snapshots_dir)
             .unwrap()
             .filter_map(|e| e.ok())
@@ -341,22 +272,25 @@ mod tests {
     fn test_stdio_hooks_shutdown_timestamped_file_format() {
         cleanup_test_snapshots();
 
+        // Wait for filesystem after cleanup
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         let mut simulation = SimulationBuilder::new().build();
         let mut hooks = StdioHooks::new();
 
-
         hooks.on_shutdown(100, &mut simulation);
 
+        // Wait for file write to complete (stdio hooks doesn't use background worker)
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
-        let latest_path = Path::new("snapshots/latest.msgpack");
+        let latest_path = Path::new("save-states/latest.msgpack");
         assert!(
             !latest_path.exists(),
             "Should NOT create latest.msgpack"
         );
 
 
-        let snapshots_dir = Path::new("snapshots");
+        let snapshots_dir = Path::new("save-states");
         let entries: Vec<_> = fs::read_dir(snapshots_dir)
             .unwrap()
             .filter_map(|e| e.ok())
@@ -380,8 +314,8 @@ mod tests {
         let filename_str = filename.to_str().unwrap();
 
         assert!(
-            filename_str.starts_with("simulation_"),
-            "Timestamped file should start with 'simulation_', got: {}",
+            !filename_str.starts_with("simulation_"),
+            "Timestamped file should NOT have 'simulation_' prefix, got: {}",
             filename_str
         );
         assert!(
@@ -409,7 +343,7 @@ mod tests {
         // Ensure cleanup completed and wait for filesystem
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        let snapshots_dir = Path::new("snapshots");
+        let snapshots_dir = Path::new("save-states");
 
         // Record filenames at start to compare against (not just count)
         let initial_files: std::collections::HashSet<String> = fs::read_dir(snapshots_dir)
@@ -440,9 +374,8 @@ mod tests {
 
             // Sleep for >1 second to ensure different timestamps (format: %Y-%m-%d_%H-%M-%S)
             // The timestamp has 1-second granularity, so we need at least 1001ms between calls
-            if i < 1 {
-                std::thread::sleep(std::time::Duration::from_millis(1100));
-            }
+            // Sleep AFTER each save to ensure next one has different timestamp
+            std::thread::sleep(std::time::Duration::from_millis(1100));
         }
 
         // Give filesystem time to flush
@@ -498,17 +431,6 @@ mod tests {
 
         let avg_per_tick = elapsed.as_micros() / 10;
 
-        #[cfg(feature = "dev-tools")]
-        {
-            let timings = simulation.world.resource::<crate::instrumentation::SystemTimings>();
-            let ipc_write_us = timings.ipc_write_us.load(std::sync::atomic::Ordering::Relaxed);
-
-            assert!(
-                ipc_write_us < 1000,
-                "Background writer should reduce IPC write overhead to <1ms, got {}μs",
-                ipc_write_us
-            );
-        }
 
         assert!(
             avg_per_tick < 5000,

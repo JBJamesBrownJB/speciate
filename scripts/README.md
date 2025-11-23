@@ -28,7 +28,7 @@ Builds and runs the full development environment:
 ```
 
 **What it does:**
-1. Builds Rust simulation with dev-tools (debug mode)
+1. Builds NAPI module with dev-tools (debug mode)
 2. Launches **Dev Tools UI** at http://localhost:5174 (React app)
 3. Launches **Electron app** (main game window)
 
@@ -40,7 +40,7 @@ Builds and runs the full development environment:
 
 **Notes:**
 - Both servers run in parallel (dev-ui + portal)
-- Simulation runs as Electron subprocess (no separate terminal needed)
+- Simulation runs as NAPI module (no subprocess, direct native calls)
 - Hot reload enabled for both UIs
 - Ctrl+C kills both processes cleanly
 
@@ -57,7 +57,7 @@ Runs the complete test suite across all project components:
 **What it does:**
 1. Runs Rust simulation tests (`cargo test --features dev-tools`)
 2. Runs Portal TypeScript tests (`npm test`)
-3. Runs dev-ui integration tests (IPC + trial loading)
+3. Runs dev-ui integration tests (NAPI + trial loading)
 
 **Use when:**
 - Before committing changes
@@ -77,7 +77,7 @@ Builds and packages the application for distribution:
 ```
 
 **What it does:**
-1. Builds Rust simulation (release mode, optimized)
+1. Builds NAPI module (release mode, optimized)
 2. Builds TypeScript portal frontend (production build)
 3. Packages with electron-builder (creates installers)
 
@@ -100,9 +100,10 @@ Builds and packages the application for distribution:
 ### First Time Setup
 
 ```bash
-# Install Rust dependencies
+# Install Simulation NAPI dependencies
 cd apps/simulation
-cargo build
+npm install
+npm run build:debug
 
 # Install Portal dependencies
 cd ../portal
@@ -157,7 +158,7 @@ All scripts:
 
 ### Build Modes
 
-| Script | Simulation | Portal | Purpose |
+| Script | NAPI Module | Portal | Purpose |
 |--------|-----------|--------|---------|
 | `dev.sh` | Debug + dev-tools | Development | Fast builds, debugging |
 | `test.sh` | Debug + dev-tools | Testing | Run full test suite |
@@ -181,11 +182,11 @@ pkill -f vite
 lsof -ti:5173 | xargs kill -9
 ```
 
-**Simulation binary not found:**
+**NAPI module not found:**
 ```bash
-# Rebuild simulation
+# Rebuild NAPI module
 cd apps/simulation
-cargo build --features dev-tools
+npm run build:debug
 ```
 
 **npm dependencies out of date:**

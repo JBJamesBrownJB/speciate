@@ -5,8 +5,6 @@ pub mod snapshot_queue;
 #[cfg(feature = "dev-tools")]
 pub mod commands;
 #[cfg(feature = "dev-tools")]
-pub mod stdin_reader;
-#[cfg(feature = "dev-tools")]
 pub mod command_executor;
 
 
@@ -16,9 +14,15 @@ pub use snapshot_queue::{CreatureSnapshot, GameState, SharedSnapshotQueue, Snaps
 pub use commands::Command;
 #[cfg(feature = "dev-tools")]
 pub use command_executor::CommandReceiver;
-#[cfg(feature = "dev-tools")]
-pub use stdin_reader::spawn_stdin_reader_thread;
 
 
 #[cfg(feature = "dev-tools")]
 pub use command_executor::command_executor_system;
+
+pub mod command_result;
+pub use command_result::CommandResult;
+
+pub mod sim_command;
+pub use sim_command::SimCommand;
+
+pub mod bridge;

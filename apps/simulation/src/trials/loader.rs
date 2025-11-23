@@ -12,21 +12,11 @@ use crate::simulation::creatures::systems::NextCreatureId;
 pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig, String> {
 
 
-    let exe_dir = std::env::current_exe()
-        .map_err(|e| format!("Failed to get executable path: {}", e))?
-        .parent()
-        .ok_or_else(|| "Failed to get executable directory".to_string())?
-        .to_path_buf();
+    let cwd = std::env::current_dir()
+        .map_err(|e| format!("Failed to get current directory: {}", e))?;
 
-
-    let trials_relative_path = if exe_dir.ends_with("deps") {
-        "../../../trials"
-    } else {
-        "../../trials"
-    };
-
-    let trial_path = exe_dir
-        .join(trials_relative_path)
+    let trial_path = cwd
+        .join("trials")
         .join(format!("{}.toml", template_name));
 
     let path = trial_path.canonicalize()

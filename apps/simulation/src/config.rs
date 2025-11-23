@@ -43,18 +43,18 @@ impl Default for MovementConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct SnapshotConfig {
+pub struct SaveStateConfig {
     pub enabled: bool,
     pub interval_secs: u64,
     pub keep_last_n: usize,
 }
 
-impl Default for SnapshotConfig {
+impl Default for SaveStateConfig {
     fn default() -> Self {
         Self {
             enabled: true,
             interval_secs: 300,
-            keep_last_n: 10,
+            keep_last_n: 20,
         }
     }
 }

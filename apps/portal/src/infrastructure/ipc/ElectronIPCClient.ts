@@ -1,19 +1,52 @@
 import type { IPCClient } from './IPCClient';
-import type { GameState } from '../../types/GameState';
-import { decode } from '@msgpack/msgpack';
+import type { GameState, CreatureData } from '../../types/GameState';
 
 export class ElectronIPCClient implements IPCClient {
   private latestState: GameState | null = null;
   private stateCallbacks: Set<(state: GameState) => void> = new Set();
+  private _cachedTickRateHz = NaN; // Default NaN until first telemetry sample
 
   async connect(): Promise<void> {
     if (!window.electron) {
       throw new Error('ElectronIPCClient: window.electron not available (not running in Electron)');
     }
 
-    window.electron.onStateUpdateBinary((binaryData: Uint8Array) => {
+    // Listen for telemetry updates (tick rate, etc.)
+    window.electron.onTelemetryUpdate((telemetry) => {
+      if (telemetry.tickRateHz !== undefined) {
+        this._cachedTickRateHz = telemetry.tickRateHz;
+      }
+    });
+
+    // Use new NAPI buffer updates
+    window.electron.onNAPIBufferUpdate((data: { buffer: number[], creatureCount: number }) => {
       try {
-        const state = decode(binaryData) as GameState;
+        const { buffer, creatureCount } = data;
+
+        // Parse SoA layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
+        const creatures: CreatureData[] = [];
+        const xOffset = creatureCount;
+        const yOffset = creatureCount * 2;
+        const rotOffset = creatureCount * 3;
+
+        for (let i = 0; i < creatureCount; i++) {
+          creatures.push({
+            id: buffer[i],
+            x: buffer[xOffset + i],
+            y: buffer[yOffset + i],
+            rotation: buffer[rotOffset + i],
+            size: 1.0, // Match BodySize::default() (NAPI doesn't provide this yet)
+          });
+        }
+
+        const state: GameState = {
+          protocolVersion: 2, // NAPI protocol version
+          tick: 0, // Will be provided by separate telemetry
+          tickRateHz: this._cachedTickRateHz, // Updated from telemetry
+          creatures,
+          entityCount: creatureCount,
+        };
+
         this.latestState = state;
 
         this.stateCallbacks.forEach(callback => {
@@ -24,7 +57,7 @@ export class ElectronIPCClient implements IPCClient {
           }
         });
       } catch (error) {
-        console.error('[ElectronIPCClient] Failed to decode binary data:', error, binaryData);
+        console.error('[ElectronIPCClient] Failed to parse NAPI buffer:', error);
       }
     });
   }

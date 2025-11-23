@@ -14,10 +14,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Expose ONLY specific methods to renderer process
 contextBridge.exposeInMainWorld('electron', {
   /**
-   * Subscribe to state updates from simulation (BINARY)
+   * Subscribe to state updates from simulation (BINARY - OLD stdio IPC)
    * Callback receives Uint8Array of raw MessagePack data
    *
    * @param {Function} callback - Function to call with binary state updates
+   * @deprecated Use onNAPIBufferUpdate instead
    */
   onStateUpdateBinary: (callback) => {
     if (typeof callback !== 'function') {
@@ -26,6 +27,26 @@ contextBridge.exposeInMainWorld('electron', {
 
     ipcRenderer.on('state-update-binary', (event, binaryData) => {
       callback(binaryData);
+    });
+  },
+
+  /**
+   * Subscribe to NAPI buffer updates (NEW - zero-copy direct buffer access)
+   * Callback receives { buffer: number[], creatureCount: number }
+   *
+   * Buffer layout (SoA): [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
+   *
+   * @param {Function} callback - Function to call with NAPI buffer updates
+   */
+  onNAPIBufferUpdate: (callback) => {
+    if (typeof callback !== 'function') {
+      throw new Error('onNAPIBufferUpdate: callback must be a function');
+    }
+
+    console.log('[Preload] onNAPIBufferUpdate registered');
+
+    ipcRenderer.on('napi-buffer-update', (event, data) => {
+      callback(data);
     });
   },
 

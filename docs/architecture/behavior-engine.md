@@ -460,14 +460,13 @@ After dodge: Avoidance drops to 0N, seek resumes, creature reaches food
 
 ## System Performance
 
-### Current Architecture: Dual-Tick Simulation
+### Current Architecture: Single-Tick Simulation
 
-The simulation uses separate tick rates for different concerns:
-- **30Hz Physics + Collision** (33.3ms budget)
-- **20Hz AI + Perception** (50ms budget)
-- **90Hz Frontend** (interpolated rendering)
+The simulation runs all systems at a single tick rate:
+- **~22Hz Tick Rate** - All systems (physics, AI, perception) run together
+- **Frontend Interpolation** - 60+ FPS visuals via lerp between frames
 
-**See:** `docs/architecture/dual-tick-simulation.md` for complete architecture.
+**Note:** Dual-tick was explored in Sprint 11 and abandoned. See `docs/archive/dual-tick/` for rationale.
 
 **Physics Tick Budget (30Hz):**
 - Grid updates: ~3ms (incremental only)

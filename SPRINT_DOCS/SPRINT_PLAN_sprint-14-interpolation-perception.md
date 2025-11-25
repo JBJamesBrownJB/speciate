@@ -23,6 +23,28 @@ Scale to 150K-200K creatures through:
 
 ---
 
+## Team
+
+**Phase 2 Lead (GPU Interpolation & Wiggle):**
+- **shader-sarah** (Dr. Sarah Boid) - GPU/Shader specialist
+  - WebGL 2.0, GLSL ES 3.0, PixiJS custom geometry
+  - Organic procedural animation expert
+  - Target: 60 FPS @ 1M entities, <0.5ms CPU, <0.2ms GPU per frame
+
+**Key Collaborators:**
+- **zoologist-tom** - 🔥 PRIMARY CREATIVE PARTNER for Sarah
+  - Biological motion patterns, creature locomotion physics
+  - Natural movement consultation (fish swimming, snake slithering)
+  - Ensures visual beauty matches ecological reality
+- **frontend-fanny** - PixiJS integration, TypeScript buffer management
+- **rusty-ron** - Backend NAPI zero-copy buffers, snapshot format
+- **architect-andy** - Performance architecture, technical standards
+- **instrumentation-ian** - GPU profiling, frame time metrics
+- **ecs-emma** - ECS optimization (Phases 3-4)
+- **pm-pam** - Sprint coordination, task breakdown
+
+---
+
 ## Phase Order (User Priority)
 
 1. ✅ Tick rate validated (22.2Hz achieved in Sprint 13)
@@ -61,64 +83,136 @@ This replaced the old `config.rs` approach. 22.2Hz provides:
 
 ---
 
-## Phase 2: Frontend Interpolation (60Hz)
+## Phase 2: Frontend Interpolation (60Hz) 🎮 GPU SHADER APPROACH
 
 **Duration:** Days 2-3
+**Owner:** shader-sarah (Dr. Sarah Boid)
+**Status:** IN PROGRESS
+**Technical Spec:** `docs/visuals/shader-smooth-and-wiggle.md`
 
-**Goal:** Smooth 60Hz rendering with position AND rotation interpolation
+**Goal:** GPU-accelerated 60Hz rendering with smooth position/rotation interpolation + organic wiggle animation
 
-### Backend: Previous Positions
+### Overview
 
-**File:** `apps/simulation/src/stdio/hooks.rs`
+This phase uses **GPU vertex shaders** instead of CPU-based JavaScript interpolation to achieve:
+- 60 FPS @ 1 million entities
+- <0.5ms CPU overhead per frame
+- <0.2ms GPU overhead for interpolation shader
+- Zero visual stuttering or "rubber banding"
+- Organic procedural animation (wiggle) at near-zero cost
 
-```rust
-#[derive(Resource, Default)]
-pub struct PreviousPositions {
-    positions: HashMap<u32, (f32, f32, f32)>,  // (x, y, rotation)
-}
+**Key Innovation:** Move interpolation math from CPU (12M ops/sec) to GPU (parallel execution on all entities simultaneously).
 
-impl PreviousPositions {
-    pub fn cleanup(&mut self, alive_ids: &HashSet<u32>) {
-        self.positions.retain(|id, _| alive_ids.contains(id));
-    }
-}
+### Phase 2A: Custom PixiJS Geometry Setup
 
-// In serialize_snapshot_frame:
-// 1. Store current as previous
-// 2. Add prev_x, prev_y, prev_rotation to CreatureSnapshot
-// 3. Update positions after serialization
-// 4. Add cleanup system (prevents memory leak)
-```
+**Goal:** Create instanced rendering infrastructure with interleaved attribute buffers.
 
-### Frontend: Interpolation
-
-**File:** `apps/portal/src/core/StateManager.ts`
-
+**Implementation:**
 ```typescript
-private lastPhysicsUpdate: number = 0;
-private readonly PHYSICS_PERIOD_MS = 45;  // 22.2Hz (1000ms / 22.2 ≈ 45ms)
+// Interleaved Float32Array buffer layout per entity:
+// [ startX, startY, endX, endY, startRot, endRot, uvX, uvY ]
+const FLOATS_PER_VERTEX = 8;
 
-public getInterpolationAlpha(): number {
-  const elapsed = performance.now() - this.lastPhysicsUpdate;
-  return Math.min(1.0, elapsed / this.PHYSICS_PERIOD_MS);
+// Custom PixiJS Geometry
+const geometry = new Geometry()
+  .addAttribute('aStartPos', buffer, 2, false, FLOAT, stride, 0)
+  .addAttribute('aEndPos', buffer, 2, false, FLOAT, stride, 8)
+  .addAttribute('aStartRot', buffer, 1, false, FLOAT, stride, 16)
+  .addAttribute('aEndRot', buffer, 1, false, FLOAT, stride, 20)
+  .addAttribute('aTextureCoord', buffer, 2, false, FLOAT, stride, 24);
+```
+
+**Update Strategy:**
+- On Server Tick (22.2Hz): Copy `end` data to `start`, load new server data into `end`, reset `uInterpolation` to 0
+- On Render Tick (60Hz): Increment `uInterpolation` based on `deltaMS / 45ms`
+
+**Collaboration:** Frontend-Fanny (PixiJS integration), Rusty-Ron (NAPI buffer format validation)
+
+### Phase 2B: Vertex Shader Interpolation (Kinematic Smoothing)
+
+**Goal:** Perfectly smooth linear movement masking 22.2Hz server updates.
+
+**GLSL Vertex Shader:**
+```glsl
+// Attributes per entity
+attribute vec2 aStartPos;
+attribute vec2 aEndPos;
+attribute float aStartRot;
+attribute float aEndRot;
+attribute vec2 aTextureCoord;
+
+// Uniforms (updated every frame)
+uniform float uInterpolation;  // 0.0 to 1.0
+uniform mat3 uProjection;
+
+void main() {
+  // Position interpolation
+  vec2 worldPos = mix(aStartPos, aEndPos, uInterpolation);
+
+  // Rotation interpolation (shortest path, handles 350°→10° wraparound)
+  float rotation = shortestPathAngle(aStartRot, aEndRot, uInterpolation);
+
+  // Apply rotation + project
+  vec2 rotatedPos = rotate(aLocalPos, rotation);
+  gl_Position = vec4((uProjection * vec3(worldPos + rotatedPos, 1.0)).xy, 0.0, 1.0);
 }
 ```
 
-**File:** `apps/portal/src/simulation/SimulationManager.ts`
+**Edge Cases:**
+- ✅ Rotation wrapping (350° → 10° = 20° CW, not 340° CCW)
+- ✅ Entity spawn/despawn (buffer resizing)
+- ✅ Extrapolation when `uInterpolation > 1.0` (network lag)
 
-```typescript
-// In render loop:
-const alpha = this.stateManager.getInterpolationAlpha();
+**Collaboration:** Architect-Andy (performance validation), Instrumentation-Ian (GPU profiling)
 
-// Interpolate position
-const displayX = prevX + (currX - prevX) * alpha;
-const displayY = prevY + (currY - prevY) * alpha;
+### Phase 2C: Organic Wiggle Animation
 
-// Interpolate rotation (handle wraparound)
-const displayRotation = this.lerpAngle(prevRotation, rotation, alpha);
+**Goal:** Inject "life" using procedural vertex deformation (fish swimming, snake slithering).
+
+**Enhanced Vertex Shader:**
+```glsl
+uniform float uGameTime;
+
+void main() {
+  // Calculate movement speed for dynamic coupling
+  float moveSpeed = length(aEndPos - aStartPos) / 0.045;  // pixels/sec
+
+  // Wiggle algorithm (in local space, before world transform)
+  float lagFactor = 3.0;  // Tail lags behind head
+  float amplitude = 5.0 * (moveSpeed / 100.0);  // Scale with speed
+  float wiggleOffset = sin(uGameTime * 2.0 - aTextureCoord.y * lagFactor) * amplitude;
+
+  vec2 localPos = aLocalVertexPos;
+  localPos.x += wiggleOffset * aTextureCoord.y;  // head fixed, tail wiggles
+
+  // ... rest of interpolation shader (position, rotation)
+}
 ```
 
-**Success:** 60 FPS rendering, no stuttering/sliding artifacts, memory leak test passes
+**Success Criteria:**
+- Creatures appear to "swim" organically
+- Tail lags behind head (S-curve motion)
+- Wiggle intensity correlates with movement speed
+- **ZERO performance regression** vs Phase 2B
+
+**Collaboration:** Zoologist-Tom (🔥 biological motion patterns, natural locomotion physics)
+
+### Phase 2D: Performance Validation & Polish
+
+**Metrics:**
+- 60 FPS stable @ 1 million entities (Chrome DevTools)
+- CPU <0.5ms per frame (profiled)
+- GPU <0.2ms per frame (WebGL profiler)
+- Zero visual artifacts at 1x-10x zoom
+- Cross-GPU compatibility (Intel/NVIDIA/AMD)
+
+**Deliverables:**
+- Working shader implementation in `apps/portal/`
+- GPU performance metrics integrated into Dev-UI (not Portal!)
+- Documentation of shader architecture
+- Demo at 200K creatures with smooth, organic motion
+
+**Success:** Buttery-smooth 60 FPS rendering with creatures that swim, wiggle, and move like living organisms
 
 ---
 

@@ -151,3 +151,58 @@ Remove MEDIUM confidence dead code that's technically functional but unused in p
 Removed ~130 lines of MEDIUM confidence dead code. Total across all phases: **~680 lines deleted!**
 
 ---
+
+## 2025-11-25: Dr. Sarah Boid Joins Team - GPU Specialist Onboarding 🎉
+
+**Welcome:**
+Dr. Sarah "Boid" C. joins as our GPU/Shader specialist to lead Sprint 14 Phase 2 (GPU Interpolation & Wiggle Animation).
+
+**Background:**
+- Principal Graphics Architect & Digital Biologist
+- Expert in WebGL 2.0, GLSL ES 3.0, and PixiJS custom shaders
+- Previous work: Project Medusa (tentacle physics), Project Starling (1M particle flocking), Project Deep-Blue (subsurface scattering)
+- Specializes in organic procedural animation and high-performance instanced rendering
+
+**Role & Responsibilities:**
+- **Phase 2 Lead:** GPU-based interpolation shader (22.2Hz → 60Hz smooth rendering)
+- **Phase 2A:** Custom PixiJS Geometry with interleaved Float32Array buffers
+- **Phase 2B:** Vertex shader interpolation (position + rotation, shortest-path angle wrapping)
+- **Phase 2C:** Organic wiggle animation (procedural vertex deformation for swimming/slithering)
+- **Phase 2D:** Performance validation & cross-GPU compatibility testing
+
+**Technical Specification:**
+- Full design doc: `docs/visuals/shader-smooth-and-wiggle.md`
+- Target: 60 FPS @ 1 million entities with <0.5ms CPU, <0.2ms GPU per frame
+- Zero performance regression from Phase 2B to Phase 2C (wiggle animation)
+
+**Collaboration Partners:**
+- **zoologist-tom:** 🔥 PRIMARY CREATIVE PARTNER - Biological motion patterns, creature locomotion physics, natural movement consultation
+  - Tom provides the biological understanding, Sarah implements it as shader math
+  - Joint work on organic wiggle algorithms that mirror real fish/snake/worm locomotion
+  - Ensuring visual beauty matches ecological reality
+- **frontend-fanny:** PixiJS integration, TypeScript buffer management, Portal vs Dev-UI architecture
+- **rusty-ron:** Backend NAPI zero-copy buffers, CreatureSnapshot format validation
+- **architect-andy:** Performance benchmarks, architectural standards, fallback strategies
+- **instrumentation-ian:** GPU profiling (WebGL profiler), frame time metrics for Dev-UI
+
+**Agent Profile:**
+- Location: `.claude/agents/shader-sarah.md`
+- Tools: Full suite (Read, Write, Edit, Grep, Glob, Bash)
+- Model: Sonnet (high-reasoning for shader mathematics)
+- Philosophy: "The Black Box Approach" - Brain (Rust) → Body (GPU), never ask CPU for visual math
+
+**Sprint Status After Onboarding:**
+- ✅ Phase 1 complete (22.2Hz tick rate validated)
+- 🎮 Phase 2 IN PROGRESS (Sarah leading GPU shader approach)
+- ⏳ Phase 3-5 pending (Uber-struct, Vision refactor, Vec2 SIMD)
+
+**Next Steps for Sarah:**
+1. Review `docs/visuals/shader-smooth-and-wiggle.md` (technical spec)
+2. Coordinate with Frontend-Fanny on PixiJS custom geometry setup
+3. Verify NAPI buffer format with Rusty-Ron
+4. Begin Phase 2A: Interleaved buffer layout design
+
+**Celebration:**
+Free bar, free food, music all night long! 🎊🎮✨
+
+---

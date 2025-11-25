@@ -26,16 +26,43 @@ Scale to 150K-200K creatures through:
 - [x] Confirmed: All systems use DeltaTime resource
 - [x] Result: 22.2Hz provides ~45ms tick budget (sufficient for 150K-200K target)
 
-### Phase 2: Frontend Interpolation (60Hz) - Days 2-3
-**URGENT: This is under review and will move to a GPU shader based approach**
-- [ ] Add PreviousPositions resource to backend
-- [ ] Update CreatureSnapshot with prev_x, prev_y, prev_rotation
-- [ ] Implement cleanup system for despawned creatures
-- [ ] Add interpolation alpha calculation to StateManager
-- [ ] Implement position interpolation in render loop
-- [ ] Implement rotation interpolation (handle wraparound)
-- [ ] Test 60 FPS rendering stability
-- [ ] Memory leak test
+### Phase 2: Frontend Interpolation (60Hz) - Days 2-3 🎮 GPU SHADER APPROACH
+**Owner:** shader-sarah (Dr. Sarah Boid - GPU/Shader Specialist)
+**Status:** IN PROGRESS - GPU shader-based interpolation & organic wiggle animation
+**Spec:** `docs/visuals/shader-smooth-and-wiggle.md`
+
+#### Phase 2A: Custom PixiJS Geometry Setup
+- [ ] Design interleaved Float32Array buffer layout (start/end pos/rot per entity)
+- [ ] Implement custom PixiJS Geometry with instanced rendering
+- [ ] Create buffer update strategy (swap prev←curr on snapshot)
+- [ ] Verify zero-copy NAPI buffer integration with Rusty-Ron
+- [ ] Test buffer uploads @ 200K entities
+
+#### Phase 2B: Vertex Shader Interpolation (Kinematic Smoothing)
+- [ ] Implement GLSL vertex shader with mix(aStartPos, aEndPos, uInterpolation)
+- [ ] Implement rotation interpolation with shortest-path angle wrapping
+- [ ] Handle edge case: rotation wraparound (350° → 10° = 20° CW, not 340° CCW)
+- [ ] Handle edge case: entity spawn/despawn (buffer resizing)
+- [ ] Handle edge case: extrapolation when uInterpolation > 1.0 (network lag)
+- [ ] Test 60 FPS @ 1 million entities
+- [ ] Profile: CPU <0.5ms per frame, GPU <0.2ms per frame
+- [ ] Cross-GPU testing (Intel/NVIDIA/AMD)
+
+#### Phase 2C: Organic Wiggle Animation
+- [ ] Add uGameTime uniform for sine wave animation
+- [ ] Implement procedural wiggle: sin(time - uv.y * lag) * amplitude
+- [ ] Ensure tail wiggles more than head (uv.y gradient)
+- [ ] (Nice-to-have) Dynamic coupling: wiggle frequency scales with velocity
+- [ ] Verify ZERO performance regression vs Phase 2B
+- [ ] Visual QA: creatures "swim" organically at various zoom levels
+
+#### Phase 2D: Performance Validation & Polish
+- [ ] Verify 60 FPS stable @ 1 million entities
+- [ ] Confirm no visual stuttering or "rubber banding"
+- [ ] Profile WebGL shader performance
+- [ ] Cross-platform compatibility testing
+- [ ] Collaborate with Instrumentation-Ian on GPU metrics for Dev-UI
+- [ ] Document shader architecture and API
 
 ### Phase 3: Uber-Struct Refactor - Days 4-5
 - [ ] Remove Catatonic component

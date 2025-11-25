@@ -99,8 +99,3 @@ required-features = ["dev-tools"]
 name = "trial_integration"
 path = "tests/trial_integration.rs"
 required-features = ["dev-tools"]
-
-[[test]]
-name = "electron_msgpack_compat"
-path = "tests/electron_msgpack_compat.rs"
-required-features = ["dev-tools"]

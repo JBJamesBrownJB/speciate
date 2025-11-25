@@ -1,10 +1,3 @@
-#[derive(Debug, Clone)]
-pub struct SpawningConfig {
-    pub initial_population: usize,
-    pub min_size: f32,
-    pub max_size: f32,
-}
-
 #[derive(Debug, Clone, bevy_ecs::system::Resource)]
 pub struct MovementConfig {
     pub locomotion_noise_base: f32,

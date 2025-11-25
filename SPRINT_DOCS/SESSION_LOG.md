@@ -117,3 +117,37 @@ Aggressive cleanup of remaining dead code found through comprehensive investigat
 Removed ~200 lines of HIGH confidence dead code across 8 files. Codebase is cleaner and more maintainable.
 
 ---
+
+## 2025-11-25: Dead Code Massacre - Phase 3 (MEDIUM Confidence)
+
+**Motivation:**
+Remove MEDIUM confidence dead code that's technically functional but unused in production.
+
+**Files Deleted Entirely:**
+- `apps/simulation/tests/electron_msgpack_compat.rs` (69 lines) - Tests deprecated stdio MessagePack IPC
+
+**Code Deleted from Existing Files:**
+- `apps/simulation/src/simulation/creatures/spawner.rs`
+  - Deleted `spawn_initial_creatures()` function (28 lines) - Unused by NAPI, hardcodes 4 creatures
+  - Deleted `test_spawn_initial_creatures` test (12 lines)
+  - Deleted `test_spawn_demo_scenario` test (12 lines)
+  - Removed SpawningConfig import
+
+**Structs Deleted:**
+- `SpawningConfig` from `apps/simulation/src/config.rs` (6 lines) - Only used by deleted function
+
+**Cargo.toml Cleanup:**
+- Removed `[[test]]` declaration for electron_msgpack_compat
+
+**Module Exports Updated:**
+- `apps/simulation/src/lib.rs` - Removed spawn_initial_creatures export
+
+**Verification:**
+- ✅ `cargo check` passes
+- ✅ All code compiles successfully
+- ✅ No broken imports or dependencies
+
+**Result:**
+Removed ~130 lines of MEDIUM confidence dead code. Total across all phases: **~680 lines deleted!**
+
+---

@@ -69,7 +69,7 @@ pub use simulation::perception::{AvoidanceBehavior, Perception};
 // Creature spawning
 pub use simulation::creatures::builder::CritBuilder;
 pub use simulation::creatures::spawner::{
-    spawn_creature, spawn_initial_creatures, CreatureSpawnRequest,
+    spawn_creature, CreatureSpawnRequest,
 };
 
 // Systems (for custom schedules)

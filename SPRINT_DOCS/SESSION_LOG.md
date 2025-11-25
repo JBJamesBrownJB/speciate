@@ -206,3 +206,64 @@ Dr. Sarah "Boid" C. joins as our GPU/Shader specialist to lead Sprint 14 Phase 2
 Free bar, free food, music all night long! 🎊🎮✨
 
 ---
+
+## 2025-11-25: Sprint Scope Refinement - Split Sprint 14 & 15
+
+**Decision:**
+Refocus Sprint 14 exclusively on frontend GPU work. Move backend ECS optimizations to Sprint 15.
+
+**Rationale:**
+- Phase 2 (GPU shader interpolation & wiggle) is substantial and deserves dedicated focus
+- Frontend rendering scale vs backend simulation scale are logically separate concerns
+- Better sprint boundaries = clearer goals, easier testing, more manageable scope
+
+**Changes Made:**
+
+**1. Created Sprint 15 Structure:**
+- Created `SPRINT_DOCS/SPRINT_15_PLAN/` directory
+- Created `SPRINT_PLAN_sprint-15-ecs-optimizations.md` with backend work
+
+**2. Extracted Backend Work to Sprint 15:**
+- Phase 3: Uber-Struct Refactor (Catatonic component → enum, stable archetypes)
+- Phase 4A: Vision Split Queries (remove 3.2MB Vec allocation bottleneck)
+- Phase 4B: Changed<T> Filters + Vec2 migration
+- Phase 4C: Parallelization (par_iter_mut)
+- Phase 4D: Performance Validation
+- Phase 5: Final Validation @ 150K-200K creatures
+
+**3. Refocused Sprint 14 Plan:**
+- Updated `SPRINT_PLAN_sprint-14-interpolation-perception.md`
+- Kept Phase 1 (Tick Rate Validation) - ✅ Complete
+- Kept Phase 2 (Frontend GPU Interpolation) - IN PROGRESS
+  - Phase 2A: Custom PixiJS Geometry Setup
+  - Phase 2B: Vertex Shader Interpolation
+  - Phase 2C: Organic Wiggle Animation
+  - Phase 2D: Performance Validation & Polish
+- Removed Phases 3-5 (now in Sprint 15)
+- Updated duration: 11 days → 3 days (focused scope)
+- Updated success metrics to frontend-only goals
+- Updated testing requirements to frontend-focused tests
+
+**4. Updated Cross-References:**
+- Updated `SPRINT_BACKLOG.md` to reflect Sprint 14 scope
+- Added references to Sprint 15 plan
+
+**New Sprint 14 Goals (Frontend Only):**
+- ✅ 22.2Hz tick rate validated (from Sprint 13)
+- 🎯 60 FPS frontend rendering @ 150K+ creatures
+- 🎯 GPU-based smooth interpolation (kinematic smoothing)
+- 🎯 Organic wiggle animation (biologically plausible)
+- 🎯 Zero CPU performance regression
+- 🎯 Cross-platform GPU compatibility
+
+**Sprint 15 Goals (Backend ECS):**
+- Stable ECS archetypes (no add/remove component churn)
+- Zero allocations in vision system
+- Component-based timing (10-100x faster than HashMap)
+- Per-creature reaction times (natural load distribution)
+- 150K-200K creatures @ 22.2Hz sustained
+
+**Result:**
+Sprint 14 = Frontend rendering scale. Sprint 15 = Backend ECS scale. Cleaner separation of concerns.
+
+---

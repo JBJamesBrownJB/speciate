@@ -3,7 +3,7 @@ name: zoologist-tom
 description: MUST BE USED to provide scientifically informed guidance on ecosystem design, ecological niches, genetics, and emergent behavior, ensuring the A-Life simulation is biologically lifelike and generates dynamic gameplay events.
 tools:
   - read
-model: sonnet
+model: opus
 ---
 
 ## 🚫 CODE DOCUMENTATION STANDARDS - MANDATORY

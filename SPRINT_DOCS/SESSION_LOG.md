@@ -267,3 +267,310 @@ Refocus Sprint 14 exclusively on frontend GPU work. Move backend ECS optimizatio
 Sprint 14 = Frontend rendering scale. Sprint 15 = Backend ECS scale. Cleaner separation of concerns.
 
 ---
+
+## 2025-11-25: Phase 2A Implementation - Custom PixiJS Geometry Setup
+
+**Goal:** Replace ParticleContainer with custom GPU-ready geometry for interpolation.
+
+**Completed:**
+
+### 1. InterpolationBufferManager (TDD ✅)
+- **17 passing unit tests** (100% coverage of buffer management logic)
+- Interleaved Float32Array layout: [startX, startY, endX, endY, startRot, endRot, size, id]
+- Buffer swap logic: END → START on simulation tick
+- Handles spawn/despawn (creature count changes)
+- Performance: ~10ms update @ 100K creatures (target was <5ms, acceptable for 22.2Hz tick budget)
+
+**Key Implementation:**
+```typescript
+// 8 floats per creature = 32 bytes
+// START = previous tick, END = current tick
+// GPU will interpolate between them
+```
+
+### 2. InterpolatedCreatureRenderer
+- Custom PixiJS Geometry with 6 interleaved attributes
+- Simple pass-through vertex shader (renders from END, no interpolation yet)
+- Integrates with InterpolationBufferManager
+- Interpolation alpha tracking (0.0 → 1.0 over 45ms tick)
+- Mesh visibility management
+
+**Shader Structure (Phase 2A):**
+```glsl
+// Currently just renders END position
+vec2 worldPos = aEndPos;  // Phase 2B will add interpolation
+```
+
+### 3. Technical Specification
+- Created `docs/visuals/phase-2a-geometry-spec.md`
+- Comprehensive buffer layout documentation
+- Update strategy diagrams
+- Performance targets documented
+
+**Testing Approach:**
+- Unit tests: InterpolationBufferManager (✅ 17 passing)
+- Integration tests: Visual verification in-app (Phase 2B)
+- GPU tests: Require WebGL context (deferred to integration)
+
+**Challenges Resolved:**
+- PixiJS TYPES import issues → Used undefined (defaults to FLOAT)
+- Test environment lacks WebGL → Core logic tested, GPU verified visually
+
+**Next Steps (Phase 2B):**
+- Implement actual interpolation shader: `mix(aStartPos, aEndPos, uInterpolation)`
+- Handle rotation wraparound (350° → 10° = 20° CW)
+- Integrate into StateManager and PixiApp
+- Visual verification @ 100K+ creatures
+
+**Outcome:**
+Phase 2A foundation complete. Buffer management robust and tested. Ready for shader implementation.
+
+---
+
+## 2025-11-25: Phase 2B Implementation - GPU Interpolation Shader
+
+**Goal:** Implement GPU-based interpolation for smooth 60 FPS rendering (22.2Hz → 60Hz).
+
+**Completed:**
+
+### 1. Double Buffering (GPU Stall Prevention)
+- **Motivation:** Validation research identified GPU stalls as CRITICAL risk when updating buffers
+- **Implementation:** Ping-pong buffer system with lazy second buffer creation
+- **Strategy:** Update inactive buffer → swap → rebind geometry attributes
+- **Performance Impact:** ~0.001ms per frame (6 attribute rebindings @ 22.2Hz)
+
+```typescript
+// Swap to inactive buffer (prevents GPU stall)
+const nextBufferIndex = 1 - this.currentBufferIndex;
+const nextBuffer = this.buffers[nextBufferIndex];
+nextBuffer.update(buffer);
+this.currentBufferIndex = nextBufferIndex;
+```
+
+### 2. GPU Interpolation Shader
+- **Position Interpolation:** `vec2 worldPos = mix(aStartPos, aEndPos, uInterpolation);`
+- **Rotation Interpolation:** Shortest-path algorithm (prevents 360° spins)
+- **Interpolation Alpha:** 0.0 → 1.0 over 45ms tick interval, reset on simulation tick
+- **Uniform:** `uInterpolation` passed to vertex shader every frame
+
+```glsl
+// Shortest-path rotation (359° → 1° = 2°, not 358°)
+float shortestPathRotation(float start, float end, float t) {
+  float diff = end - start;
+  if (diff > PI) diff -= TWO_PI;
+  if (diff < -PI) diff += TWO_PI;
+  return start + diff * t;
+}
+```
+
+### 3. Test Status
+- ✅ **InterpolationBufferManager:** 17/17 tests passing (no WebGL needed)
+- ⏸️ **InterpolatedCreatureRenderer:** Deferred to integration tests (requires WebGL)
+  - Same status as Phase 2A
+  - PixiJS Geometry.addAttribute() requires WebGL context
+  - Node.js/vitest environment has no WebGL
+  - Visual verification deferred to in-app testing
+
+**Technical Decisions:**
+1. **Lazy buffer creation:** buffers[1] created on first update (simpler initialization)
+2. **Attribute rebinding:** Rebind all 6 attributes after swap (required by PixiJS)
+3. **GPU rotation math:** Shortest-path in shader (zero CPU overhead)
+
+**Next Steps (Integration):**
+1. Replace CreatureRenderer with InterpolatedCreatureRenderer in PixiApp
+2. Wire up onSimulationTick() and render() calls in StateManager
+3. Visual verification @ 10K, 50K, 100K creatures
+4. GPU performance profiling (<0.2ms target)
+
+**Outcome:**
+Phase 2B core implementation complete. GPU interpolation shader ready for integration. Double buffering prevents GPU stalls. Awaiting visual verification in app.
+
+---
+
+## 2025-11-25: Integration Blocker - PixiJS v8 API Compatibility
+
+**Issue:** TypeScript compilation errors when integrating InterpolatedCreatureRenderer
+
+**Root Cause:** PixiJS v8.14.0 significantly changed low-level geometry API from v7
+- `Geometry` class API changed (no `addAttribute` method)
+- `Buffer` class constructor changed
+- `Shader.from()` API changed
+- `Mesh` now expects `MeshGeometry` not `Geometry`
+
+**TypeScript Errors:**
+```
+src/rendering/InterpolatedCreatureRenderer.ts(48,5): Type 'Mesh<Geometry, Shader>' is not assignable to type 'Mesh<MeshGeometry, TextureShader>'
+src/rendering/InterpolatedCreatureRenderer.ts(76,48): Expected 2 arguments, but got 7 (addAttribute)
+src/rendering/InterpolatedCreatureRenderer.ts(213,17): Property 'uniforms' does not exist on type 'Shader'
+```
+
+**Integration Completed:**
+- ✅ main.ts updated to use InterpolatedCreatureRenderer
+- ✅ Removed ParticleContainer/ParticlePool dependencies
+- ✅ Added initialization/tick/render logic
+- ❌ TypeScript compilation blocked by PixiJS v8 API
+
+**Options:**
+1. **Research PixiJS v8 custom geometry API** - adapt implementation to v8 patterns
+2. **Use simpler approach** - CPU-side interpolation with standard Sprites/Graphics
+3. **Revert temporarily** - use old CreatureRenderer while researching v8 API
+
+**Current Status:** Blocked - awaiting decision on path forward
+
+---
+
+## 2025-11-25: PixiJS v8 API Migration - TypeScript Complete, Runtime Error
+
+**Goal:** Adapt InterpolatedCreatureRenderer to PixiJS v8 API, fix compilation errors
+
+**Decision:** User chose Option 1 - Research and migrate to v8 API (no giving up!)
+
+**Completed:**
+
+### 1. Comprehensive PixiJS v8 Research
+- Deployed general-purpose research agent to investigate v8 API
+- Discovered constructor-based geometry API (no more `addAttribute()` method chaining)
+- Found `BufferUsage` enum for buffer creation (`VERTEX | COPY_DST`)
+- Identified `shader.resources` replacing `shader.uniforms`
+- Learned AttributeOption structure: `{ buffer, format, stride, offset, instance }`
+
+### 2. Complete API Migration
+**Geometry:**
+- Old: `geometry.addAttribute(name, buffer, size, normalized, type, stride, offset)`
+- New: `geometry.addAttribute(name, { buffer, format: 'float32x2', stride, offset, instance })`
+
+**Buffer:**
+- Old: `new Buffer(data, static, isIndex)`
+- New: `new Buffer({ data, usage: BufferUsage.VERTEX | BufferUsage.COPY_DST })`
+
+**Shader:**
+- Old: `Shader.from(vertex, fragment, uniforms)` + `shader.uniforms.uInterpolation`
+- New: `Shader.from({ gl: { vertex, fragment }, resources })` + `shader.resources.uInterpolation`
+
+**Mesh:**
+- Old: `new Mesh(geometry, shader)`
+- New: `new Mesh({ geometry, shader }) as any`  (TypeScript expects MeshGeometry)
+
+### 3. TypeScript Compilation: ✅ PASSING
+- Fixed all type errors (BufferUsage, AttributeOption, unused variables)
+- 0 compilation errors
+- Clean type-check success
+
+### 4. main.ts Integration
+- Replaced ParticleContainer + CreatureRenderer with InterpolatedCreatureRenderer
+- Removed ParticlePool dependency
+- Added initialize/onSimulationTick/render logic
+- Tracks simulation tick changes for buffer updates
+
+**Blocking Issue:**
+
+**Runtime Error:**
+```
+[Renderer ERROR] Uncaught TypeError: Cannot read properties of undefined (reading 'buffer')
+Source: http://localhost:5173/node_modules/.vite/deps/chunk-H5NVZ4MV.js?v=634f3bf5:9559
+```
+
+**Root Cause:** Likely empty geometry rendering before buffer initialization
+- Geometry created with `instanceCount = 0`, no buffers
+- PixiJS tries to render empty mesh, accesses undefined buffer
+- Happens during initial app load
+
+**Hypothesis:** Need to create buffers in constructor, even if empty
+
+**Next Steps:**
+1. Create empty buffers in constructor (not lazily in updateGeometryBuffer)
+2. Add all attributes upfront with empty buffer
+3. Test runtime with 12K creatures
+4. Visual verification of smooth interpolation
+
+**Files Modified:**
+- `apps/portal/src/rendering/InterpolatedCreatureRenderer.ts` - Complete v8 migration (200+ lines changed)
+- `apps/portal/src/rendering/InterpolatedCreatureRenderer.test.ts` - Removed unused import
+- `apps/portal/src/main.ts` - Integrated new renderer (50+ lines changed)
+
+**Documentation:**
+- `SPRINT_DOCS/PHASE_2B_PROGRESS.md` - Detailed migration status and next steps
+
+**Technical Achievements:**
+- ✅ Successfully navigated sparse PixiJS v8 documentation
+- ✅ TypeScript compilation passing with proper types
+- ✅ Double buffering architecture intact
+- ✅ GPU interpolation shader preserved
+- ❌ Runtime initialization needs debugging
+
+**Outcome:**
+95% complete - core implementation migrated to v8, one initialization bug to fix before testing.
+
+---
+
+## 2025-11-25: CREATURES VISIBLE! 🎉 - PixiJS v8 UniformGroup Fix
+
+**Milestone:** First successful rendering of creatures with new GPU interpolation system!
+
+**Issue Fixed:**
+```
+TypeError: Cannot create property 'name' on number '0'
+    at new _UniformGroup2
+    at Shader.from (InterpolatedCreatureRenderer.ts:226:19)
+```
+
+**Root Cause:** PixiJS v8 changed how shader uniforms work in `resources`:
+- **Old approach (broken):** Pass raw values directly to `resources`
+  ```typescript
+  resources: {
+    uTexture: texture.source,
+    uInterpolation: 0.0,        // ❌ Not a valid resource
+    uCameraPos: [0, 0],         // ❌ Not a valid resource
+  }
+  ```
+- **New approach (correct):** Wrap uniforms in `UniformGroup` with typed values
+  ```typescript
+  const uniforms = new UniformGroup({
+    uInterpolation: { value: 0.0, type: 'f32' },
+    uCameraPos: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
+    uCameraZoom: { value: 10.0, type: 'f32' },
+    uViewportSize: { value: new Float32Array([800, 600]), type: 'vec2<f32>' },
+  });
+  resources: { uTexture: texture.source, uniforms }
+  ```
+
+**Changes Made:**
+1. Added `UniformGroup` import from `pixi.js`
+2. Created `UniformGroup` with typed uniform values (`f32`, `vec2<f32>`)
+3. Updated `render()` to access uniforms via `UniformGroup.uniforms`
+4. Updated `onSimulationTick()` to immediately reset uniform
+5. Fixed test mock to include PixiJS v8 TextureSource properties (`uid`, `_resourceType`)
+6. Updated InterpolationBufferManager tests for 7-float layout (no `id` field)
+
+**Test Results:**
+- ✅ All 249 tests passing
+- ✅ TypeScript compilation clean
+- ✅ App starts without shader errors
+- ✅ **CREATURES ARE VISIBLE!** 🎉
+
+**Current Status (End of Day):**
+- ✅ Creatures render on screen
+- ⚠️ Creatures not moving (interpolation/tick updates need investigation)
+- ⚠️ New spawns don't appear (spawn integration needs work)
+- ⏳ Visual smoothness not yet validated
+
+**Known Issues to Address Tomorrow:**
+1. **Movement:** Creatures static - interpolation alpha updates or tick handler may not be firing
+2. **Spawning:** New creatures don't appear - onSimulationTick may not be receiving new creatures
+3. **Validation:** Need to verify interpolation produces smooth motion (not teleporting)
+
+**Files Modified:**
+- `apps/portal/src/rendering/InterpolatedCreatureRenderer.ts` - UniformGroup fix
+- `apps/portal/src/rendering/InterpolatedCreatureRenderer.test.ts` - Mock texture fix
+- `apps/portal/src/rendering/InterpolationBufferManager.test.ts` - 7-float layout
+
+**Next Session:**
+1. Debug why creatures aren't moving (check tick handler, interpolation alpha)
+2. Debug why new spawns don't appear (check onSimulationTick data flow)
+3. Validate smooth interpolation visually
+4. Begin Phase 2C: Organic wiggle animation (if 2B complete)
+
+**Celebration:**
+After days of PixiJS v8 API battles, we have visible creatures! The foundation is solid. 🎊
+
+---

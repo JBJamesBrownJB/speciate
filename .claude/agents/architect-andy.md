@@ -6,7 +6,7 @@ tools:
   - write
   - edit
   - grep
-model: sonnet
+model: opus
 ---
 
 ## 🚫 CODE DOCUMENTATION STANDARDS - MANDATORY

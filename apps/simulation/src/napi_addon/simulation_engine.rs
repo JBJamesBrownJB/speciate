@@ -34,7 +34,7 @@ use crate::persistence::{SaveStateWorker, SaveType};
 ///
 /// This is the SINGLE SOURCE OF TRUTH for simulation speed.
 /// All sleep intervals are calculated from this constant.
-const TARGET_SIMULATION_HZ: f32 = 22.2;
+const TARGET_SIMULATION_HZ: f32 = 20.0;
 
 use crate::ipc::SimCommand;
 

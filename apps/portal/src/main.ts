@@ -1,15 +1,14 @@
-import { Application, Container, ParticleContainer, Rectangle } from "pixi.js";
+import { Application, Container } from "pixi.js";
 import { SpriteProvider } from "@/rendering/SpriteProvider";
 import { Camera } from "@/domain/Camera";
 import { Viewport } from "@/domain/Viewport";
-import { RENDERING_CONFIG, CAMERA_CONFIG, WORLD_CONFIG } from "@/core/constants";
-import { ParticlePool } from "@/infrastructure/ParticlePool";
+import { RENDERING_CONFIG, CAMERA_CONFIG } from "@/core/constants";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
 import { PerformanceMetrics } from "@/core/PerformanceMetrics";
 import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
-import { CreatureRenderer } from "@/rendering/CreatureRenderer";
+import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
 import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
@@ -99,24 +98,7 @@ async function main(): Promise<void> {
 
     const texture = spriteProvider.getCreatureTexture();
 
-    const particleContainer = new ParticleContainer({
-      dynamicProperties: {
-        position: true,
-        rotation: true,
-        scale: true,
-        color: false,
-        vertex: false,
-      },
-    });
-    particleContainer.boundsArea = new Rectangle(
-      -WORLD_CONFIG.SIZE / 2,
-      -WORLD_CONFIG.SIZE / 2,
-      WORLD_CONFIG.SIZE,
-      WORLD_CONFIG.SIZE
-    );
-
     const worldContainer = new Container();
-    worldContainer.addChild(particleContainer);
     app.stage.addChild(worldContainer);
 
     camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
@@ -124,12 +106,8 @@ async function main(): Promise<void> {
     const scaleBarManager = new ScaleBarManager("scale-line", "scale-label");
     scaleBarManager.update(camera.zoom);
 
-    const particlePool = new ParticlePool();
-    const creatureRenderer = new CreatureRenderer(
-      particlePool,
-      particleContainer,
-      texture
-    );
+    const creatureRenderer = new InterpolatedCreatureRenderer(texture, 200000);
+    worldContainer.addChild(creatureRenderer.getMesh());
 
     const fpsSparkline = new FPSSparkline("fps-sparkline");
     const hudManager = new HUDManager(
@@ -148,6 +126,9 @@ async function main(): Promise<void> {
     const perfMetrics = new PerformanceMetrics(RENDERING_CONFIG.TARGET_FPS);
 
     let latestCreatureData: CreatureData[] = [];
+    let lastSimulationTick = -1;
+    let isFirstFrame = true;
+
     const ipcClient: IPCClient | null = createIPCClient();
 
     if (ipcClient) {
@@ -174,12 +155,33 @@ async function main(): Promise<void> {
         hudManager.updateTickRate(state.tickRateHz || 0);
         hudManager.updateCreatureCount(currentCreatureCount);
         hudManager.updateZoom(camera.zoom);
+
+        // Handle simulation tick updates
+        if (state.tick !== lastSimulationTick) {
+          lastSimulationTick = state.tick;
+
+          const spriteUpdateStart = performance.now();
+          if (isFirstFrame) {
+            creatureRenderer.initialize(latestCreatureData);
+            isFirstFrame = false;
+          } else {
+            creatureRenderer.onSimulationTick(latestCreatureData);
+          }
+          const spriteUpdateEnd = performance.now();
+          perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
+        }
       }
 
-      const spriteUpdateStart = performance.now();
-      creatureRenderer.render(latestCreatureData);
-      const spriteUpdateEnd = performance.now();
-      perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
+      // Render with interpolation every frame (60 FPS)
+      // Pass camera and viewport parameters for coordinate transform
+      creatureRenderer.render(
+        deltaMs,
+        camera.x,
+        camera.y,
+        camera.zoom,
+        viewportWidth,
+        viewportHeight
+      );
 
       hudManager.updateFPS(fps);
 

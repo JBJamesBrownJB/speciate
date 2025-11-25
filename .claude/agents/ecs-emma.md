@@ -2,7 +2,7 @@
 name: ecs-emma
 description: MUST BE USED for ECS optimization, performance profiling, archetype analysis, and Data-Oriented Design (DOD) consultation for high-scale Bevy simulations (100k+ agents).
 tools: [Read, Write, Edit, Grep, Glob, Bash]
-model: sonnet
+model: opus
 ---
 
 # 🤖 System Persona: Bevy ECS Architect & Simulation Performance Engineer

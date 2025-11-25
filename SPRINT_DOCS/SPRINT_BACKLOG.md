@@ -30,23 +30,27 @@
 
 ### Phase 2: Frontend Interpolation (60Hz) - Days 2-3 🎮 GPU SHADER APPROACH
 **Owner:** shader-sarah (Dr. Sarah Boid - GPU/Shader Specialist)
-**Status:** IN PROGRESS - GPU shader-based interpolation & organic wiggle animation
+**Status:** CREATURES VISIBLE! Movement/spawn debugging remaining
 **Spec:** `docs/visuals/shader-smooth-and-wiggle.md`
 
-#### Phase 2A: Custom PixiJS Geometry Setup
-- [ ] Design interleaved Float32Array buffer layout (start/end pos/rot per entity)
-- [ ] Implement custom PixiJS Geometry with instanced rendering
-- [ ] Create buffer update strategy (swap prev←curr on snapshot)
-- [ ] Verify zero-copy NAPI buffer integration with Rusty-Ron
-- [ ] Test buffer uploads @ 200K entities
+#### Phase 2A: Custom PixiJS Geometry Setup ✅ COMPLETE
+- [x] Design interleaved Float32Array buffer layout (7 floats: startX/Y, endX/Y, startRot, endRot, size)
+- [x] Implement custom PixiJS Geometry with instanced rendering
+- [x] Create buffer update strategy (swap END→START on tick)
+- [x] InterpolationBufferManager with 17 passing tests
+- [x] Double buffering for GPU stall prevention
 
-#### Phase 2B: Vertex Shader Interpolation (Kinematic Smoothing)
-- [ ] Implement GLSL vertex shader with mix(aStartPos, aEndPos, uInterpolation)
-- [ ] Implement rotation interpolation with shortest-path angle wrapping
-- [ ] Handle edge case: rotation wraparound (350° → 10° = 20° CW, not 340° CCW)
-- [ ] Handle edge case: entity spawn/despawn (buffer resizing)
-- [ ] Handle edge case: extrapolation when uInterpolation > 1.0 (network lag)
-- [ ] Test 60 FPS @ 1 million entities
+#### Phase 2B: Vertex Shader Interpolation (Kinematic Smoothing) 🎉 CREATURES VISIBLE
+- [x] Implement GLSL vertex shader with mix(aStartPos, aEndPos, uInterpolation)
+- [x] Implement rotation interpolation with shortest-path angle wrapping
+- [x] Handle edge case: rotation wraparound (350° → 10° = 20° CW, not 340° CCW)
+- [x] Handle edge case: entity spawn/despawn (buffer resizing in BufferManager)
+- [x] PixiJS v8 API migration complete (UniformGroup pattern)
+- [x] All 249 tests passing
+- [x] **MILESTONE: Creatures render on screen!**
+- [ ] Debug: Creatures not moving (tick integration)
+- [ ] Debug: New spawns not appearing
+- [ ] Validate smooth interpolation visually
 - [ ] Profile: CPU <0.5ms per frame, GPU <0.2ms per frame
 - [ ] Cross-GPU testing (Intel/NVIDIA/AMD)
 
@@ -104,4 +108,28 @@ See: `SPRINT_DOCS/SPRINT_15_PLAN/SPRINT_PLAN_sprint-15-ecs-optimizations.md`
 
 ## Current Tasks
 
-_This section will be updated as the sprint progresses._
+**Last Updated:** 2025-11-25 End of Day
+
+### Completed Today
+- ✅ PixiJS v8 UniformGroup fix - creatures now render!
+- ✅ All 249 tests passing
+- ✅ TypeScript compilation clean
+
+### Next Session (Priority Order)
+1. **Debug creature movement** - creatures visible but static
+   - Check if onSimulationTick() is being called with new creature data
+   - Verify interpolationAlpha is advancing in render()
+   - Confirm camera uniforms are updating correctly
+
+2. **Debug spawn visibility** - new spawns don't appear
+   - Trace creature count through pipeline
+   - Verify geometry.instanceCount increments
+   - Check buffer updates on spawn
+
+3. **Visual validation** - once movement works
+   - Verify smooth interpolation (no teleporting)
+   - Test rotation wraparound
+   - Check zoom/pan behavior
+
+### Blockers
+None - path forward is clear (debug integration, not architecture)

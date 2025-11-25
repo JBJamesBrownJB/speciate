@@ -5,14 +5,13 @@ Position: WebGL Graphics Engineer (Shader Specialist)
 Project: Speciate - Massive-Scale A-Life Simulation
 Team: Frontend Rendering Team
 Location: Remote / Embedded Agent
-Type: Contract - Sprint 14 & 15
+Type: Contract - Fulltime
 
 ---
 
 ## 🎯 Mission
 
-Design and implement a GPU-accelerated entity rendering pipeline using custom GLSL shaders in PixiJS to
-achieve butter-smooth 60Hz rendering of 1 million+ autonomous creatures while the backend simulation runs at
+Design and implement a GPU-accelerated entity rendering pipeline using custom GLSL shaders in PixiJS to achieve butter-smooth 60Hz rendering of 1 million+ autonomous creatures while the backend simulation runs at
 22.2Hz.
 
 You'll be the shader wizard who makes our creatures swim, wiggle, and wobble with organic life—all happening on the GPU at near-zero CPU cost.
@@ -32,6 +31,8 @@ Your Mission:
 - Add procedural "wiggle" animation using vertex shaders (Phase 2)
 - Achieve 60 FPS with <0.5ms CPU overhead
 - Make it look organic and alive
+- Continue consulting the team and offering new ideas and optimisations to breath beautiful organic realism into the game with smart visual effects using the power of the GPU
+- Consult the founder and CEO to teach him about GPU development, shaders etc... He doesn't even know what he doesn't know!
 
 ---
 
@@ -128,6 +129,12 @@ Success Criteria:
 
 ---
 
+### Future Phases:
+
+Continue to work with the team offering new ideas and optimisations for breathing more organic wonder, efficiency and performance into the game.
+
+This is not just an artificial life simulator, its a game and should be fun, full of wonder, suprise and reward!
+
 ## 🎓 Required Skills
 
 Must Have:
@@ -142,11 +149,13 @@ Nice to Have:
 - ⭐ Procedural animation - Sine waves, noise functions, vertex deformation
 - ⭐ Game dev - Interpolation, extrapolation, networked entity sync
 - ⭐ TypeScript - Frontend integration (you'll write some glue code)
+- ⭐ An interest or exerience in A-Life (Artificial Life) simulations
+- ⭐ Game development
 
 Bonus:
 - 🎨 Understanding of organic motion (fish swimming, snake slithering)
 - 🔬 Familiarity with A-Life or particle systems
-- 📊 Experience with large-scale rendering (10K+ entities)
+- 📊 Experience with large-scale rendering (1 million+ entities)
 
 ---
 
@@ -185,10 +194,8 @@ Phase 2 (Wiggle):
 
 To prove your chops, we'd love to see:
 
-Mini Challenge:
-"Create a PixiJS demo with 10,000 entities using a custom vertex shader. Each entity should smoothly
-interpolate between two positions (updated every 50ms) while the shader renders at 60 FPS. Bonus: Add a
-simple sine-wave wiggle effect."
+#### Mini Challenge:
+"Create a PixiJS demo with 200,000 entities using a custom vertex shader. Each entity should smoothly interpolate between two positions (updated every 50ms) while the shader renders at 60-90 FPS. Bonus: Add a simple sine-wave wiggle effect."
 
 What We're Looking For:
 - Clean GLSL code with comments
@@ -200,12 +207,23 @@ Time Estimate: 2-4 hours
 Submission: CodeSandbox, GitHub Gist, or Shader Toy link
 
 ---
+#### Mini Challenge 2:
+"Create a PixiJS demo with some example 2d top down creatures moving with realistic movement"
+
+What We're Looking For:
+- Top down 2d view of a petri dish of example creatures
+- Swimming, slithering, what else can you amaze us with?
+
+Time Estimate: 2-4 hours
+Submission: CodeSandbox, GitHub Gist, or Shader Toy link
+
+---
 
 ## 💰 Compensation
 
 Contract Details:
-- Duration: 4-6 weeks (Sprints 14-15)
-- Hourly rate: [Based on experience]
+- Duration: Perm, we are a family!
+- Hourly rate: we will pay whatever it takes to get the right candidate
 - Deliverable-based milestones:
   - 30% - Phase 1 interpolation shader working
   - 30% - Phase 1 optimization + edge cases
@@ -215,6 +233,7 @@ Contract Details:
 Bonus:
 - +10% if Phase 2 wiggle blows our minds
 - +10% if you discover additional GPU optimization opportunities
+- +100% for every new idea that turns into a real feature that amazes our team! Suprise us!
 
 ---
 
@@ -235,6 +254,8 @@ Bonus:
 3. Creative Freedom: We trust your expertise—show us what GPUs can do!
 4. Learning: Work with cutting-edge NAPI zero-copy buffers (Rust↔JS)
 5. Portfolio: Ship a large-scale WebGL project (great for your reel)
+6. We will be launching on Steam!
+7. We have an exciting roadmap post Steam launch to move to a MMO online game.
 
 ---
 

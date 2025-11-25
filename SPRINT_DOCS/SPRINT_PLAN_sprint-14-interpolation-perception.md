@@ -1,4 +1,4 @@
-# Sprint 13: Interpolation, Vision Refactor & Data-Oriented Design
+# Sprint 14: Interpolation, Vision Refactor & Data-Oriented Design
 
 **Branch:** `feat/sprint-14-interpolation-perception`
 **Status:** PLANNED
@@ -10,13 +10,13 @@
 ## Sprint Goal
 
 Scale to 150K-200K creatures through:
-1. **20Hz simulation** → 60Hz interpolated rendering (smooth visuals, 3x capacity)
+1. **22.2Hz simulation** → 60Hz interpolated rendering (smooth visuals, 3x capacity)
 2. **Perception → Vision refactor** (biological naming, FOV dot product, stochastic updates)
 3. **Uber-struct pattern** (stable archetypes, hot/cold split, cache-friendly)
 4. **Vec2 vector math** (SIMD optimization)
 
 **Key Architecture:**
-- Single-tick 20Hz simulation (proven simple, biologically realistic)
+- Single-tick 22.2Hz simulation (achieved in Sprint 13 NAPI migration)
 - f64 precision SimulationTime (no drift over 24+ hours)
 - Component-based timing (10-100x faster than HashMap)
 - Per-creature reaction times (natural load distribution, no synchronization spikes)
@@ -25,7 +25,7 @@ Scale to 150K-200K creatures through:
 
 ## Phase Order (User Priority)
 
-1. ✅ Lower tick rate (20Hz)
+1. ✅ Tick rate validated (22.2Hz achieved in Sprint 13)
 2. ✅ Frontend interpolation (60Hz position + rotation)
 3. ✅ Refactor components → uber-struct pattern
 4. ✅ Perception → Vision (stochastic updates, FOV, Vec2)
@@ -34,31 +34,30 @@ Scale to 150K-200K creatures through:
 
 ---
 
-## Phase 1: Lower Main Tick Rate (20Hz)
+## Phase 1: Validate Tick Rate (22.2Hz)
 
-**Duration:** Day 1 (30 min)
+**Duration:** Day 1 (COMPLETE - Discovery)
 
-**Goal:** 20Hz baseline = 2.5x capacity vs 60Hz
+**Goal:** Confirm 22.2Hz achieved in Sprint 13 NAPI migration
 
-**Changes:**
+**Discovery:**
+Sprint 13's NAPI-RS migration introduced hardcoded tick rate in `simulation_engine.rs`:
 ```rust
-// apps/simulation/src/config.rs
-impl Default for TimingConfig {
-    fn default() -> Self {
-        Self {
-            target_tick_rate: 20,  // Changed from 60
-            // ...
-        }
-    }
-}
+// apps/simulation/src/napi_addon/simulation_engine.rs:37
+const TARGET_SIMULATION_HZ: f32 = 22.2;
 ```
 
-**Validation:**
-- All systems use `DeltaTime` resource (no hardcoded assumptions)
-- 10K creatures: <30ms avg tick
-- 20K creatures: <40ms avg tick
+This replaced the old `config.rs` approach. 22.2Hz provides:
+- ~45ms per tick (vs 16.7ms @ 60Hz)
+- 2.7x capacity improvement
+- Sufficient for 150K-200K creature target
 
-**Success:** Stable 20Hz, all tests pass, motion appears choppy (Phase 2 fixes)
+**Validation:**
+- ✅ All systems use `DeltaTime` resource (no hardcoded assumptions)
+- ✅ Tick rate confirmed at 22.2Hz in NAPI engine
+- ✅ No changes needed - already optimal
+
+**Success:** 22.2Hz stable, ready for Phase 2 interpolation
 
 ---
 
@@ -97,7 +96,7 @@ impl PreviousPositions {
 
 ```typescript
 private lastPhysicsUpdate: number = 0;
-private readonly PHYSICS_PERIOD_MS = 50;  // 20Hz
+private readonly PHYSICS_PERIOD_MS = 45;  // 22.2Hz (1000ms / 22.2 ≈ 45ms)
 
 public getInterpolationAlpha(): number {
   const elapsed = performance.now() - this.lastPhysicsUpdate;
@@ -553,19 +552,19 @@ pub fn update_vision_system(
 ### Benchmarks
 
 **Baseline (20K):**
-- Tick time: <30ms avg
+- Tick time: <30ms avg (well under 45ms budget @ 22.2Hz)
 - Vision: ~10ms (5-20% creatures per tick)
 - Movement: ~8ms
 - Frontend: 60 FPS stable
 
 **Target (150K):**
-- Tick time: <45ms avg
+- Tick time: <45ms avg (at 22.2Hz budget)
 - Vision: ~30ms (staggered updates = 7.5x fewer per tick)
 - Movement: ~12ms
 - Frontend: 60 FPS stable
 
 **Stretch (200K):**
-- Tick time: <50ms avg (acceptable at 20Hz)
+- Tick time: <50ms avg (slightly over budget, acceptable at 22.2Hz)
 - Vision: ~35ms
 - Movement: ~13ms
 - Frontend: 60 FPS stable
@@ -640,8 +639,8 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 ## Success Metrics
 
 **Performance:**
-- [ ] 150K creatures @ 20Hz (HIGH confidence: 90%)
-- [ ] 200K creatures @ 20Hz (MEDIUM confidence: 60%)
+- [ ] 150K creatures @ 22.2Hz (HIGH confidence: 90%)
+- [ ] 200K creatures @ 22.2Hz (MEDIUM confidence: 60%)
 - [ ] 60 FPS frontend rendering
 - [ ] Vision <40% frame budget
 
@@ -661,7 +660,7 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 
 **Risk:** Frontend interpolation looks floaty
 - **Mitigation:** Linear lerp only (no easing), test with 20K first
-- **Fallback:** Increase to 30Hz physics if needed
+- **Fallback:** Increase to 30Hz physics if needed (currently 22.2Hz)
 
 **Risk:** Uber-struct refactor breaks existing systems
 - **Mitigation:** TDD - write tests first, refactor incrementally

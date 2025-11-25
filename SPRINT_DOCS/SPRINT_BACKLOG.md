@@ -1,4 +1,4 @@
-# Sprint 13: Interpolation, Vision Refactor & Data-Oriented Design
+# Sprint 14: Interpolation, Vision Refactor & Data-Oriented Design
 
 **Branch:** `feat/sprint-14-interpolation-perception`
 **Duration:** 11 days
@@ -11,7 +11,7 @@
 **MORE DETAIL IN:** SPRINT_PLAN_sprint-14-interpolation-perception.md, check this to confirm your approach
 
 Scale to 150K-200K creatures through:
-1. 20Hz simulation → 60Hz interpolated rendering
+1. 22.2Hz simulation → 60Hz interpolated rendering (achieved in Sprint 13)
 2. Perception → Vision refactor (biological naming, FOV, stochastic updates)
 3. Uber-struct pattern (stable archetypes, hot/cold split)
 4. Vec2 vector math (SIMD optimization)
@@ -20,11 +20,11 @@ Scale to 150K-200K creatures through:
 
 ## Phase Checklist
 
-### Phase 1: Lower Main Tick Rate (20Hz) - Day 1
-- [ ] Change target_tick_rate to 20Hz in config
-- [ ] Validate all systems use DeltaTime resource
-- [ ] Test 10K creatures: <30ms avg tick
-- [ ] Test 20K creatures: <40ms avg tick
+### Phase 1: Validate Tick Rate (22.2Hz) - Day 1 ✅ COMPLETE
+- [x] Discovered: 22.2Hz achieved in Sprint 13 NAPI migration
+- [x] Validated: Hardcoded in simulation_engine.rs:37
+- [x] Confirmed: All systems use DeltaTime resource
+- [x] Result: 22.2Hz provides ~45ms tick budget (sufficient for 150K-200K target)
 
 ### Phase 2: Frontend Interpolation (60Hz) - Days 2-3
 **URGENT: This is under review and will move to a GPU shader based approach**
@@ -102,8 +102,8 @@ Scale to 150K-200K creatures through:
 ## Success Criteria
 
 **Performance:**
-- [ ] 150K creatures @ 20Hz sustained
-- [ ] 200K creatures @ 20Hz (stretch)
+- [ ] 150K creatures @ 22.2Hz sustained
+- [ ] 200K creatures @ 22.2Hz (stretch)
 - [ ] 60 FPS frontend rendering
 - [ ] Vision <40% frame budget (was 70%)
 

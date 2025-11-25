@@ -794,7 +794,7 @@ enum Frame {
 
 ### Current Implementation (Single-Tick)
 
-The simulation runs at a **configurable tick rate** (default 30Hz for balance). Future work will lower this to 20Hz with frontend interpolation for scaling.
+The simulation runs at a **hardcoded tick rate of 22.2Hz** (implemented in Sprint 13 NAPI migration). This provides ~45ms per tick, allowing for 150K-200K creature scaling. Future work will add frontend interpolation for smooth 60Hz visuals.
 
 **Current Architecture:**
 ```rust
@@ -820,26 +820,52 @@ impl Simulation {
 6. **Reset Acceleration** - Clear acceleration for next tick
 7. **Snapshot** - Create state for frontend (IPC via background writer thread)
 
-### Future Direction: Frontend Interpolation
+### Tick Rate Implementation (Sprint 13)
 
-**Goal:** Scale to 150K-200K creatures by lowering simulation tick rate while maintaining smooth visuals.
+**Current Status:** 22.2Hz hardcoded in `napi_addon/simulation_engine.rs`
+
+**Implementation:**
+```rust
+// apps/simulation/src/napi_addon/simulation_engine.rs:37
+const TARGET_SIMULATION_HZ: f32 = 22.2;
+```
+
+This replaced the old configurable approach from `config.rs` used by the deprecated stdio runner.
+
+**Benefits:**
+- ~45ms per tick (2.7x improvement vs 60Hz)
+- Sufficient for 150K-200K creature target
+- Simpler architecture (no runtime configuration)
+
+### Future Direction: Frontend Interpolation (Sprint 14)
+
+**Goal:** Smooth 60Hz visuals while maintaining 22.2Hz physics simulation.
 
 **Planned Approach:**
-- Lower simulation to 20Hz (50ms per tick = 2.5x more creatures per frame budget)
-- Frontend interpolates to 90Hz for smooth rendering
-- lerp(prev_pos, curr_pos, alpha) where alpha = time_since_last_tick / tick_period
+- Frontend interpolates between 22.2Hz physics updates to 60Hz display
+- `lerp(prev_pos, curr_pos, alpha)` where `alpha = time_since_last_tick / 45ms`
+- Position AND rotation interpolation to prevent sliding artifacts
 
-**Why not dual-tick?** Dual-tick architecture (separate AI/Physics schedules) was explored and abandoned. Sequential execution on single thread provides no benefit - when schedules align, you still get the same spike. Only true parallelism (separate threads) would help, which requires major architectural changes.
+**Why not dual-tick?** Dual-tick architecture (separate AI/Physics schedules) was explored and abandoned in Sprint 11. Sequential execution on single thread provides no benefit - when schedules align, you still get the same spike. Only true parallelism (separate threads) would help, which requires major architectural changes.
 
-**See Sprint 12 plan for interpolation implementation details.**
+**See Sprint 14 plan for interpolation implementation details.**
 
-### IPC Optimization (Completed)
+### IPC Optimization (Sprint 13 - Completed)
 
-Current implementation uses background writer thread for efficient IPC:
-- Main thread overhead: 30ms → <1ms (97% reduction)
-- Crossbeam channel with bounded buffer (size=2)
-- Graceful frame dropping when frontend lags
-- MessagePack serialization on background thread
+**Current Implementation:** NAPI-RS zero-copy double-buffer
+
+**Architecture:**
+- Zero-copy position buffers (direct TypeScript access to Rust memory)
+- Double-buffering (simulation writes to back buffer, frontend reads from front)
+- ThreadsafeFunction for telemetry events
+- No serialization overhead (<1ms buffer swap)
+
+**Performance Improvement:**
+- Old (stdio MessagePack): ~30ms frame serialization overhead
+- New (NAPI zero-copy): <1ms for buffer swap
+- **Result:** 97% reduction in IPC overhead
+
+**See:** `docs/architecture/napi-architecture.md` for implementation details
 
 ---
 

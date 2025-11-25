@@ -1,7 +1,6 @@
 // Domain modules
 pub mod core;
 pub mod creatures;
-pub mod dna;
 pub mod movement;
 pub mod perception;
 

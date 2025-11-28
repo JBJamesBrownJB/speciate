@@ -70,10 +70,9 @@ pub fn integrate_motion_system(
         }
         let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
         if speed_sq > max_speed_sq {
-            let speed = speed_sq.sqrt();
-            let inv_speed = MAX_SPEED / speed;
-            velocity.vx *= inv_speed;
-            velocity.vy *= inv_speed;
+            let scale = (max_speed_sq / speed_sq).sqrt();
+            velocity.vx *= scale;
+            velocity.vy *= scale;
         }
 
         acceleration.ax = 0.0;

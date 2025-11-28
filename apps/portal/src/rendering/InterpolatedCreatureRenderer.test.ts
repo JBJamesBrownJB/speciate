@@ -92,6 +92,7 @@ describe("InterpolatedCreatureRenderer", () => {
         { id: 1, x: 0, y: 0, rotation: 0, size: 10 },
       ];
       renderer.initialize(creatures);
+      renderer.setTickRate(20.0); // Set tick rate (required for interpolation to work)
 
       // Simulate render frame (16.67ms @ 60 FPS)
       // Pass camera parameters: cameraX, cameraY, zoom, width, height
@@ -99,7 +100,7 @@ describe("InterpolatedCreatureRenderer", () => {
 
       const uniforms = renderer.getUniforms();
       // Alpha should be deltaMS / tickInterval
-      // 16.67ms / 45ms = ~0.37
+      // 16.67ms / 50ms = ~0.33
       expect(uniforms.uInterpolation).toBeGreaterThan(0.0);
       expect(uniforms.uInterpolation).toBeLessThan(1.0);
     });
@@ -109,6 +110,7 @@ describe("InterpolatedCreatureRenderer", () => {
         { id: 1, x: 0, y: 0, rotation: 0, size: 10 },
       ];
       renderer.initialize(creatures);
+      renderer.setTickRate(20.0); // Set tick rate (required for interpolation to work)
 
       // Advance interpolation
       renderer.render(16.67, 0, 0, 10, 800, 600);

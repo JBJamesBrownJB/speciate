@@ -5,6 +5,9 @@ export const RENDERING_CONFIG = {
   VELOCITY_DAMPING: 0.1, // Exponential decay rate for extrapolation (tune: 0.05-0.2)
 } as const;
 
+// Derived timing value
+export const getTickIntervalMs = (tickRateHz: number): number => 1000 / tickRateHz;
+
 export const WORLD_CONFIG = {
   SIZE: 2000000, // World is 2000km × 2000km (-1,000,000 to +1,000,000 meters)
 } as const;

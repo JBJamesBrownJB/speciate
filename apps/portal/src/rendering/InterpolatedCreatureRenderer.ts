@@ -9,6 +9,7 @@ import {
 } from "pixi.js";
 import { InterpolationBufferManager } from "./InterpolationBufferManager";
 import type { CreatureData } from "@/types/GameState";
+import { getTickIntervalMs } from "@/core/constants";
 
 /**
  * Renders creatures using custom GPU-based geometry and interpolation.
@@ -28,7 +29,7 @@ export class InterpolatedCreatureRenderer {
 
   // Interpolation state
   private interpolationAlpha: number = 0.0;
-  private readonly TICK_INTERVAL_MS = 1000 / 22.2; // ~45ms
+  private tickIntervalMs: number = Infinity; // No interpolation until tick rate is set
 
   constructor(texture: Texture, _maxCreatures: number) {
     this.bufferManager = new InterpolationBufferManager();
@@ -278,7 +279,7 @@ export class InterpolatedCreatureRenderer {
     viewportHeight: number
   ): void {
     // Update interpolation alpha
-    this.interpolationAlpha += deltaMS / this.TICK_INTERVAL_MS;
+    this.interpolationAlpha += deltaMS / this.tickIntervalMs;
     this.interpolationAlpha = Math.max(0.0, Math.min(1.0, this.interpolationAlpha));
 
     // Update shader uniforms (v8 API: access via UniformGroup.uniforms)
@@ -354,5 +355,12 @@ export class InterpolatedCreatureRenderer {
    */
   isBufferDirty(): boolean {
     return this.bufferManager.isDirty();
+  }
+
+  /**
+   * Update tick rate (when telemetry arrives with actual simulation tick rate)
+   */
+  setTickRate(tickRateHz: number): void {
+    this.tickIntervalMs = getTickIntervalMs(tickRateHz);
   }
 }

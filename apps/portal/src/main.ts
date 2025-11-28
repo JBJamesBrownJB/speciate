@@ -9,7 +9,6 @@ import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
-import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
   container: HTMLElement,
@@ -125,20 +124,49 @@ async function main(): Promise<void> {
 
     const perfMetrics = new PerformanceMetrics(RENDERING_CONFIG.TARGET_FPS);
 
-    let latestCreatureData: CreatureData[] = [];
-    let lastSimulationTick = -1;
     let isFirstFrame = true;
+    let lastFirstCreatureX: number | null = null;
 
     const ipcClient: IPCClient | null = createIPCClient();
 
     if (ipcClient) {
       await ipcClient.connect();
 
+      // Handle simulation tick updates via IPC callback (fires when new data arrives)
+      ipcClient.onStateUpdate((state) => {
+        const creatures = state.creatures;
+        currentCreatureCount = creatures.length;
+
+        // Update tick rate when telemetry provides it
+        if (state.tickRateHz && !isNaN(state.tickRateHz)) {
+          creatureRenderer.setTickRate(state.tickRateHz);
+        }
+
+        // Detect if positions actually changed (simulation tick occurred)
+        const currentFirstX = creatures.length > 0 ? creatures[0].x : null;
+        const positionsChanged = currentFirstX !== lastFirstCreatureX;
+
+        if (positionsChanged && creatures.length > 0) {
+          lastFirstCreatureX = currentFirstX;
+
+          const spriteUpdateStart = performance.now();
+          if (isFirstFrame) {
+            creatureRenderer.initialize(creatures);
+            isFirstFrame = false;
+          } else {
+            creatureRenderer.onSimulationTick(creatures);
+          }
+          const spriteUpdateEnd = performance.now();
+          perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
+        }
+      });
+
       window.addEventListener("beforeunload", async () => {
         await ipcClient.disconnect();
       });
     }
 
+    // Render loop - only handles rendering, not simulation updates
     app.ticker.add(() => {
       const frameStart = performance.now();
       const deltaMs = frameStart - lastFrameTime;
@@ -146,34 +174,15 @@ async function main(): Promise<void> {
 
       perfMetrics.recordFrameTime(deltaMs);
 
+      // Update HUD with cached values
       const state = ipcClient?.getLatestState();
-
-      if (state && state.creatures) {
-        currentCreatureCount = state.creatures.length;
-        latestCreatureData = state.creatures;
-
+      if (state) {
         hudManager.updateTickRate(state.tickRateHz || 0);
         hudManager.updateCreatureCount(currentCreatureCount);
         hudManager.updateZoom(camera.zoom);
-
-        // Handle simulation tick updates
-        if (state.tick !== lastSimulationTick) {
-          lastSimulationTick = state.tick;
-
-          const spriteUpdateStart = performance.now();
-          if (isFirstFrame) {
-            creatureRenderer.initialize(latestCreatureData);
-            isFirstFrame = false;
-          } else {
-            creatureRenderer.onSimulationTick(latestCreatureData);
-          }
-          const spriteUpdateEnd = performance.now();
-          perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
-        }
       }
 
-      // Render with interpolation every frame (60 FPS)
-      // Pass camera and viewport parameters for coordinate transform
+      // Render with interpolation every frame
       creatureRenderer.render(
         deltaMs,
         camera.x,

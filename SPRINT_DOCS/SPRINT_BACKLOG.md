@@ -40,7 +40,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 |-------|--------|---------------|----------|
 | Phase 2A: Vision Split Queries | ✅ COMPLETE | 2x capacity (5K→10K) | 100% |
 | Phase 1b: Uber-Struct Refactor | ✅ COMPLETE | Archetype stability | 100% |
-| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 62.5% (5/8 opts) |
+| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 75% (6/8 opts) |
 | Phase 1: Archetype Churn Trial | 📋 SKIPPED | Validation unnecessary | N/A |
 | Phase 2B: Vec2 + Changed<T> | 📋 PLANNED | 2-3ms @ 20K | 0% |
 | Phase 2C: Parallelization | 📋 PLANNED | 2-3x speedup | 0% |
@@ -359,7 +359,17 @@ pub fn rotation_system(
 | sqrt calls/seeking creature | 2/tick | 1/tick | **50% reduction** |
 | Seek time @ 5K seekers | Baseline | -0.5ms | 10% improvement |
 
-**Risk:** LOW | **Effort:** 45 min | **Status:** [ ] Not started
+**Risk:** LOW | **Effort:** 45 min | **Status:** ✅ **COMPLETE** (2025-11-28)
+
+**Actual Implementation:**
+- All 156 library tests pass
+- Deferred 2 sqrt() calls in seek system:
+  1. **center_distance:** Converted all distance checks to squared comparisons (lines 39, 50, 57), only compute sqrt at line 65 when needed for normalization
+  2. **current_speed:** Eliminated entirely - replaced with squared comparison at line 50
+- Early exits now use squared distance checks (no sqrt until line 65)
+- Seekers that arrive/pounce: **2 sqrt → 0 sqrt** (100% elimination)
+- Active seekers: **2 sqrt → 1 sqrt** (50% reduction)
+- Zero behavioral regression
 
 ---
 

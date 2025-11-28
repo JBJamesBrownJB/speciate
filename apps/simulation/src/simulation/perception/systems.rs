@@ -28,6 +28,7 @@ pub fn update_perception_system(
         }
 
         let self_radius = size.radius();
+        let perception_range = perception.range;
 
         for &(other_entity, other_x, other_y, other_radius) in &scratch.positions {
             if entity == other_entity {
@@ -38,17 +39,12 @@ pub fn update_perception_system(
             let dy = other_y - pos.y;
             let center_dist_sq = dx * dx + dy * dy;
 
-            let combined_radii = self_radius + other_radius;
-
-            if center_dist_sq > (perception.range + combined_radii).powi(2) {
-                continue;
-            }
-
-            let center_dist = center_dist_sq.sqrt();
-            let edge_dist = center_dist - combined_radii;
-
-            if edge_dist <= perception.range {
+            let max_dist = perception_range + self_radius + other_radius;
+            if center_dist_sq <= max_dist * max_dist {
                 perception.add_neighbor(other_entity);
+                if perception.is_full() {
+                    break;
+                }
             }
         }
     }

@@ -2,18 +2,19 @@ use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
-pub const MAX_PERCEIVED_NEIGHBORS: usize = 32;
+pub const MAX_PERCEIVED_NEIGHBORS: usize = 40;
 
 #[derive(Resource, Default)]
 pub struct PerceptionScratchBuffer {
     pub positions: Vec<(Entity, f32, f32, f32)>,
 }
 
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone)]
 pub struct Perception {
     pub range: f32,
     neighbor_count: u8,
     neighbors: [Entity; MAX_PERCEIVED_NEIGHBORS],
+    pub obstacles: Vec<Entity>, // Placeholder for future obstacle tracking
 }
 
 impl Perception {
@@ -22,6 +23,7 @@ impl Perception {
             range,
             neighbor_count: 0,
             neighbors: [Entity::PLACEHOLDER; MAX_PERCEIVED_NEIGHBORS],
+            obstacles: Vec::new(),
         }
     }
 
@@ -59,6 +61,10 @@ impl Perception {
 
     pub fn contains(&self, entity: Entity) -> bool {
         self.neighbors[..self.neighbor_count as usize].contains(&entity)
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.neighbor_count as usize >= MAX_PERCEIVED_NEIGHBORS
     }
 }
 

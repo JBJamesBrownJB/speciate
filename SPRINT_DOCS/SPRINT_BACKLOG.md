@@ -40,7 +40,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 |-------|--------|---------------|----------|
 | Phase 2A: Vision Split Queries | ✅ COMPLETE | 2x capacity (5K→10K) | 100% |
 | Phase 1b: Uber-Struct Refactor | ✅ COMPLETE | Archetype stability | 100% |
-| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 87% (7/8 opts) |
+| Phase 2A-2: Movement Optimizations | ✅ COMPLETE | 13% tick budget (~6.5ms) | 100% (7/8, OPT-8 deferred) |
 | Phase 1: Archetype Churn Trial | 📋 SKIPPED | Validation unnecessary | N/A |
 | Phase 2B: Vec2 + Changed<T> | 📋 PLANNED | 2-3ms @ 20K | 0% |
 | Phase 2C: Parallelization | 📋 PLANNED | 2-3x speedup | 0% |

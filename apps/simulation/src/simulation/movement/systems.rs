@@ -7,6 +7,7 @@ use crate::simulation::core::components::*;
 use crate::simulation::movement::constants::{MAX_SPEED, STOPPED_THRESHOLD, VELOCITY_DAMPING};
 use crate::simulation::movement::noise::perlin_locomotion_noise;
 use bevy_ecs::prelude::*;
+use rayon::prelude::*;
 pub fn integrate_motion_system(
     mut query: Query<(
         Entity,
@@ -28,7 +29,14 @@ pub fn integrate_motion_system(
     let dt = delta_time.0;
     let max_speed_sq = MAX_SPEED * MAX_SPEED;
     let tick = physics_tick.get();
-    for (entity, size, mut position, mut velocity, mut acceleration, creature_state) in query.iter_mut() {
+    let noise_base = movement_config.locomotion_noise_base;
+    let noise_time_scale = movement_config.noise_time_scale;
+
+    // Collect entities into Vec for Rayon parallel processing
+    let mut entities: Vec<_> = query.iter_mut().collect();
+
+    // Parallel physics integration using Rayon
+    entities.par_iter_mut().for_each(|(entity, size, position, velocity, acceleration, creature_state)| {
         if creature_state.behavior == BehaviorMode::Catatonic {
             acceleration.ax = 0.0;
             acceleration.ay = 0.0;
@@ -39,7 +47,7 @@ pub fn integrate_motion_system(
                     velocity.vx = 0.0;
                     velocity.vy = 0.0;
                 }
-                continue;
+                return;
             }
 
             velocity.vx *= VELOCITY_DAMPING;
@@ -48,7 +56,7 @@ pub fn integrate_motion_system(
             position.x += velocity.vx * dt;
             position.y += velocity.vy * dt;
 
-            continue;
+            return;
         }
         velocity.vx += acceleration.ax * dt;
         velocity.vy += acceleration.ay * dt;
@@ -59,10 +67,10 @@ pub fn integrate_motion_system(
             let speed = speed_sq.sqrt();
             let speed_ratio = speed / MAX_SPEED;
             let size_factor = size.inv_sqrt_length;
-            let noise_magnitude = movement_config.locomotion_noise_base * speed_ratio * speed_ratio * size_factor;
+            let noise_magnitude = noise_base * speed_ratio * speed_ratio * size_factor;
 
-            let noise_x = perlin_locomotion_noise(entity.index(), tick, 0, movement_config.noise_time_scale);
-            let noise_y = perlin_locomotion_noise(entity.index(), tick, 1, movement_config.noise_time_scale);
+            let noise_x = perlin_locomotion_noise(entity.index(), tick, 0, noise_time_scale);
+            let noise_y = perlin_locomotion_noise(entity.index(), tick, 1, noise_time_scale);
 
             let perpendicular_x = -velocity.vy / speed;
             let perpendicular_y = velocity.vx / speed;
@@ -82,24 +90,30 @@ pub fn integrate_motion_system(
 
         position.x += velocity.vx * dt;
         position.y += velocity.vy * dt;
-    }
+    });
 
-    for (_entity, _size, mut position, mut velocity, _accel, _state) in query.iter_mut() {
-        if position.x < world_bounds.min_x {
-            position.x = world_bounds.min_x;
+    // Parallel boundary enforcement (reuse collected entities)
+    let min_x = world_bounds.min_x;
+    let max_x = world_bounds.max_x;
+    let min_y = world_bounds.min_y;
+    let max_y = world_bounds.max_y;
+
+    entities.par_iter_mut().for_each(|(_entity, _size, position, velocity, _accel, _state)| {
+        if position.x < min_x {
+            position.x = min_x;
             velocity.vx = velocity.vx.max(0.0);
-        } else if position.x > world_bounds.max_x {
-            position.x = world_bounds.max_x;
+        } else if position.x > max_x {
+            position.x = max_x;
             velocity.vx = velocity.vx.min(0.0);
         }
-        if position.y < world_bounds.min_y {
-            position.y = world_bounds.min_y;
+        if position.y < min_y {
+            position.y = min_y;
             velocity.vy = velocity.vy.max(0.0);
-        } else if position.y > world_bounds.max_y {
-            position.y = world_bounds.max_y;
+        } else if position.y > max_y {
+            position.y = max_y;
             velocity.vy = velocity.vy.min(0.0);
         }
-    }
+    });
 }
 
 pub fn update_body_size_cache(mut query: Query<&mut BodySize, Changed<BodySize>>) {

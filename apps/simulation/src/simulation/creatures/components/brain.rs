@@ -27,6 +27,8 @@ impl BrainMode {
 #[reflect(Component)]
 pub struct Brain {
     pub mode: BrainMode,
+    #[serde(skip)]
+    #[reflect(ignore)]
     pub last_decision_time: f64,
 }
 
@@ -170,5 +172,39 @@ mod tests {
     fn test_should_panic_disabled_when_exhausted() {
         assert!(!should_panic(0.5, 1.0, 4.0)); // energy < 5.0 = giving up
         assert!(should_panic(0.5, 1.0, 6.0)); // energy > 5.0 = can panic
+    }
+
+    #[test]
+    fn test_last_decision_time_not_serialized() {
+        use serde_json;
+
+        let mut brain = Brain::cycling();
+        brain.last_decision_time = 100.0; // Simulate brain that has been running
+
+        // Serialize
+        let json = serde_json::to_string(&brain).unwrap();
+
+        // Deserialize
+        let loaded_brain: Brain = serde_json::from_str(&json).unwrap();
+
+        // last_decision_time should be reset to 0.0 (default)
+        assert_eq!(loaded_brain.last_decision_time, 0.0,
+            "last_decision_time should not be serialized - it must reset on reload to prevent cycling bugs");
+        assert_eq!(loaded_brain.mode, BrainMode::Cycling, "mode should be preserved");
+    }
+
+    #[test]
+    fn test_cycling_brain_works_after_simulated_reload() {
+        let mut brain = Brain::cycling();
+        brain.last_decision_time = 100.0; // Simulate old saved state
+
+        // Simulate serialize/deserialize (last_decision_time should reset)
+        let json = serde_json::to_string(&brain).unwrap();
+        let mut reloaded_brain: Brain = serde_json::from_str(&json).unwrap();
+
+        // After reload, brain should be able to make decisions immediately
+        // (or after base cooldown, not waiting for time 100.0+ again!)
+        assert!(reloaded_brain.can_decide(0.15, 0.0, 100.0),
+            "Reloaded brain should be able to decide after base cooldown (150ms), not stuck waiting for time 100+");
     }
 }

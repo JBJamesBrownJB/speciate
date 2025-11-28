@@ -45,11 +45,80 @@ Scale backend ECS simulation to 150K-200K creatures through:
 
 ---
 
+## Performance Metrics Summary
+
+### Baseline (Actual @ 5K Active Wanderers)
+**Source:** `docs/performance/snapshots/5k_wanderers_2025-11-28T14-33-50.json`
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Total tick time | **50ms** | **AT BUDGET LIMIT** |
+| Perception system | **34ms (67%)** | **CRITICAL BOTTLENECK** |
+| Movement systems | 13ms (26%) | Acceptable |
+| Avoidance | 3.4ms (7%) | Acceptable |
+| Rotation | 0.1ms | Trivial |
+| Max active creatures | **~5K** | Limited by perception O(N²) |
+| IPC | 3.42 | Good (hardware efficient) |
+| CPU utilization | 17% | 7 cores idle |
+
+### The Problem: O(N²) Vision System
+
+At 5K creatures, perception takes 34ms. This scales **quadratically**:
+- 5K creatures → 34ms (5K × 5K = 25M comparisons)
+- 10K creatures → ~136ms (theoretically, 4x)
+- 20K creatures → ~544ms (theoretically, 16x)
+
+**Current architecture cannot scale.** Split queries + stochastic updates are mandatory.
+
+### Expected Gains by Phase
+
+| Phase | Optimization | Expected Gain | Cumulative Capacity |
+|-------|-------------|---------------|---------------------|
+| **Baseline** | - | 50ms @ 5K | 5K active |
+| **Phase 1** | Uber-struct (cache locality) | 5-10% tick reduction | 6K active |
+| **Phase 2A** | Vision split queries (zero alloc) | **50-70% perception reduction** | 15-20K active |
+| **Phase 2B** | Changed<T> + Vec2 SIMD | 2-3ms saved | 25K active |
+| **Phase 2C** | Parallelization (8-core) | 2-3x on movement | 40-50K active |
+| **Phase 2D** | Stochastic vision (10% per tick) | **10x perception reduction** | 150-200K active |
+
+### Target Metrics (End of Sprint)
+
+| Active Creatures | Target Tick Time | Perception Budget | Confidence |
+|-----------------|------------------|-------------------|------------|
+| 5K | <25ms | <10ms | 99% |
+| 20K | <35ms | <15ms | 90% |
+| 50K | <45ms | <25ms | 75% |
+| 100K | <50ms | <30ms | 50% |
+| 200K | <50ms | <30ms | 30% (stretch) |
+
+### Key Performance Indicators (KPIs)
+
+| KPI | Before (5K) | After (50K) | Target |
+|-----|-------------|-------------|--------|
+| Perception % of frame | 67% | <50% | ✓ |
+| Vec allocations/frame | 3.2MB | 0 bytes | ✓ |
+| Perception time | 34ms | <25ms @ 50K | ✓ |
+| CPU core utilization | 17% (1 core) | 50%+ (4-8 cores) | ✓ |
+| Max active creatures | 5K | 50-100K | ✓ |
+| IPC | 3.42 | >3.5 | ✓ |
+
+---
+
 ## Phase 1: Uber-Struct Refactor
 
 **Duration:** Days 1-2
 
 **Goal:** Stable ECS archetypes (no add/remove component churn → cache-friendly)
+
+### Expected Metrics After Phase 1
+| Metric | Before | After | Gain |
+|--------|--------|-------|------|
+| Tick time @ 5K | 50ms | 45ms | 5-10% |
+| Active creature capacity | 5K | 6K | +20% |
+| L1 cache hit rate | Baseline | +5-10% | Measurable |
+| Archetype fragmentation | High | Stable | Eliminated |
+
+**Note:** Phase 1 provides modest gains. The real wins come from Phase 2 (vision optimization).
 
 ### Remove Catatonic Component
 
@@ -120,6 +189,17 @@ pub struct BiologyData {
 **Duration:** Days 3-5 (expanded from 2 days for thorough ECS audit)
 
 **Goal:** Transform perception → vision WITH comprehensive ECS optimization across ALL systems
+
+### Expected Metrics After Phase 2A (Vision Split Queries)
+| Metric | Before | After | Gain |
+|--------|--------|-------|------|
+| Vec allocations/frame | 3.2MB | 0 bytes | **100% eliminated** |
+| Perception time @ 5K | 34ms | ~15ms | **50-60% reduction** |
+| Perception time @ 20K | N/A (>100ms) | ~25ms | Now possible |
+| Active creature capacity | 6K | 15-20K | **3x increase** |
+| Memory churn | 64MB/sec | 0 | GC eliminated |
+
+**Critical:** This is the single most important optimization. Without it, nothing else matters.
 
 ### Critical Context
 
@@ -279,6 +359,14 @@ pub fn update_vision_system(
 
 ### Phase 2B: Changed<T> Filters + Vec2 Migration (Day 4)
 
+### Expected Metrics After Phase 2B
+| Metric | Before | After | Gain |
+|--------|--------|-------|------|
+| Rotation iterations @ 20K | 20K/frame | 2-4K/frame | **80-90% reduction** |
+| Vector math operations | Scalar f32 | SIMD Vec2 | 10-20% faster |
+| Tick time @ 20K | ~35ms | ~32ms | 2-3ms saved |
+| Active creature capacity | 15-20K | 25K | +25% |
+
 **Morning: Add Changed Filters**
 
 **Issue:** Systems process ALL entities even when nothing changed
@@ -336,6 +424,17 @@ pub fn update_vision_system(
 ---
 
 ### Phase 2C: Parallelization (Day 5)
+
+### Expected Metrics After Phase 2C
+| Metric | Before | After | Gain |
+|--------|--------|-------|------|
+| CPU cores utilized | 1 | 4-8 | **4-8x potential** |
+| Realistic speedup | 1x | 2-3x | Amdahl's law |
+| Movement systems time @ 25K | ~13ms | ~5ms | 5-8ms saved |
+| Tick time @ 25K | ~32ms | ~25ms | 20% reduction |
+| Active creature capacity | 25K | 40-50K | **+60-100%** |
+
+**Note:** Parallelization helps movement but NOT perception (O(N²) requires sequential access).
 
 **Morning: Add par_iter_mut() to Pure Systems**
 

@@ -11,10 +11,6 @@ import { InterpolationBufferManager } from "./InterpolationBufferManager";
 import type { CreatureData } from "@/types/GameState";
 import { getTickIntervalMs } from "@/core/constants";
 
-/**
- * Renders creatures using custom GPU-based geometry and interpolation.
- * Uses GPU interpolation shader (mix START/END) with PixiJS v8 API.
- */
 export class InterpolatedCreatureRenderer {
   private static readonly FLOATS_PER_CREATURE = 7;
   private static readonly DEFAULT_MAX_CREATURES = 200_000;
@@ -52,12 +48,6 @@ export class InterpolatedCreatureRenderer {
     this.mesh.visible = false; // Hide until we have creatures
   }
 
-  /**
-   * Create PixiJS v8 Geometry with interleaved vertex buffer
-   *
-   * Layout: [startX, startY, endX, endY, startRot, endRot, size, id]
-   * 8 floats per creature = 32 bytes stride
-   */
   private createGeometry(): Geometry {
     const geometry = new Geometry();
 
@@ -140,12 +130,6 @@ export class InterpolatedCreatureRenderer {
     return geometry;
   }
 
-  /**
-   * Create GPU interpolation shader (Phase 2B) using PixiJS v8 API
-   *
-   * Interpolates position and rotation between START/END states
-   * Uses GLSL ES 3.0 for gl_VertexID support
-   */
   private createShader(texture: Texture): Shader {
     const vertexSrc = `#version 300 es
       precision highp float;
@@ -250,9 +234,6 @@ export class InterpolatedCreatureRenderer {
     });
   }
 
-  /**
-   * Initialize renderer with creatures (first frame)
-   */
   initialize(creatures: CreatureData[]): void {
     this.bufferManager.initialize(creatures);
     this.updateGeometryBuffer();
@@ -260,9 +241,6 @@ export class InterpolatedCreatureRenderer {
     this.mesh.visible = creatures.length > 0;
   }
 
-  /**
-   * Handle simulation tick (22.2Hz)
-   */
   onSimulationTick(creatures: CreatureData[]): void {
     this.bufferManager.update(creatures);
     this.updateGeometryBuffer();
@@ -273,9 +251,6 @@ export class InterpolatedCreatureRenderer {
     this.mesh.visible = creatures.length > 0;
   }
 
-  /**
-   * Render frame (60 FPS)
-   */
   render(
     deltaMS: number,
     cameraX: number,
@@ -303,9 +278,6 @@ export class InterpolatedCreatureRenderer {
     }
   }
 
-  /**
-   * Update PixiJS v8 geometry buffer from InterpolationBufferManager (double buffered)
-   */
   private updateGeometryBuffer(): void {
     const creatureCount = this.bufferManager.getCreatureCount();
 
@@ -343,10 +315,6 @@ export class InterpolatedCreatureRenderer {
     this.geometry.instanceCount = creatureCount;
   }
 
-  /**
-   * Ensure vertex buffers have capacity for given creature count.
-   * Only allocates if exceeding current capacity.
-   */
   private ensureVertexBufferCapacity(requiredCount: number): void {
     if (requiredCount <= this.vertexBufferCapacity) {
       return;
@@ -365,37 +333,22 @@ export class InterpolatedCreatureRenderer {
     this.vertexBufferCapacity = newCapacity;
   }
 
-  /**
-   * Get PixiJS mesh (for adding to stage)
-   */
   getMesh(): Mesh {
     return this.mesh;
   }
 
-  /**
-   * Get current creature count
-   */
   getCreatureCount(): number {
     return this.bufferManager.getCreatureCount();
   }
 
-  /**
-   * Get shader uniforms (for testing/debugging) - v8 API
-   */
   getUniforms(): Record<string, unknown> {
     return (this.shader.resources.uniforms as UniformGroup).uniforms as Record<string, unknown>;
   }
 
-  /**
-   * Check if buffer needs GPU upload
-   */
   isBufferDirty(): boolean {
     return this.bufferManager.isDirty();
   }
 
-  /**
-   * Update tick rate (when telemetry arrives with actual simulation tick rate)
-   */
   setTickRate(tickRateHz: number): void {
     this.tickIntervalMs = getTickIntervalMs(tickRateHz);
   }

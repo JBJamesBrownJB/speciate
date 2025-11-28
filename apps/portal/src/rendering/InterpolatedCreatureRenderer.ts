@@ -18,24 +18,30 @@ import { getTickIntervalMs } from "@/core/constants";
  * Phase 2C: Will add organic wiggle animation
  */
 export class InterpolatedCreatureRenderer {
+  private static readonly FLOATS_PER_CREATURE = 7;
+  private static readonly DEFAULT_MAX_CREATURES = 200_000;
+
   private bufferManager: InterpolationBufferManager;
   private geometry: Geometry;
   private shader: Shader;
   private mesh: Mesh;
 
-  // Double buffering for GPU stall prevention
+  // Double buffering for GPU stall prevention (pre-allocated to max capacity)
   private vertexBuffers: [Float32Array, Float32Array];
+  private vertexBufferCapacity: number;
   private currentBufferIndex: number = 0;
 
   // Interpolation state
   private interpolationAlpha: number = 0.0;
   private tickIntervalMs: number = Infinity; // No interpolation until tick rate is set
 
-  constructor(texture: Texture, _maxCreatures: number) {
-    this.bufferManager = new InterpolationBufferManager();
+  constructor(texture: Texture, maxCreatures: number = InterpolatedCreatureRenderer.DEFAULT_MAX_CREATURES) {
+    this.bufferManager = new InterpolationBufferManager(maxCreatures);
 
-    // Initialize double buffers (ping-pong)
-    this.vertexBuffers = [new Float32Array(0), new Float32Array(0)];
+    // Pre-allocate double buffers to max capacity (avoids GC pressure during spawning)
+    this.vertexBufferCapacity = maxCreatures;
+    const bufferSize = maxCreatures * InterpolatedCreatureRenderer.FLOATS_PER_CREATURE;
+    this.vertexBuffers = [new Float32Array(bufferSize), new Float32Array(bufferSize)];
 
     // Create custom geometry
     this.geometry = this.createGeometry();
@@ -303,31 +309,62 @@ export class InterpolatedCreatureRenderer {
    * Update PixiJS v8 geometry buffer from InterpolationBufferManager (double buffered)
    */
   private updateGeometryBuffer(): void {
-    const buffer = this.bufferManager.getBuffer();
     const creatureCount = this.bufferManager.getCreatureCount();
+
+    // When cleared, just set instance count to 0 - no buffer update needed
+    if (creatureCount === 0) {
+      this.geometry.instanceCount = 0;
+      return;
+    }
+
+    const buffer = this.bufferManager.getBuffer();
+
+    // Ensure capacity (only allocates if exceeding pre-allocated size)
+    this.ensureVertexBufferCapacity(creatureCount);
 
     // Swap to inactive buffer (prevents GPU stall while GPU reads active buffer)
     const nextBufferIndex = 1 - this.currentBufferIndex;
 
-    // Copy data to inactive buffer
-    if (this.vertexBuffers[nextBufferIndex].length !== buffer.length) {
-      this.vertexBuffers[nextBufferIndex] = new Float32Array(buffer.length);
-    }
+    // Copy data to inactive buffer (reuses pre-allocated buffer)
     this.vertexBuffers[nextBufferIndex].set(buffer);
 
     // Swap buffers
     this.currentBufferIndex = nextBufferIndex;
 
-    // Update the GPU buffer with new data (buffer created in createGeometry)
-    const activeBuffer = this.vertexBuffers[this.currentBufferIndex];
+    // Update the GPU buffer with new data
+    // Create a subarray view of just the used portion for PixiJS
+    const usedLength = creatureCount * InterpolatedCreatureRenderer.FLOATS_PER_CREATURE;
+    const activeBufferView = this.vertexBuffers[this.currentBufferIndex].subarray(0, usedLength);
     const pixiBuffer = this.geometry.getBuffer('aStartPos');
     if (pixiBuffer) {
-      pixiBuffer.data = activeBuffer;
+      pixiBuffer.data = activeBufferView;
       pixiBuffer.update();
     }
 
     // Update instance count for instanced rendering
     this.geometry.instanceCount = creatureCount;
+  }
+
+  /**
+   * Ensure vertex buffers have capacity for given creature count.
+   * Only allocates if exceeding current capacity.
+   */
+  private ensureVertexBufferCapacity(requiredCount: number): void {
+    if (requiredCount <= this.vertexBufferCapacity) {
+      return;
+    }
+
+    const newCapacity = Math.max(requiredCount, this.vertexBufferCapacity * 2);
+    const newSize = newCapacity * InterpolatedCreatureRenderer.FLOATS_PER_CREATURE;
+
+    const newBuffer0 = new Float32Array(newSize);
+    const newBuffer1 = new Float32Array(newSize);
+
+    newBuffer0.set(this.vertexBuffers[0]);
+    newBuffer1.set(this.vertexBuffers[1]);
+
+    this.vertexBuffers = [newBuffer0, newBuffer1];
+    this.vertexBufferCapacity = newCapacity;
   }
 
   /**

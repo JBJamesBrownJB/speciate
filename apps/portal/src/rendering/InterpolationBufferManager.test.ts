@@ -6,13 +6,14 @@ describe("InterpolationBufferManager", () => {
   let manager: InterpolationBufferManager;
 
   beforeEach(() => {
-    manager = new InterpolationBufferManager();
+    manager = new InterpolationBufferManager(1000); // Small capacity for tests
   });
 
   describe("initialization", () => {
-    it("should initialize with empty buffer", () => {
-      expect(manager.getBuffer().length).toBe(0);
+    it("should initialize with pre-allocated capacity", () => {
+      expect(manager.getBuffer().length).toBe(0); // No creatures yet
       expect(manager.getCreatureCount()).toBe(0);
+      expect(manager.getCapacity()).toBe(1000); // Pre-allocated
     });
 
     it("should initialize with START = END for first frame", () => {
@@ -168,7 +169,66 @@ describe("InterpolationBufferManager", () => {
     });
   });
 
-  describe("buffer resizing", () => {
+  describe("buffer capacity and reuse", () => {
+    it("should reuse buffer when spawning within capacity (no allocation)", () => {
+      const smallManager = new InterpolationBufferManager(100);
+      const initialCapacity = smallManager.getCapacity();
+
+      smallManager.initialize([{ id: 1, x: 0, y: 0, rotation: 0, size: 10 }]);
+
+      // Spawn more creatures (still within capacity)
+      for (let count = 10; count <= 90; count += 10) {
+        const creatures: CreatureData[] = [];
+        for (let i = 0; i < count; i++) {
+          creatures.push({ id: i, x: i, y: i, rotation: 0, size: 10 });
+        }
+        smallManager.update(creatures);
+
+        // Capacity should NOT change - buffer reused
+        expect(smallManager.getCapacity()).toBe(initialCapacity);
+        expect(smallManager.getCreatureCount()).toBe(count);
+      }
+    });
+
+    it("should grow capacity when exceeding initial capacity", () => {
+      const smallManager = new InterpolationBufferManager(10);
+      expect(smallManager.getCapacity()).toBe(10);
+
+      // Spawn more than capacity
+      const creatures: CreatureData[] = [];
+      for (let i = 0; i < 25; i++) {
+        creatures.push({ id: i, x: i, y: i, rotation: 0, size: 10 });
+      }
+      smallManager.initialize(creatures);
+
+      // Capacity should have grown (doubled or to fit)
+      expect(smallManager.getCapacity()).toBeGreaterThanOrEqual(25);
+      expect(smallManager.getCreatureCount()).toBe(25);
+    });
+
+    it("should handle buffer shrinking without reallocating", () => {
+      const smallManager = new InterpolationBufferManager(100);
+
+      // Initialize with many creatures
+      const manyCreatures: CreatureData[] = [];
+      for (let i = 0; i < 50; i++) {
+        manyCreatures.push({ id: i, x: i, y: i, rotation: 0, size: 10 });
+      }
+      smallManager.initialize(manyCreatures);
+      const capacityAfterInit = smallManager.getCapacity();
+
+      // Shrink to fewer creatures
+      smallManager.update([
+        { id: 1, x: 0, y: 0, rotation: 0, size: 10 },
+        { id: 2, x: 10, y: 10, rotation: 0, size: 10 },
+      ]);
+
+      // Capacity stays same (no shrink reallocation)
+      expect(smallManager.getCapacity()).toBe(capacityAfterInit);
+      expect(smallManager.getCreatureCount()).toBe(2);
+      expect(smallManager.getBuffer().length).toBe(14); // 2 * 7 floats
+    });
+
     it("should resize buffer when creature count increases significantly", () => {
       manager.initialize([{ id: 1, x: 0, y: 0, rotation: 0, size: 10 }]);
 
@@ -188,31 +248,6 @@ describe("InterpolationBufferManager", () => {
       const buffer = manager.getBuffer();
       expect(buffer.length).toBe(7000); // 1000 creatures * 7 floats
       expect(manager.getCreatureCount()).toBe(1000);
-    });
-
-    it("should handle buffer shrinking", () => {
-      // Start with many creatures
-      const manyCreatures: CreatureData[] = [];
-      for (let i = 0; i < 1000; i++) {
-        manyCreatures.push({
-          id: i,
-          x: i * 10,
-          y: i * 10,
-          rotation: 0,
-          size: 10,
-        });
-      }
-      manager.initialize(manyCreatures);
-
-      // Shrink to 10 creatures
-      manager.update([
-        { id: 1, x: 0, y: 0, rotation: 0, size: 10 },
-        { id: 2, x: 10, y: 10, rotation: 0, size: 10 },
-      ]);
-
-      expect(manager.getCreatureCount()).toBe(2);
-      // Buffer may stay allocated at larger size (optimization)
-      // but logical length should be correct
     });
   });
 

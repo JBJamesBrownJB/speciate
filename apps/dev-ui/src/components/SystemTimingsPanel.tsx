@@ -10,8 +10,8 @@ interface SparklineData {
   maxHistory: number;
 }
 
-const WARNING_THRESHOLD_US = 5000;
-const DANGER_THRESHOLD_US = 10000;
+const WARNING_THRESHOLD_US = 20000;
+const DANGER_THRESHOLD_US = 50000;
 
 const renderSparkline = (
   canvas: HTMLCanvasElement,

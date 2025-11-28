@@ -32,7 +32,41 @@ Scale backend ECS simulation to 150K-200K creatures through:
 
 ---
 
-## Phase 1: Uber-Struct Refactor (Days 1-2)
+## Phase 1: Archetype Churn Trial (Day 1 - VALIDATION)
+
+### Purpose
+Validate whether archetype fragmentation is a measurable performance problem before investing in uber-struct refactor.
+
+### Trial Design
+| Scenario | Description | Expected Outcome |
+|----------|-------------|------------------|
+| A (Stable) | 2.5K wanderers, no behavior changes | Baseline metrics |
+| B (Churning) | 2.5K creatures, constant behavior transitions | Measure degradation |
+
+### Metrics to Capture
+- Tick time (ms)
+- Archetype count (should grow in B if fragmentation)
+- IPC (should drop in B if cache thrashing)
+- L1/L2 cache miss rates
+
+### Decision Point
+- **B >> A (>20% slower):** Proceed to Phase 1b (uber-struct)
+- **B ≈ A (<10% difference):** Skip to Phase 2A (vision optimization)
+
+### Tasks
+- [ ] Design Scenario A: stable 2.5K wanderers
+- [ ] Design Scenario B: churning behavior mechanism (user to specify)
+- [ ] Run Scenario A, capture snapshot
+- [ ] Run Scenario B, capture snapshot
+- [ ] Compare metrics, make decision
+
+**Owner:** ecs-emma + instrumentation-ian
+
+---
+
+## Phase 1b: Uber-Struct Refactor (Day 2 - CONDITIONAL)
+
+**Only proceed if Phase 1 trial shows >20% degradation.**
 
 ### Expected Metrics
 | Metric | Before | After | Gain |
@@ -52,7 +86,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 - [ ] Migrate existing component-per-field to uber-structs
 - [ ] Verify stable archetype (no add/remove component churn)
 - [ ] Run benchmarks to validate cache locality improvement
-- [ ] **BENCHMARK:** Capture tick time @ 50K before/after
+- [ ] **BENCHMARK:** Capture tick time @ 5K before/after
 
 **Owner:** ecs-emma + rusty-ron
 **Validation:** instrumentation-ian (cache metrics)

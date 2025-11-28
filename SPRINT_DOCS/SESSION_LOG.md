@@ -79,3 +79,26 @@
 **Key Insight:** Stochastic vision (only 10% creatures update per tick) is now a Phase 2D requirement, not optional.
 
 ---
+
+## 2025-11-28: Phase 1 Changed to Validation Trial
+
+**Decision:** Before investing in uber-struct refactor, validate that archetype churn is actually a measurable problem.
+
+**Trial Design:**
+- **Scenario A (Stable):** 2.5K wanderers, no behavior changes
+- **Scenario B (Churning):** 2.5K creatures with constant behavior transitions
+
+**Metrics to Compare:**
+- Tick time difference
+- Archetype count growth
+- IPC / cache miss rates
+
+**Decision Point:**
+- If B >> A (>20% slower) → Proceed to Phase 1b (uber-struct)
+- If B ≈ A (<10% difference) → Skip to Phase 2A (vision optimization)
+
+**Rationale:** Real wins come from Phase 2 vision optimization. Uber-struct may provide only modest gains (5-10%). Before spending a day on implementation, prove it's worth the effort.
+
+**Next:** User to design behavior change mechanism for Scenario B.
+
+---

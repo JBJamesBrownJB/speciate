@@ -37,11 +37,12 @@ Scale backend ECS simulation to 150K-200K creatures through:
 
 ## Phase Overview
 
-1. **Phase 1:** Uber-Struct Refactor (Days 1-2)
-2. **Phase 2:** Vision Split Queries (Day 3 - CRITICAL)
-3. **Phase 3:** Changed<T> Filters + Vec2 (Day 4)
-4. **Phase 4:** Parallelization (Day 5)
-5. **Phase 5:** Performance Validation (Day 6)
+1. **Phase 1:** Archetype Churn Trial (Day 1 - VALIDATION)
+2. **Phase 1b:** Uber-Struct Refactor (Day 2 - IF trial shows impact)
+3. **Phase 2A:** Vision Split Queries (Day 3 - CRITICAL)
+4. **Phase 2B:** Changed<T> Filters + Vec2 (Day 4)
+5. **Phase 2C:** Parallelization (Day 5)
+6. **Phase 2D:** Stochastic Vision + Performance Validation (Day 6)
 
 ---
 
@@ -104,13 +105,56 @@ At 5K creatures, perception takes 34ms. This scales **quadratically**:
 
 ---
 
-## Phase 1: Uber-Struct Refactor
+## Phase 1: Archetype Churn Trial (VALIDATION)
 
-**Duration:** Days 1-2
+**Duration:** Day 1
+
+**Goal:** Validate whether archetype fragmentation is actually a measurable performance problem before investing in uber-struct refactor.
+
+### Trial Design
+
+**Scenario A - Baseline (Stable Archetypes):**
+- Spawn 2.5K wandering creatures
+- All creatures maintain stable component composition
+- No behavior transitions (no add/remove component operations)
+- Capture performance snapshot
+
+**Scenario B - Churning (Unstable Archetypes):**
+- Spawn 2.5K creatures with constant behavior changes
+- Creatures continuously transition between behavior states
+- Forces frequent add/remove component operations
+- Capture performance snapshot
+
+### Metrics to Compare
+
+| Metric | Scenario A (Stable) | Scenario B (Churning) | Decision |
+|--------|---------------------|----------------------|----------|
+| Tick time | Baseline | If significantly higher | Uber-struct needed |
+| Archetype count | Stable | If growing | Memory fragmentation |
+| IPC | Baseline | If lower | Cache thrashing |
+| L1/L2 miss rate | Baseline | If higher | Cache pollution |
+
+### Decision Point
+
+- **If B >> A (>20% slower):** Proceed to Phase 1b (uber-struct refactor)
+- **If B ≈ A (<10% difference):** Skip Phase 1b, proceed to Phase 2A (vision optimization)
+
+### Implementation Notes
+
+User to determine mechanism for forcing behavior changes in Scenario B. Options:
+- Timer-based behavior transitions
+- Forced state cycling (Wandering → Idle → Wandering)
+- Component add/remove stress test
+
+---
+
+## Phase 1b: Uber-Struct Refactor (CONDITIONAL)
+
+**Duration:** Day 2 (only if Phase 1 trial shows significant impact)
 
 **Goal:** Stable ECS archetypes (no add/remove component churn → cache-friendly)
 
-### Expected Metrics After Phase 1
+### Expected Metrics After Phase 1b
 | Metric | Before | After | Gain |
 |--------|--------|-------|------|
 | Tick time @ 5K | 50ms | 45ms | 5-10% |
@@ -118,7 +162,7 @@ At 5K creatures, perception takes 34ms. This scales **quadratically**:
 | L1 cache hit rate | Baseline | +5-10% | Measurable |
 | Archetype fragmentation | High | Stable | Eliminated |
 
-**Note:** Phase 1 provides modest gains. The real wins come from Phase 2 (vision optimization).
+**Note:** Phase 1b provides modest gains. The real wins come from Phase 2 (vision optimization).
 
 ### Remove Catatonic Component
 

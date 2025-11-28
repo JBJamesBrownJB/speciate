@@ -1,5 +1,4 @@
 use super::builder::CritBuilder;
-use crate::config::SpawningConfig;
 use crate::simulation::components::*;
 use crate::simulation::core::WorldBounds;
 use crate::simulation::Simulation;
@@ -121,36 +120,6 @@ pub fn spawn_initial_creatures_from_config(simulation: &mut Simulation, config: 
     }
 }
 
-pub fn spawn_initial_creatures(simulation: &mut Simulation, _config: &SpawningConfig) {
-    let obstacle = CritBuilder::new()
-        .at(0.0, 0.0)
-        .in_behavior(BehaviorMode::Catatonic)
-        .with_all_capabilities();
-    simulation.spawn_crit(obstacle);
-
-    simulation.spawn_crit(
-        CritBuilder::new()
-            .with_size(5.0)
-            .at(20.0, 0.0)
-            .as_seeker(-10.0, 0.0)
-            .with_all_capabilities(),
-    );
-
-    simulation.spawn_crit(
-        CritBuilder::new()
-            .at(-20.0, 0.0)
-            .as_seeker(10.0, 0.0)
-            .with_all_capabilities(),
-    );
-
-    simulation.spawn_crit(
-        CritBuilder::new()
-            .at(0.0, 20.0)
-            .as_seeker(-10.0, -10.0)
-            .with_all_capabilities(),
-    );
-}
-
 #[cfg(test)]
 pub fn spawn_seek_test_scenario(simulation: &mut Simulation) -> (u32, u32) {
     let seeker_id = {
@@ -169,36 +138,7 @@ pub fn spawn_seek_test_scenario(simulation: &mut Simulation) -> (u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SpawningConfig;
     use crate::simulation::SimulationBuilder;
-
-    #[test]
-    fn test_spawn_initial_creatures() {
-        let mut simulation = SimulationBuilder::new().build();
-        let config = SpawningConfig {
-            initial_population: 10,
-            min_size: 0.5,
-            max_size: 2.0,
-        };
-
-        spawn_initial_creatures(&mut simulation, &config);
-
-        assert_eq!(simulation.creature_count(), 4);
-    }
-
-    #[test]
-    fn test_spawn_demo_scenario() {
-        let mut simulation = SimulationBuilder::new().build();
-        let config = SpawningConfig {
-            initial_population: 0,
-            min_size: 0.5,
-            max_size: 2.0,
-        };
-
-        spawn_initial_creatures(&mut simulation, &config);
-
-        assert_eq!(simulation.creature_count(), 4);
-    }
 
     #[test]
     fn test_spawn_creature_with_defaults_creates_entity() {

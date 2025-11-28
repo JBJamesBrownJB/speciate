@@ -7,9 +7,9 @@
 //! - `simulation` - Core simulation logic (ECS, physics, behaviors)
 //! - `persistence` - Save state management
 //! - `ipc` - Inter-process communication (NAPI, snapshots)
-//! - `runner` - Simulation runner with configurable hooks
 //! - `config` - Configuration structs
 //! - `state` - State management
+//! - `napi_addon` - Native Node.js addon (NAPI-RS bridge)
 //! - `trials` - Trial loading system (dev-tools feature)
 //! - `instrumentation` - Performance metrics (dev-tools feature)
 //!
@@ -23,7 +23,6 @@ pub mod simulation;
 pub mod persistence;
 pub mod ipc;
 pub mod state;
-pub mod runner;
 #[cfg(feature = "napi")]
 pub mod napi_addon;
 
@@ -70,7 +69,7 @@ pub use simulation::perception::{AvoidanceBehavior, Perception};
 // Creature spawning
 pub use simulation::creatures::builder::CritBuilder;
 pub use simulation::creatures::spawner::{
-    spawn_creature, spawn_initial_creatures, CreatureSpawnRequest,
+    spawn_creature, CreatureSpawnRequest,
 };
 
 // Systems (for custom schedules)
@@ -83,9 +82,6 @@ pub use simulation::movement::{
 
 // IPC types
 pub use ipc::{CreatureSnapshot, GameState, SharedSnapshotQueue, SnapshotQueue};
-
-// Runner
-pub use runner::{ConsoleHooks, NoOpHooks, RunnerConfig, RunnerHooks, SimulationRunner};
 
 // NAPI exports
 

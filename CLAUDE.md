@@ -10,13 +10,18 @@
 - `docs/biology/biology-notes.md` - Zoologist consultation log
 - `SPRINT_DOCS/` - Current and past sprint plans
 
-**Current Sprint:** Sprint 13 - NAPI-RS Migration (COMPLETE)
-- Branch: `feat/sprint-13-napi-rs-migration`
-- Focus: Replace stdio IPC with native NAPI addon for 10x performance improvement
-- Status: ✅ Migration complete, stdio code archived
-- See: `SPRINT_DOCS/SPRINT_PLAN_sprint-13-napi-rs-migration.md`
+**Current Sprint:** Sprint 14 - Interpolation, Vision Refactor & Data-Oriented Design (IN PROGRESS)
+- Branch: `feat/sprint-14-interpolation-perception`
+- Focus: Scale to 150K-200K creatures via interpolation, vision optimization, and ECS refactoring
+- Status: Phase 1 complete (tick rate validated at 22.2Hz)
+- See: `SPRINT_DOCS/SPRINT_PLAN_sprint-14-interpolation-perception.md`
 
 **Recent Completion:** Sprint 13 delivered zero-copy double-buffer architecture, replacing stdio MessagePack IPC
+
+**Tick Rate:** 22.2Hz (hardcoded in `simulation_engine.rs`, ~45ms per tick)
+- Replaced configurable tick rate from old stdio system
+- Provides 2.7x capacity improvement vs 60Hz
+- Sufficient for 150K-200K creature target
 
 ---
 

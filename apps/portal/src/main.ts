@@ -1,16 +1,14 @@
-import { Application, Container, ParticleContainer, Rectangle } from "pixi.js";
+import { Application, Container } from "pixi.js";
 import { SpriteProvider } from "@/rendering/SpriteProvider";
 import { Camera } from "@/domain/Camera";
 import { Viewport } from "@/domain/Viewport";
-import { RENDERING_CONFIG, CAMERA_CONFIG, WORLD_CONFIG } from "@/core/constants";
-import { ParticlePool } from "@/infrastructure/ParticlePool";
+import { RENDERING_CONFIG, CAMERA_CONFIG } from "@/core/constants";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
 import { PerformanceMetrics } from "@/core/PerformanceMetrics";
 import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
-import { CreatureRenderer } from "@/rendering/CreatureRenderer";
-import type { CreatureData } from "@/types/GameState";
+import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
 
 function updateContainerSize(
   container: HTMLElement,
@@ -99,24 +97,7 @@ async function main(): Promise<void> {
 
     const texture = spriteProvider.getCreatureTexture();
 
-    const particleContainer = new ParticleContainer({
-      dynamicProperties: {
-        position: true,
-        rotation: true,
-        scale: true,
-        color: false,
-        vertex: false,
-      },
-    });
-    particleContainer.boundsArea = new Rectangle(
-      -WORLD_CONFIG.SIZE / 2,
-      -WORLD_CONFIG.SIZE / 2,
-      WORLD_CONFIG.SIZE,
-      WORLD_CONFIG.SIZE
-    );
-
     const worldContainer = new Container();
-    worldContainer.addChild(particleContainer);
     app.stage.addChild(worldContainer);
 
     camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
@@ -124,12 +105,8 @@ async function main(): Promise<void> {
     const scaleBarManager = new ScaleBarManager("scale-line", "scale-label");
     scaleBarManager.update(camera.zoom);
 
-    const particlePool = new ParticlePool();
-    const creatureRenderer = new CreatureRenderer(
-      particlePool,
-      particleContainer,
-      texture
-    );
+    const creatureRenderer = new InterpolatedCreatureRenderer(texture, 200000);
+    worldContainer.addChild(creatureRenderer.getMesh());
 
     const fpsSparkline = new FPSSparkline("fps-sparkline");
     const hudManager = new HUDManager(
@@ -147,17 +124,53 @@ async function main(): Promise<void> {
 
     const perfMetrics = new PerformanceMetrics(RENDERING_CONFIG.TARGET_FPS);
 
-    let latestCreatureData: CreatureData[] = [];
+    let isFirstFrame = true;
+    let lastFirstCreatureX: number | null = null;
+
     const ipcClient: IPCClient | null = createIPCClient();
 
     if (ipcClient) {
       await ipcClient.connect();
+
+      // Handle simulation tick updates via IPC callback (fires when new data arrives)
+      ipcClient.onStateUpdate((state) => {
+        const creatures = state.creatures;
+        currentCreatureCount = creatures.length;
+
+        // Update tick rate when telemetry provides it
+        if (state.tickRateHz && !isNaN(state.tickRateHz)) {
+          creatureRenderer.setTickRate(state.tickRateHz);
+        }
+
+        // Detect if positions actually changed (simulation tick occurred)
+        const currentFirstX = creatures.length > 0 ? creatures[0].x : null;
+        const positionsChanged = currentFirstX !== lastFirstCreatureX;
+
+        if (positionsChanged) {
+          lastFirstCreatureX = currentFirstX;
+
+          const spriteUpdateStart = performance.now();
+          if (creatures.length > 0) {
+            if (isFirstFrame) {
+              creatureRenderer.initialize(creatures);
+              isFirstFrame = false;
+            } else {
+              creatureRenderer.onSimulationTick(creatures);
+            }
+          } else {
+            creatureRenderer.onSimulationTick([]);
+          }
+          const spriteUpdateEnd = performance.now();
+          perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
+        }
+      });
 
       window.addEventListener("beforeunload", async () => {
         await ipcClient.disconnect();
       });
     }
 
+    // Render loop - only handles rendering, not simulation updates
     app.ticker.add(() => {
       const frameStart = performance.now();
       const deltaMs = frameStart - lastFrameTime;
@@ -165,21 +178,23 @@ async function main(): Promise<void> {
 
       perfMetrics.recordFrameTime(deltaMs);
 
+      // Update HUD with cached values
       const state = ipcClient?.getLatestState();
-
-      if (state && state.creatures) {
-        currentCreatureCount = state.creatures.length;
-        latestCreatureData = state.creatures;
-
+      if (state) {
         hudManager.updateTickRate(state.tickRateHz || 0);
         hudManager.updateCreatureCount(currentCreatureCount);
         hudManager.updateZoom(camera.zoom);
       }
 
-      const spriteUpdateStart = performance.now();
-      creatureRenderer.render(latestCreatureData);
-      const spriteUpdateEnd = performance.now();
-      perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
+      // Render with interpolation every frame
+      creatureRenderer.render(
+        deltaMs,
+        camera.x,
+        camera.y,
+        camera.zoom,
+        viewportWidth,
+        viewportHeight
+      );
 
       hudManager.updateFPS(fps);
 

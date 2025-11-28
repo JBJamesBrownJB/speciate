@@ -1,131 +1,53 @@
-# Sprint 13: Interpolation, Vision Refactor & Data-Oriented Design
+# Sprint 15: ECS Optimizations & Backend Performance
 
-**Branch:** `feat/sprint-14-interpolation-perception`
+**Branch:** `feat/sprint-15-ecs-optimizations` (to be created)
 **Status:** PLANNED
-**Prerequisites:** Sprint 12 complete (Hardware Metrics Cockpit)
-**Duration:** 11 days
+**Prerequisites:** Sprint 14 complete (Frontend GPU Interpolation)
+**Duration:** 6 days
 
 ---
 
 ## Sprint Goal
 
-Scale to 150K-200K creatures through:
-1. **20Hz simulation** → 60Hz interpolated rendering (smooth visuals, 3x capacity)
-2. **Perception → Vision refactor** (biological naming, FOV dot product, stochastic updates)
-3. **Uber-struct pattern** (stable archetypes, hot/cold split, cache-friendly)
-4. **Vec2 vector math** (SIMD optimization)
+Scale backend ECS simulation to 150K-200K creatures through:
+1. **Uber-struct pattern** (stable archetypes, hot/cold split, cache-friendly)
+2. **Vision system refactor** (remove Vec allocation bottleneck, FOV, stochastic updates)
+3. **Vec2 vector math** (SIMD optimization)
+4. **Parallelization** (multi-core utilization)
 
 **Key Architecture:**
-- Single-tick 20Hz simulation (proven simple, biologically realistic)
-- f64 precision SimulationTime (no drift over 24+ hours)
+- Stable ECS archetypes (no add/remove component churn)
+- Zero allocations in vision system
 - Component-based timing (10-100x faster than HashMap)
-- Per-creature reaction times (natural load distribution, no synchronization spikes)
+- Per-creature reaction times (natural load distribution)
 
 ---
 
-## Phase Order (User Priority)
+## Team
 
-1. ✅ Lower tick rate (20Hz)
-2. ✅ Frontend interpolation (60Hz position + rotation)
-3. ✅ Refactor components → uber-struct pattern
-4. ✅ Perception → Vision (stochastic updates, FOV, Vec2)
-5. ✅ Async zoom (decouple GPU from wheel events)
-6. ✅ Performance validation (150K-200K creatures)
-
----
-
-## Phase 1: Lower Main Tick Rate (20Hz)
-
-**Duration:** Day 1 (30 min)
-
-**Goal:** 20Hz baseline = 2.5x capacity vs 60Hz
-
-**Changes:**
-```rust
-// apps/simulation/src/config.rs
-impl Default for TimingConfig {
-    fn default() -> Self {
-        Self {
-            target_tick_rate: 20,  // Changed from 60
-            // ...
-        }
-    }
-}
-```
-
-**Validation:**
-- All systems use `DeltaTime` resource (no hardcoded assumptions)
-- 10K creatures: <30ms avg tick
-- 20K creatures: <40ms avg tick
-
-**Success:** Stable 20Hz, all tests pass, motion appears choppy (Phase 2 fixes)
+**ECS Optimization Lead:**
+- **ecs-emma** - ECS architecture, data-oriented design, performance profiling
+- **rusty-ron** - Backend implementation, Bevy ECS systems
+- **instrumentation-ian** - Performance analysis, hardware profiling
+- **architect-andy** - Architecture validation, technical standards
+- **zoologist-tom** - Biological validation (FOV, reaction times)
+- **pm-pam** - Sprint coordination, task breakdown
 
 ---
 
-## Phase 2: Frontend Interpolation (60Hz)
+## Phase Overview
 
-**Duration:** Days 2-3
-
-**Goal:** Smooth 60Hz rendering with position AND rotation interpolation
-
-### Backend: Previous Positions
-
-**File:** `apps/simulation/src/stdio/hooks.rs`
-
-```rust
-#[derive(Resource, Default)]
-pub struct PreviousPositions {
-    positions: HashMap<u32, (f32, f32, f32)>,  // (x, y, rotation)
-}
-
-impl PreviousPositions {
-    pub fn cleanup(&mut self, alive_ids: &HashSet<u32>) {
-        self.positions.retain(|id, _| alive_ids.contains(id));
-    }
-}
-
-// In serialize_snapshot_frame:
-// 1. Store current as previous
-// 2. Add prev_x, prev_y, prev_rotation to CreatureSnapshot
-// 3. Update positions after serialization
-// 4. Add cleanup system (prevents memory leak)
-```
-
-### Frontend: Interpolation
-
-**File:** `apps/portal/src/core/StateManager.ts`
-
-```typescript
-private lastPhysicsUpdate: number = 0;
-private readonly PHYSICS_PERIOD_MS = 50;  // 20Hz
-
-public getInterpolationAlpha(): number {
-  const elapsed = performance.now() - this.lastPhysicsUpdate;
-  return Math.min(1.0, elapsed / this.PHYSICS_PERIOD_MS);
-}
-```
-
-**File:** `apps/portal/src/simulation/SimulationManager.ts`
-
-```typescript
-// In render loop:
-const alpha = this.stateManager.getInterpolationAlpha();
-
-// Interpolate position
-const displayX = prevX + (currX - prevX) * alpha;
-const displayY = prevY + (currY - prevY) * alpha;
-
-// Interpolate rotation (handle wraparound)
-const displayRotation = this.lerpAngle(prevRotation, rotation, alpha);
-```
-
-**Success:** 60 FPS rendering, no stuttering/sliding artifacts, memory leak test passes
+1. **Phase 1:** Uber-Struct Refactor (Days 1-2)
+2. **Phase 2:** Vision Split Queries (Day 3 - CRITICAL)
+3. **Phase 3:** Changed<T> Filters + Vec2 (Day 4)
+4. **Phase 4:** Parallelization (Day 5)
+5. **Phase 5:** Performance Validation (Day 6)
 
 ---
 
-## Phase 3: Uber-Struct Refactor
+## Phase 1: Uber-Struct Refactor
 
-**Duration:** Days 4-5
+**Duration:** Days 1-2
 
 **Goal:** Stable ECS archetypes (no add/remove component churn → cache-friendly)
 
@@ -193,9 +115,9 @@ pub struct BiologyData {
 
 ---
 
-## Phase 4: Vision System + Comprehensive ECS Optimization
+## Phase 2: Vision System + Comprehensive ECS Optimization
 
-**Duration:** Days 6-9 (expanded from 2 days for thorough ECS audit)
+**Duration:** Days 3-5 (expanded from 2 days for thorough ECS audit)
 
 **Goal:** Transform perception → vision WITH comprehensive ECS optimization across ALL systems
 
@@ -214,7 +136,7 @@ let creatures: Vec<(Entity, Position, BodySize)> = query
 
 **The solution:** Split queries (different component sets = no borrow conflict)
 
-### Phase 4A: Vision Split Queries (Day 6 - CRITICAL)
+### Phase 2A: Vision Split Queries (Day 3 - CRITICAL)
 
 **Morning: Rename & Add Components**
 
@@ -355,7 +277,7 @@ pub fn update_vision_system(
 
 ---
 
-### Phase 4B: Changed<T> Filters + Vec2 Migration (Day 7)
+### Phase 2B: Changed<T> Filters + Vec2 Migration (Day 4)
 
 **Morning: Add Changed Filters**
 
@@ -413,7 +335,7 @@ pub fn update_vision_system(
 
 ---
 
-### Phase 4C: Parallelization (Day 8)
+### Phase 2C: Parallelization (Day 5)
 
 **Morning: Add par_iter_mut() to Pure Systems**
 
@@ -484,7 +406,7 @@ pub fn update_vision_system(
 
 ---
 
-### Phase 4D: Performance Validation (Day 9)
+### Phase 2D: Performance Validation (Day 6)
 
 **Morning: Benchmarks**
 
@@ -503,13 +425,13 @@ pub fn update_vision_system(
 6. Analyze bottlenecks:
    - Is vision still >40% of frame budget?
    - Which system is now the bottleneck?
-   - Do we need spatial grid (Sprint 14)?
+   - Do we need spatial grid (Sprint 16)?
 
 **Evening: Documentation**
 
 7. Update `docs/performance/optimization-backlog.md`
-8. Write Phase 4 completion report
-9. Document remaining bottlenecks for Sprint 14
+8. Write Phase 2 completion report
+9. Document remaining bottlenecks for Sprint 16
 
 **Success Criteria:**
 - ✅ Zero Vec allocations (profiler verified)
@@ -542,30 +464,28 @@ pub fn update_vision_system(
 
 ---
 
----
+## Phase 3: Final Validation
 
-## Phase 5: Performance Validation
+**Duration:** Day 6 (combined with Phase 2D)
 
-**Duration:** Day 11
-
-**Goal:** 150K-200K creatures achieved
+**Goal:** 150K-200K creatures achieved with all ECS optimizations
 
 ### Benchmarks
 
 **Baseline (20K):**
-- Tick time: <30ms avg
+- Tick time: <30ms avg (well under 45ms budget @ 22.2Hz)
 - Vision: ~10ms (5-20% creatures per tick)
 - Movement: ~8ms
-- Frontend: 60 FPS stable
+- Frontend: 60 FPS stable (from Sprint 14)
 
 **Target (150K):**
-- Tick time: <45ms avg
+- Tick time: <45ms avg (at 22.2Hz budget)
 - Vision: ~30ms (staggered updates = 7.5x fewer per tick)
 - Movement: ~12ms
 - Frontend: 60 FPS stable
 
 **Stretch (200K):**
-- Tick time: <50ms avg (acceptable at 20Hz)
+- Tick time: <50ms avg (slightly over budget, acceptable at 22.2Hz)
 - Vision: ~35ms
 - Movement: ~13ms
 - Frontend: 60 FPS stable
@@ -576,21 +496,21 @@ pub fn update_vision_system(
 2. Verify small reacts faster (visibly)
 3. Verify large appears ponderous
 4. Test predator sneaking from behind (FOV blind spot)
-5. Zoom smoothness at 150K creatures
+5. Zoom smoothness at 150K creatures (GPU interpolation from Sprint 14)
 
 ### Hardware Metrics
 
 Use cockpit to capture snapshots:
-- **Baseline:** Before tick rate change
-- **Post-interpolation:** After Phase 2
-- **Post-refactor:** After uber-struct changes
+- **Baseline:** Before Sprint 15
+- **Post-uber-struct:** After Phase 1
+- **Post-vision:** After Phase 2A
 - **Final:** All optimizations active
 
 Compare IPC, L1/L2 cache miss rates, frame times.
 
 **Success:**
-- 150K creatures @ 20Hz sustained
-- 60 FPS frontend (smooth interpolation)
+- 150K creatures @ 22.2Hz sustained
+- 60 FPS frontend (Sprint 14 GPU interpolation)
 - Vision <40% frame budget (was 70%)
 - Cache hit rates improved (uber-struct validation)
 
@@ -605,12 +525,14 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 - [ ] Memory leak prevention (despawn cleanup)
 - [ ] FOV blind spots (entities outside FOV not detected)
 - [ ] Vec2 math (distance, normalize, dot product)
+- [ ] BehaviorMode::Catatonic replaces Catatonic component
+- [ ] Uber-struct refactor doesn't change behavior
 
 **Integration Tests:**
-- [ ] 20K creatures stable at 20Hz
-- [ ] Interpolation smooth at 60 FPS
-- [ ] Large creatures visibly slower
-- [ ] Zoom smooth at 150K creatures
+- [ ] 20K creatures stable at 22.2Hz
+- [ ] Large creatures visibly slower reactions
+- [ ] 150K creatures @ <45ms tick time
+- [ ] Zero allocations in vision system (profiler verified)
 
 ---
 
@@ -640,10 +562,10 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 ## Success Metrics
 
 **Performance:**
-- [ ] 150K creatures @ 20Hz (HIGH confidence: 90%)
-- [ ] 200K creatures @ 20Hz (MEDIUM confidence: 60%)
-- [ ] 60 FPS frontend rendering
-- [ ] Vision <40% frame budget
+- [ ] 150K creatures @ 22.2Hz (HIGH confidence: 90%)
+- [ ] 200K creatures @ 22.2Hz (MEDIUM confidence: 60%)
+- [ ] Vision <40% frame budget (was 70%)
+- [ ] Zero Vec allocations in vision system
 
 **Behavior:**
 - [ ] Size-based reaction times visible
@@ -654,14 +576,11 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 - [ ] Stable archetypes (no add/remove churn)
 - [ ] SIMD vector math throughout
 - [ ] Component-based timing (not HashMap)
+- [ ] Multi-core parallelization on pure systems
 
 ---
 
 ## Risks & Mitigations
-
-**Risk:** Frontend interpolation looks floaty
-- **Mitigation:** Linear lerp only (no easing), test with 20K first
-- **Fallback:** Increase to 30Hz physics if needed
 
 **Risk:** Uber-struct refactor breaks existing systems
 - **Mitigation:** TDD - write tests first, refactor incrementally
@@ -671,10 +590,25 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 - **Mitigation:** Balance FOV width (start with 180°, tune based on gameplay)
 - **Validation:** Playtesting with zoologist-tom validation
 
+**Risk:** Vec2 migration introduces subtle bugs
+- **Mitigation:** Comprehensive unit tests for all vector operations
+- **Testing:** Compare outputs before/after migration
+
+**Risk:** Parallelization introduces race conditions
+- **Mitigation:** Only parallelize pure systems (no entity lookups)
+- **Testing:** Determinism tests (same seed = same output)
+
 ---
 
-## Future Work (Sprint 14+)
+## Future Work
 
+**Sprint 16 (Organic Shader Animation):**
+- Organic wiggle animation (procedural vertex deformation)
+- Movement-coupled animation (speed affects wiggle intensity)
+- Biological locomotion patterns (fish swimming, snake slithering)
+- zoologist-tom collaboration for biological accuracy
+
+**Sprint 17+ (Advanced Features):**
 - DNA-driven `neural_speed` gene (0.5-2.0 multiplier, costs energy²)
 - Spatial grid for O(1) vision queries (if 200K fails)
 - Metabolic brain cost (fast reactions = high energy drain)
@@ -685,7 +619,8 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 
 ## References
 
-- **Sprint 11:** IPC optimization, dual-tick abandoned
-- **Sprint 12:** Hardware Metrics Cockpit complete
-- **Biology notes:** `docs/biology/biology-notes.md` (lines 850-956)
-- **Optimization backlog:** `docs/performance/optimization-backlog.md` (lines 29-33)
+- **Sprint 14:** Frontend GPU interpolation (prerequisite)
+- **Sprint 13:** NAPI-RS migration (zero-copy buffers)
+- **Sprint 12:** Hardware Metrics Cockpit
+- **Biology notes:** `docs/biology/biology-notes.md`
+- **Optimization backlog:** `docs/performance/optimization-backlog.md`

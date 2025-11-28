@@ -19,9 +19,6 @@ pub use command_executor::CommandReceiver;
 #[cfg(feature = "dev-tools")]
 pub use command_executor::command_executor_system;
 
-pub mod command_result;
-pub use command_result::CommandResult;
-
 pub mod sim_command;
 pub use sim_command::SimCommand;
 

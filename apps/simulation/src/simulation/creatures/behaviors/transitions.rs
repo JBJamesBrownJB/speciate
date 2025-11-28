@@ -4,30 +4,7 @@ use bevy_ecs::prelude::*;
 
 
 const AGE_INCREMENT_PER_TICK: f32 = 0.001;
-
-
-#[allow(dead_code)]
 const ENERGY_COST_WANDERING: f32 = 0.01;
-#[allow(dead_code)]
-const ENERGY_COST_FLEEING: f32 = 0.05;
-#[allow(dead_code)]
-const ENERGY_RESTORE_FEEDING: f32 = 0.1;
-#[allow(dead_code)]
-const ENERGY_RESTORE_RESTING: f32 = 0.02;
-#[allow(dead_code)]
-const ENERGY_THRESHOLD_MODERATE: f32 = 50.0;
-#[allow(dead_code)]
-const ENERGY_THRESHOLD_HIGH: f32 = 80.0;
-
-
-#[allow(dead_code)]
-const TRANSITION_PROB_WANDERING_TO_FLEEING: f64 = 0.01;
-#[allow(dead_code)]
-const TRANSITION_PROB_WANDERING_TO_RESTING: f64 = 0.001;
-#[allow(dead_code)]
-const TRANSITION_PROB_FLEEING_TO_WANDERING: f64 = 0.02;
-#[allow(dead_code)]
-const TRANSITION_PROB_RESTING_TO_WANDERING: f64 = 0.05;
 
 pub fn behavior_transition_system(
     _commands: Commands,

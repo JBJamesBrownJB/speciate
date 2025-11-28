@@ -11,6 +11,13 @@ use crate::simulation::movement::{integrate_motion_system, rotation_system};
 use crate::simulation::perception;
 use bevy_ecs::prelude::*;
 
+/// Result of loading a trial
+pub struct LoadTrialResult {
+    pub success: bool,
+    pub message: String,
+    pub command_type: String,
+}
+
 pub struct SimulationBuilder {
     world: World,
     schedule: Schedule,
@@ -226,12 +233,10 @@ impl Simulation {
     #[cfg_attr(not(feature = "dev-tools"), allow(unused_variables))]
     pub fn load_trial<F>(&mut self, trial_name: &str, callback: F)
     where
-        F: FnOnce(crate::ipc::CommandResult) + 'static,
+        F: FnOnce(LoadTrialResult) + 'static,
     {
-        use crate::ipc::CommandResult;
-
         let Some(ref _assets_path) = self.assets_path else {
-            callback(CommandResult {
+            callback(LoadTrialResult {
                 success: false,
                 message: "Assets path not set. Call set_assets_path() first.".to_string(),
                 command_type: "LoadTrial".to_string(),
@@ -244,14 +249,14 @@ impl Simulation {
             use crate::trials;
             match trials::loader::load_trial(&mut self.world, trial_name) {
                 Ok(config) => {
-                    callback(CommandResult {
+                    callback(LoadTrialResult {
                         success: true,
                         message: format!("Loaded trial '{}' ({} spawn patterns)", config.name, config.spawns.len()),
                         command_type: "LoadTrial".to_string(),
                     });
                 }
                 Err(e) => {
-                    callback(CommandResult {
+                    callback(LoadTrialResult {
                         success: false,
                         message: format!("Failed to load trial '{}': {}", trial_name, e),
                         command_type: "LoadTrial".to_string(),
@@ -262,7 +267,7 @@ impl Simulation {
 
         #[cfg(not(feature = "dev-tools"))]
         {
-            callback(CommandResult {
+            callback(LoadTrialResult {
                 success: false,
                 message: "Trial loading requires dev-tools feature".to_string(),
                 command_type: "LoadTrial".to_string(),

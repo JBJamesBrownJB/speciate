@@ -600,8 +600,15 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 
 ---
 
-## Future Work (Sprint 16+)
+## Future Work
 
+**Sprint 16 (Organic Shader Animation):**
+- Organic wiggle animation (procedural vertex deformation)
+- Movement-coupled animation (speed affects wiggle intensity)
+- Biological locomotion patterns (fish swimming, snake slithering)
+- zoologist-tom collaboration for biological accuracy
+
+**Sprint 17+ (Advanced Features):**
 - DNA-driven `neural_speed` gene (0.5-2.0 multiplier, costs energy²)
 - Spatial grid for O(1) vision queries (if 200K fails)
 - Metabolic brain cost (fast reactions = high energy drain)

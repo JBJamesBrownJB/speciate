@@ -13,9 +13,7 @@ import { getTickIntervalMs } from "@/core/constants";
 
 /**
  * Renders creatures using custom GPU-based geometry and interpolation.
- *
- * Phase 2B: GPU interpolation shader (mix START/END) with PixiJS v8 API
- * Phase 2C: Will add organic wiggle animation
+ * Uses GPU interpolation shader (mix START/END) with PixiJS v8 API.
  */
 export class InterpolatedCreatureRenderer {
   private static readonly FLOATS_PER_CREATURE = 7;

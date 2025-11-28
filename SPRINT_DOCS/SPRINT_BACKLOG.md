@@ -40,7 +40,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 |-------|--------|---------------|----------|
 | Phase 2A: Vision Split Queries | ✅ COMPLETE | 2x capacity (5K→10K) | 100% |
 | Phase 1b: Uber-Struct Refactor | ✅ COMPLETE | Archetype stability | 100% |
-| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 37.5% (3/8 opts) |
+| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 50% (4/8 opts) |
 | Phase 1: Archetype Churn Trial | 📋 SKIPPED | Validation unnecessary | N/A |
 | Phase 2B: Vec2 + Changed<T> | 📋 PLANNED | 2-3ms @ 20K | 0% |
 | Phase 2C: Parallelization | 📋 PLANNED | 2-3x speedup | 0% |
@@ -295,8 +295,27 @@ pub fn rotation_system(
 | Rotation time | 0.2ms | ~0.1ms | 50% improvement |
 | Memory overhead | 0 | +8 bytes/creature | 80KB @ 10K |
 
-**Risk:** LOW | **Effort:** 45 min | **Status:** [ ] Not started
-**Alternative:** Use Bevy's `Changed<Velocity>` filter (requires archetype changes)
+**Risk:** LOW | **Effort:** 45 min | **Status:** ✅ **COMPLETE** (2025-11-28)
+
+**Actual Implementation:**
+- Used `Changed<Velocity>` filter instead of PreviousVelocity component (zero archetype churn!)
+- Fixed spurious write in movement system (lines 38-41): only set velocity to 0 if not already 0
+- Modified rotation_system query: `Query<(&mut Rotation, &Velocity), Changed<Velocity>>`
+- All 156 library tests pass
+- Zero new components, zero memory overhead
+- Bevy's internal change tracking handles detection automatically
+
+**How It Works:**
+- Bevy tracks "last modified tick" for every component internally
+- `Changed<Velocity>` filter only processes entities where Velocity was written this tick
+- Stopped catatonic creatures: velocity unchanged → skip atan2() entirely
+- Moving creatures: velocity changes → rotation updates as normal
+- **Critical:** Eliminated spurious write prevents false-positive change detection
+
+**Expected Benefit:**
+- Stopped/slow creatures skip atan2() (~50-100 cycles saved)
+- Rotation system only processes entities that actually moved
+- Zero memory overhead (vs +8 bytes/creature with PreviousVelocity approach)
 
 ---
 

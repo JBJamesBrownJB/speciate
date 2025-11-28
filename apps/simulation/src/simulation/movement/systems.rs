@@ -35,8 +35,10 @@ pub fn integrate_motion_system(
 
             let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
             if speed_sq < STOPPED_THRESHOLD * STOPPED_THRESHOLD {
-                velocity.vx = 0.0;
-                velocity.vy = 0.0;
+                if velocity.vx != 0.0 || velocity.vy != 0.0 {
+                    velocity.vx = 0.0;
+                    velocity.vy = 0.0;
+                }
                 continue;
             }
 

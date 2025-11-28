@@ -258,3 +258,248 @@ Phase 2D:     ██████████████████████
 - Frontend ready for high entity counts (200K+)
 - Backend is the bottleneck (vision Vec allocations)
 - Focus: zero-allocation, cache-friendly, parallel architecture
+
+---
+
+## Phase 3: Spatial Grid + Parallel Perception (DEFERRED TO SPRINT 16+)
+
+**Status:** NOT IN SPRINT 15 SCOPE
+**Trigger:** If Phase 2D validation shows perception still bottleneck at 150K creatures
+**Duration:** 4-5 days
+**Owner:** ecs-emma + rusty-ron + instrumentation-ian
+
+### ⚠️ Critical Context: Why Rayon Alone Fails
+
+**The Math:**
+- 150K creatures O(n²): 22.5 billion comparisons
+- With Rayon (8 cores): 2.8 billion comparisons per core
+- Estimated time: **3,825ms** (85x over 45ms budget)
+
+**Conclusion:** Must fix algorithmic complexity BEFORE parallelizing.
+
+### Spatial Grid Architecture
+
+**Complexity Reduction:**
+- Current: O(n²) = 150K × 150K = 22.5B comparisons
+- With Grid: O(n × k) = 150K × 180 = 27M comparisons
+- **Reduction:** 833x fewer operations
+
+**Expected Performance:**
+- Sequential grid @ 150K: ~40ms
+- Parallel grid (8 cores) @ 150K: **~7ms**
+- With stochastic vision (10% per tick): **~0.7ms**
+
+---
+
+### Day 1-2: Spatial Grid Foundation
+
+**Tasks:**
+
+- [ ] **Design:** Review `docs/architecture/spatial-partitioning.md` spec
+- [ ] **RED:** Write `test_spatial_grid_query_returns_nearby_entities()`
+- [ ] **RED:** Write `test_spatial_grid_empty_query_returns_nothing()`
+- [ ] **RED:** Write `test_spatial_grid_boundary_conditions()`
+- [ ] **GREEN:** Implement `SpatialGrid` struct
+  - [ ] `new(cell_size: f32)` - Initialize with 200m cells
+  - [ ] `insert(entity, x, y, radius)` - Add to grid
+  - [ ] `remove(entity)` - Remove from grid
+  - [ ] `query_radius_iter(x, y, radius)` - Iterator over nearby entities
+  - [ ] `clear()` - Reset grid (per-tick)
+  - [ ] `world_to_cell(x, y)` - Coordinate conversion
+  - [ ] `get_position(entity)` - Position cache lookup
+- [ ] **REFACTOR:** Optimize data structures
+  - [ ] Use `FxHashMap` for cell storage
+  - [ ] Cache `inv_cell_size` (avoid division)
+  - [ ] Pre-allocate cell vectors with `with_capacity(20)`
+- [ ] **Test:** Unit test grid at 1K, 10K, 100K entities
+- [ ] **Benchmark:** Grid insertion/query performance
+
+**Owner:** rusty-ron + ecs-emma
+
+---
+
+### Day 3: Integration with Perception System
+
+**Tasks:**
+
+- [ ] **RED:** Write `test_perception_with_grid_handles_25k_under_20ms()`
+- [ ] **RED:** Write `test_grid_perception_matches_naive_results()`
+- [ ] **Design:** Create `rebuild_spatial_grid_system()`
+  - Runs BEFORE perception in schedule
+  - Clears grid, repopulates from Position/BodySize query
+- [ ] **GREEN:** Integrate grid into perception
+  - [ ] Add `SpatialGrid` as `Resource`
+  - [ ] Update `update_perception_system()` to use `grid.query_radius_iter()`
+  - [ ] Remove `PerceptionScratchBuffer` (obsolete)
+  - [ ] Update perception system ordering (grid rebuild → perception)
+- [ ] **REFACTOR:** Optimize grid rebuild
+  - [ ] Batch position updates
+  - [ ] Measure rebuild cost (target: <2ms @ 150K)
+- [ ] **Test:** Verify behavior matches old system (no regressions)
+- [ ] **Benchmark:** Perception time @ 25K, 50K, 100K
+
+**Owner:** ecs-emma + rusty-ron
+
+---
+
+### Day 4: Add Rayon Parallelization
+
+**Tasks:**
+
+- [ ] **Setup:** Add `rayon = "1.10"` to `Cargo.toml`
+- [ ] **RED:** Write `test_parallel_perception_deterministic()`
+- [ ] **RED:** Write `test_parallel_perception_no_race_conditions()`
+- [ ] **GREEN:** Parallelize perception computation
+  - [ ] Collect entity data into `Vec<(Entity, f32, f32, f32, bool)>`
+  - [ ] Replace `.iter()` with `.par_iter()` on entity_data
+  - [ ] Ensure grid is read-only during parallel phase
+  - [ ] Collect results into `Vec<(Entity, [Entity; 40], u8)>`
+  - [ ] Sequential apply phase (write to `Perception` component)
+- [ ] **REFACTOR:** Tune batch sizes
+  - [ ] Test `min_batch_size(64)`, `min_batch_size(256)`, `min_batch_size(512)`
+  - [ ] Choose optimal based on 150K creature benchmark
+- [ ] **Test:** Determinism (same seed = same results)
+- [ ] **Benchmark:** Speedup on 4-core, 8-core, 16-core CPUs
+
+**Owner:** rusty-ron + instrumentation-ian
+
+---
+
+### Day 5: Benchmarking & Validation
+
+**Tasks:**
+
+- [ ] **Benchmark:** Create `apps/simulation/benches/perception.rs`
+  - [ ] Sequential naive (O(n²) baseline)
+  - [ ] Sequential grid (O(n×k))
+  - [ ] Parallel grid (O(n×k) / 8 cores)
+- [ ] **Run benchmarks:**
+  - [ ] 1K creatures (baseline)
+  - [ ] 5K creatures (current production scale)
+  - [ ] 25K creatures (Phase 2 target)
+  - [ ] 50K creatures (intermediate)
+  - [ ] 100K creatures (stress test)
+  - [ ] 150K creatures (primary target)
+  - [ ] 200K creatures (stretch goal)
+- [ ] **Hardware profiling:**
+  - [ ] Capture IPC before/after
+  - [ ] Measure L1/L2 cache hit rates
+  - [ ] CPU utilization (should be 50%+ on 8-core)
+  - [ ] Memory allocation overhead (grid rebuild)
+- [ ] **Validation:**
+  - [ ] Verify 150K @ <10ms perception (parallel grid)
+  - [ ] Verify no behavior regressions (all tests pass)
+  - [ ] Verify no memory leaks (grid cleanup)
+- [ ] **Documentation:**
+  - [ ] Update `docs/performance/optimization-backlog.md`
+  - [ ] Create Phase 3 completion report
+  - [ ] Document remaining bottlenecks
+
+**Owner:** instrumentation-ian + ecs-emma
+
+---
+
+### Expected Metrics (Phase 3 Complete)
+
+| Metric | Before (O(n²)) | After (Grid) | After (Grid + Rayon) | Improvement |
+|--------|----------------|--------------|----------------------|-------------|
+| Perception @ 5K | 34ms | ~1ms | ~0.5ms | 68x faster |
+| Perception @ 25K | ~850ms | ~6ms | ~2ms | 425x faster |
+| Perception @ 50K | ~3,400ms | ~12ms | ~3ms | 1,133x faster |
+| Perception @ 150K | ~30,600ms | ~40ms | **~7ms** | 4,371x faster |
+| Perception @ 200K | N/A | ~53ms | **~10ms** | Enables 200K! |
+| Max creatures @ 45ms | ~5K | ~50K | **200K+** | **40x capacity** |
+
+### Cell Size Tuning (Empirical)
+
+**Tasks:**
+
+- [ ] Test cell size 100m (many cells, more overhead)
+- [ ] Test cell size 150m
+- [ ] Test cell size 200m (spec recommendation)
+- [ ] Test cell size 300m
+- [ ] Test cell size 500m (fewer cells, more entities per cell)
+- [ ] Choose optimal based on 150K benchmark
+- [ ] Document rationale in `docs/architecture/spatial-partitioning.md`
+
+**Expected:** 200m is optimal (spec is correct)
+
+---
+
+### Success Criteria
+
+**Phase 3 Complete When:**
+
+- [ ] Spatial grid handles 150K creatures @ <40ms perception (sequential)
+- [ ] Parallel grid handles 150K creatures @ <10ms perception (8 cores)
+- [ ] Benchmarks show 500x+ speedup vs naive O(n²) at 150K
+- [ ] Zero regression in perception behavior (tests pass)
+- [ ] Cache hit rates improved (hardware profiling confirms)
+- [ ] No memory leaks (grid properly cleared each tick)
+- [ ] 200K creatures achievable @ <50ms tick time
+
+---
+
+### Dependencies
+
+**Cargo.toml:**
+```toml
+[dependencies]
+rayon = "1.10"
+rustc-hash = "1.1"  # FxHashMap (faster than std HashMap)
+```
+
+**System Ordering:**
+```
+rebuild_spatial_grid_system
+  .before(update_perception_system)
+```
+
+---
+
+### Risks & Mitigations
+
+**Risk:** Grid rebuild overhead negates gains
+- **Mitigation:** Benchmark rebuild separately, target <2ms @ 150K
+- **Fallback:** Incremental grid updates (only move changed entities)
+
+**Risk:** Cell size incorrect (too large/small)
+- **Mitigation:** Empirical testing with 100m, 200m, 300m, 500m
+- **Validation:** Benchmark perception time at each cell size
+
+**Risk:** Rayon overhead exceeds benefits at low creature counts
+- **Mitigation:** Conditional parallelization (only above 10K creatures)
+- **Code:** `if entity_count > 10_000 { par_iter } else { iter }`
+
+**Risk:** Race conditions in parallel perception
+- **Mitigation:** Grid is read-only during parallel phase
+- **Testing:** Determinism tests, ThreadSanitizer in CI
+
+---
+
+### Alternative Approaches (If Phase 3 Insufficient)
+
+**Option A: Stochastic Vision + Spatial Grid**
+- Combine 10% per-tick updates with spatial grid
+- 150K × 10% × 180 neighbors = 2.7M comparisons
+- 2.7M / 8 cores = ~340K per core = **~0.7ms**
+- **Headroom:** 64x under budget!
+
+**Option B: Hierarchical Spatial Grid (Quadtree)**
+- For very large worlds (>10,000m × 10,000m)
+- Adaptive cell sizing based on entity density
+- More complex, only if linear grid insufficient
+
+**Option C: GPU-Accelerated Perception**
+- Compute shader for distance checks
+- 1 million+ creatures possible
+- Requires major architecture change (Sprint 18+)
+
+---
+
+### References
+
+- **Spec:** `docs/architecture/spatial-partitioning.md`
+- **Emma's Analysis:** SPRINT_DOCS/SPRINT_PLAN_sprint-15-ecs-optimizations.md (Phase 3)
+- **Rayon Docs:** https://docs.rs/rayon/latest/rayon/
+- **FxHashMap:** https://docs.rs/rustc-hash/latest/rustc_hash/

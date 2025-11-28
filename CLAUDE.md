@@ -3,6 +3,7 @@
 ## Quick Reference
 
 **Key Documentation:**
+- `docs/spec/` - **Live specification of implemented features** (brain-spec.md, etc.)
 - `docs/archive/dual-tick/` - ⚠️ ABANDONED architecture (Sprint 11, archived for learning)
 - `docs/architecture/napi-architecture.md` - Current NAPI-RS integration (zero-copy buffers)
 - `docs/biology/dna-driven-design.md` - DNA-driven design principles (detailed)
@@ -74,6 +75,45 @@ The complete TDD cycle has three mandatory stages:
 - Jump into fixing without a failing test first
 
 **Exception:** Environment issues (GPU drivers, Docker config) don't need tests.
+
+---
+
+## Specification Documentation - MANDATORY
+
+**CRITICAL: Update `docs/spec/` when implementing features.**
+
+### What Goes in Specs
+
+The `docs/spec/` folder contains **live documentation of IMPLEMENTED features**:
+- Current behavior (not planned/future)
+- Constants and their values
+- Component structures
+- System interactions
+- Design decisions with rationale
+
+### When to Update
+
+**After implementing a feature:**
+1. Create or update the relevant spec file (e.g., `brain-spec.md`, `movement-spec.md`)
+2. Document what IS, not what WILL BE
+3. Include actual constant values from code
+4. Describe system interactions
+
+**Spec files:**
+- `brain-spec.md` - Brain component, decision timing, panic override
+- `movement-spec.md` - Movement systems, steering behaviors
+- `perception-spec.md` - Vision system, neighbor detection
+- (Add more as features are implemented)
+
+### Format
+
+Each spec should include:
+- **Status:** Implemented/Partial/Planned
+- **Location:** Source file paths
+- **Overview:** What the system does
+- **Components:** Structs and enums
+- **Constants:** Hardcoded values with descriptions
+- **Integration:** How it connects to other systems
 
 ---
 

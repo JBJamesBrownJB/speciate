@@ -3,7 +3,6 @@ use bevy_ecs::world::World;
 use std::fs;
 
 use super::{CreatureType, SpawnPattern, TrialConfig};
-use crate::simulation::core::components::Catatonic;
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::components::state::BehaviorMode;
 use crate::simulation::creatures::systems::NextCreatureId;
@@ -131,7 +130,7 @@ fn spawn_creature(
             let bundle = builder.build(creature_id);
 
 
-            world.spawn((bundle, Catatonic));
+            world.spawn(bundle);
         }
 
         CreatureType::Seeker => {
@@ -156,6 +155,17 @@ fn spawn_creature(
                 .at(x, y)
                 .with_wandering()
                 .in_behavior(BehaviorMode::Wandering);
+            let bundle = builder.build(creature_id);
+
+            world.spawn(bundle);
+        }
+
+        CreatureType::Cycling => {
+            let builder = CritBuilder::new()
+                .at(x, y)
+                .with_wandering()
+                .with_cycling_brain()
+                .in_behavior(BehaviorMode::Catatonic);
             let bundle = builder.build(creature_id);
 
             world.spawn(bundle);
@@ -186,8 +196,10 @@ mod tests {
         spawn_pattern(&mut world, &pattern);
 
 
-        let mut query = world.query::<(&Position, &Catatonic)>();
-        let results: Vec<_> = query.iter(&world).collect();
+        let mut query = world.query::<(&Position, &CreatureState)>();
+        let results: Vec<_> = query.iter(&world)
+            .filter(|(_, state)| state.behavior == BehaviorMode::Catatonic)
+            .collect();
 
         assert_eq!(results.len(), 1);
         let (pos, _) = results[0];
@@ -390,7 +402,11 @@ mod tests {
 
 
 
-        let catatonic_count = world.query::<&Catatonic>().iter(&world).count();
+        let catatonic_count = world
+            .query::<&CreatureState>()
+            .iter(&world)
+            .filter(|state| state.behavior == BehaviorMode::Catatonic)
+            .count();
         let seeker_count = world
             .query::<&CreatureState>()
             .iter(&world)

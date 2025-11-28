@@ -103,10 +103,6 @@ impl Default for ActualTickRate {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, Reflect)]
-#[reflect(Component)]
-pub struct Catatonic;
-
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct BoundaryConfig {
     pub min_x: f32,

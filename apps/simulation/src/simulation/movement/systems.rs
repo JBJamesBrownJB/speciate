@@ -4,7 +4,7 @@ use crate::config::MovementConfig;
 use crate::instrumentation::SystemTimings;
 use crate::simulation::components::*;
 use crate::simulation::core::components::*;
-use crate::simulation::movement::constants::{MAX_SPEED, VELOCITY_DAMPING};
+use crate::simulation::movement::constants::{MAX_SPEED, STOPPED_THRESHOLD, VELOCITY_DAMPING};
 use crate::simulation::movement::noise::perlin_locomotion_noise;
 use bevy_ecs::prelude::*;
 pub fn integrate_motion_system(
@@ -30,6 +30,22 @@ pub fn integrate_motion_system(
     let tick = physics_tick.get();
     for (entity, size, mut position, mut velocity, mut acceleration, creature_state) in query.iter_mut() {
         if creature_state.behavior == BehaviorMode::Catatonic {
+            acceleration.ax = 0.0;
+            acceleration.ay = 0.0;
+
+            let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+            if speed_sq < STOPPED_THRESHOLD * STOPPED_THRESHOLD {
+                velocity.vx = 0.0;
+                velocity.vy = 0.0;
+                continue;
+            }
+
+            velocity.vx *= VELOCITY_DAMPING;
+            velocity.vy *= VELOCITY_DAMPING;
+
+            position.x += velocity.vx * dt;
+            position.y += velocity.vy * dt;
+
             continue;
         }
         velocity.vx += acceleration.ax * dt;

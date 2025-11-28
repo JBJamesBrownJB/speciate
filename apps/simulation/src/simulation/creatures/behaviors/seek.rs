@@ -13,7 +13,7 @@ pub fn seek_system(
         (
             &mut Position,
             &mut Acceleration,
-            &mut Velocity,
+            &Velocity,
             &BodySize,
             &Target,
             &mut CreatureState,
@@ -25,7 +25,7 @@ pub fn seek_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "behavior");
 
-    for (position, mut acceleration, mut velocity, size, target, mut creature_state) in
+    for (position, mut acceleration, velocity, size, target, mut creature_state) in
         query.iter_mut()
     {
         if creature_state.behavior != BehaviorMode::Seeking {
@@ -37,8 +37,6 @@ pub fn seek_system(
         let center_distance = (to_target_x * to_target_x + to_target_y * to_target_y).sqrt();
 
         if center_distance < 0.001 {
-            velocity.vx = 0.0;
-            velocity.vy = 0.0;
             creature_state.behavior = BehaviorMode::Catatonic;
             continue;
         }
@@ -51,8 +49,6 @@ pub fn seek_system(
         if center_distance < (SEEKING.pounce_distance + body_radius)
             && current_speed < SEEKING.pounce_speed
         {
-            velocity.vx = 0.0;
-            velocity.vy = 0.0;
             creature_state.behavior = BehaviorMode::Catatonic;
             continue;
         }

@@ -2,21 +2,26 @@ use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
-#[derive(Component, Debug, Clone, Reflect, Serialize, Deserialize)]
-#[reflect(Component)]
+pub const MAX_PERCEIVED_NEIGHBORS: usize = 32;
+
+#[derive(Resource, Default)]
+pub struct PerceptionScratchBuffer {
+    pub positions: Vec<(Entity, f32, f32, f32)>,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
 pub struct Perception {
     pub range: f32,
-
-    #[reflect(ignore)]
-    #[serde(skip)]
-    pub nearby: Vec<Entity>,
+    neighbor_count: u8,
+    neighbors: [Entity; MAX_PERCEIVED_NEIGHBORS],
 }
 
 impl Perception {
     pub fn new(range: f32) -> Self {
         Self {
             range,
-            nearby: Vec::with_capacity(32),
+            neighbor_count: 0,
+            neighbors: [Entity::PLACEHOLDER; MAX_PERCEIVED_NEIGHBORS],
         }
     }
 
@@ -30,19 +35,30 @@ impl Perception {
     }
 
     pub fn has_neighbors(&self) -> bool {
-        !self.nearby.is_empty()
+        self.neighbor_count > 0
     }
 
     pub fn neighbor_count(&self) -> usize {
-        self.nearby.len()
+        self.neighbor_count as usize
     }
 
     pub fn clear(&mut self) {
-        self.nearby.clear();
+        self.neighbor_count = 0;
     }
 
     pub fn add_neighbor(&mut self, entity: Entity) {
-        self.nearby.push(entity);
+        if (self.neighbor_count as usize) < MAX_PERCEIVED_NEIGHBORS {
+            self.neighbors[self.neighbor_count as usize] = entity;
+            self.neighbor_count += 1;
+        }
+    }
+
+    pub fn iter_neighbors(&self) -> impl Iterator<Item = Entity> + '_ {
+        self.neighbors[..self.neighbor_count as usize].iter().copied()
+    }
+
+    pub fn contains(&self, entity: Entity) -> bool {
+        self.neighbors[..self.neighbor_count as usize].contains(&entity)
     }
 }
 

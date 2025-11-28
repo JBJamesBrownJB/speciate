@@ -5,24 +5,22 @@ use serde::{Deserialize, Serialize};
 
 
 pub use super::core::components::{
-    Acceleration, BoundaryConfig, Catatonic, DeltaTime, Position, Velocity,
+    Acceleration, BoundaryConfig, DeltaTime, Position, Velocity,
 };
 
 
 pub use super::creatures::components::{
-
     BehaviorMode,
+    Brain,
+    BrainMode,
     CanAvoidObstacles,
     CanFlee,
-
     CanSeek,
     CanWander,
     CreatureState,
-    HomePosition,
-
     CritId,
     FleeState,
-
+    HomePosition,
     Target,
     WanderState,
 };

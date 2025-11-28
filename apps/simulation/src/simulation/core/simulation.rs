@@ -30,7 +30,7 @@ impl SimulationBuilder {
 
         use crate::simulation::components::*;
         use crate::simulation::core::components::*;
-        use crate::simulation::perception::{AvoidanceBehavior, Perception};
+        use crate::simulation::perception::AvoidanceBehavior;
         use bevy_ecs::prelude::AppTypeRegistry;
 
         world.init_resource::<AppTypeRegistry>();
@@ -43,11 +43,12 @@ impl SimulationBuilder {
             type_registry.register::<Acceleration>();
             type_registry.register::<BodySize>();
             type_registry.register::<Rotation>();
-            type_registry.register::<Catatonic>();
 
             type_registry.register::<CritId>();
             type_registry.register::<CreatureState>();
             type_registry.register::<BehaviorMode>();
+            type_registry.register::<Brain>();
+            type_registry.register::<BrainMode>();
             type_registry.register::<HomePosition>();
 
             type_registry.register::<CanSeek>();
@@ -55,7 +56,6 @@ impl SimulationBuilder {
             type_registry.register::<CanWander>();
             type_registry.register::<CanAvoidObstacles>();
 
-            type_registry.register::<Perception>();
             type_registry.register::<AvoidanceBehavior>();
             type_registry.register::<Target>();
 
@@ -97,6 +97,7 @@ impl SimulationBuilder {
 
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
+        world.insert_resource(perception::PerceptionScratchBuffer::default());
 
         Self { world, schedule }
     }

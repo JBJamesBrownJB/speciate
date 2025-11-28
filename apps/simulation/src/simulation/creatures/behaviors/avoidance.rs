@@ -36,7 +36,7 @@ pub fn avoidance_system(
         let mut total_repulsion_x = 0.0;
         let mut total_repulsion_y = 0.0;
 
-        for &other_entity in &perception.nearby {
+        for other_entity in perception.iter_neighbors() {
             if other_entity == entity {
                 continue;
             }
@@ -117,7 +117,7 @@ mod tests {
             let mut total_repulsion_x = 0.0;
             let mut total_repulsion_y = 0.0;
 
-            for &other_entity in &perception.nearby {
+            for other_entity in perception.iter_neighbors() {
                 if other_entity == entity {
                     continue;
                 }

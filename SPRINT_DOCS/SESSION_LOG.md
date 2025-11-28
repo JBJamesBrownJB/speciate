@@ -102,3 +102,166 @@
 **Next:** User to design behavior change mechanism for Scenario B.
 
 ---
+
+## 2025-11-28: Phase 1 Complete - Brain Component Implemented
+
+**Completed:**
+- ✅ Removed dead `Catatonic` marker component from core/components.rs
+- ✅ Created `Brain` component with `BrainMode` enum (Normal, Cycling, Dormant)
+- ✅ Populated `behavior_transition_system` with Brain-driven decision logic
+- ✅ Added `test_archetype_stability_with_cycling_brain` regression test
+- ✅ All 149 tests passing
+
+**New Files:**
+- `apps/simulation/src/simulation/creatures/components/brain.rs`
+
+**Modified Files:**
+- `apps/simulation/src/simulation/core/components.rs` - Removed Catatonic
+- `apps/simulation/src/simulation/creatures/components/mod.rs` - Added brain module
+- `apps/simulation/src/simulation/creatures/builder.rs` - Added Brain to CritBundle
+- `apps/simulation/src/simulation/creatures/behaviors/transitions.rs` - Brain-driven decisions
+- `apps/simulation/src/simulation/tests.rs` - Archetype stability regression test
+- Multiple re-export files (lib.rs, components.rs)
+
+**Architecture:**
+- Brain centralizes decision-making (receives perception, life stats, outputs behavior)
+- `BrainMode::Normal` - Standard decision logic (future: perception-based)
+- `BrainMode::Cycling` - Forces behavior cycling every cooldown period (for testing)
+- `BrainMode::Dormant` - No decisions (static behavior)
+- Current architecture already archetype-stable (BehaviorMode is an enum, not add/remove components)
+
+**Key Insight:**
+The original uber-struct trial was unnecessary because the current architecture already avoids archetype churn - BehaviorMode is an enum inside CreatureState, not a separate component being added/removed. The Brain component reinforces this pattern and provides:
+1. Regression test to prevent future accidental churn
+2. Centralized decision-making foundation
+3. Future DNA integration point
+
+**Next:** Phase 1.5 - Brain timing architecture refactor
+
+---
+
+## 2025-11-28: Phase 1.5 Complete - Brain Timing Architecture
+
+**Problem Identified:**
+- Brain had separate `decision_cooldown_ms` timing
+- Vision will use stochastic timing (Phase 2D)
+- These would compound, causing up to 2x intended reaction latency
+
+**Solution Implemented:**
+- Added `has_fresh_vision: bool` field to Brain component
+- Perception system sets `brain.has_fresh_vision = true` after updating
+- Brain system checks flag for Normal mode, clears it after processing
+- Cycling mode still uses cooldown timer (for testing)
+
+**Key Design Decision:**
+Originally planned to use `VisionUpdated` marker component, but this caused archetype churn (add/remove each tick). Using a boolean field inside Brain avoids this entirely.
+
+**Files Modified:**
+- `creatures/components/brain.rs` - Added `has_fresh_vision` field
+- `perception/systems.rs` - Sets flag after perception update
+- `creatures/behaviors/transitions.rs` - Uses flag instead of marker
+
+**Benefits:**
+- Zero archetype churn (field mutation, not component add/remove)
+- Single timing source (Vision drives Brain decisions)
+- Prepares for Phase 2D stochastic vision
+
+**All 149 tests passing**, including archetype stability regression test.
+
+**Next:** Phase 1.5 - Brain timing architecture revision
+
+---
+
+## 2025-11-28: Phase 1.5 Revised - Dynamic Brain Cooldown
+
+**Problem with Original Implementation:**
+The `has_fresh_vision` approach was wrong because:
+- Brain doesn't just decide based on perception
+- Brain also considers hunger, health, energy, age
+- Tying Brain to perception updates would delay internal-state-driven decisions
+
+**Revised Implementation (Zoologist Consultation):**
+
+Brain now uses **dynamic cooldown** that scales with creature state:
+- **Age:** Power law (exponent 2.5) - older creatures think slower
+- **Energy:** Quadratic - low energy slows thinking
+- **Panic override:** Immediate threats bypass cooldown entirely
+
+**Key Changes:**
+1. Removed `has_fresh_vision` field from Brain
+2. Added `effective_cooldown_ms(age, energy)` method
+3. Added `should_panic()` function for immediate threat response
+4. Updated `can_decide()` signature to include age/energy
+5. Removed perception→brain coupling in perception/systems.rs
+6. Added 4 new tests (153 total passing)
+
+**New Specification System:**
+- Created `docs/spec/` folder for live feature documentation
+- Added `brain-spec.md` documenting current Brain implementation
+- Updated `CLAUDE.md` to require spec updates when implementing features
+
+**Files Modified:**
+- `creatures/components/brain.rs` - Dynamic cooldown, panic override
+- `creatures/behaviors/transitions.rs` - Uses new Brain API
+- `perception/systems.rs` - Removed Brain coupling
+- `CLAUDE.md` - Added spec documentation requirement
+- `docs/spec/brain-spec.md` - NEW - Brain system specification
+
+**Constants (hardcoded, DNA integration deferred):**
+- `BASE_COOLDOWN_MS = 150.0`
+- `AGE_SENSITIVITY = 2.0`
+- `PANIC_THRESHOLD = 2.0` (body size multiplier)
+
+**Next:** Phase 2A - Vision split queries (the critical optimization)
+
+---
+
+## 2025-11-28: Catatonic Marker Cleanup + Cycling Trial
+
+**Issue:** Build error from leftover `Catatonic` marker component references in `trials/loader.rs`.
+
+**Root Cause:** Phase 1 removed the `Catatonic` marker component from `core/components.rs`, but `trials/loader.rs` still referenced it.
+
+**Fixed:**
+- ✅ Line 133: Changed `world.spawn((bundle, Catatonic))` to `world.spawn(bundle)`
+- ✅ Line 188: Updated test query to use `CreatureState` with behavior filter
+- ✅ Line 392: Updated `catatonic_count` to filter by `BehaviorMode::Catatonic`
+
+**New: Cycling Creature Type**
+- ✅ Added `CreatureType::Cycling` to `trials/mod.rs`
+- ✅ Updated `trials/loader.rs` to spawn cycling creatures with `with_cycling_brain()`
+- ✅ Created `trials/cycling-brain-stress.toml` - 2.5K cycling creatures (50x50 grid)
+
+**Test Results:**
+- All 153 simulation tests passing
+- One pre-existing flaky test in NAPI save state integration (unrelated)
+
+**Files Modified:**
+- `trials/loader.rs` - Fixed Catatonic references, added Cycling creature type
+- `trials/mod.rs` - Added `CreatureType::Cycling`
+- `trials/cycling-brain-stress.toml` - NEW - 2.5K cycling creatures trial
+
+**Next:** Phase 2A - Vision split queries (the critical optimization)
+
+---
+
+## 2025-11-28: Perception System Specification Added
+
+**Created:** `docs/spec/perception-spec.md`
+
+**Documents:**
+- Perception component (range, nearby entities)
+- AvoidanceBehavior component (personal space, panic threshold)
+- Constants from movement/constants.rs
+- `update_perception_system` O(N²) algorithm
+- Edge-to-edge distance calculation
+- Current performance baseline (34ms @ 5K = 67% of tick)
+- Scaling problem (O(N²) quadratic)
+- Future optimization phases (2A-2D)
+
+**Key Insights Captured:**
+- Catatonic creatures skip perception (but ARE perceived)
+- Brain runs independently of perception timing
+- Vec allocations happen every tick (optimization target)
+
+---

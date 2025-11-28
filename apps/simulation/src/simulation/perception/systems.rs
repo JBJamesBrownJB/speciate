@@ -9,15 +9,16 @@ use bevy_ecs::system::Res;
 
 pub fn update_perception_system(
     mut query: Query<(Entity, &Position, &BodySize, &mut Perception, &CreatureState)>,
+    mut scratch: ResMut<PerceptionScratchBuffer>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "perception");
 
-    let creatures: Vec<(Entity, Position, BodySize)> = query
-        .iter()
-        .map(|(entity, pos, size, _, _)| (entity, *pos, *size))
-        .collect();
+    scratch.positions.clear();
+    for (entity, pos, size, _, _) in query.iter() {
+        scratch.positions.push((entity, pos.x, pos.y, size.radius()));
+    }
 
     for (entity, pos, size, mut perception, state) in query.iter_mut() {
         perception.clear();
@@ -28,16 +29,15 @@ pub fn update_perception_system(
 
         let self_radius = size.radius();
 
-        for (other_entity, other_pos, other_size) in &creatures {
-            if entity == *other_entity {
+        for &(other_entity, other_x, other_y, other_radius) in &scratch.positions {
+            if entity == other_entity {
                 continue;
             }
 
-            let dx = other_pos.x - pos.x;
-            let dy = other_pos.y - pos.y;
+            let dx = other_x - pos.x;
+            let dy = other_y - pos.y;
             let center_dist_sq = dx * dx + dy * dy;
 
-            let other_radius = other_size.radius();
             let combined_radii = self_radius + other_radius;
 
             if center_dist_sq > (perception.range + combined_radii).powi(2) {
@@ -48,7 +48,7 @@ pub fn update_perception_system(
             let edge_dist = center_dist - combined_radii;
 
             if edge_dist <= perception.range {
-                perception.add_neighbor(*other_entity);
+                perception.add_neighbor(other_entity);
             }
         }
     }
@@ -134,7 +134,7 @@ mod tests {
             1,
             "Active crit should perceive the catatonic one"
         );
-        assert!(active_perception.nearby.contains(&catatonic_crit));
+        assert!(active_perception.contains(catatonic_crit));
     }
 
     #[test]
@@ -188,13 +188,13 @@ mod tests {
 
         let perception1 = world.get::<Perception>(crit1).unwrap();
         assert_eq!(perception1.neighbor_count(), 1);
-        assert!(perception1.nearby.contains(&crit2));
-        assert!(!perception1.nearby.contains(&crit3));
+        assert!(perception1.contains(crit2));
+        assert!(!perception1.contains(crit3));
 
         let perception2 = world.get::<Perception>(crit2).unwrap();
         assert_eq!(perception2.neighbor_count(), 1);
-        assert!(perception2.nearby.contains(&crit1));
-        assert!(!perception2.nearby.contains(&crit3));
+        assert!(perception2.contains(crit1));
+        assert!(!perception2.contains(crit3));
 
         let perception3 = world.get::<Perception>(crit3).unwrap();
         assert_eq!(perception3.neighbor_count(), 0);
@@ -234,7 +234,7 @@ mod tests {
 
         let perception = world.get::<Perception>(crit).unwrap();
         assert_eq!(perception.neighbor_count(), 0);
-        assert!(!perception.nearby.contains(&crit));
+        assert!(!perception.contains(crit));
     }
 
     #[test]
@@ -358,10 +358,10 @@ mod tests {
         }
 
         let perception1 = world.get::<Perception>(crit1).unwrap();
-        assert!(!perception1.nearby.contains(&crit3));
+        assert!(!perception1.contains(crit3));
 
         let perception2 = world.get::<Perception>(crit2).unwrap();
-        assert!(perception2.nearby.contains(&crit3));
+        assert!(perception2.contains(crit3));
     }
 
     #[test]

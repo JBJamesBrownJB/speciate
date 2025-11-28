@@ -33,12 +33,13 @@ pub fn territory_wandering_system(
             continue;
         }
 
-        let speed = (velocity.vx * velocity.vx + velocity.vy * velocity.vy).sqrt();
+        let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
 
-        let (heading_x, heading_y) = if speed < 0.01 {
+        let (heading_x, heading_y) = if speed_sq < 0.0001 {
             let random_angle = rng.gen_range(0.0..std::f32::consts::TAU);
             (random_angle.cos(), random_angle.sin())
         } else {
+            let speed = speed_sq.sqrt();
             (velocity.vx / speed, velocity.vy / speed)
         };
 
@@ -57,8 +58,9 @@ pub fn territory_wandering_system(
         let desired_vx = target_x;
         let desired_vy = target_y;
 
-        let desired_length = (desired_vx * desired_vx + desired_vy * desired_vy).sqrt();
-        let (norm_desired_x, norm_desired_y) = if desired_length > 0.01 {
+        let desired_length_sq = desired_vx * desired_vx + desired_vy * desired_vy;
+        let (norm_desired_x, norm_desired_y) = if desired_length_sq > 0.0001 {
+            let desired_length = desired_length_sq.sqrt();
             (desired_vx / desired_length, desired_vy / desired_length)
         } else {
             (0.0, 0.0)
@@ -71,8 +73,10 @@ pub fn territory_wandering_system(
         let steer_x = scaled_desired_x - velocity.vx;
         let steer_y = scaled_desired_y - velocity.vy;
 
-        let steer_magnitude = (steer_x * steer_x + steer_y * steer_y).sqrt();
-        let wander_force = if steer_magnitude > STEERING.wander_force {
+        let steer_magnitude_sq = steer_x * steer_x + steer_y * steer_y;
+        let wander_force_sq = STEERING.wander_force * STEERING.wander_force;
+        let wander_force = if steer_magnitude_sq > wander_force_sq {
+            let steer_magnitude = steer_magnitude_sq.sqrt();
             let scale = STEERING.wander_force / steer_magnitude;
             (steer_x * scale, steer_y * scale)
         } else {
@@ -83,9 +87,10 @@ pub fn territory_wandering_system(
 
         let to_home_x = home.x - position.x;
         let to_home_y = home.y - position.y;
-        let to_home_dist = (to_home_x * to_home_x + to_home_y * to_home_y).sqrt();
+        let to_home_dist_sq = to_home_x * to_home_x + to_home_y * to_home_y;
 
-        let (norm_to_home_x, norm_to_home_y) = if to_home_dist > 0.01 {
+        let (norm_to_home_x, norm_to_home_y) = if to_home_dist_sq > 0.0001 {
+            let to_home_dist = to_home_dist_sq.sqrt();
             (to_home_x / to_home_dist, to_home_y / to_home_dist)
         } else {
             (0.0, 0.0)

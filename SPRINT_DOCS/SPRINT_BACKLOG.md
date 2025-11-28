@@ -40,7 +40,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 |-------|--------|---------------|----------|
 | Phase 2A: Vision Split Queries | ✅ COMPLETE | 2x capacity (5K→10K) | 100% |
 | Phase 1b: Uber-Struct Refactor | ✅ COMPLETE | Archetype stability | 100% |
-| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 50% (4/8 opts) |
+| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 62.5% (5/8 opts) |
 | Phase 1: Archetype Churn Trial | 📋 SKIPPED | Validation unnecessary | N/A |
 | Phase 2B: Vec2 + Changed<T> | 📋 PLANNED | 2-3ms @ 20K | 0% |
 | Phase 2C: Parallelization | 📋 PLANNED | 2-3x speedup | 0% |
@@ -331,7 +331,19 @@ pub fn rotation_system(
 | sqrt calls/wandering creature | 4/tick | 1-2/tick | **50-75% reduction** |
 | Wander time @ 10K | Baseline | -1ms | 15% improvement |
 
-**Risk:** LOW | **Effort:** 1 hour | **Status:** [ ] Not started
+**Risk:** LOW | **Effort:** 1 hour | **Status:** ✅ **COMPLETE** (2025-11-28)
+
+**Actual Implementation:**
+- All 156 library tests pass
+- Deferred 4 sqrt() calls in wander system using squared distance pattern:
+  1. **Line 36:** Speed calculation - defer sqrt until needed for normalization
+  2. **Line 60:** Desired length - defer sqrt until needed for normalization
+  3. **Line 74:** Steer magnitude - defer sqrt until needed for clamping
+  4. **Line 86:** To-home distance - defer sqrt until needed for normalization
+- Pattern: Check `value_sq < threshold_sq` before computing `sqrt(value_sq)`
+- Slow/stationary wanderers: **4 sqrt → 0 sqrt** (100% elimination)
+- Active wanderers: **4 sqrt → 2-3 sqrt** (25-50% reduction)
+- Zero behavioral regression
 
 ---
 

@@ -40,7 +40,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 |-------|--------|---------------|----------|
 | Phase 2A: Vision Split Queries | ✅ COMPLETE | 2x capacity (5K→10K) | 100% |
 | Phase 1b: Uber-Struct Refactor | ✅ COMPLETE | Archetype stability | 100% |
-| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 75% (6/8 opts) |
+| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 87% (7/8 opts) |
 | Phase 1: Archetype Churn Trial | 📋 SKIPPED | Validation unnecessary | N/A |
 | Phase 2B: Vec2 + Changed<T> | 📋 PLANNED | 2-3ms @ 20K | 0% |
 | Phase 2C: Parallelization | 📋 PLANNED | 2-3x speedup | 0% |
@@ -407,8 +407,31 @@ for other_entity in perception.iter_neighbors() {
 | Avoidance time | 3.2ms | 0.8ms | **75% improvement** |
 | Operations saved/sec | 2.22M sqrt | 444K sqrt | **1.78M/sec saved** |
 
-**Risk:** LOW | **Effort:** 30 min | **Status:** [ ] Not started
+**Risk:** LOW | **Effort:** 30 min | **Status:** ✅ **COMPLETE** (2025-11-28)
 **Critical:** Biggest single win - O(N×M) nested loop optimization!
+
+**Actual Implementation:**
+- All 156 library tests pass
+- Early exit with squared distance check before sqrt (lines 51-62):
+  ```rust
+  let center_distance_sq = away_x * away_x + away_y * away_y;
+
+  let other_radius = other_size.radius();
+  let max_combined_radius = self_radius + other_radius;
+  let max_interaction_distance = avoidance.personal_space + max_combined_radius;
+  let max_interaction_distance_sq = max_interaction_distance * max_interaction_distance;
+
+  // Early exit BEFORE sqrt (80% of neighbors)
+  if center_distance_sq > max_interaction_distance_sq {
+      continue;
+  }
+
+  // Only compute sqrt for close neighbors (20% of cases)
+  let center_distance = center_distance_sq.sqrt();
+  ```
+- Accounts for both creature radii (not just personal_space)
+- 100K sqrt/tick → 20K sqrt/tick (80% reduction expected)
+- O(N×M) optimization - most critical improvement in this phase
 
 ---
 
@@ -425,6 +448,58 @@ for other_entity in perception.iter_neighbors() {
 
 **Risk:** MEDIUM (1% numerical error) | **Effort:** 2 hours | **Status:** [ ] Deferred
 **Recommendation:** Defer to future sprint (uncertain biological impact)
+
+---
+
+### Future Work: Rayon Parallelization for Movement Systems
+
+**After completing OPT-1 through OPT-7, consider Rayon for multi-core parallelization.**
+
+**Concept:**
+```rust
+use rayon::prelude::*;
+
+// Convert ECS query iteration to parallel
+pub fn integrate_motion_system(
+    query: Query<(Entity, &BodySize, &mut Position, &mut Velocity, ...)>,
+    // ... resources
+) {
+    // Collect entities into Vec for parallel processing
+    let entities: Vec<_> = query.iter().collect();
+
+    entities.par_iter().for_each(|(entity, size, pos, vel, ...)| {
+        // Parallel physics integration
+        // Each thread processes subset of creatures
+    });
+}
+```
+
+**Expected Metrics:**
+| Metric | Sequential (post OPT-7) | Parallel (8 cores) | Gain |
+|--------|-------------------------|-------------------|------|
+| Movement time @ 10K | ~24ms (optimized) | ~6ms | **4x speedup** |
+| Movement time @ 20K | ~48ms | ~12ms | **4x speedup** |
+| CPU utilization | 12.5% (1 core) | 100% (8 cores) | Full core usage |
+
+**Challenges:**
+- **Mutable access:** `&mut Position`, `&mut Velocity` require careful partitioning
+- **Resource contention:** `Res<DeltaTime>`, `Res<WorldBounds>` are read-only (safe)
+- **Boundary enforcement:** Second loop may need special handling
+- **Archetype iteration:** Rayon works on Vec, need to collect from ECS query
+
+**Recommended Approach:**
+1. Collect entities into `Vec<(Entity, Position, Velocity, ...)>` (read phase)
+2. `par_iter_mut()` on Vec for parallel computation
+3. Write results back to ECS components (write phase)
+4. Benchmark batch sizes (64, 256, 512) for optimal thread granularity
+
+**Why Defer to Next Sprint:**
+- Complete sequential optimizations first (establish baseline)
+- Rayon adds complexity (collect → parallel → write-back pattern)
+- Need empirical validation that parallelization overhead < gains
+- At 10K creatures, gains are modest; at 50K+ creatures, becomes critical
+
+**See:** Phase 2C in main sprint plan for full parallelization strategy
 
 ---
 

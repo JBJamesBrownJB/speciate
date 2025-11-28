@@ -47,13 +47,24 @@ pub fn avoidance_system(
 
             let away_x = position.x - other_pos.x;
             let away_y = position.y - other_pos.y;
-            let center_distance = (away_x * away_x + away_y * away_y).sqrt();
+            let center_distance_sq = away_x * away_x + away_y * away_y;
+
+            let other_radius = other_size.radius();
+            let max_combined_radius = self_radius + other_radius;
+            let max_interaction_distance = avoidance.personal_space + max_combined_radius;
+            let max_interaction_distance_sq = max_interaction_distance * max_interaction_distance;
+
+            if center_distance_sq > max_interaction_distance_sq {
+                continue;
+            }
+
+            let center_distance = center_distance_sq.sqrt();
 
             if center_distance < 0.001 {
                 continue;
             }
 
-            let edge_distance = center_distance - self_radius - other_size.radius();
+            let edge_distance = center_distance - self_radius - other_radius;
             let safe_distance = edge_distance.max(0.01);
 
             if safe_distance < avoidance.personal_space {

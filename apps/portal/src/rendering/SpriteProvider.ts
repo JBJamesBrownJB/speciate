@@ -10,7 +10,7 @@ export class SpriteProvider {
     }
 
     try {
-      const assetUrl = 'placeholder.png';
+      const assetUrl = 'blimp-alpha.png';
       this.placeholderTexture = await Assets.load(assetUrl);
       this.initialized = true;
     } catch (error) {

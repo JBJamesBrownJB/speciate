@@ -1,6 +1,6 @@
-# Sprint 16: Organic Shader Animation & Visual Polish
+# Sprint 17: Organic Shader Animation & Visual Polish
 
-**Branch:** `feat/sprint-16-organic-shader-animation` (to be created)
+**Branch:** `feat/sprint-17-organic-shader-animation` (to be created)
 **Status:** PLANNED
 **Prerequisites:** Sprint 15 complete (ECS Optimizations)
 **Duration:** 3-4 days

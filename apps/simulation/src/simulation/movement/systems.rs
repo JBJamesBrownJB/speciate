@@ -52,8 +52,9 @@ pub fn integrate_motion_system(
         velocity.vy += acceleration.ay * dt;
         velocity.vx *= VELOCITY_DAMPING;
         velocity.vy *= VELOCITY_DAMPING;
-        let speed = (velocity.vx * velocity.vx + velocity.vy * velocity.vy).sqrt();
-        if speed > 0.1 {
+        let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+        if speed_sq > 0.01 {
+            let speed = speed_sq.sqrt();
             let speed_ratio = speed / MAX_SPEED;
             let size_factor = 1.0 / size.length.sqrt();
             let noise_magnitude = movement_config.locomotion_noise_base * speed_ratio * speed_ratio * size_factor;

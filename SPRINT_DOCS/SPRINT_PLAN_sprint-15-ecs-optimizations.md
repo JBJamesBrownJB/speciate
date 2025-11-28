@@ -761,419 +761,45 @@ Compare IPC, L1/L2 cache miss rates, frame times.
 
 ## Phase 3: Spatial Grid + Parallel Perception (DEFERRED TO SPRINT 16+)
 
-**Status:** NOT INCLUDED IN SPRINT 15 (deferred based on Phase 2D validation results)
+**Status:** NOT INCLUDED IN SPRINT 15
 
-**Trigger:** If Phase 2D fails to achieve 150K creatures at <45ms tick time
+**Trigger:** If Phase 2D validation shows perception still bottleneck at 150K creatures
 
-**Duration:** 4-5 days
+**Duration:** 5 days
 
-**Rationale:** Spatial grid is a **mandatory architectural change** to break the O(n²) perception bottleneck. Current perception system cannot scale beyond ~50K creatures even with all Sprint 15 optimizations.
+**See:** `SPRINT_16_PLAN/SPRINT_PLAN_sprint-16-spatial-grid.md` for complete implementation plan.
+**See:** `SPRINT_16_PLAN/RATIONALE.md` for decision logic.
 
----
+### Quick Context
 
-### The O(N²) Problem: Why Rayon Alone Fails
+**The Problem:**
+Even with perfect 8-core Rayon parallelization, O(N²) perception fails at scale:
+- 150K creatures: 22.5B comparisons → 3,825ms (85x over budget)
+- Solution: Spatial grid FIRST (O(N²) → O(N×k)), THEN Rayon
+- Expected result: 150K @ 7ms perception, enabling 200K+ creatures
 
-**Current Algorithm (Sequential):**
-```rust
-// Build scratch buffer - O(n)
-for entity in all_creatures {
-    scratch.positions.push((entity, pos.x, pos.y, radius));
-}
+**Why Deferred:**
+Sprint 15 focuses on zero-allocation and cache-friendly patterns (split queries, Vec2 SIMD, stochastic vision). If these succeed at 150K+, spatial grid can wait for Sprint 16+.
 
-// Check every creature against every other creature - O(n²)
-for entity in all_creatures {
-    for other in scratch.positions {  // Inner loop: n iterations
-        if distance_check(entity, other) {
-            perception.add_neighbor(other);
-        }
-    }
-}
-```
+**Key Metrics (if implemented):**
 
-**Performance at Scale:**
-
-| Creatures | Comparisons | Sequential | Parallel (8 cores) | Budget | Status |
-|-----------|-------------|------------|--------------------| -------|--------|
-| 5K | 25M | 34ms | ~5ms | 45ms | ✅ OK |
-| 25K | 625M | ~850ms | ~106ms | 45ms | ❌ 2.4x over |
-| 50K | 2.5B | ~3,400ms | ~425ms | 45ms | ❌ 9.4x over |
-| 150K | 22.5B | ~30,600ms | ~3,825ms | 45ms | ❌ **85x over** |
-
-**Conclusion:** Even with perfect 8-core Rayon parallelization, O(n²) fails at 25K creatures.
-
----
-
-### The Solution: Spatial Grid Architecture
-
-**Concept:** Partition world into 200m × 200m grid cells. Only check entities in nearby cells.
-
-**Complexity Reduction:**
-- Current: O(n²) = 150K × 150K = 22.5 billion comparisons
-- With Grid: O(n × k) where k ≈ 180 avg neighbors = 150K × 180 = 27 million comparisons
-- **Reduction:** 833x fewer comparisons
-
-**Data Structure:**
-```rust
-use rustc_hash::FxHashMap;
-
-#[derive(Resource)]
-pub struct SpatialGrid {
-    cell_size: f32,              // 200.0m
-    inv_cell_size: f32,          // 1.0 / 200.0 (multiply is faster than divide)
-    cells: FxHashMap<(i32, i32), Vec<Entity>>,  // Grid cells
-    positions: FxHashMap<Entity, (f32, f32, f32)>,  // (x, y, radius) cache
-}
-
-impl SpatialGrid {
-    pub fn query_radius_iter(&self, x: f32, y: f32, radius: f32)
-        -> impl Iterator<Item = Entity> + '_
-    {
-        // Calculate grid cell range (typically 3×3 = 9 cells)
-        let min_cell = self.world_to_cell(x - radius, y - radius);
-        let max_cell = self.world_to_cell(x + radius, y + radius);
-
-        // Iterate entities in nearby cells only
-        (min_cell.0..=max_cell.0)
-            .flat_map(|cx| {
-                (min_cell.1..=max_cell.1).filter_map(move |cy| {
-                    self.cells.get(&(cx, cy))
-                })
-            })
-            .flatten()
-            .copied()
-    }
-}
-```
-
-**Optimized Perception System:**
-```rust
-pub fn update_vision_system(
-    query: Query<(Entity, &Position, &BodySize, &mut Perception, &CreatureState)>,
-    grid: Res<SpatialGrid>,
-) {
-    // Collect entity data for parallel processing (O(n), ~1ms @ 150K)
-    let entity_data: Vec<_> = query
-        .iter()
-        .map(|(e, pos, size, _, state)| {
-            (e, pos.x, pos.y, size.radius(), state.behavior.is_active())
-        })
-        .collect();
-
-    // Parallel perception computation (O(n × k), ~20ms @ 150K on 8 cores)
-    let results: Vec<_> = entity_data
-        .par_iter()  // Rayon parallel iterator
-        .filter(|(_, _, _, _, is_active)| *is_active)
-        .map(|&(entity, pos_x, pos_y, self_radius, _)| {
-            let range = /* perception range */;
-            let mut neighbors = [Entity::PLACEHOLDER; MAX_PERCEIVED_NEIGHBORS];
-            let mut count: u8 = 0;
-
-            // Spatial query: O(9 cells × ~20 entities/cell) = ~180 checks
-            for candidate in grid.query_radius_iter(pos_x, pos_y, range) {
-                if candidate == entity || count >= MAX_PERCEIVED_NEIGHBORS as u8 {
-                    continue;
-                }
-                // Distance check (from grid's position cache)
-                let (cx, cy, c_radius) = grid.get_position(candidate);
-                let dx = cx - pos_x;
-                let dy = cy - pos_y;
-                let max_dist = range + c_radius;
-                if dx * dx + dy * dy <= max_dist * max_dist {
-                    neighbors[count as usize] = candidate;
-                    count += 1;
-                }
-            }
-            (entity, neighbors, count)
-        })
-        .collect();
-
-    // Apply results (sequential, O(n), ~2ms @ 150K)
-    for (entity, neighbors, count) in results {
-        if let Ok((_, _, _, mut perception, _)) = query.get_mut(entity) {
-            perception.set_neighbors_raw(neighbors, count);
-        }
-    }
-}
-```
-
----
-
-### Performance Projections
-
-**Spatial Grid Alone (Sequential):**
-
-| Creatures | Comparisons | Time | vs Current | Fits Budget? |
-|-----------|-------------|------|------------|--------------|
-| 5K | 900K | ~1ms | 34x faster | ✅ Yes |
-| 25K | 4.5M | ~6ms | 142x faster | ✅ Yes |
-| 50K | 9M | ~12ms | 283x faster | ✅ Yes |
-| 150K | 27M | ~40ms | 765x faster | ✅ Yes (barely) |
-
-**Spatial Grid + Rayon (8 cores):**
-
-| Creatures | Comparisons | Time (8 cores) | vs Current | Headroom |
-|-----------|-------------|----------------|------------|----------|
-| 5K | 900K | ~0.5ms | 68x faster | 90x budget |
-| 25K | 4.5M | ~2ms | 425x faster | 22x budget |
-| 50K | 9M | ~3ms | 1,133x faster | 15x budget |
-| 150K | 27M | ~7ms | 4,371x faster | **6.4x budget** |
-| 200K | 36M | ~10ms | 8,500x faster | **4.5x budget** |
-
-**With stochastic vision (10% per tick):**
-- 150K creatures: ~0.7ms perception (64x budget remaining!)
-- 200K creatures: ~1.0ms perception (45x budget remaining!)
-
----
-
-### Implementation Plan (TDD)
-
-**Day 1-2: Spatial Grid Foundation**
-
-1. **RED:** Write failing test for `SpatialGrid::query_radius()`
-   ```rust
-   #[test]
-   fn test_spatial_grid_query_returns_nearby_entities() {
-       let mut grid = SpatialGrid::new(200.0);
-
-       let e1 = Entity::from_raw(1);
-       let e2 = Entity::from_raw(2);
-       let e3 = Entity::from_raw(3);
-
-       grid.insert(e1, 0.0, 0.0, 5.0);
-       grid.insert(e2, 50.0, 0.0, 5.0);   // Within 100m
-       grid.insert(e3, 500.0, 0.0, 5.0);  // Outside 100m
-
-       let results: Vec<_> = grid.query_radius(0.0, 0.0, 100.0).collect();
-
-       assert!(results.contains(&e1));
-       assert!(results.contains(&e2));
-       assert!(!results.contains(&e3));
-   }
-   ```
-
-2. **GREEN:** Implement `SpatialGrid`
-   - `new(cell_size: f32)` - Initialize empty grid
-   - `insert(entity, x, y, radius)` - Add entity to grid
-   - `remove(entity)` - Remove entity from grid
-   - `query_radius(x, y, radius)` - Return entities in range
-   - `clear()` - Reset grid (called each tick)
-
-3. **REFACTOR:** Optimize hot paths
-   - Use `FxHashMap` (faster than `HashMap` for integer keys)
-   - Pre-allocate cell vectors with `with_capacity()`
-   - Cache `inv_cell_size` to avoid division
-
-**Day 3: Integration with Perception**
-
-4. **RED:** Write failing benchmark test
-   ```rust
-   #[test]
-   fn test_perception_with_grid_handles_25k_under_20ms() {
-       let mut world = setup_world_with_grid(25_000);
-
-       let start = Instant::now();
-       update_perception_system(/* ... */);
-       let elapsed = start.elapsed();
-
-       assert!(elapsed < Duration::from_millis(20),
-           "Perception took {:?}, expected <20ms", elapsed);
-   }
-   ```
-
-5. **GREEN:** Integrate grid into perception system
-   - Replace scratch buffer with spatial grid
-   - Update perception system to use `grid.query_radius_iter()`
-   - Add grid rebuild system (runs before perception)
-
-6. **REFACTOR:** Optimize grid rebuild
-   - Parallel insertion using `par_iter()`
-   - Batch cell updates to reduce lock contention
-
-**Day 4: Add Rayon Parallelization**
-
-7. Add Rayon dependency to `Cargo.toml`:
-   ```toml
-   [dependencies]
-   rayon = "1.10"
-   ```
-
-8. **RED:** Write parallel perception test
-   ```rust
-   #[test]
-   fn test_parallel_perception_deterministic() {
-       // Same seed should produce identical results
-       let results1 = run_perception_parallel(seed: 42);
-       let results2 = run_perception_parallel(seed: 42);
-       assert_eq!(results1, results2);
-   }
-   ```
-
-9. **GREEN:** Parallelize perception inner loop
-   - Replace `.iter()` with `.par_iter()` for entity_data
-   - Ensure grid reads are thread-safe (no mutable access)
-
-10. **REFACTOR:** Tune batch sizes
-    ```rust
-    use bevy_ecs::batching::BatchingStrategy;
-
-    query.par_iter()
-        .batching_strategy(BatchingStrategy::new().min_batch_size(512))
-        .for_each(|...| { ... });
-    ```
-
-**Day 5: Benchmarking & Validation**
-
-11. Comprehensive benchmarks:
-    - 25K creatures (grid vs no-grid comparison)
-    - 50K creatures (sequential vs parallel)
-    - 100K creatures (stress test)
-    - 150K creatures (target validation)
-    - 200K creatures (stretch goal)
-
-12. Hardware profiling (with instrumentation-ian):
-    - Cache hit rates (should improve with spatial locality)
-    - CPU utilization (should be 50%+ on 8-core)
-    - Memory allocation (grid rebuild cost)
-
-13. Create performance report:
-    - Before/after comparison
-    - Speedup by creature count
-    - Scaling analysis (linear, quadratic, etc.)
-
----
-
-### Benchmarking Strategy
-
-**File:** `apps/simulation/benches/perception.rs`
-
-```rust
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
-
-fn perception_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("perception");
-
-    for size in [1_000, 5_000, 25_000, 100_000, 150_000] {
-        // Baseline: O(n²) sequential
-        group.bench_with_input(
-            BenchmarkId::new("sequential_naive", size),
-            &size,
-            |b, &size| {
-                let world = setup_world_naive(size);
-                b.iter(|| run_perception_naive(&world));
-            },
-        );
-
-        // Optimized: Spatial grid sequential
-        group.bench_with_input(
-            BenchmarkId::new("sequential_grid", size),
-            &size,
-            |b, &size| {
-                let world = setup_world_with_grid(size);
-                b.iter(|| run_perception_with_grid(&world));
-            },
-        );
-
-        // Optimized: Spatial grid + Rayon parallel
-        group.bench_with_input(
-            BenchmarkId::new("parallel_grid", size),
-            &size,
-            |b, &size| {
-                let world = setup_world_with_grid(size);
-                b.iter(|| run_perception_parallel(&world));
-            },
-        );
-    }
-
-    group.finish();
-}
-
-criterion_group!(benches, perception_benchmark);
-criterion_main!(benches);
-```
-
-**Run benchmarks:**
-```bash
-cd apps/simulation
-cargo bench --bench perception
-```
-
-**Expected output:**
-```
-perception/sequential_naive/150000    time: [30.6 s]
-perception/sequential_grid/150000     time: [40 ms]    (765x speedup)
-perception/parallel_grid/150000       time: [7 ms]     (4,371x speedup)
-```
-
----
-
-### ECS Performance Considerations
-
-**Archetype Stability:**
-- Spatial grid is a `Resource`, not a `Component` - no archetype impact
-- Grid rebuild happens once per tick (before perception) - no per-entity churn
-
-**Cache Coherency:**
-- Grid stores position cache: `FxHashMap<Entity, (f32, f32, f32)>`
-- Sequential access pattern during grid rebuild (good cache locality)
-- Random access during query (mitigated by small cell count)
-
-**Bevy Batch Size Tuning:**
-- For 150K entities, use `min_batch_size(512)` to reduce work-stealing overhead
-- Below 10K entities, use `min_batch_size(64)` for better load balancing
-
-**Trade-offs:**
-- Memory: ~10-20MB for grid at 150K creatures (acceptable)
-- Rebuild cost: ~1-2ms per tick to rebuild grid (small compared to 40ms savings)
-- Complexity: More code to maintain (but critical for scaling)
-
----
-
-### Success Criteria
-
-**Phase 3 Complete When:**
-
-- [ ] Spatial grid handles 150K creatures @ <40ms perception (sequential)
-- [ ] Parallel grid handles 150K creatures @ <10ms perception (8 cores)
-- [ ] Benchmarks show 500x+ speedup vs naive O(n²)
-- [ ] Zero regression in behavior (all tests pass)
-- [ ] Cache hit rates improved (hardware profiling)
-- [ ] No memory leaks (grid properly cleared each tick)
-
-**Target Metrics:**
-
-| Metric | Before (O(n²)) | After (Grid + Rayon) | Improvement |
+| Metric | Before (O(N²)) | After (Grid + Rayon) | Improvement |
 |--------|----------------|----------------------|-------------|
-| Perception @ 5K | 34ms | <1ms | 34x faster |
-| Perception @ 25K | ~850ms (projected) | ~2ms | 425x faster |
-| Perception @ 150K | ~30,600ms (projected) | ~7ms | 4,371x faster |
-| Max creatures @ 45ms | ~5K | 200K+ | **40x capacity** |
+| Perception @ 150K | ~30,600ms | ~7ms | 4,371x faster |
+| Max creatures @ 45ms | ~5K | 200K+ | 40x capacity |
 
----
+**Dependencies:**
+- `rayon = "1.10"`
+- `rustc-hash = "2.0"` (FxHashMap)
 
-### Alternative: Stochastic Vision (10% per tick)
+**Architecture:**
+- 200m × 200m grid cells (2× max perception range)
+- Complexity: O(N²) → O(N×k) where k ≈ 180 neighbors
+- Reduction: 833x fewer operations @ 150K
 
-**If spatial grid + Rayon still insufficient:**
-
-Combine with stochastic vision from Phase 2D:
-- 150K creatures × 10% = 15K updates per tick
-- 15K × 180 neighbors = 2.7M comparisons
-- 2.7M / 8 cores = ~340K per core = **~0.7ms perception**
-
-**This provides 64x headroom in the 45ms budget.**
-
----
-
-### Risk: Grid Cell Size Tuning
-
-**Cell Size Trade-off:**
-- Too small (50m): More cells, overhead from checking many empty cells
-- Too large (500m): Fewer cells, but more entities per cell (approaches O(n²))
-- Sweet spot: ~200m (from existing spec `docs/architecture/spatial-partitioning.md`)
-
-**Validation:**
-- Test cell sizes: 100m, 200m, 300m, 500m
-- Measure perception time at 150K creatures
-- Choose optimal based on benchmarks
+**References:**
+- Full spec: `docs/architecture/spatial-partitioning.md`
+- Implementation plan: `SPRINT_16_PLAN/SPRINT_PLAN_sprint-16-spatial-grid.md` (TDD breakdown, benchmarking strategy, success criteria)
 
 ---
 

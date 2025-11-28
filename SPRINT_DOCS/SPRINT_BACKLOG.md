@@ -43,7 +43,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 | Phase 2A-2: Movement Optimizations | ✅ COMPLETE | 13% tick budget (~6.5ms) | 100% (7/8, OPT-8 deferred) |
 | Phase 1: Archetype Churn Trial | 📋 SKIPPED | Validation unnecessary | N/A |
 | Phase 2B: Vec2 + Changed<T> | 📋 PLANNED | 2-3ms @ 20K | 0% |
-| Phase 2C: Parallelization | 📋 PLANNED | 2-3x speedup | 0% |
+| Phase 2C: Parallelization | ✅ COMPLETE | 2-3x speedup | 100% |
 | Phase 2D: Stochastic Vision | 📋 PLANNED | 90% perception | 0% |
 | Phase 3: Spatial Grid | 🔮 DEFERRED | Sprint 16+ | N/A |
 
@@ -118,6 +118,86 @@ pub struct CreatureState {
 - [x] Add `BehaviorMode::is_active()` helper method ✅
 
 **Result:** Behavior transitions no longer cause archetype changes. Component layout remains stable throughout creature lifecycle.
+
+---
+
+## Phase 2C: Rayon Parallelization (CRITICAL) ✅ COMPLETE
+
+**Status:** COMPLETE (2025-11-28)
+**Source:** `docs/performance/snapshots/10k_wanderers_2025-11-28T21-40-33.json`
+
+### Actual Metrics - MASSIVE WIN! 🚀
+
+| Metric | Before (Sequential) | After (Rayon Parallel) | Improvement | Status |
+|--------|---------------------|------------------------|-------------|--------|
+| **Movement time** | 25.9ms | **4.1ms** | **-21.8ms (84% faster!)** | ✅ |
+| **Total tick time** | 47.7ms | **28.7ms** | **-19ms (40% faster!)** | ✅ |
+| **CPU cores active** | 9.3 avg | **16 (ALL!)** | **+73% core usage** | ✅ |
+| **CPU utilization** | 19.6% | **24.7%** | **+26%** | ✅ |
+| **IPC** | 3.0 | **4.25** | **+42% efficiency** | ✅ |
+
+**Result:** Movement system achieved **6.3x speedup** through Rayon parallelization!
+
+### Implementation
+
+**Pattern:** Collect → Parallel → Write-back
+
+```rust
+use rayon::prelude::*;
+
+pub fn integrate_motion_system(
+    mut query: Query<(Entity, &BodySize, &mut Position, &mut Velocity, ...)>,
+    // ... resources
+) {
+    // Collect entities into Vec for Rayon parallel processing
+    let mut entities: Vec<_> = query.iter_mut().collect();
+
+    // Parallel physics integration using Rayon
+    entities.par_iter_mut().for_each(|(entity, size, position, velocity, ...)| {
+        // Physics logic runs in parallel across all CPU cores!
+        // Each of 16 cores processes ~625 creatures (at 10K total)
+    });
+
+    // Parallel boundary enforcement (reuse Vec)
+    entities.par_iter_mut().for_each(|(_, _, position, velocity, ...)| {
+        // Boundary clamping runs in parallel
+    });
+}
+```
+
+### Why It Works
+
+**Bevy's `par_iter_mut()` vs Rayon:**
+- Bevy's parallel iteration uses `bevy_tasks` (not configured for max parallelism in NAPI context)
+- Rayon's `par_iter_mut()` uses ALL available CPU cores automatically
+- Manual collect → parallel → write-back pattern gives full control
+
+**Key Insights:**
+1. **Embarrassingly parallel:** Each creature's physics is independent
+2. **All 16 cores engaged:** Rayon distributes 10K creatures across threads
+3. **IPC jumped to 4.25:** Excellent instruction-level parallelism
+4. **Zero overhead:** Mutable references write back automatically
+
+### Capacity Projection
+
+**Current @ 10K creatures:**
+- Total tick: 28.7ms
+- Budget remaining: **16.3ms headroom!**
+
+**Projected capacity:**
+- Comfortable: **~15K creatures** (within 45ms budget)
+- With optimization: **20K+ creatures** achievable!
+
+### Tasks
+
+- [x] Add `rayon` dependency to Cargo.toml ✅
+- [x] Implement collect → parallel → write-back pattern ✅
+- [x] Parallelize physics integration loop ✅
+- [x] Parallelize boundary enforcement loop ✅
+- [x] Verify zero behavioral regression (all 156 tests pass) ✅
+- [x] Benchmark @ 10K creatures (28.7ms total, 4.1ms movement) ✅
+
+**CRITICAL SUCCESS:** Parallelization delivered exactly what was promised - multi-core utilization with massive speedup!
 
 ---
 

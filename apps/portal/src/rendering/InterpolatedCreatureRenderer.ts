@@ -133,7 +133,6 @@ export class InterpolatedCreatureRenderer {
 
     geometry.instanceCount = 0;
 
-    console.error('[InterpolatedCreatureRenderer] Geometry created with vertexCount=4, topology=triangle-strip');
     return geometry;
   }
 
@@ -326,7 +325,6 @@ export class InterpolatedCreatureRenderer {
 
     // Update instance count for instanced rendering
     this.geometry.instanceCount = creatureCount;
-    console.error('[InterpolatedCreatureRenderer] updateGeometryBuffer: creatureCount =', creatureCount, 'instanceCount =', this.geometry.instanceCount);
   }
 
   /**

@@ -11,13 +11,13 @@
 
 **Achieve buttery-smooth 60 FPS frontend rendering** through GPU-accelerated interpolation and organic animation:
 
-1. **Validate 22.2Hz tick rate** (achieved in Sprint 13) → 60Hz interpolated rendering
+1. **Validate tick rate** (achieved in Sprint 13) → 60Hz interpolated rendering
 2. **GPU vertex shader interpolation** (smooth position/rotation, <0.5ms CPU overhead)
 3. **Organic wiggle animation** (procedural vertex deformation, biologically plausible)
 4. **Performance validation** (60 FPS @ 1M entities target)
 
 **Key Architecture:**
-- 22.2Hz simulation (hardcoded in Sprint 13 NAPI migration)
+- Simulation tick rate defined in `simulation_engine.rs:37` (TARGET_SIMULATION_HZ)
 - Custom PixiJS geometry with interleaved vertex buffers
 - GPU-side interpolation (parallel execution on all entities)
 - Zero-copy NAPI buffer integration
@@ -49,7 +49,7 @@
 
 ## Phase Overview
 
-1. **Phase 1:** Validate Tick Rate (22.2Hz) - ✅ COMPLETE
+1. **Phase 1:** Validate Tick Rate - ✅ COMPLETE
 2. **Phase 2:** Frontend GPU Interpolation - IN PROGRESS
    - 2A: Custom PixiJS Geometry Setup
    - 2B: Vertex Shader Interpolation (Kinematic Smoothing)
@@ -60,30 +60,21 @@
 
 ---
 
-## Phase 1: Validate Tick Rate (22.2Hz)
+## Phase 1: Validate Tick Rate
 
 **Duration:** Day 1 (COMPLETE - Discovery)
 
-**Goal:** Confirm 22.2Hz achieved in Sprint 13 NAPI migration
+**Goal:** Confirm tick rate achieved in Sprint 13 NAPI migration
 
 **Discovery:**
-Sprint 13's NAPI-RS migration introduced hardcoded tick rate in `simulation_engine.rs`:
-```rust
-// apps/simulation/src/napi_addon/simulation_engine.rs:37
-const TARGET_SIMULATION_HZ: f32 = 22.2;
-```
-
-This replaced the old `config.rs` approach. 22.2Hz provides:
-- ~45ms per tick (vs 16.7ms @ 60Hz)
-- 2.7x capacity improvement
-- Sufficient for 150K-200K creature target
+Sprint 13's NAPI-RS migration introduced tick rate constant in `simulation_engine.rs:37` (TARGET_SIMULATION_HZ). This replaced the old `config.rs` approach.
 
 **Validation:**
 - ✅ All systems use `DeltaTime` resource (no hardcoded assumptions)
-- ✅ Tick rate confirmed at 22.2Hz in NAPI engine
+- ✅ Tick rate stable in NAPI engine
 - ✅ No changes needed - already optimal
 
-**Success:** 22.2Hz stable, ready for Phase 2 interpolation
+**Success:** Tick rate stable, ready for Phase 2 interpolation
 
 ---
 
@@ -127,14 +118,14 @@ const geometry = new Geometry()
 ```
 
 **Update Strategy:**
-- On Server Tick (22.2Hz): Copy `end` data to `start`, load new server data into `end`, reset `uInterpolation` to 0
-- On Render Tick (60Hz): Increment `uInterpolation` based on `deltaMS / 45ms`
+- On Server Tick: Copy `end` data to `start`, load new server data into `end`, reset `uInterpolation` to 0
+- On Render Frame (60Hz): Increment `uInterpolation` based on `deltaMS / tickIntervalMs`
 
 **Collaboration:** Frontend-Fanny (PixiJS integration), Rusty-Ron (NAPI buffer format validation)
 
 ### Phase 2B: Vertex Shader Interpolation (Kinematic Smoothing)
 
-**Goal:** Perfectly smooth linear movement masking 22.2Hz server updates.
+**Goal:** Perfectly smooth linear movement masking low-frequency server updates.
 
 **GLSL Vertex Shader:**
 ```glsl
@@ -232,7 +223,7 @@ void main() {
 - [ ] Cross-platform GPU compatibility (Intel/NVIDIA/AMD)
 
 **Integration Tests:**
-- [ ] 22.2Hz simulation ticks feed interpolation correctly
+- [ ] Simulation ticks feed interpolation correctly
 - [ ] Zero-copy NAPI buffers work with custom geometry
 - [ ] Zoom smoothness maintained at high entity counts
 - [ ] Dev-UI displays GPU metrics correctly
@@ -287,7 +278,7 @@ void main() {
 
 **Risk:** GPU shader interpolation looks floaty or unnatural
 - **Mitigation:** Linear lerp only (no easing), validate with 20K creatures first
-- **Fallback:** Increase simulation tick rate to 30Hz if needed (currently 22.2Hz)
+- **Fallback:** Increase simulation tick rate if needed (see `simulation_engine.rs:37`)
 
 **Risk:** Wiggle animation causes performance regression
 - **Mitigation:** Profile GPU performance before/after, ensure <0.2ms overhead
@@ -323,7 +314,7 @@ void main() {
 
 ## References
 
-- **Sprint 13:** NAPI-RS migration (zero-copy buffers, 22.2Hz tick rate)
+- **Sprint 13:** NAPI-RS migration (zero-copy buffers, tick rate constant)
 - **Sprint 15 (Next):** Backend ECS optimizations
 - **Shader spec:** `docs/visuals/shader-smooth-and-wiggle.md`
 - **NAPI architecture:** `docs/architecture/napi-architecture.md`

@@ -146,15 +146,19 @@ async function main(): Promise<void> {
         const currentFirstX = creatures.length > 0 ? creatures[0].x : null;
         const positionsChanged = currentFirstX !== lastFirstCreatureX;
 
-        if (positionsChanged && creatures.length > 0) {
+        if (positionsChanged) {
           lastFirstCreatureX = currentFirstX;
 
           const spriteUpdateStart = performance.now();
-          if (isFirstFrame) {
-            creatureRenderer.initialize(creatures);
-            isFirstFrame = false;
+          if (creatures.length > 0) {
+            if (isFirstFrame) {
+              creatureRenderer.initialize(creatures);
+              isFirstFrame = false;
+            } else {
+              creatureRenderer.onSimulationTick(creatures);
+            }
           } else {
-            creatureRenderer.onSimulationTick(creatures);
+            creatureRenderer.onSimulationTick([]);
           }
           const spriteUpdateEnd = performance.now();
           perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);

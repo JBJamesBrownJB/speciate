@@ -11,7 +11,7 @@
 **MORE DETAIL IN:** SPRINT_PLAN_sprint-14-interpolation-perception.md
 
 **Achieve buttery-smooth 60 FPS frontend rendering** through GPU-accelerated interpolation:
-1. Validate 22.2Hz tick rate (✅ achieved in Sprint 13)
+1. Validate tick rate (✅ achieved in Sprint 13)
 2. GPU vertex shader interpolation (smooth position/rotation)
 3. Organic wiggle animation (procedural, biologically plausible)
 4. Performance validation (60 FPS @ 1M entities target)
@@ -22,11 +22,11 @@
 
 ## Phase Checklist
 
-### Phase 1: Validate Tick Rate (22.2Hz) - Day 1 ✅ COMPLETE
-- [x] Discovered: 22.2Hz achieved in Sprint 13 NAPI migration
-- [x] Validated: Hardcoded in simulation_engine.rs:37
+### Phase 1: Validate Tick Rate - Day 1 ✅ COMPLETE
+- [x] Discovered: Tick rate achieved in Sprint 13 NAPI migration
+- [x] Validated: Defined in simulation_engine.rs:37 (TARGET_SIMULATION_HZ)
 - [x] Confirmed: All systems use DeltaTime resource
-- [x] Result: 22.2Hz provides ~45ms tick budget (sufficient for 150K-200K target)
+- [x] Result: Tick rate sufficient for 150K-200K target
 
 ### Phase 2: Frontend Interpolation (60Hz) - Days 2-3 🎮 GPU SHADER APPROACH
 **Owner:** shader-sarah (Dr. Sarah Boid - GPU/Shader Specialist)

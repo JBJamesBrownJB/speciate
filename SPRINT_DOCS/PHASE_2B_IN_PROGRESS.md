@@ -8,7 +8,7 @@
 
 ## Summary
 
-Phase 2B implements GPU-based interpolation for smooth 60 FPS rendering while the simulation runs at 22.2Hz. The core shader and double buffering implementation is complete.
+Phase 2B implements GPU-based interpolation for smooth 60 FPS rendering. Tick rate is defined in `simulation_engine.rs:37`. The core shader and double buffering implementation is complete.
 
 ---
 
@@ -21,7 +21,7 @@ Phase 2B implements GPU-based interpolation for smooth 60 FPS rendering while th
 - Added ping-pong buffer system (`buffers: [Buffer, Buffer]`)
 - Implemented buffer swapping in `updateGeometryBuffer()` to prevent GPU stalls
 - First buffer created in `createGeometry()`, second buffer created on first update
-- Buffers swap on each simulation tick (22.2Hz)
+- Buffers swap on each simulation tick
 
 **Critical Implementation:**
 ```typescript
@@ -63,7 +63,7 @@ float shortestPathRotation(float start, float end, float t) {
 ```
 
 **Interpolation Alpha Update:**
-- Increments from 0.0 → 1.0 over TICK_INTERVAL_MS (~45ms)
+- Increments from 0.0 → 1.0 over tick interval (derived from `TARGET_SIMULATION_HZ`)
 - Resets to 0.0 on simulation tick
 - Clamped to [0, 1] range
 - Uniform passed to shader: `uInterpolation`
@@ -109,7 +109,7 @@ float shortestPathRotation(float start, float end, float t) {
 ### 2. Geometry Attribute Rebinding on Swap
 **Decision:** Rebind all 6 attributes after buffer swap
 **Rationale:** PixiJS requires explicit buffer binding to geometry
-**Performance Impact:** Negligible (6 attribute bindings @ 22.2Hz = ~0.001ms per frame)
+**Performance Impact:** Negligible (6 attribute bindings per tick = ~0.001ms per frame)
 
 ### 3. Shortest-Path Rotation in Shader
 **Decision:** Implement rotation interpolation in GPU shader, not CPU

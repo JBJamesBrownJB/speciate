@@ -56,7 +56,7 @@ pub fn integrate_motion_system(
         if speed_sq > 0.01 {
             let speed = speed_sq.sqrt();
             let speed_ratio = speed / MAX_SPEED;
-            let size_factor = 1.0 / size.length.sqrt();
+            let size_factor = size.inv_sqrt_length;
             let noise_magnitude = movement_config.locomotion_noise_base * speed_ratio * speed_ratio * size_factor;
 
             let noise_x = perlin_locomotion_noise(entity.index(), tick, 0, movement_config.noise_time_scale);
@@ -98,6 +98,12 @@ pub fn integrate_motion_system(
             position.y = world_bounds.max_y;
             velocity.vy = velocity.vy.min(0.0);
         }
+    }
+}
+
+pub fn update_body_size_cache(mut query: Query<&mut BodySize, Changed<BodySize>>) {
+    for mut size in query.iter_mut() {
+        size.inv_sqrt_length = 1.0 / size.length.sqrt();
     }
 }
 

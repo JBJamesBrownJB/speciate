@@ -40,7 +40,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 |-------|--------|---------------|----------|
 | Phase 2A: Vision Split Queries | ✅ COMPLETE | 2x capacity (5K→10K) | 100% |
 | Phase 1b: Uber-Struct Refactor | ✅ COMPLETE | Archetype stability | 100% |
-| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 12.5% (1/8 opts) |
+| Phase 2A-2: Movement Optimizations | 🔄 IN PROGRESS | 13% tick budget (~6.5ms) | 25% (2/8 opts) |
 | Phase 1: Archetype Churn Trial | 📋 SKIPPED | Validation unnecessary | N/A |
 | Phase 2B: Vec2 + Changed<T> | 📋 PLANNED | 2-3ms @ 20K | 0% |
 | Phase 2C: Parallelization | 📋 PLANNED | 2-3x speedup | 0% |
@@ -209,8 +209,18 @@ impl BodySize {
 | Movement time | Baseline | -2ms | **8% improvement** |
 | Memory overhead | 0 | +4 bytes/creature | 40KB @ 10K |
 
-**Risk:** LOW | **Effort:** 30 min | **Status:** [ ] Not started
-**Critical:** BodySize.length is IMMUTABLE but sqrt() calculated every tick!
+**Risk:** LOW | **Effort:** 30 min | **Status:** ✅ **COMPLETE** (2025-11-28)
+
+**Actual Results:**
+- All 156 library tests pass
+- Added `inv_sqrt_length: f32` field to `BodySize` component (+4 bytes/creature)
+- Pre-computed at spawn via `BodySize::new(length)` constructor
+- Added `update_body_size_cache()` system using `Changed<BodySize>` filter
+- System runs BEFORE `integrate_motion_system` in schedule
+- Changed line 59: `size.inv_sqrt_length` instead of `1.0 / size.length.sqrt()`
+- **Serialization fix:** Added `#[serde(skip)]` and `#[reflect(ignore)]` to cache field (prevents Bevy reflection panic)
+- **Future-proof:** When growth is added, cache auto-updates via Bevy's change detection
+- Zero behavioral regression
 
 ---
 

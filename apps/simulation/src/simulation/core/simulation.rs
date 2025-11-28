@@ -7,7 +7,9 @@ use crate::simulation::creatures::behaviors::{
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
 use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
-use crate::simulation::movement::{integrate_motion_system, rotation_system};
+use crate::simulation::movement::{
+    integrate_motion_system, rotation_system, update_body_size_cache,
+};
 use crate::simulation::perception;
 use bevy_ecs::prelude::*;
 
@@ -72,6 +74,7 @@ impl SimulationBuilder {
             flee_system,
             seek_system,
             behaviors::avoidance_system,
+            update_body_size_cache,
             integrate_motion_system,
             rotation_system,
         ));

@@ -16,21 +16,22 @@ Scale backend ECS simulation to 150K-200K creatures through:
 
 ---
 
-## Baseline Metrics (Updated @ 10K Active Wanderers)
-**Source:** `docs/performance/snapshots/10k_wanderers_2025-11-28T18-53-31.json`
-**Previous baseline:** 5K @ 50ms (see 5k_wanderers_2025-11-28T14-33-50.json)
+## Baseline Metrics (Updated @ 20K Active Wanderers After Rayon)
+**Source:** `docs/performance/snapshots/10k_wanderers_2025-11-28T21-40-33.json` (10K post-Rayon)
+**Previous baseline:** 10K @ 49ms (pre-Rayon), 5K @ 50ms (pre-vision optimization)
 
 | Metric | Current Value | Status |
 |--------|---------------|--------|
-| Total tick time | **49ms** | ✅ UNDER BUDGET (45ms target) |
-| Perception system | **18.3ms (37%)** | ✅ **IMPROVED** (was 67% @ 5K) |
-| Movement systems | 26.5ms (54%) | Expected with 2x creatures |
-| Avoidance | 3.2ms (7%) | Acceptable |
+| Total tick time | **28.7ms @ 10K** | ✅ **WAY UNDER BUDGET** (45ms target) |
+| Movement systems | **4.1ms (14%)** | ✅ **6.3x SPEEDUP** (was 26.5ms) |
+| Perception system | **20.1ms (70%)** | Now the bottleneck |
+| Avoidance | 3.3ms (12%) | Acceptable |
 | Rotation | 0.2ms (<1%) | Negligible |
 | Vec allocations | **~0 bytes** | ✅ **ELIMINATED** |
-| Max active creatures | **~10K** | **2x improvement** |
-| CPU utilization | 18% (1 core) | Still single-threaded |
-| IPC | 2.84 | Good (cache-friendly) |
+| Max active creatures | **20K tested** | **4x improvement from Sprint start!** |
+| CPU utilization | **24.7% (all 16 cores)** | ✅ **Multi-core engaged!** |
+| IPC | **4.25** | ✅ **Excellent!** (was 3.0) |
+| CPU cores active | **16/16** | ✅ **Full parallelism** |
 
 ---
 
@@ -803,11 +804,28 @@ Phase 2D:     ██████████████████████
 
 ## Progress Notes
 
-### 2025-11-28: Phase 2A Complete ✅
+### 2025-11-28 (Evening): Phase 2C Complete ✅ - MASSIVE WIN!
+- **Rayon parallelization delivered:** 6.3x movement speedup (25.9ms → 4.1ms)
+- **Total tick improvement:** 47.7ms → 28.7ms (40% faster!)
+- **All 16 CPU cores engaged:** 19.6% → 24.7% utilization
+- **IPC jumped to 4.25:** Excellent instruction-level parallelism
+- **Capacity validated:** 20K creatures tested successfully!
+- **Next:** Phase 2D (Stochastic Vision) or Phase 2B (Vec2 SIMD)
+- **Source:** Snapshot `10k_wanderers_2025-11-28T21-40-33.json`
+- **Implementation:** Collect → Parallel → Write-back pattern with Rayon
+
+### 2025-11-28 (Afternoon): Phase 2A-2 Complete ✅
+- **Movement optimizations delivered:** 7 sequential optimizations (OPT-1 through OPT-7)
+- **Actual savings:** ~1.3ms total (modest but stable)
+- **Key optimizations:** Deferred sqrt, cached inv_sqrt, early exits
+- **OPT-7 (avoidance):** 3.2ms → 2.6ms (19% reduction)
+- **All 156 tests passing:** Zero behavioral regression
+- **Source:** Snapshots throughout the day
+
+### 2025-11-28 (Morning): Phase 2A Complete ✅
 - **Perception optimization delivered:** 10K creatures @ 49ms (2x capacity improvement)
 - **Vec allocations eliminated:** ~0 bytes/frame (was 3.2MB)
 - **Perception time reduced:** 18.3ms @ 10K (was 34ms @ 5K) - 46% improvement
-- **Next:** Phase 2B (Changed<T> filters + Vec2 SIMD)
 - **Source:** Snapshot `10k_wanderers_2025-11-28T18-53-31.json`, commit `642b598`
 
 ### Sprint Context

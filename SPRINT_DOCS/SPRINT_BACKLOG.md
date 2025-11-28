@@ -9,10 +9,14 @@
 ## Sprint Goal
 
 Scale backend ECS simulation to 150K-200K creatures through:
-1. **Uber-struct pattern** (stable archetypes, hot/cold split, cache-friendly)
-2. **Vision system refactor** (remove Vec allocation bottleneck, FOV, stochastic updates)
-3. **Vec2 vector math** (SIMD optimization)
-4. **Parallelization** (multi-core utilization)
+1. **Uber-struct pattern** (stable archetypes, hot/cold split, cache-friendly) - DONE
+2. **Vision system refactor** (remove Vec allocation bottleneck, FOV, stochastic updates) - DONE
+3. **Vec2 vector math** (SIMD optimization) - DONES
+4. **Parallelization** (multi-core utilization) - DONE FOR MOVEMENTS
+5. **🚨 CRITICAL: Stochastic Vision (Phase 2D) - FINAL Sprint 15 Task!!** 🚨
+   - Status: PENDING (cleanup complete, ready to implement)
+   - Expected: 90% perception time reduction @ 50K+ creatures
+   - Only update 10% of creatures per tick instead of 100%
 
 ---
 
@@ -45,7 +49,7 @@ Scale backend ECS simulation to 150K-200K creatures through:
 | Phase 1: Archetype Churn Trial | 📋 SKIPPED | Validation unnecessary | N/A |
 | Phase 2B: Vec2 + Changed<T> | 📋 PLANNED | 2-3ms @ 20K | 0% |
 | Phase 2C: Parallelization | ✅ COMPLETE | 2-3x speedup | 100% |
-| Phase 2D: Stochastic Vision | 📋 PLANNED | 90% perception | 0% |
+| **Phase 2D: Stochastic Vision** | **🔄 NEXT** | **90% perception** | **0% - READY TO START** |
 | Phase 3: Spatial Grid | 🔮 DEFERRED | Sprint 16+ | N/A |
 
 **Legend:** ✅ Complete | 🔄 In Progress | 📋 Planned | ⏸️ Conditional | 🔮 Deferred
@@ -728,7 +732,7 @@ Validate whether archetype fragmentation is a measurable performance problem bef
 
 ---
 
-## 📋 Phase 2D: Stochastic Vision + Validation
+## 🔄 Phase 2D: Stochastic Vision + Validation (NEXT - FINAL Sprint 15 Task)
 
 ### Expected Metrics After Stochastic Vision
 | Metric | Before | After | Gain |
@@ -804,13 +808,19 @@ Phase 2D:     ██████████████████████
 
 ## Progress Notes
 
+### 2025-11-28 (Night): Sprint 15 Cleanup Complete ✅
+- **Phase 1 (Safety):** Fixed test duplication (70 lines removed), added 3 Rayon safety tests
+- **Phase 2 (Quality):** Created query type aliases, removed 3 clippy suppressions, added inline math docs
+- **Phase 3 (Docs):** Created movement-spec.md, avoidance-spec.md, wander-spec.md, updated CLAUDE.md
+- **All 161 tests passing:** Zero compiler warnings, zero clippy warnings
+- **🚨 NEXT: Phase 2D - Stochastic Vision (FINAL Sprint 15 Task)** 🚨
+
 ### 2025-11-28 (Evening): Phase 2C Complete ✅ - MASSIVE WIN!
 - **Rayon parallelization delivered:** 6.3x movement speedup (25.9ms → 4.1ms)
 - **Total tick improvement:** 47.7ms → 28.7ms (40% faster!)
 - **All 16 CPU cores engaged:** 19.6% → 24.7% utilization
 - **IPC jumped to 4.25:** Excellent instruction-level parallelism
 - **Capacity validated:** 20K creatures tested successfully!
-- **Next:** Phase 2D (Stochastic Vision) or Phase 2B (Vec2 SIMD)
 - **Source:** Snapshot `10k_wanderers_2025-11-28T21-40-33.json`
 - **Implementation:** Collect → Parallel → Write-back pattern with Rayon
 

@@ -1,25 +1,13 @@
 use crate::simulation::components::*;
-use crate::simulation::core::components::*;
 use crate::simulation::movement::constants::{MAX_SPEED, SEEKING, SLOW_ZONE_MULTIPLIER};
+use crate::simulation::queries::SeekQuery;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
-use bevy_ecs::prelude::*;
 #[cfg(feature = "dev-tools")]
 use bevy_ecs::system::Res;
 
-#[allow(clippy::type_complexity)]
 pub fn seek_system(
-    mut query: Query<
-        (
-            &mut Position,
-            &mut Acceleration,
-            &Velocity,
-            &BodySize,
-            &Target,
-            &mut CreatureState,
-        ),
-        With<CanSeek>,
-    >,
+    mut query: SeekQuery,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
     #[cfg(feature = "dev-tools")]
@@ -69,6 +57,7 @@ pub fn seek_system(
             let slow_zone_distance = slow_zone - arrival_radius;
             let distance_into_zone = center_distance - arrival_radius;
             let ratio = distance_into_zone / slow_zone_distance;
+            // Exponential decay in slow zone: speed decreases smoothly as we approach target
             creature_max_speed * (SEEKING.slow_zone_decay * ratio).exp() / SEEKING.slow_zone_decay.exp()
         };
 

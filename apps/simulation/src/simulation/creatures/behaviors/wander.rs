@@ -1,22 +1,10 @@
 use crate::simulation::components::*;
-use crate::simulation::core::components::*;
 use crate::simulation::movement::{STEERING, TERRITORY};
-use bevy_ecs::prelude::*;
+use crate::simulation::queries::WanderQuery;
 use rand::Rng;
 
-#[allow(clippy::type_complexity)]
 pub fn territory_wandering_system(
-    mut query: Query<
-        (
-            &mut Acceleration,
-            &mut WanderState,
-            &Velocity,
-            &Position,
-            &HomePosition,
-            &CreatureState,
-        ),
-        With<CanWander>,
-    >,
+    mut query: WanderQuery,
     #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
         crate::instrumentation::SystemTimings,
     >,
@@ -185,6 +173,8 @@ pub fn calculate_territory_blend(
         return 0.5;
     }
 
+    // Sigmoid blend between wander (free roam) and homeward (territory bound)
+    // Steepness controls how quickly the blend transitions
     let normalized = (distance_from_home - blend_center) / comfort_radius;
     let sigmoid = 1.0 / (1.0 + (-TERRITORY.sigmoid_steepness * normalized).exp());
     sigmoid.clamp(0.0, 1.0)

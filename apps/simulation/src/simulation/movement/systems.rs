@@ -172,4 +172,208 @@ mod tests {
         assert_eq!(acceleration.ax, 0.0);
         assert_eq!(acceleration.ay, 0.0);
     }
+
+    #[test]
+    fn test_parallel_movement_determinism() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.016));
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
+        world.insert_resource(MovementConfig::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        // Spawn 100 entities with varied initial conditions
+        for i in 0..100 {
+            let x = (i as f32 * 0.5) % 100.0;
+            let y = (i as f32 * 0.3) % 100.0;
+            let mut state = CreatureState::default();
+            state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+            world.spawn((
+                BodySize::new(1.0),
+                Position { x, y },
+                Velocity { vx: (i as f32 * 0.1).sin(), vy: (i as f32 * 0.1).cos() },
+                Acceleration { ax: 0.0, ay: 0.0 },
+                state,
+            ));
+        }
+
+        // Run system and capture initial state
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        // Capture positions after first run
+        let positions_run1: Vec<_> = world
+            .query::<&Position>()
+            .iter(&world)
+            .map(|p| (p.x, p.y))
+            .collect();
+
+        // Reset to initial state
+        let mut world2 = World::new();
+        world2.insert_resource(DeltaTime(0.016));
+        world2.insert_resource(PhysicsTick(0));
+        world2.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
+        world2.insert_resource(MovementConfig::default());
+        #[cfg(feature = "dev-tools")]
+        world2.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        for i in 0..100 {
+            let x = (i as f32 * 0.5) % 100.0;
+            let y = (i as f32 * 0.3) % 100.0;
+            let mut state = CreatureState::default();
+            state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+            world2.spawn((
+                BodySize::new(1.0),
+                Position { x, y },
+                Velocity { vx: (i as f32 * 0.1).sin(), vy: (i as f32 * 0.1).cos() },
+                Acceleration { ax: 0.0, ay: 0.0 },
+                state,
+            ));
+        }
+
+        let mut system2 = IntoSystem::into_system(integrate_motion_system);
+        system2.initialize(&mut world2);
+        system2.run((), &mut world2);
+
+        // Capture positions after second run
+        let positions_run2: Vec<_> = world2
+            .query::<&Position>()
+            .iter(&world2)
+            .map(|p| (p.x, p.y))
+            .collect();
+
+        // Verify determinism: same input produces same output
+        assert_eq!(positions_run1.len(), 100);
+        assert_eq!(positions_run2.len(), 100);
+        for (i, ((x1, y1), (x2, y2))) in positions_run1.iter().zip(positions_run2.iter()).enumerate() {
+            assert!(
+                (x1 - x2).abs() < 0.0001,
+                "Entity {} X position mismatch: {} vs {}",
+                i, x1, x2
+            );
+            assert!(
+                (y1 - y2).abs() < 0.0001,
+                "Entity {} Y position mismatch: {} vs {}",
+                i, y1, y2
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_creatures_processed_in_parallel() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.016));
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
+        world.insert_resource(MovementConfig::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        // Spawn 1000 entities - all with zero velocity (sentinel value)
+        for _i in 0..1000 {
+            let mut state = CreatureState::default();
+            state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering; // Non-catatonic
+            world.spawn((
+                BodySize::new(1.0),
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 0.0, vy: 0.0 },
+                Acceleration { ax: 1.0, ay: 1.0 }, // Non-zero accel to trigger velocity change
+                state,
+            ));
+        }
+
+        // Run parallel integration
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        // Verify ALL entities were processed (acceleration should be reset to 0)
+        let mut processed_count = 0;
+        for accel in world.query::<&Acceleration>().iter(&world) {
+            assert_eq!(accel.ax, 0.0, "Acceleration should be reset after integration");
+            assert_eq!(accel.ay, 0.0, "Acceleration should be reset after integration");
+            processed_count += 1;
+        }
+
+        assert_eq!(processed_count, 1000, "All 1000 entities should be processed");
+
+        // Also verify velocities were updated (not still zero)
+        let velocities_updated = world
+            .query::<&Velocity>()
+            .iter(&world)
+            .filter(|v| v.vx != 0.0 || v.vy != 0.0)
+            .count();
+
+        assert_eq!(velocities_updated, 1000, "All velocities should be updated");
+    }
+
+    #[test]
+    fn test_concurrent_boundary_enforcement() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.016));
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
+        world.insert_resource(MovementConfig::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        // Spawn entities that will exceed boundaries in parallel
+        let test_cases = vec![
+            (150.0, 0.0, 10.0, 0.0),   // Beyond max_x
+            (-150.0, 0.0, -10.0, 0.0), // Beyond min_x
+            (0.0, 150.0, 0.0, 10.0),   // Beyond max_y
+            (0.0, -150.0, 0.0, -10.0), // Beyond min_y
+        ];
+
+        for (x, y, vx, vy) in test_cases.iter() {
+            let mut state = CreatureState::default();
+            state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+            world.spawn((
+                BodySize::new(1.0),
+                Position { x: *x, y: *y },
+                Velocity { vx: *vx, vy: *vy },
+                Acceleration { ax: 0.0, ay: 0.0 },
+                state,
+            ));
+        }
+
+        // Run parallel integration (includes boundary enforcement)
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        // Verify all positions are clamped to boundaries
+        for pos in world.query::<&Position>().iter(&world) {
+            assert!(
+                pos.x >= -100.0 && pos.x <= 100.0,
+                "Position X {} should be clamped to [-100, 100]",
+                pos.x
+            );
+            assert!(
+                pos.y >= -100.0 && pos.y <= 100.0,
+                "Position Y {} should be clamped to [-100, 100]",
+                pos.y
+            );
+        }
+
+        // Verify velocities were corrected at boundaries
+        let velocities: Vec<_> = world.query::<&Velocity>().iter(&world).collect();
+
+        // Entity 0: was beyond max_x, velocity.vx should be clamped to <= 0
+        assert!(velocities[0].vx <= 0.0, "Velocity at max_x boundary should be non-positive");
+
+        // Entity 1: was beyond min_x, velocity.vx should be clamped to >= 0
+        assert!(velocities[1].vx >= 0.0, "Velocity at min_x boundary should be non-negative");
+
+        // Entity 2: was beyond max_y, velocity.vy should be clamped to <= 0
+        assert!(velocities[2].vy <= 0.0, "Velocity at max_y boundary should be non-positive");
+
+        // Entity 3: was beyond min_y, velocity.vy should be clamped to >= 0
+        assert!(velocities[3].vy >= 0.0, "Velocity at min_y boundary should be non-negative");
+    }
 }

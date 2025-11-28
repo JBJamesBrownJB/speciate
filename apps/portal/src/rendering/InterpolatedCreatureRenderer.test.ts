@@ -316,4 +316,67 @@ describe("InterpolatedCreatureRenderer", () => {
       expect(mesh.visible).toBe(true);
     });
   });
+
+  describe("texture aspect ratio", () => {
+    it("should set texture aspect ratio uniform based on texture dimensions", () => {
+      const rectangularTexture = {
+        width: 239,
+        height: 163,
+        source: {
+          width: 239,
+          height: 163,
+          uid: 2,
+          _resourceType: "textureSource",
+          _resourceId: 2,
+          destroyed: false,
+        },
+      } as unknown as Texture;
+
+      const aspectRenderer = new InterpolatedCreatureRenderer(rectangularTexture, 1000);
+      const uniforms = aspectRenderer.getUniforms();
+
+      const expectedAspectRatio = 163 / 239;
+      expect(uniforms.uTextureAspectRatio).toBeCloseTo(expectedAspectRatio, 3);
+    });
+
+    it("should create square quad for square texture (aspect ratio 1.0)", () => {
+      const squareTexture = {
+        width: 64,
+        height: 64,
+        source: {
+          width: 64,
+          height: 64,
+          uid: 3,
+          _resourceType: "textureSource",
+          _resourceId: 3,
+          destroyed: false,
+        },
+      } as unknown as Texture;
+
+      const squareRenderer = new InterpolatedCreatureRenderer(squareTexture, 1000);
+      const uniforms = squareRenderer.getUniforms();
+
+      expect(uniforms.uTextureAspectRatio).toBe(1.0);
+    });
+
+    it("should handle tall textures (height > width)", () => {
+      const tallTexture = {
+        width: 100,
+        height: 200,
+        source: {
+          width: 100,
+          height: 200,
+          uid: 4,
+          _resourceType: "textureSource",
+          _resourceId: 4,
+          destroyed: false,
+        },
+      } as unknown as Texture;
+
+      const tallRenderer = new InterpolatedCreatureRenderer(tallTexture, 1000);
+      const uniforms = tallRenderer.getUniforms();
+
+      expect(uniforms.uTextureAspectRatio).toBe(2.0);
+    });
+  });
 });

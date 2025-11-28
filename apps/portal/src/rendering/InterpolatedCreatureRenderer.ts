@@ -157,6 +157,7 @@ export class InterpolatedCreatureRenderer {
       uniform vec2 uCameraPos;      // Camera position in world meters
       uniform float uCameraZoom;     // Pixels per meter
       uniform vec2 uViewportSize;    // Screen size in pixels
+      uniform float uTextureAspectRatio;  // Height/width ratio of texture
 
       out vec2 vTextureCoord;
 
@@ -178,8 +179,9 @@ export class InterpolatedCreatureRenderer {
         vec2 worldPos = mix(aStartPos, aEndPos, uInterpolation);
         float rotation = shortestPathRotation(aStartRot, aEndRot, uInterpolation);
 
-        // Create quad vertex in local space
-        vec2 localPos = (aQuadVertex - 0.5) * aSize;
+        // Create quad vertex in local space with aspect-corrected dimensions
+        vec2 quadSize = vec2(aSize, aSize * uTextureAspectRatio);
+        vec2 localPos = (aQuadVertex - 0.5) * quadSize;
         vTextureCoord = aQuadVertex;
 
         // Apply rotation
@@ -229,6 +231,7 @@ export class InterpolatedCreatureRenderer {
       uCameraPos: { value: new Float32Array([0, 0]), type: 'vec2<f32>' },
       uCameraZoom: { value: 10.0, type: 'f32' },
       uViewportSize: { value: new Float32Array([800, 600]), type: 'vec2<f32>' },
+      uTextureAspectRatio: { value: texture.height / texture.width, type: 'f32' },
     });
 
     return Shader.from({

@@ -1,0 +1,23 @@
+# Cycling Brain Stress Test
+#
+# Purpose: 2.5K creatures with BrainMode::Cycling to stress test
+# behavior transitions and verify archetype stability.
+#
+# Each creature cycles: Catatonic -> Wandering -> Seeking -> Catatonic
+# Brain cooldown scales with age/energy, so transitions are staggered.
+
+name = "Cycling Brain Stress Test"
+description = """
+2500 creatures with cycling brains for regression testing.
+Verifies archetype stability under constant behavior transitions.
+"""
+
+[[spawns]]
+type = "grid"
+start_x = -50.0
+start_y = -50.0
+spacing = 2.0
+rows = 50
+cols = 50
+creature_type = "cycling"
+grid_offset_y = 1.0

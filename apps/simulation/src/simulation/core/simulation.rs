@@ -7,7 +7,9 @@ use crate::simulation::creatures::behaviors::{
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
 use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
-use crate::simulation::movement::{integrate_motion_system, rotation_system};
+use crate::simulation::movement::{
+    integrate_motion_system, rotation_system, update_body_size_cache,
+};
 use crate::simulation::perception;
 use bevy_ecs::prelude::*;
 
@@ -30,7 +32,7 @@ impl SimulationBuilder {
 
         use crate::simulation::components::*;
         use crate::simulation::core::components::*;
-        use crate::simulation::perception::{AvoidanceBehavior, Perception};
+        use crate::simulation::perception::AvoidanceBehavior;
         use bevy_ecs::prelude::AppTypeRegistry;
 
         world.init_resource::<AppTypeRegistry>();
@@ -43,11 +45,12 @@ impl SimulationBuilder {
             type_registry.register::<Acceleration>();
             type_registry.register::<BodySize>();
             type_registry.register::<Rotation>();
-            type_registry.register::<Catatonic>();
 
             type_registry.register::<CritId>();
             type_registry.register::<CreatureState>();
             type_registry.register::<BehaviorMode>();
+            type_registry.register::<Brain>();
+            type_registry.register::<BrainMode>();
             type_registry.register::<HomePosition>();
 
             type_registry.register::<CanSeek>();
@@ -55,7 +58,6 @@ impl SimulationBuilder {
             type_registry.register::<CanWander>();
             type_registry.register::<CanAvoidObstacles>();
 
-            type_registry.register::<Perception>();
             type_registry.register::<AvoidanceBehavior>();
             type_registry.register::<Target>();
 
@@ -72,6 +74,7 @@ impl SimulationBuilder {
             flee_system,
             seek_system,
             behaviors::avoidance_system,
+            update_body_size_cache,
             integrate_motion_system,
             rotation_system,
         ));
@@ -97,6 +100,7 @@ impl SimulationBuilder {
 
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
+        world.insert_resource(perception::PerceptionScratchBuffer::default());
 
         Self { world, schedule }
     }

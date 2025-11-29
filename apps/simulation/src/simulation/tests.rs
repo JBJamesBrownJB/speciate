@@ -150,7 +150,7 @@ mod system_tests {
 #[cfg(test)]
 mod behavior_tests {
 
-    use crate::simulation::components::{BehaviorMode, CreatureState, CritId, Position, Velocity};
+    use crate::simulation::components::{BehaviorMode, CreatureState, CritId, Position, Target, Velocity};
     use crate::simulation::creatures::builder::CritBuilder;
     use crate::simulation::SimulationBuilder;
 
@@ -241,6 +241,101 @@ mod behavior_tests {
             }
         }
         assert!(found, "Should find the crit after updates");
+    }
+
+    #[test]
+    fn test_catatonic_transition_preserves_momentum() {
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        let builder = CritBuilder::new()
+            .at(0.0, 0.0)
+            .as_seeker(5.0, 0.0)
+            .with_all_capabilities();
+        let entity_id = sim.spawn_crit(builder);
+
+        for _ in 0..200 {
+            sim.update(0.05);
+
+            let world = sim.world_mut();
+            let mut query = world.query::<(&CritId, &Velocity, &CreatureState)>();
+
+            for (crit_id, velocity, state) in query.iter(world) {
+                if crit_id.0 == entity_id && state.behavior == BehaviorMode::Catatonic {
+                    assert!(
+                        velocity.vx.abs() > 0.01 || velocity.vy.abs() > 0.01,
+                        "Velocity should be preserved on Catatonic transition, but got vx={}, vy={} (current code zeros velocity)",
+                        velocity.vx,
+                        velocity.vy
+                    );
+                    return;
+                }
+            }
+        }
+
+        panic!("Creature should have transitioned to Catatonic after reaching target");
+    }
+
+    #[test]
+    fn test_catatonic_deceleration_via_damping() {
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        let builder = CritBuilder::new()
+            .at(0.0, 0.0)
+            .with_all_capabilities()
+            .in_behavior(BehaviorMode::Catatonic);
+        let entity_id = sim.spawn_crit(builder);
+
+        {
+            let world = sim.world_mut();
+            let mut query = world.query::<(&CritId, &mut Velocity)>();
+            for (crit_id, mut velocity) in query.iter_mut(world) {
+                if crit_id.0 == entity_id {
+                    velocity.vx = 10.0;
+                    velocity.vy = 0.0;
+                }
+            }
+        }
+
+        let initial_speed = 10.0;
+        let mut prev_speed = initial_speed;
+
+        for _ in 0..100 {
+            sim.update(0.05);
+
+            let world = sim.world_mut();
+            let mut query = world.query::<(&CritId, &Velocity)>();
+
+            for (crit_id, velocity) in query.iter(world) {
+                if crit_id.0 == entity_id {
+                    let speed = (velocity.vx * velocity.vx + velocity.vy * velocity.vy).sqrt();
+
+                    if speed >= 0.01 {
+                        assert!(
+                            speed < prev_speed,
+                            "Speed should decrease each tick (prev: {}, current: {})",
+                            prev_speed,
+                            speed
+                        );
+                    }
+                    prev_speed = speed;
+                }
+            }
+        }
+
+        let world = sim.world_mut();
+        let mut query = world.query::<(&CritId, &Velocity)>();
+
+        for (crit_id, velocity) in query.iter(world) {
+            if crit_id.0 == entity_id {
+                assert!(
+                    velocity.vx.abs() < 0.1,
+                    "Should decelerate to near-zero after 100 ticks, got: {}",
+                    velocity.vx
+                );
+            }
+        }
     }
 
     #[test]
@@ -560,6 +655,85 @@ mod behavior_tests {
             final_y.abs() < 10.0,
             "Seeker should return near target Y after avoidance (final Y: {:.2}, target: 0)",
             final_y
+        );
+    }
+
+    #[test]
+    fn test_cycling_to_seeking_assigns_random_target() {
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        let builder = CritBuilder::new()
+            .at(50.0, 50.0)
+            .with_all_capabilities()
+            .with_cycling_brain()
+            .in_behavior(BehaviorMode::Wandering);
+        let entity_id = sim.spawn_crit(builder);
+
+        let world = sim.world_mut();
+        let mut query = world.query::<(&CritId, &Target)>();
+        let mut target_before = Target::new(0.0, 0.0);
+        for (crit_id, target) in query.iter(world) {
+            if crit_id.0 == entity_id {
+                target_before = *target;
+            }
+        }
+
+        for _ in 0..200 {
+            sim.update(0.05);
+
+            let world = sim.world_mut();
+            let mut query = world.query::<(&CritId, &CreatureState, &Target, &Position)>();
+
+            for (crit_id, state, target, position) in query.iter(world) {
+                if crit_id.0 == entity_id && state.behavior == BehaviorMode::Seeking {
+                    assert_ne!(
+                        target.x, target_before.x,
+                        "Target X should change when cycling to Seeking"
+                    );
+                    assert_ne!(
+                        target.y, target_before.y,
+                        "Target Y should change when cycling to Seeking"
+                    );
+
+                    let distance = ((target.x - position.x).powi(2) + (target.y - position.y).powi(2)).sqrt();
+                    assert!(
+                        distance >= 50.0 && distance <= 200.0,
+                        "Target should be 50-200 units away, got: {}",
+                        distance
+                    );
+                    return;
+                }
+            }
+        }
+
+        panic!("Creature should have cycled to Seeking mode within 200 ticks");
+    }
+
+    #[test]
+    fn test_archetype_stability_with_cycling_brain() {
+        let mut sim = SimulationBuilder::new().build();
+
+        for i in 0..100 {
+            let builder = CritBuilder::new()
+                .at(i as f32 * 10.0, 0.0)
+                .with_cycling_brain()
+                .in_behavior(BehaviorMode::Catatonic);
+            sim.spawn_crit(builder);
+        }
+
+        let post_spawn_archetype_count = sim.world().archetypes().len();
+
+        for _ in 0..1000 {
+            sim.update(0.05);
+        }
+
+        let final_archetype_count = sim.world().archetypes().len();
+
+        assert_eq!(
+            post_spawn_archetype_count, final_archetype_count,
+            "Archetype count should remain stable after 1000 ticks with cycling brains (was {}, now {})",
+            post_spawn_archetype_count, final_archetype_count
         );
     }
 }

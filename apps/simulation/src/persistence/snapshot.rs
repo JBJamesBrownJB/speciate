@@ -200,6 +200,23 @@ impl Simulation {
         let mut entity_map = bevy_ecs::entity::EntityHashMap::default();
         scene.write_to_world(&mut simulation.world, &mut entity_map)?;
 
+        // Perception is not serialized (fixed-array optimization). Reconstruct from BodySize.
+        use crate::simulation::core::components::BodySize;
+        use crate::simulation::perception::Perception;
+        let entities_needing_perception: Vec<(Entity, f32)> = simulation
+            .world
+            .query_filtered::<(Entity, &BodySize), Without<Perception>>()
+            .iter(&simulation.world)
+            .map(|(e, size)| (e, size.length))
+            .collect();
+
+        for (entity, body_length) in entities_needing_perception {
+            simulation
+                .world
+                .entity_mut(entity)
+                .insert(Perception::from_body_size(body_length));
+        }
+
         Ok(simulation)
     }
 }

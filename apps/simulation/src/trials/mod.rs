@@ -64,6 +64,8 @@ pub enum CreatureType {
     Seeker,
 
     Wanderer,
+
+    Cycling,
 }
 
 impl Default for CreatureType {

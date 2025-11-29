@@ -3,7 +3,7 @@ use crate::simulation::components::*;
 use bevy_ecs::prelude::*;
 
 pub fn rotation_system(
-    mut query: Query<(&mut Rotation, &Velocity)>,
+    mut query: Query<(&mut Rotation, &Velocity), Changed<Velocity>>,
     #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
         crate::instrumentation::SystemTimings,
     >,

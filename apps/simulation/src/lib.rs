@@ -52,13 +52,13 @@ macro_rules! time_system {
 // Core simulation types
 pub use simulation::core::{Simulation, SimulationBuilder};
 pub use simulation::core::components::{
-    Acceleration, BodySize, BoundaryConfig, Catatonic, DeltaTime,
+    Acceleration, BodySize, BoundaryConfig, DeltaTime,
     PhysicsTick, Position, Velocity,
 };
 
 // Creature components and capabilities
 pub use simulation::creatures::components::{
-    BehaviorMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
+    BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
     CreatureState, CritId, FleeState, HomePosition, Target, WanderState,
 };
 pub use simulation::components::Rotation;

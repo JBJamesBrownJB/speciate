@@ -3,6 +3,7 @@ pub mod core;
 pub mod creatures;
 pub mod movement;
 pub mod perception;
+pub mod queries;
 
 // Legacy modules (to be refactored)
 pub mod components; // Will be split across domains

@@ -3,6 +3,7 @@
 ## Quick Reference
 
 **Key Documentation:**
+- `docs/spec/` - **Live specification of implemented features** (brain-spec.md, etc.)
 - `docs/archive/dual-tick/` - ⚠️ ABANDONED architecture (Sprint 11, archived for learning)
 - `docs/architecture/napi-architecture.md` - Current NAPI-RS integration (zero-copy buffers)
 - `docs/biology/dna-driven-design.md` - DNA-driven design principles (detailed)
@@ -10,13 +11,17 @@
 - `docs/biology/biology-notes.md` - Zoologist consultation log
 - `SPRINT_DOCS/` - Current and past sprint plans
 
-**Current Sprint:** Sprint 14 - Interpolation, Vision Refactor & Data-Oriented Design (IN PROGRESS)
-- Branch: `feat/sprint-14-interpolation-perception`
-- Focus: Scale to 150K-200K creatures via interpolation, vision optimization, and ECS refactoring
-- Status: Phase 1 complete (tick rate validated at 22.2Hz)
-- See: `SPRINT_DOCS/SPRINT_PLAN_sprint-14-interpolation-perception.md`
+**Current Sprint:** Sprint 15 - ECS Optimizations (COMPLETE)
+- Branch: `feat/sprint-15-ecs-optimizations`
+- Focus: Movement parallelization, perception split queries, brain serialization fix
+- Achievements: 6.3x movement speedup (Rayon), 2x vision capacity, 20K creature validation
+- See: `SPRINT_DOCS/SPRINT_BACKLOG.md`
 
-**Recent Completion:** Sprint 13 delivered zero-copy double-buffer architecture, replacing stdio MessagePack IPC
+**Next Sprint:** Sprint 16 - TBD (Stochastic Vision or Spatial Grid)
+
+**Recent Completions:**
+- Sprint 15: Rayon parallelization, vision refactor, query type aliases, comprehensive test coverage
+- Sprint 13: Zero-copy double-buffer architecture, replacing stdio MessagePack IPC
 
 **Tick Rate:** 22.2Hz (hardcoded in `simulation_engine.rs`, ~45ms per tick)
 - Replaced configurable tick rate from old stdio system
@@ -74,6 +79,45 @@ The complete TDD cycle has three mandatory stages:
 - Jump into fixing without a failing test first
 
 **Exception:** Environment issues (GPU drivers, Docker config) don't need tests.
+
+---
+
+## Specification Documentation - MANDATORY
+
+**CRITICAL: Update `docs/spec/` when implementing features.**
+
+### What Goes in Specs
+
+The `docs/spec/` folder contains **live documentation of IMPLEMENTED features**:
+- Current behavior (not planned/future)
+- Constants and their values
+- Component structures
+- System interactions
+- Design decisions with rationale
+
+### When to Update
+
+**After implementing a feature:**
+1. Create or update the relevant spec file (e.g., `brain-spec.md`, `movement-spec.md`)
+2. Document what IS, not what WILL BE
+3. Include actual constant values from code
+4. Describe system interactions
+
+**Spec files:**
+- `brain-spec.md` - Brain component, decision timing, panic override
+- `movement-spec.md` - Movement systems, steering behaviors
+- `perception-spec.md` - Vision system, neighbor detection
+- (Add more as features are implemented)
+
+### Format
+
+Each spec should include:
+- **Status:** Implemented/Partial/Planned
+- **Location:** Source file paths
+- **Overview:** What the system does
+- **Components:** Structs and enums
+- **Constants:** Hardcoded values with descriptions
+- **Integration:** How it connects to other systems
 
 ---
 
@@ -218,6 +262,37 @@ npm run build && npm run package
 - Domain layer: Pure TypeScript
 - Rendering layer: PixiJS integration
 - Infrastructure: External services
+
+### Parallelization (Sprint 15)
+
+Movement systems use Rayon for multi-core execution:
+- **Pattern:** Collect entities → `par_iter_mut()` → write-back
+- **Performance:** 6.3x speedup at 10K creatures (25.9ms → 4.1ms)
+- **Scaling:** All 16 cores engaged, IPC: 4.25
+- **Architecture:** Manual Vec collection required (Bevy's par_iter_mut doesn't engage Rayon in NAPI context)
+
+**Implementation:**
+```rust
+// Collect entities into Vec for Rayon
+let mut entities: Vec<_> = query.iter_mut().collect();
+
+// Parallel physics integration (uses all CPU cores)
+entities.par_iter_mut().for_each(|(entity, size, position, velocity, ...)| {
+    // Physics logic runs in parallel
+});
+
+// Parallel boundary enforcement (reuse Vec)
+entities.par_iter_mut().for_each(|(position, velocity, ...)| {
+    // Boundary clamping in parallel
+});
+```
+
+**Key Insights:**
+- Two parallel loops reuse same Vec (efficient)
+- Automatic write-back through mutable references (no explicit sync)
+- Validated at 20K creatures with determinism tests
+
+**See:** `apps/simulation/src/simulation/movement/systems.rs:35-113`, `docs/spec/movement-spec.md`
 
 ---
 

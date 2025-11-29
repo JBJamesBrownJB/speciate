@@ -30,6 +30,7 @@ noise = "0.9"  # Perlin noise for locomotion variability
 chrono = { version = "0.4", features = ["serde"] }  # Timestamp generation for snapshots
 crossbeam = "0.8"  # Lock-free data structures for snapshot queue
 crossbeam-channel = "0.5"  # High-performance MPSC for background IPC writer
+rayon = "1.8"  # Data parallelism for movement systems
 
 # NAPI-RS (Node.js Native Addon)
 napi = { version = "2.12", features = ["napi4", "serde-json"] }

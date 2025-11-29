@@ -14,6 +14,7 @@ pub struct CritBundle {
     pub body_size: BodySize,
     pub rotation: Rotation,
     pub creature_state: CreatureState,
+    pub brain: Brain,
     pub wander_state: WanderState,
     pub home_position: HomePosition,
     pub can_seek: CanSeek,
@@ -52,6 +53,7 @@ pub struct CritBuilder {
     velocity: (f32, f32),
     capabilities: CritCapabilities,
     behavior: BehaviorMode,
+    brain_mode: BrainMode,
     energy: f32,
     age: f32,
     max_speed: f32,
@@ -72,6 +74,7 @@ impl CritBuilder {
             velocity: (0.0, 0.0),
             capabilities: CritCapabilities::default(),
             behavior: BehaviorMode::Wandering,
+            brain_mode: BrainMode::Normal,
             energy: 100.0,
             age: 0.0,
             max_speed: MAX_SPEED,
@@ -117,6 +120,21 @@ impl CritBuilder {
 
     pub fn in_behavior(mut self, behavior: BehaviorMode) -> Self {
         self.behavior = behavior;
+        self
+    }
+
+    pub fn with_brain_mode(mut self, mode: BrainMode) -> Self {
+        self.brain_mode = mode;
+        self
+    }
+
+    pub fn with_cycling_brain(mut self) -> Self {
+        self.brain_mode = BrainMode::Cycling;
+        self
+    }
+
+    pub fn with_dormant_brain(mut self) -> Self {
+        self.brain_mode = BrainMode::Dormant;
         self
     }
 
@@ -193,6 +211,7 @@ impl CritBuilder {
                 age: self.age,
                 max_speed: self.max_speed,
             },
+            brain: Brain::with_mode(self.brain_mode),
             wander_state: WanderState {
                 wander_angle: rng.gen_range(0.0..std::f32::consts::TAU),
                 wander_radius: 5.0,

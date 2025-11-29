@@ -54,11 +54,21 @@ pub struct Acceleration {
 #[reflect(Component)]
 pub struct BodySize {
     pub length: f32,
+    #[serde(skip, default = "default_inv_sqrt")]
+    #[reflect(ignore)]
+    pub inv_sqrt_length: f32,
+}
+
+fn default_inv_sqrt() -> f32 {
+    1.0
 }
 
 impl BodySize {
     pub fn new(length: f32) -> Self {
-        Self { length }
+        Self {
+            length,
+            inv_sqrt_length: 1.0 / length.sqrt(),
+        }
     }
 
     pub fn radius(&self) -> f32 {
@@ -68,7 +78,7 @@ impl BodySize {
 
 impl Default for BodySize {
     fn default() -> Self {
-        Self { length: 1.0 }
+        Self::new(1.0)
     }
 }
 
@@ -102,10 +112,6 @@ impl Default for ActualTickRate {
         Self(-1.0)
     }
 }
-
-#[derive(Component, Debug, Clone, Copy, Reflect)]
-#[reflect(Component)]
-pub struct Catatonic;
 
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct BoundaryConfig {

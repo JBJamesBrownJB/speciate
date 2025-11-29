@@ -954,3 +954,108 @@ fn behavior_update(
 
 **Reference:** Future optimization backlog entry for implementation details.
 
+---
+
+## 2025-11-29 | Vision System DNA Design | Sprint 18 Planning
+
+### Request
+DNA-driven vision parameters to replace hardcoded perception range and FOV. Need realistic trade-offs like real animals (hawks: long range + narrow FOV, rabbits: wide FOV + shorter range).
+
+### Biological Input
+
+**Three core vision genes recommended:**
+
+1. **`visual_range_multiplier`** (4.0-25.0, default 10.0)
+   - Biological basis: Eye size, foveal photoreceptor density, optical quality
+   - Trade-offs: High range requires concentrated photoreceptors → reduces FOV effectiveness, increases metabolism
+   - Metabolism cost: +0.5% base metabolism per point above 10
+   - Birth cost: +2% biomass per point above 10
+
+2. **`visual_arc`** (π/3 to 2π radians, default π)
+   - Biological basis: Eye placement (lateral vs frontal), retinal extent
+   - Trade-offs: Wide arc (>π) applies 0.7× penalty to effective range (peripheral vision = lower acuity)
+   - Birth cost: +1% biomass per π/6 above π
+   - Ranges: 60-90° (predator), 180-240° (generalist), 270-360° (prey)
+
+3. **`neural_speed`** (0.5-2.0, default 1.0)
+   - Biological basis: Optic nerve myelination, reflexive vs deliberative processing
+   - Interpretation: Lower value = slower reactions, higher value = faster reactions
+   - Trade-offs: Fast processing = high energy burn during active vision, prone to false positives
+   - Maintenance cost: +1% base metabolism per 0.1 above 1.0
+   - Active cost: +3% active metabolism per 0.1 above 1.0
+   - Birth cost: +1% biomass per 0.1 above 1.0
+
+### Key Biological Constraints
+
+**Fundamental Law:** "You cannot maximize range, FOV, acuity, speed, AND low-light sensitivity simultaneously. Evolution produces specialists."
+
+**Vision systems are expensive:** Retina is brain tissue, visual processing consumes 20-25% of metabolic output in visual species.
+
+**Body size interactions:**
+- Range bonus: Weak allometric relationship `size^0.1` (higher vantage point, larger eyes)
+- Max range cap: `30 / size^0.3` (prevents unrealistic combinations - elephants can't have hawk eyes due to optical physics)
+- Reaction time: Existing size-based formula remains primary, neural_speed modifies it
+
+### Creature Archetypes Validated
+
+**Hawk (Aerial Apex Predator):**
+- `visual_range_multiplier`: 22.0 (8× human visual acuity)
+- `visual_arc`: π/2 (90°, narrow binocular)
+- `neural_speed`: 1.3 (fast but deliberative)
+- Phenotype: Extreme distance vision, poor peripheral awareness, calculated pursuit
+- Costs: +9% base metabolism, +27% birth biomass
+
+**Rabbit (Prey Generalist):**
+- `visual_range_multiplier`: 6.0 (moderate)
+- `visual_arc`: 5π/3 (300°, near-omnidirectional)
+- `neural_speed`: 1.8 (extremely fast reflexes)
+- Phenotype: Effective range reduced by FOV penalty (6.0 × 0.7 = 4.2×), detects movement everywhere, prone to panic
+- Costs: +8% base metabolism, +24% active metabolism, +12% birth biomass
+
+**Owl (Nocturnal Ambush Predator):**
+- `visual_range_multiplier`: 14.0 (good but not exceptional)
+- `visual_arc`: 2π/3 (120°, binocular frontal)
+- `neural_speed`: 0.7 (slow, integrative)
+- Phenotype: Patient hunter, long integration time (low-light adapted), deliberate strike
+- Costs: +2% base metabolism, +8% birth biomass
+
+**Bison (Social Grazer):**
+- `visual_range_multiplier`: 8.0 (decent, vision secondary to herd)
+- `visual_arc`: 3π/2 (270°, wide lateral)
+- `neural_speed`: 1.0 (baseline, relies on herd early warning)
+- Phenotype: Range penalized for wide arc, collective panic behavior
+- Costs: +4% birth biomass
+
+### Implementation Formulas
+
+**Effective perception range:**
+```rust
+let fov_penalty = if dna.visual_arc > PI { 0.7 } else { 1.0 };
+let size_bonus = size.powf(0.1);
+let max_multiplier = 30.0 / size.powf(0.3);
+let clamped = dna.visual_range_multiplier.min(max_multiplier);
+let perception_range = body_length * clamped * fov_penalty * size_bonus;
+```
+
+**Modified reaction time:**
+```rust
+let base_ms = 68.0 + (size - 0.5) * 49.41;  // Existing size formula
+let modified_ms = (base_ms / dna.neural_speed).clamp(30.0, 1000.0);
+```
+
+**Vision metabolism modifier:**
+```rust
+let range_cost = ((dna.visual_range_multiplier - 10.0).max(0.0)) * 0.005;
+let speed_cost = ((dna.neural_speed - 1.0).max(0.0)) * 0.10;
+let modifier = 1.0 + range_cost + speed_cost;
+```
+
+### Design Philosophy
+
+These genes create **ecological niches, not balance**. Hawks dominate open terrain. Rabbits survive through numbers and reflexes. Owls own the night. Natural selection discovers specialists through mutation and environmental pressure.
+
+**Blind spots:** Simple FOV cone is sufficient (complex blind spot geometry adds cost with minimal emergent behavior payoff). Blind spot = `2π - visual_arc`, centered behind creature.
+
+### Status
+Approved for Sprint 18 implementation. Will replace hardcoded perception range (10.0×) and FOV (180°) with DNA-driven variation.
+

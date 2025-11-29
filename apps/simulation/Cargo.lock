@@ -2467,6 +2467,7 @@ dependencies = [
  "parking_lot",
  "perf-event",
  "rand",
+ "rayon",
  "regex",
  "rmp-serde",
  "serde",

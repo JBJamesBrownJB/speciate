@@ -1,8 +1,12 @@
 # Electron Desktop Architecture
 
+**Status:** ✅ CURRENT (NAPI-RS integration as of Sprint 13)
+
 ## Overview
 
-Speciate Phase 1 uses **Electron** to package the simulation as a standalone desktop application. The architecture uses **stdio MessagePack streaming** for efficient communication between the Rust simulation and the TypeScript/PixiJS frontend.
+Speciate Phase 1 uses **Electron** to package the simulation as a standalone desktop application. The architecture uses **NAPI-RS zero-copy shared memory** for ultra-efficient communication between the Rust simulation and the TypeScript/PixiJS frontend.
+
+**Previous architecture:** stdio MessagePack streaming (archived in `docs/archive/stdio/`)
 
 ## Architecture Diagram
 

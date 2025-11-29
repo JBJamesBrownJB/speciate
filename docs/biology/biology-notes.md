@@ -1059,3 +1059,130 @@ These genes create **ecological niches, not balance**. Hawks dominate open terra
 ### Status
 Approved for Sprint 18 implementation. Will replace hardcoded perception range (10.0×) and FOV (180°) with DNA-driven variation.
 
+---
+
+## 2025-11-29 | DNA Collector Gameplay System
+
+**Consultation:** Biological validation of DNA collection, manipulation, and cloning system for player-driven genetic engineering
+
+### Core Validated Concepts
+
+**DNA degradation post-mortem:**
+- Live capture: 100% quality
+- Fresh dead: 60% quality (enzymatic degradation begins)
+- Decomposed: 20% quality (fragmented, minimal value)
+- Decay function: `quality = base_quality × e^(-decay_rate × time_since_death)`
+
+**Incremental modification limits (5-15% per generation):**
+- Reflects biological reality: large mutations are lethal
+- Prevents "god mode" jumps
+- Matches natural selection constraints (~99% mutations are neutral/harmful)
+
+**Biomass as conserved resource:**
+- Cloning requires raw building blocks from dead creatures
+- Energy cost scales with complexity: `energy = biomass × complexity × size^0.75`
+- Development time scales allometrically: `time = base_time × size^0.25`
+
+### Critical Biological Constraints
+
+**Epistasis (gene interactions):**
+- Size changes force metabolic recalculation (Kleiber's law: metabolism ∝ mass^0.75)
+- Speed modifications require structural changes
+- Vision improvements demand neural pathway adjustments
+- Cannot cherry-pick advantages without consequences
+
+**Cloning fidelity degradation:**
+- Clones of clones accumulate errors (somatic mutations, epigenetic drift, telomere shortening)
+- Fidelity: `base_fidelity × (1 - clone_generation × degradation)`
+- Encourages returning to wild stock periodically
+
+**Developmental constraints:**
+- Not all gene combinations are viable (embryonically lethal)
+- Head-to-body ratio limits, organ scaling laws, structural integrity
+- Failed combinations = lost biomass
+
+### Genetic Diversity Mechanics
+
+**Hybrid vigor vs inbreeding depression:**
+```rust
+fitness = 1.0 + (diversity_bonus × ln(unique_lineages))
+          - (inbreeding_penalty × generations_cloned)
+```
+
+**Incentivizes:**
+- Collecting diverse specimens ("trophy hunting")
+- Refreshing gene pool from wild populations
+- Avoiding repeated cloning of single lineage
+
+### Speciation Thresholds
+
+**Gradient model (not binary):**
+
+| Divergence | Status | Interbreeding |
+|-----------|--------|---------------|
+| 0-5% | Local variety | 100% |
+| 5-15% | Subspecies | 80-100% (natural hybrids) |
+| 15-30% | Species boundary | 20-80% (tech-assisted) |
+| 30-50% | Genus boundary | 0-20% (extreme splicing) |
+| 50%+ | Family boundary | 0% (impossible) |
+
+**Speciation threshold:** 15-20% cumulative divergence
+**Small variances (<5%) do NOT create new species**
+
+### Cross-Breeding Mechanics
+
+**Natural:** Only works between closely related species (5-15% divergence), same biome
+**Tech-assisted:** "Hybridization Chamber" enables distant crosses, higher failure rate
+**Risk/Reward:** High biomass cost for failures, novel trait combinations on success
+
+### Environmental Gene Expression
+
+**Same DNA produces different phenotypes in different environments:**
+```rust
+expressed_trait = gene_value × environment_modifier^0.3
+```
+
+**Examples:**
+- Resource scarcity → smaller adult size
+- Cold climate → thicker fur/blubber
+- Predator presence → higher alertness
+
+**Gameplay implication:** Must consider WHERE creatures will live, not just WHAT modifications to make
+
+### Advanced Mechanics
+
+**Progressive understanding:**
+- First capture: Sequence genome (raw data only)
+- Observation time: Correlate genes to phenotypes
+- Multiple specimens: Statistical confidence in gene-trait relationships
+- Prevents instant "unlock all knowledge" exploit
+
+**Horizontal gene transfer:**
+- Gene vectors (engineered microorganisms) transfer genes between unrelated species
+- High-risk: Vectors may spread uncontrollably to wild populations
+- High-reward: Novel trait combinations
+
+### Design Principles Applied
+
+1. **Conservation of matter:** Biomass in = biomass out (minus inefficiency)
+2. **Conservation of energy:** All processes cost energy ∝ complexity
+3. **Incremental progress:** No instant "god creatures"
+4. **Biological constraints:** Not all combinations viable
+5. **Diversity incentive:** Hybrid vigor rewards collection, inbreeding punishes repetition
+6. **Emergent complexity:** Advanced traits arise from primitive gene interactions
+7. **Player-created species are friendly:** Incentivizes genetic experimentation
+
+### Gameplay Motivation
+
+**"NEW SPECIES DISCOVERED!" reward:**
+- Unlocks at 15-20% divergence threshold
+- All player-created species are friendly/controllable
+- Permanent addition to DNA bank (pride of creation)
+- Drives "trophy hunting" behavior and experimentation
+
+### Implementation Priority
+
+**Future feature** (not core simulation). All mechanics are biologically grounded and compatible with existing DNA-driven design principles.
+
+**Documentation:** `/home/dev/dev/speciate/docs/gameplay/dna-collector.md`
+

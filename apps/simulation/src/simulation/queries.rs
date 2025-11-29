@@ -21,7 +21,7 @@ pub type SeekQuery<'w, 's> = Query<
     'w,
     's,
     (
-        &'static mut Position,
+        &'static Position,  // Read-only: seek only reads position
         &'static mut Acceleration,
         &'static Velocity,
         &'static BodySize,

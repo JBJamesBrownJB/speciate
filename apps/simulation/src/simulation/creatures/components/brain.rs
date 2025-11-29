@@ -62,7 +62,8 @@ impl Brain {
         let energy_normalized = (energy / MAX_ENERGY).clamp(0.0, 1.0);
 
         let age_factor = 1.0 + age_normalized.powf(2.5) * AGE_SENSITIVITY;
-        let energy_factor = 1.0 + (1.0 - energy_normalized).powf(2.0) * 1.5;
+        let low_energy = 1.0 - energy_normalized;
+        let energy_factor = 1.0 + low_energy * low_energy * 1.5;
 
         BASE_COOLDOWN_MS * age_factor * energy_factor
     }

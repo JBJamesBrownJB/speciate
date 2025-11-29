@@ -1,5 +1,6 @@
 use super::constants::{
     ARRIVAL_THRESHOLD, BRAKE_FORCE, MAX_FORCE, POUNCE_SPEED, POUNCE_THRESHOLD, SLOW_ZONE_DECAY,
+    SLOW_ZONE_DECAY_EXP,
 };
 use crate::simulation::components::*;
 use crate::simulation::math::{clamp_force, magnitude_sq};
@@ -70,7 +71,7 @@ pub fn seek_system(
             let distance_into_zone = center_distance - arrival_radius;
             let ratio = distance_into_zone / slow_zone_distance;
             // Exponential decay in slow zone: speed decreases smoothly as we approach target
-            creature_max_speed * (SLOW_ZONE_DECAY * ratio).exp() / SLOW_ZONE_DECAY.exp()
+            creature_max_speed * (SLOW_ZONE_DECAY * ratio).exp() / SLOW_ZONE_DECAY_EXP
         };
 
         let desired_vx = (to_target_x / center_distance) * desired_speed;

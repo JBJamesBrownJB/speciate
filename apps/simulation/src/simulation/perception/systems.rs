@@ -16,6 +16,8 @@ pub fn update_perception_system(
     crate::time_system!(timings, "perception");
 
     scratch.positions.clear();
+    let count_hint = query.iter().size_hint().0;
+    scratch.positions.reserve(count_hint);
     for (entity, pos, size, _, _) in query.iter() {
         scratch.positions.push((entity, pos.x, pos.y, size.radius()));
     }

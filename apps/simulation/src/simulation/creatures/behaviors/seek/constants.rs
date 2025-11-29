@@ -11,6 +11,7 @@ pub const POUNCE_DISTANCE: f32 = 0.5; // Snap-to-target distance threshold (mete
 pub const POUNCE_SPEED: f32 = 5.5; // Maximum speed for pounce snap (m/s)
 pub const ARRIVAL_TOLERANCE: f32 = 0.5; // Stop when this close to target (meters)
 pub const SLOW_ZONE_DECAY: f32 = 1.5; // Exponential decay factor for deceleration curve
+pub const SLOW_ZONE_DECAY_EXP: f32 = 4.4816890703; // Precomputed: 1.5_f32.exp()
 
 #[cfg(test)]
 mod tests {

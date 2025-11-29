@@ -4,16 +4,23 @@ use speciate::{CritBuilder, Simulation, SimulationBuilder};
 // 22.2Hz tick rate → ~45ms per tick (matches TARGET_SIMULATION_HZ in napi_addon)
 const TICK_DELTA: f32 = 0.045;
 
-// Creature counts for scaling benchmarks
-// 1K = baseline, 10K = current target, 20K = stress test
-const SCALING_COUNTS: [usize; 4] = [1_000, 5_000, 10_000, 20_000];
+// Creature counts for scaling benchmarks (matches realistic production targets)
+// 1K = baseline, 10K = current target, 50K/100K = stress, 200K = capacity limit
+const SCALING_COUNTS: [usize; 5] = [1_000, 10_000, 50_000, 100_000, 200_000];
+
+// Spawn extent matching NAPI spawn_creatures (±500 = 1000×1000 area)
+const SPAWN_EXTENT: f32 = 500.0;
 
 fn create_simulation_with_creatures(count: usize) -> Simulation {
+    use rand::Rng;
     let mut sim = SimulationBuilder::new().build();
+    let mut rng = rand::thread_rng();
 
-    for i in 0..count {
-        let x = (i % 100) as f32 * 10.0;
-        let y = (i / 100) as f32 * 10.0;
+    // Random spawn matching NAPI: (rand - 0.5) * 1000 = ±500 units
+    // This matches apps/simulation/src/ipc/bridge/bevy_app.rs:108-109
+    for _ in 0..count {
+        let x = (rng.gen::<f32>() - 0.5) * (SPAWN_EXTENT * 2.0);
+        let y = (rng.gen::<f32>() - 0.5) * (SPAWN_EXTENT * 2.0);
 
         let builder = CritBuilder::new()
             .at(x, y)
@@ -33,7 +40,7 @@ fn bench_tick_scaling(c: &mut Criterion) {
     for count in SCALING_COUNTS {
         let mut sim = create_simulation_with_creatures(count);
 
-        // Warm-up: let ECS stabilize archetypes
+        // Warm-up: stabilize ECS archetypes (random spawn already spreads creatures)
         for _ in 0..10 {
             sim.update(TICK_DELTA);
         }

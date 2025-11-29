@@ -325,10 +325,10 @@ When working with the AI team, use the appropriate agent for your task:
 
 1. **Consult zoologist-tom FIRST** (mandatory)
 2. Add gene to DNA system with min/max bounds
-3. Log decision in `docs/biology/biology-notes.md`
+3. Document in appropriate `docs/biology/done/` or `docs/biology/ideas/` file
 4. Implement trait expression (DNA → phenotype → behavior)
 
-**See:** [docs/biology/dna-driven-design.md](docs/biology/dna-driven-design.md) for complete specification
+**See:** [docs/biology/ideas/dna-driven-design.md](docs/biology/ideas/dna-driven-design.md) for complete specification
 
 ---
 

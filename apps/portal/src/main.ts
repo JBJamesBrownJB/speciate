@@ -9,6 +9,7 @@ import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
+import { ChangeDetector } from "@/core/ChangeDetection";
 
 function updateContainerSize(
   container: HTMLElement,
@@ -125,7 +126,7 @@ async function main(): Promise<void> {
     const perfMetrics = new PerformanceMetrics(RENDERING_CONFIG.TARGET_FPS);
 
     let isFirstFrame = true;
-    let lastFirstCreatureX: number | null = null;
+    const changeDetector = new ChangeDetector();
 
     const ipcClient: IPCClient | null = createIPCClient();
 
@@ -142,12 +143,10 @@ async function main(): Promise<void> {
           creatureRenderer.setTickRate(state.tickRateHz);
         }
 
-        // Detect if positions actually changed (simulation tick occurred)
-        const currentFirstX = creatures.length > 0 ? creatures[0].x : null;
-        const positionsChanged = currentFirstX !== lastFirstCreatureX;
+        // Detect if state changed (count or positions changed)
+        const stateChanged = changeDetector.shouldUpdate(creatures);
 
-        if (positionsChanged) {
-          lastFirstCreatureX = currentFirstX;
+        if (stateChanged) {
 
           const spriteUpdateStart = performance.now();
           if (creatures.length > 0) {

@@ -1,6 +1,6 @@
 # Brain & Decision Timing - Reaction Speeds
 
-**Status:** ✅ 30% IMPLEMENTED (Cooldown working, size-based formula pending)
+**Status:** 🟡 Partially Implemented (Core cooldown system working, DNA-driven variation pending)
 
 **Code:** `apps/simulation/src/simulation/creatures/components/brain.rs`
 
@@ -56,10 +56,10 @@ Low-energy creatures react slower (fatigue).
 effective_ms = BASE_COOLDOWN_MS × age_factor × energy_factor
 ```
 
-**Constants:**
-- `BASE_COOLDOWN_MS`: 150.0
-- `AGE_SENSITIVITY`: 2.0
-- `MAX_AGE`: 100.0 (arbitrary units)
+**Constants:** See `apps/simulation/src/simulation/creatures/components/brain.rs`
+- `BASE_COOLDOWN_MS` - Base decision interval
+- `AGE_SENSITIVITY` - How much age affects cooldown
+- `MAX_AGE` - Age normalization factor
 
 ---
 
@@ -187,7 +187,7 @@ modified_reaction_ms = (base_ms / dna.neural_speed).clamp(30.0, 1000.0)
 
 ## Integration with Vision System
 
-**When combined with stochastic vision (Sprint 18):**
+**When combined with stochastic vision (planned):**
 - Brain cooldown determines **when** creature can decide
 - Vision cooldown determines **when** creature perceives
 - Perception may be stale when brain makes decision (biologically realistic)

@@ -10,11 +10,12 @@ pub enum BehaviorMode {
     Catatonic = 0,
     Seeking = 1,
     Wandering = 2,
+    Waiting = 3,
 }
 
 impl BehaviorMode {
     pub fn is_active(&self) -> bool {
-        !matches!(self, BehaviorMode::Catatonic)
+        !matches!(self, BehaviorMode::Catatonic | BehaviorMode::Waiting)
     }
 }
 

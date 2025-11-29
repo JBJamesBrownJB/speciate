@@ -2,7 +2,11 @@ use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
-pub const MAX_PERCEIVED_NEIGHBORS: usize = 40;
+use super::constants::{
+    DEFAULT_PERCEPTION_RANGE, ENERGY_MODIFIER, MAX_PERCEIVED_NEIGHBORS, PANIC_THRESHOLD_RATIO,
+    PERCEPTION_MULTIPLIER, PERSONAL_SPACE,
+};
+use crate::simulation::creatures::behaviors::avoidance::constants::AVOIDANCE_FORCE;
 
 #[derive(Resource, Default)]
 pub struct PerceptionScratchBuffer {
@@ -27,13 +31,8 @@ impl Perception {
         }
     }
 
-    pub fn default_range() -> Self {
-        Self::new(10.0)
-    }
-
     pub fn from_body_size(body_length: f32) -> Self {
-        use crate::simulation::movement::PERCEPTION;
-        Self::new(body_length * PERCEPTION.perception_multiplier)
+        Self::new(body_length * PERCEPTION_MULTIPLIER)
     }
 
     pub fn has_neighbors(&self) -> bool {
@@ -70,7 +69,7 @@ impl Perception {
 
 impl Default for Perception {
     fn default() -> Self {
-        Self::default_range()
+        Self::new(DEFAULT_PERCEPTION_RANGE)
     }
 }
 
@@ -81,6 +80,16 @@ pub struct AvoidanceBehavior {
     pub max_force: f32,
 }
 
+// Energy-driven personal space reduction (biological realism)
+// Hungry creatures tolerate closer proximity to reach resources
+// 100% energy = max_modifier space, 0% energy = min_modifier space (60% reduction, matches wolves/vultures)
+// TODO(DNA): Replace hardcoded modifier range with energy_sensitivity gene
+fn calculate_energy_modifier(energy_fraction: f32) -> f32 {
+    let clamped = energy_fraction.clamp(0.0, 1.0);
+    let range = ENERGY_MODIFIER.max_modifier - ENERGY_MODIFIER.min_modifier;
+    ENERGY_MODIFIER.min_modifier + (range * clamped)
+}
+
 impl AvoidanceBehavior {
     pub fn new(personal_space: f32, max_force: f32) -> Self {
         Self {
@@ -89,27 +98,24 @@ impl AvoidanceBehavior {
         }
     }
 
-    pub fn default_params() -> Self {
-        use crate::simulation::movement::{PERCEPTION, STEERING};
-        let personal_space = 1.0 + PERCEPTION.personal_space;
-        Self::new(personal_space, STEERING.avoidance_force)
-    }
-
     pub fn from_body_size(body_length: f32) -> Self {
-        use crate::simulation::movement::{PERCEPTION, STEERING};
-        let personal_space = body_length + PERCEPTION.personal_space;
-        Self::new(personal_space, STEERING.avoidance_force)
+        let personal_space = body_length + PERSONAL_SPACE;
+        Self::new(personal_space, AVOIDANCE_FORCE)
     }
 
     pub fn panic_threshold(&self) -> f32 {
-        use crate::simulation::movement::PERCEPTION;
-        self.personal_space * PERCEPTION.panic_threshold_ratio
+        self.personal_space * PANIC_THRESHOLD_RATIO
+    }
+
+    pub fn effective_personal_space(&self, energy_fraction: f32) -> f32 {
+        self.personal_space * calculate_energy_modifier(energy_fraction)
     }
 }
 
 impl Default for AvoidanceBehavior {
     fn default() -> Self {
-        Self::default_params()
+        let personal_space = 1.0 + PERSONAL_SPACE;
+        Self::new(personal_space, AVOIDANCE_FORCE)
     }
 }
 
@@ -166,5 +172,31 @@ mod tests {
         perception.clear();
         assert!(!perception.has_neighbors());
         assert_eq!(perception.neighbor_count(), 0);
+    }
+
+    #[test]
+    fn test_effective_personal_space_at_full_energy() {
+        let avoidance = AvoidanceBehavior::new(10.0, 35.0);
+        assert_eq!(avoidance.effective_personal_space(1.0), 10.0);
+    }
+
+    #[test]
+    fn test_effective_personal_space_at_zero_energy() {
+        let avoidance = AvoidanceBehavior::new(10.0, 35.0);
+        assert_eq!(avoidance.effective_personal_space(0.0), 4.0);
+    }
+
+    #[test]
+    fn test_effective_personal_space_at_half_energy() {
+        let avoidance = AvoidanceBehavior::new(10.0, 35.0);
+        let result = avoidance.effective_personal_space(0.5);
+        assert!((result - 7.0).abs() < 0.001, "Expected ~7.0, got {}", result);
+    }
+
+    #[test]
+    fn test_energy_fraction_clamped() {
+        let avoidance = AvoidanceBehavior::new(10.0, 35.0);
+        assert_eq!(avoidance.effective_personal_space(-1.0), 4.0);
+        assert_eq!(avoidance.effective_personal_space(2.0), 10.0);
     }
 }

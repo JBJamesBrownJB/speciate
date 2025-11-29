@@ -1,6 +1,6 @@
 # Vision System - DNA-Driven Perception
 
-**Status:** ⏳ PLANNED (Sprint 18: stochastic-vision)
+**Status:** ⏳ PLANNED (stochastic-vision)
 
 **Current Implementation:** Hardcoded 10× perception range, 360° awareness, no FOV
 
@@ -102,7 +102,7 @@ let modified_ms = (base_ms / dna.neural_speed).clamp(30.0, 1000.0);
 
 ---
 
-## Stochastic Vision (Sprint 18)
+## Stochastic Vision (Planned)
 
 **Problem:** 200K creatures updating perception every tick = CPU bottleneck
 
@@ -152,7 +152,7 @@ struct VisionTiming {
 - Neighbor tracking (up to 40 neighbors)
 - Perception range scales by body size: `body_length × 10.0`
 
-### ❌ Not Implemented (Sprint 18 Target)
+### ❌ Not Implemented (Planned)
 - DNA vision genes (visual_range_multiplier, visual_arc, neural_speed)
 - VisionTiming component
 - FOV cone filtering

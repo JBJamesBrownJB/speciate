@@ -1,5 +1,8 @@
 use crate::simulation::components::*;
 use crate::simulation::core::components::BodySize;
+use crate::simulation::creatures::behaviors::wander::constants::{
+    ANGLE_CHANGE, WANDER_DISTANCE, WANDER_RADIUS,
+};
 use crate::simulation::movement::constants::MAX_SPEED;
 use crate::simulation::perception::*;
 use bevy_ecs::prelude::*;
@@ -159,14 +162,14 @@ impl CritBuilder {
     }
 
     pub fn with_target(mut self, x: f32, y: f32) -> Self {
-        self.target = Some(Target::new(x, y));
+        self.target = Some(Target::at_point(x, y));
         self
     }
 
     pub fn as_seeker(mut self, target_x: f32, target_y: f32) -> Self {
         self.capabilities.can_seek = true;
         self.behavior = BehaviorMode::Seeking;
-        self.target = Some(Target::new(target_x, target_y));
+        self.target = Some(Target::at_point(target_x, target_y));
         self
     }
 
@@ -183,7 +186,7 @@ impl CritBuilder {
         let (clamped_x, clamped_y) =
             world_bounds.clamp_target(initial_target_x, initial_target_y, EDGE_MARGIN);
 
-        self.target = Some(Target::new(clamped_x, clamped_y));
+        self.target = Some(Target::at_point(clamped_x, clamped_y));
         self
     }
 
@@ -214,9 +217,9 @@ impl CritBuilder {
             brain: Brain::with_mode(self.brain_mode),
             wander_state: WanderState {
                 wander_angle: rng.gen_range(0.0..std::f32::consts::TAU),
-                wander_radius: 5.0,
-                wander_distance: 3.0,
-                angle_change: 4.5,
+                wander_radius: WANDER_RADIUS,
+                wander_distance: WANDER_DISTANCE,
+                angle_change: ANGLE_CHANGE,
             },
             home_position: HomePosition::new(self.position.0, self.position.1),
             can_seek: CanSeek,
@@ -225,7 +228,7 @@ impl CritBuilder {
             can_avoid_obstacles: CanAvoidObstacles,
             perception: Perception::from_body_size(self.size),
             avoidance_behavior: AvoidanceBehavior::from_body_size(self.size),
-            target: self.target.unwrap_or(Target::new(0.0, 0.0)),
+            target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
         }
     }
 }

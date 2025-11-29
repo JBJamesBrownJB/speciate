@@ -527,7 +527,7 @@ mod behavior_tests {
             world
                 .entity_mut(entity)
                 .insert(CanSeek)
-                .insert(Target::new(100.0, 0.0));
+                .insert(Target::at_point(100.0, 0.0));
 
         }
 
@@ -672,7 +672,7 @@ mod behavior_tests {
 
         let world = sim.world_mut();
         let mut query = world.query::<(&CritId, &Target)>();
-        let mut target_before = Target::new(0.0, 0.0);
+        let mut target_before = Target::at_point(0.0, 0.0);
         for (crit_id, target) in query.iter(world) {
             if crit_id.0 == entity_id {
                 target_before = *target;

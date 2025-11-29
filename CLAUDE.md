@@ -3,19 +3,17 @@
 ## Quick Reference
 
 **Key Documentation:**
-- `docs/spec/` - **Live specification of implemented features** (brain-spec.md, etc.)
+- `docs/biology/done/` - **Implemented biological features** (wandering, perception, seeking, etc.)
+- `docs/biology/ideas/dna-driven-design.md` - DNA-driven design principles (detailed)
 - `docs/archive/dual-tick/` - ⚠️ ABANDONED architecture (Sprint 11, archived for learning)
-- `docs/architecture/napi-architecture.md` - Current NAPI-RS integration (zero-copy buffers)
-- `docs/biology/dna-driven-design.md` - DNA-driven design principles (detailed)
 - `docs/architecture/electron-architecture.md` - IPC protocol and Electron patterns
-- `docs/biology/biology-notes.md` - Zoologist consultation log
-- `SPRINT_DOCS/` - Current and past sprint plans
+- `SPRINTS/` - Current and past sprint plans
 
 **Current Sprint:** Sprint 15 - ECS Optimizations (COMPLETE)
 - Branch: `feat/sprint-15-ecs-optimizations`
 - Focus: Movement parallelization, perception split queries, brain serialization fix
 - Achievements: 6.3x movement speedup (Rayon), 2x vision capacity, 20K creature validation
-- See: `SPRINT_DOCS/SPRINT_BACKLOG.md`
+- See: `SPRINTS/SPRINT_BACKLOG.md`
 
 **Next Sprint:** Sprint 16 - TBD (Stochastic Vision or Spatial Grid)
 
@@ -23,9 +21,9 @@
 - Sprint 15: Rayon parallelization, vision refactor, query type aliases, comprehensive test coverage
 - Sprint 13: Zero-copy double-buffer architecture, replacing stdio MessagePack IPC
 
-**Tick Rate:** 22.2Hz (hardcoded in `simulation_engine.rs`, ~45ms per tick)
+**Tick Rate:** See `apps/simulation/src/napi_addon/simulation_engine.rs:37` (TARGET_SIMULATION_HZ)
 - Replaced configurable tick rate from old stdio system
-- Provides 2.7x capacity improvement vs 60Hz
+- Current rate provides capacity improvement vs 60Hz
 - Sufficient for 150K-200K creature target
 
 ---
@@ -82,45 +80,6 @@ The complete TDD cycle has three mandatory stages:
 
 ---
 
-## Specification Documentation - MANDATORY
-
-**CRITICAL: Update `docs/spec/` when implementing features.**
-
-### What Goes in Specs
-
-The `docs/spec/` folder contains **live documentation of IMPLEMENTED features**:
-- Current behavior (not planned/future)
-- Constants and their values
-- Component structures
-- System interactions
-- Design decisions with rationale
-
-### When to Update
-
-**After implementing a feature:**
-1. Create or update the relevant spec file (e.g., `brain-spec.md`, `movement-spec.md`)
-2. Document what IS, not what WILL BE
-3. Include actual constant values from code
-4. Describe system interactions
-
-**Spec files:**
-- `brain-spec.md` - Brain component, decision timing, panic override
-- `movement-spec.md` - Movement systems, steering behaviors
-- `perception-spec.md` - Vision system, neighbor detection
-- (Add more as features are implemented)
-
-### Format
-
-Each spec should include:
-- **Status:** Implemented/Partial/Planned
-- **Location:** Source file paths
-- **Overview:** What the system does
-- **Components:** Structs and enums
-- **Constants:** Hardcoded values with descriptions
-- **Integration:** How it connects to other systems
-
----
-
 ## DNA-Driven Design - MANDATORY
 
 **CRITICAL: All creature traits MUST be encoded in DNA.**
@@ -149,10 +108,10 @@ Every advantage must have a cost (built into physics/biology):
 
 1. Consult `zoologist-tom` agent FIRST
 2. Add gene to DNA system with biological bounds
-3. Log decision in `docs/biology/biology-notes.md`
+3. Document in appropriate `docs/biology/done/` or `docs/biology/ideas/` file
 4. Implement trait expression (DNA → phenotype → behavior)
 
-**Full details:** `docs/biology/dna-driven-design.md`
+**Full details:** `docs/biology/ideas/dna-driven-design.md`
 
 ---
 
@@ -292,7 +251,7 @@ entities.par_iter_mut().for_each(|(position, velocity, ...)| {
 - Automatic write-back through mutable references (no explicit sync)
 - Validated at 20K creatures with determinism tests
 
-**See:** `apps/simulation/src/simulation/movement/systems.rs:35-113`, `docs/spec/movement-spec.md`
+**See:** `apps/simulation/src/simulation/movement/systems.rs:35-113`, `docs/biology/done/movement-physics.md`
 
 ---
 

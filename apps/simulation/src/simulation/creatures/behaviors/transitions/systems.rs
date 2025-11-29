@@ -1,10 +1,10 @@
+use super::constants::{
+    AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING, RANDOM_TARGET_MAX_DISTANCE,
+    RANDOM_TARGET_MIN_DISTANCE, TICK_INTERVAL_SECONDS,
+};
 use crate::simulation::components::*;
 use crate::simulation::core::components::PhysicsTick;
 use bevy_ecs::prelude::*;
-
-const AGE_INCREMENT_PER_TICK: f32 = 0.001;
-const ENERGY_COST_WANDERING: f32 = 0.01;
-const TICK_INTERVAL_SECONDS: f64 = 0.05;
 
 pub fn behavior_transition_system(
     physics_tick: Res<PhysicsTick>,
@@ -32,6 +32,7 @@ pub fn behavior_transition_system(
             BehaviorMode::Wandering => {
                 creature_state.consume_energy(ENERGY_COST_WANDERING);
             }
+            BehaviorMode::Waiting => {}
         }
 
         let age = creature_state.age;
@@ -64,10 +65,10 @@ fn generate_random_target(position: &Position) -> Target {
     use rand::Rng;
     let mut rng = rand::thread_rng();
 
-    let distance = rng.gen_range(50.0..200.0);
+    let distance = rng.gen_range(RANDOM_TARGET_MIN_DISTANCE..RANDOM_TARGET_MAX_DISTANCE);
     let angle = rng.gen_range(0.0..std::f32::consts::TAU);
 
-    Target::new(
+    Target::at_point(
         position.x + distance * angle.cos(),
         position.y + distance * angle.sin(),
     )
@@ -81,6 +82,7 @@ fn cycle_behavior_with_target(current: BehaviorMode, position: &Position, target
             BehaviorMode::Seeking
         },
         BehaviorMode::Seeking => BehaviorMode::Catatonic,
+        BehaviorMode::Waiting => BehaviorMode::Catatonic,
     }
 }
 
@@ -92,7 +94,7 @@ mod tests {
     fn test_creature_aging() {
         let mut world = World::new();
 
-        let entity = world.spawn((CreatureState::new(), Brain::new())).id();
+        let entity = world.spawn((CreatureState::new(), Brain::default())).id();
 
         let initial_age = world.get::<CreatureState>(entity).unwrap().age;
         for _ in 0..10 {
@@ -126,7 +128,7 @@ mod tests {
         let mut state = CreatureState::new();
         state.behavior = BehaviorMode::Catatonic;
         let position = Position { x: 100.0, y: 100.0 };
-        let mut target = Target::new(0.0, 0.0);
+        let mut target = Target::at_point(0.0, 0.0);
 
         // Young creature with full energy - base cooldown ~150ms
         assert!(brain.can_decide(0.15, 0.0, 100.0));
@@ -147,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_cycle_behavior_sequence() {
-        let mut target = Target::new(0.0, 0.0);
+        let mut target = Target::at_point(0.0, 0.0);
         let position = Position { x: 100.0, y: 100.0 };
 
         assert_eq!(

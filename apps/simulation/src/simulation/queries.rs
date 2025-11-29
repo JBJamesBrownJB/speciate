@@ -41,6 +41,7 @@ pub type AvoidanceQuery<'w, 's> = Query<
         &'static mut Acceleration,
         &'static Perception,
         &'static AvoidanceBehavior,
+        &'static CreatureState,
     ),
     With<CanAvoidObstacles>,
 >;

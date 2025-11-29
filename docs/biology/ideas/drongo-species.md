@@ -384,7 +384,7 @@ Prey for Apex Predators (if caught alone)
 
 ## Implementation Roadmap
 
-### Phase 1: DNA Traits (Sprint 6 Phase 3)
+### Phase 1: DNA Traits (Early Phase)
 ```rust
 // Add to DNA struct
 pub learning_rate: f32,      // 0.0 - 1.0
@@ -393,7 +393,7 @@ pub social_learning: bool,   // false/true
 pub dexterity: f32,          // 0.0 - 1.0
 ```
 
-### Phase 2: Observation System (Sprint 7)
+### Phase 2: Observation System
 ```rust
 // New components
 pub struct SocialLearning { observed_actions: Vec<Action> }
@@ -405,7 +405,7 @@ ImitationSystem: Drongos attempt observed actions
 CulturalTransmissionSystem: Spread knowledge to nearby Drongos
 ```
 
-### Phase 3: Crafting System (Sprint 8)
+### Phase 3: Crafting System
 ```rust
 // Simple recipe system
 pub struct Recipe {

@@ -79,7 +79,7 @@ The spatial grid operates within a single-tick simulation:
 - **Simulation tick (~22Hz):** Grid updated and queried each frame
 - **Frontend (60+ FPS):** Interpolated rendering
 
-**Note:** Originally designed for dual-tick architecture (Sprint 11), now simplified to single-tick. See `docs/archive/dual-tick/` for historical context.
+**Note:** Originally designed for dual-tick architecture, now simplified to single-tick. See `docs/archive/dual-tick/` for historical context.
 
 ---
 

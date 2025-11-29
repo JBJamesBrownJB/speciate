@@ -1,6 +1,6 @@
 # Electron Desktop Architecture
 
-**Status:** ✅ CURRENT (NAPI-RS integration as of Sprint 13)
+**Status:** ✅ CURRENT (NAPI-RS integration)
 
 ## Overview
 

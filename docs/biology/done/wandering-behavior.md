@@ -39,10 +39,10 @@ home_bias = 1.0 / (1.0 + e^(-steepness × (distance - blend_center) / comfort_ra
 - 20m from home: 50% bias (balanced)
 - 35m from home: >80% bias (strong pull)
 
-**Constants:**
-- `blend_center`: 20.0m (where wander/homeward = 50/50)
-- `sigmoid_steepness`: 1.5
-- `max_wander_distance`: 30.0m
+**Constants:** See `apps/simulation/src/simulation/movement/constants.rs` (TERRITORY struct)
+- `blend_center` - Distance where wander/homeward forces are 50/50
+- `sigmoid_steepness` - Curve sharpness
+- `max_wander_distance` - Hard limit for excursions
 
 ### Force Blending
 **Status:** ✅ Implemented
@@ -51,8 +51,8 @@ home_bias = 1.0 / (1.0 + e^(-steepness × (distance - blend_center) / comfort_ra
 blended_force = (1 - home_bias) × wander_force + home_bias × homeward_force
 ```
 
-- `wander_force`: 5.0 (gentle exploration)
-- `homeward_force`: 50.0 (strong pull when needed)
+- See `constants.rs` STEERING.wander_force (gentle exploration)
+- See `constants.rs` TERRITORY.homeward_force (strong pull when needed)
 
 ---
 
@@ -120,7 +120,7 @@ Expand/contract territory under stress.
 
 ## Implementation Status
 
-### ✅ Implemented (Sprint 6)
+### ✅ Implemented
 - HomePosition component
 - Sigmoid home bias calculation
 - Hybrid force blending (wander + homeward)

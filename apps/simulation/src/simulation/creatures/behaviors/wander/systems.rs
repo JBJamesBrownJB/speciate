@@ -1,5 +1,8 @@
+use super::constants::{
+    BLEND_CENTER, COMFORT_RADIUS, HOMEWARD_FORCE, MAX_WANDER_DISTANCE, SIGMOID_STEEPNESS,
+    WANDER_FORCE,
+};
 use crate::simulation::components::*;
-use crate::simulation::movement::{STEERING, TERRITORY};
 use crate::simulation::queries::WanderQuery;
 use rand::Rng;
 
@@ -62,10 +65,10 @@ pub fn territory_wandering_system(
         let steer_y = scaled_desired_y - velocity.vy;
 
         let steer_magnitude_sq = steer_x * steer_x + steer_y * steer_y;
-        let wander_force_sq = STEERING.wander_force * STEERING.wander_force;
+        let wander_force_sq = WANDER_FORCE * WANDER_FORCE;
         let wander_force = if steer_magnitude_sq > wander_force_sq {
             let steer_magnitude = steer_magnitude_sq.sqrt();
-            let scale = STEERING.wander_force / steer_magnitude;
+            let scale = WANDER_FORCE / steer_magnitude;
             (steer_x * scale, steer_y * scale)
         } else {
             (steer_x, steer_y)
@@ -84,15 +87,15 @@ pub fn territory_wandering_system(
             (0.0, 0.0)
         };
 
-        let urgency = (distance_from_home / TERRITORY.max_wander_distance).min(1.0);
+        let urgency = (distance_from_home / MAX_WANDER_DISTANCE).min(1.0);
 
-        let homeward_force_magnitude = TERRITORY.homeward_force * urgency;
+        let homeward_force_magnitude = HOMEWARD_FORCE * urgency;
         let homeward_force = (
             norm_to_home_x * homeward_force_magnitude,
             norm_to_home_y * homeward_force_magnitude,
         );
 
-        let blend = calculate_territory_blend(distance_from_home, TERRITORY.comfort_radius, TERRITORY.blend_center);
+        let blend = calculate_territory_blend(distance_from_home, COMFORT_RADIUS, BLEND_CENTER);
         let final_force = blend_forces(wander_force, homeward_force, blend);
 
         if final_force.0.is_finite() && final_force.1.is_finite() {
@@ -176,7 +179,7 @@ pub fn calculate_territory_blend(
     // Sigmoid blend between wander (free roam) and homeward (territory bound)
     // Steepness controls how quickly the blend transitions
     let normalized = (distance_from_home - blend_center) / comfort_radius;
-    let sigmoid = 1.0 / (1.0 + (-TERRITORY.sigmoid_steepness * normalized).exp());
+    let sigmoid = 1.0 / (1.0 + (-SIGMOID_STEEPNESS * normalized).exp());
     sigmoid.clamp(0.0, 1.0)
 }
 

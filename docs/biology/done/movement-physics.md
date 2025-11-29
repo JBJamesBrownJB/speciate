@@ -1,6 +1,6 @@
 # Movement Constants - Scientific Rationale
 
-This document preserves the biological and physical rationale for movement constants extracted from code comments during the "Death to Comments" cleanup (Sprint 9, 2025-11-15).
+This document preserves the biological and physical rationale for movement constants extracted from code comments during the "Death to Comments" cleanup (2025-11-15).
 
 **Status:** These values are currently hardcoded. All will migrate to DNA-driven parameters in future sprints.
 
@@ -86,11 +86,13 @@ This document preserves the biological and physical rationale for movement const
 - Biologically realistic (multiple sensory inputs → single motor output)
 
 **Force Hierarchy (Biological Priority):**
-1. **Panic:** 50N - Emergency collision prevention (survival)
-2. **Avoidance:** 15N - Collision prevention (high priority)
-3. **Seeking:** 10N - Goal pursuit (moderate priority)
-4. **Wander:** 5N - Exploration (low priority)
-5. **Flee:** 20N - Threat response (high priority, future)
+
+See `apps/simulation/src/simulation/movement/constants.rs` for current force magnitudes:
+1. **Panic** - Emergency collision prevention (survival)
+2. **Avoidance** - Collision prevention (high priority)
+3. **Seeking** - Goal pursuit (moderate priority)
+4. **Wander** - Exploration (low priority)
+5. **Flee** - Threat response (high priority, future)
 
 ---
 
@@ -98,7 +100,9 @@ This document preserves the biological and physical rationale for movement const
 
 ### Elastic Tether Model
 
-**Source:** Movement ecology research (zoologist consultation 2025-11-08, see biology-notes.md)
+**Source:** Movement ecology research (zoologist consultation 2025-11-08)
+
+**See also:** `docs/biology/done/wandering-behavior.md` for complete territory wandering documentation
 
 **Biological principle:** Animals don't wander randomly - they patrol territories with soft boundaries.
 
@@ -150,6 +154,45 @@ This document preserves the biological and physical rationale for movement const
 **Historical note:** Original zoologist recommendation was 0.92, but this proved too aggressive when combined with seek force of 10N. Adjusted to 0.98 for better gameplay.
 
 **Biological impact:** Creates continuous energy cost for movement - fast creatures burn energy rapidly just maintaining speed.
+
+### Perlin Noise Locomotion
+
+**Status:** ✅ Implemented
+**Location:** `apps/simulation/src/simulation/movement/systems.rs:66-79`, `movement/noise.rs`
+
+**What it does:** Adds smooth, organic lateral jitter to moving creatures. Instead of traveling in perfectly straight lines (robotic), creatures gently weave side-to-side as they move (lifelike).
+
+**Biological rationale:**
+- Animals don't move in perfectly straight lines (muscle micro-adjustments, terrain irregularities, balance corrections)
+- Smaller animals have more erratic movement (higher frequency body adjustments)
+- Faster movement amplifies natural jitter (less control at high speed)
+
+**How it works:**
+- Applied **perpendicular** to velocity vector (lateral drift, not forward/backward)
+- Only applies when speed > 0.01 m/s (stationary creatures don't jitter)
+- Uses deterministic Perlin noise (same entity = same jitter pattern over time)
+- Independent X/Y noise streams (prevents diagonal bias)
+
+**Scaling factors:**
+- **Speed scaling:** `noise_magnitude ∝ (speed / MAX_SPEED)²` - Faster movement = more jitter
+- **Size scaling:** `noise_magnitude ∝ 1/√body_length` - Smaller creatures = more jitter
+- **Base magnitude:** 99.5 (configurable via `MovementConfig.locomotion_noise_base`)
+- **Time scale:** 0.01 (configurable via `MovementConfig.noise_time_scale`)
+
+**Examples:**
+- Small creature (0.5m), full speed: High-frequency weaving (visible jitter)
+- Large creature (5m), full speed: Gentle sway (barely noticeable)
+- Any creature, slow speed: Minimal drift (precise low-speed control)
+
+**Why Perlin noise?**
+- Smooth continuous variation (not random jumps)
+- Deterministic (same seed = same pattern, enables replay/debugging)
+- Organic appearance (matches natural rhythms)
+
+**Trade-offs:**
+- Increases path length slightly (meandering vs straight)
+- Makes precise positioning harder (can't hit exact coordinates)
+- **Future:** Will interact with terrain (smooth ground = less jitter, rough terrain = more)
 
 ---
 
@@ -227,6 +270,43 @@ This document preserves the biological and physical rationale for movement const
 
 **Rationale:** When another creature is within 50% of comfort zone, collision is imminent - trigger maximum evasive force.
 
+### State-Dependent Personal Space (Energy Modulation)
+
+**Status:** ✅ Implemented
+
+**Formula:** `effective_personal_space = base_personal_space × (0.4 + 0.6 × energy_fraction)`
+
+**Energy effects:**
+- 100% energy: 1.0× modifier (full personal space maintained)
+- 50% energy: 0.7× modifier (30% reduction, mild hunger)
+- 0% energy: 0.4× modifier (60% reduction, starvation)
+
+**Biological basis:**
+- Ghrelin (hunger hormone): Reduces territorial aggression by 40-60% in mammals
+- Cortisol (stress): Dampens amygdala threat response to proximity
+- Prefrontal override: Goal-directed behavior suppresses avoidance when resources critical
+
+**Real-world examples:**
+- **Vultures:** 50-100m soaring spacing → body-contact feeding (200+ birds in 20m²)
+- **Wolves:** 2-5m travel spacing → shoulder-to-shoulder at kills
+- **Wildebeest:** 5-10m grazing spacing → trampling density at water sources
+
+**Implementation:**
+- Location: `apps/simulation/src/simulation/perception/components.rs:84-91`
+- Method: `AvoidanceBehavior::effective_personal_space(energy_fraction: f32)`
+- Applies to ALL behaviors (seeking, wandering, catatonic) for biological realism
+
+**Trade-offs:**
+- **Cost:** Crowding increases disease transmission, injury risk, stress metabolism
+- **Benefit:** Access to contested high-value resources (food, water, mates)
+- **Niche:** Creates "cautious" (maintain space when hungry) vs "bold" (collapse space) archetypes
+
+**Future DNA integration:**
+- Gene: `energy_sensitivity` (0.2-1.0)
+- Low sensitivity (0.2): Maintains boundaries even when starving (cautious, risk-averse)
+- High sensitivity (1.0): Collapses personal space when hungry (bold, risk-tolerant)
+- Formula: `modifier = 1.0 - (energy_sensitivity × (1.0 - energy_fraction))`
+
 ---
 
 ## DNA Migration Plan
@@ -234,9 +314,9 @@ This document preserves the biological and physical rationale for movement const
 All constants documented here are flagged for migration to DNA-driven parameters. See `/docs/technical-debt.md` for full inventory.
 
 **Migration priority:**
-1. **Phase 1 (Sprint 10-11):** Body size genes (length, mass)
-2. **Phase 2 (Sprint 12-13):** Locomotion genes (speed, agility, turning)
-3. **Phase 3 (Sprint 14+):** Behavior genes (perception, territory size, aggression)
+1. **Phase 1:** Body size genes (length, mass)
+2. **Phase 2:** Locomotion genes (speed, agility, turning)
+3. **Phase 3:** Behavior genes (perception, territory size, aggression)
 
 **Gene expression API (planned):**
 ```rust
@@ -251,12 +331,12 @@ let personal_space = body_length + dna.express_gene("spacing_buffer");
 ## References
 
 - "The Nature of Code" by Dan Shiffman (Reynolds steering behaviors)
-- Movement ecology research (elastic tether model) - See `wandering-behavior.md`
+- Movement ecology research (elastic tether model) - See `docs/biology/done/wandering-behavior.md`
 - Kleiber's Law (metabolic scaling)
 - `/docs/architecture/behavior-engine.md` - Force accumulation architecture
 
-**See also:** `wandering-behavior.md`, `brain-decision-timing.md`, `collision-physics.md`
+**See also:** `docs/biology/done/wandering-behavior.md`, `docs/biology/done/brain-decision-timing.md`, `docs/biology/ideas/collision-physics.md`
 
 ---
 
-**Last Updated:** 2025-11-15 (Sprint 9 - Death to Comments cleanup)
+**Last Updated:** 2025-11-29

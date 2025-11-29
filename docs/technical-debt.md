@@ -1,6 +1,6 @@
 # Technical Debt Inventory
 
-**Last Updated:** Sprint 8 (2025-11-15)
+**Last Updated:** 2025-11-15
 **Total Items:** 52
 
 This document tracks all TODO comments, architectural decisions, and technical debt across the codebase. Items are categorized by priority and sprint target.
@@ -18,7 +18,7 @@ This document tracks all TODO comments, architectural decisions, and technical d
 
 ## Category 1: DNA-Driven Design (P1) [46 items]
 
-**Sprint Target:** Sprint 9-10
+**Priority:** High (Phase 1)
 **Effort:** 3-4 weeks
 **Risk:** Medium (large refactor, but well-documented)
 
@@ -39,7 +39,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ### Migration Plan (Phased Approach)
 
-**Phase 1 (Sprint 9): DNA Infrastructure**
+**Phase 1: DNA Infrastructure**
 - [ ] Create `DNA` component with gene storage (`HashMap<String, f32>`)
 - [ ] Implement gene expression API (`dna.express_gene(name) -> f32`)
 - [ ] Add DNA to creature spawning (random initialization)
@@ -47,7 +47,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 - **Effort:** 1 week
 - **Risk:** Low (isolated system)
 
-**Phase 2 (Sprint 10): Movement & Physics Migration**
+**Phase 2: Movement & Physics Migration**
 - [ ] Migrate `MAX_SPEED` → `dna.express_gene("agility")` (range: 20-80 m/s)
 - [ ] Migrate `MAX_ACCELERATION` → derived from agility × body_mass
 - [ ] Migrate `MAX_TURN_RATE` → `dna.express_gene("agility") / body_length^1.33`
@@ -55,7 +55,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 - **Effort:** 1 week
 - **Risk:** Medium (affects all creatures, needs careful testing)
 
-**Phase 3 (Sprint 11): Behavior Constants Migration**
+**Phase 3: Behavior Constants Migration**
 - [ ] Migrate SEEKING constants → DNA genes (strength, precision)
 - [ ] Migrate TERRITORY constants → DNA genes (comfort_radius, attachment)
 - [ ] Migrate STEERING constants → DNA genes (avoidance, caution)
@@ -63,7 +63,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 - **Effort:** 1-2 weeks
 - **Risk:** Medium (affects AI behavior, needs extensive testing)
 
-**Phase 4 (Sprint 12): Genetic Crossover & Evolution**
+**Phase 4: Genetic Crossover & Evolution**
 - [ ] Implement sexual reproduction (parent DNA → offspring DNA)
 - [ ] Add mutation system (small random gene variations)
 - [ ] Implement species identification (genetic similarity clustering)
@@ -95,13 +95,13 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ## Category 2: Behavior System Completion (P1) [5 items]
 
-**Sprint Target:** Sprint 11
+**Priority:** High (Phase 2)
 **Effort:** 1-2 weeks
 **Risk:** Low (well-defined systems)
 
 ### Items
 
-#### 2.1 Fleeing Behavior (Sprint 11)
+#### 2.1 Fleeing Behavior (Planned)
 **File:** `creatures/behaviors/flee.rs`, `behaviors/transitions.rs`
 **Status:** Stub implementation exists, not active
 **TODO:**
@@ -112,7 +112,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 - **Effort:** 3-4 days
 - **Rationale:** Required for predator/prey dynamics
 
-#### 2.2 Resting Behavior (Sprint 11-12)
+#### 2.2 Resting Behavior (Planned)
 **File:** `behaviors/transitions.rs`, `components/state.rs`
 **Status:** Commented out in BehaviorMode enum
 **TODO:**
@@ -123,7 +123,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 - **Effort:** 2-3 days
 - **Rationale:** Required for energy management, creature survival
 
-#### 2.3 Feeding Behavior (Sprint 12)
+#### 2.3 Feeding Behavior (Planned)
 **File:** `behaviors/transitions.rs`
 **Status:** Planned, not implemented
 **TODO:**
@@ -134,7 +134,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 - **Effort:** 1 week
 - **Rationale:** Required for ecosystem dynamics, food chain
 
-#### 2.4 Full State Machine (Sprint 11-12)
+#### 2.4 Full State Machine (Planned)
 **File:** `behaviors/transitions.rs:50-51`
 **Status:** Simplified (Catatonic/Seeking/Wandering only)
 **TODO:**
@@ -145,7 +145,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 - **Effort:** 1 week
 - **Rationale:** Required for lifelike A-Life behavior
 
-#### 2.5 Energy Cost System (Sprint 11)
+#### 2.5 Energy Cost System (Planned)
 **File:** `behaviors/transitions.rs:13-24`
 **Status:** Constants defined, not actively used
 **TODO:**
@@ -159,7 +159,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ## Category 3: Performance Optimization (P2) [0 items]
 
-**Sprint Target:** Sprint 13+
+**Priority:** Medium (Phase 3)
 **Effort:** Variable
 **Risk:** Low (isolated optimization)
 
@@ -173,7 +173,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ## Category 4: Architecture & Organization (P3) [1 item]
 
-**Sprint Target:** Sprint 14+ (cleanup sprint)
+**Priority:** Low (Future cleanup)
 **Effort:** 2-3 days
 **Risk:** Very Low (refactor only, no logic changes)
 
@@ -226,15 +226,17 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ## Tracking & Metadata
 
-### Last Sprint Completed: Sprint 8
+### Recently Completed
 **Achievements:**
-- ✅ Phase 1: Type safety cleanup (5 TypeScript `any` removed, 10 Rust warnings fixed)
-- ✅ Phase 2: Constant extraction (TERRITORY, SEEKING structs, 6 tests added)
-- ✅ Phase 3: behavior-engine.md architecture documentation (17 pages)
-- ✅ Phase 4: Performance baseline UI (Target FPS, Frame Budget, Tick Rate)
-- ✅ Phase 5: Technical debt inventory (this document)
+- ✅ ECS optimization with Rayon parallelization (6.3x movement speedup)
+- ✅ Vision system refactor (split queries, 2x capacity)
+- ✅ Energy-modulated personal space (biological hunger mechanics)
+- ✅ Type safety cleanup (TypeScript `any` removal, Rust warnings fixed)
+- ✅ Constant extraction (TERRITORY, SEEKING structs, comprehensive tests)
+- ✅ Architecture documentation (behavior-engine.md, 17 pages)
+- ✅ Technical debt inventory (this document)
 
-### Next Sprint Recommendation: Sprint 9 - DNA Foundation
+### Next Priority: DNA Foundation
 
 **Priorities:**
 1. **DNA Infrastructure** (P1, 1 week) - Enables all future genetic systems

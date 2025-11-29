@@ -42,10 +42,6 @@ impl Default for Brain {
 }
 
 impl Brain {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn with_mode(mode: BrainMode) -> Self {
         Self {
             mode,
@@ -118,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_brain_respects_dynamic_cooldown() {
-        let mut brain = Brain::new();
+        let mut brain = Brain::default();
         brain.last_decision_time = 0.0;
 
         // Young (age=0), full energy (100) = base cooldown 150ms
@@ -129,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_brain_cooldown_increases_with_age() {
-        let brain = Brain::new();
+        let brain = Brain::default();
 
         let young_cooldown = brain.effective_cooldown_ms(0.0, 100.0);
         let old_cooldown = brain.effective_cooldown_ms(80.0, 100.0);
@@ -139,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_brain_cooldown_increases_with_low_energy() {
-        let brain = Brain::new();
+        let brain = Brain::default();
 
         let full_energy = brain.effective_cooldown_ms(0.0, 100.0);
         let half_energy = brain.effective_cooldown_ms(0.0, 50.0);
@@ -151,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_brain_record_decision_updates_time() {
-        let mut brain = Brain::new();
+        let mut brain = Brain::default();
         brain.record_decision(1.5);
         assert_eq!(brain.last_decision_time, 1.5);
     }

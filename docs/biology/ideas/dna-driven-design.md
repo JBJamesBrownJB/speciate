@@ -1,8 +1,27 @@
 # DNA-Driven Design Principle
 
-**Status:** ✅ PARTIALLY IMPLEMENTED (constants marked with TODO, no gene struct yet)
+**Status:** ❌ NOT IMPLEMENTED (design only - code contains TODO markers, no DNA struct exists)
 
-**Related:** All biology files implement DNA-driven design principles
+---
+
+## What Exists vs What's Planned
+
+### ✅ What EXISTS (Design Phase)
+- **This design document** - Complete architectural vision for DNA system
+- **TODO markers in code** - Constants flagged for future DNA migration (e.g., `// TODO: from DNA`)
+- **Zoologist consultation protocol** - Process for validating biological realism
+- **Hooks and agents** - Infrastructure ready to support DNA validation
+
+### ❌ What DOES NOT EXIST (Not Implemented)
+- **DNA struct** - No DNA component in Rust code
+- **Gene expression pipeline** - No DNA → phenotype → behavior system
+- **Genetic operations** - No crossover, mutation, or inheritance
+- **Per-creature variation** - All creatures use same hardcoded constants
+- **Species system** - No DNA-based species identification
+
+**This document describes the VISION, not current reality.** Code contains only placeholder TODO markers.
+
+---
 
 ## Core Principle
 
@@ -363,17 +382,23 @@ These traits exist but are NOT yet DNA-encoded:
 
 | Trait | Current Location | Status | Migration Priority |
 |-------|------------------|--------|-------------------|
-| `max_speed` | CreatureState struct | Hardcoded default | HIGH - Sprint 7 |
-| `energy` | CreatureState struct | Hardcoded default | HIGH - Sprint 7 |
-| `age` | CreatureState struct | Runtime only | LOW - age not genetic |
-| `width/height` | Creature message | Hardcoded 1x1 | HIGH - Sprint 6 Phase 3 (size genes) |
+| `max_speed` | CreatureState struct | Hardcoded default | HIGH (Phase 1) |
+| `energy` | CreatureState struct | Hardcoded default | HIGH (Phase 1) |
+| `age` | CreatureState struct | Runtime only | LOW (age not genetic) |
+| `width/height` | Creature message | Hardcoded 1x1 | HIGH (Phase 1 - size genes) |
 
-### Migration Steps
-1. **Sprint 6 Phase 3** - Add DNA component with size genes (`max_scale`, `growth_rate`)
-2. **Sprint 7** - Migrate `max_speed` and `max_energy` to DNA
-3. **Sprint 8** - Add perception, behavior genes
-4. **Sprint 9** - Implement genetic crossover and mutation
-5. **Sprint 10** - Species identification and clustering
+### Migration Steps (Future Work)
+
+**Current Status:** DNA system not yet implemented. Codebase contains `// TODO: from DNA` markers where hardcoded constants should eventually be replaced.
+
+**Proposed Implementation Plan:**
+1. **Phase 1** - Create DNA component struct with basic size/speed genes
+2. **Phase 2** - Implement gene expression pipeline (DNA → phenotype)
+3. **Phase 3** - Add perception, behavior genes
+4. **Phase 4** - Implement genetic crossover and mutation
+5. **Phase 5** - Species identification and clustering
+
+**No specific sprint assignments** - this is a major feature requiring dedicated sprint planning.
 
 ### Interim: Flagging Hardcoded Traits
 The DNA consultation hook will WARN (not block) when it detects hardcoded creature traits that should be DNA-encoded. This helps track technical debt and prevents adding more hardcoded values.
@@ -443,7 +468,7 @@ Soft-enforcement hook that triggers on creature code changes:
 
 ## Vision: Fully DNA-Driven Ecosystem
 
-**End State (Sprint 12+):**
+**End State (Future):**
 - Zero hardcoded creature attributes
 - All traits emerge from DNA
 - Species self-organize into ecological niches
@@ -455,5 +480,8 @@ Soft-enforcement hook that triggers on creature code changes:
 
 ---
 
-*Last Updated: 2025-11-07*
-*See also: `/workspace/BIOLOGY_NOTES.md`, `/workspace/.claude/agents/zoologist-tom.md`*
+---
+
+**Last Updated:** 2025-11-29
+
+**See also:** `docs/biology/done/` for implemented features, `.claude/agents/zoologist-tom.md` for consultation protocol

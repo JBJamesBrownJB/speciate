@@ -466,7 +466,7 @@ The simulation runs all systems at a single tick rate:
 - **~22Hz Tick Rate** - All systems (physics, AI, perception) run together
 - **Frontend Interpolation** - 60+ FPS visuals via lerp between frames
 
-**Note:** Dual-tick was explored in Sprint 11 and abandoned. See `docs/archive/dual-tick/` for rationale.
+**Note:** Dual-tick was explored and abandoned. See `docs/archive/dual-tick/` for rationale.
 
 **Physics Tick Budget (30Hz):**
 - Grid updates: ~3ms (incremental only)
@@ -496,12 +496,12 @@ The simulation runs all systems at a single tick rate:
 
 ### Future Optimizations
 
-**Available Now (Sprint 10+):**
+**Implemented Optimizations:**
 1. **Spatial Grid:** 200m bucket grid with FxHash (O(N) queries)
 2. **Dual-Tick Architecture:** 30Hz physics / 20Hz AI (implemented)
 3. **Incremental Updates:** Only update grid on cell changes
 
-**Planned (Sprint 12+):**
+**Planned Optimizations:**
 1. **ECS Parallelization:** Bevy's `par_iter_mut()` for perception
 2. **SIMD Physics:** Vectorized distance calculations
 3. **LOD Simulation:** Full sim near player, statistical sim distant
@@ -515,15 +515,15 @@ The simulation runs all systems at a single tick rate:
 
 **Migration Path:**
 ```rust
-// Phase 1 (Now): Hardcoded constants
+// Phase 1 (Current): Hardcoded constants
 const MAX_SPEED: f32 = 50.0;
 
-// Phase 2 (Sprint 9): DNA component added
+// Phase 2 (Planned): DNA component added
 pub struct DNA {
     pub genes: HashMap<String, f32>,
 }
 
-// Phase 3 (Sprint 10+): Gene expression
+// Phase 3 (Future): Gene expression
 fn seek_system(query: Query<(&DNA, &Target, &mut Acceleration)>) {
     for (dna, target, mut accel) in query.iter() {
         let max_speed = dna.express_gene("agility");

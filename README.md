@@ -291,7 +291,7 @@ Failed to build CPU_CYCLES counter: Permission denied (os error 13)
 - **Systemic trade-offs:** Large + fast = massive energy consumption → starvation
 - **No hardcoded values:** Every creature unique via genetic variation
 
-**See:** [docs/biology/dna-driven-design.md](docs/biology/dna-driven-design.md)
+**See:** [docs/biology/ideas/dna-driven-design.md](docs/biology/ideas/dna-driven-design.md)
 
 ### 2. Test-Driven Development (MANDATORY)
 
@@ -341,22 +341,17 @@ Speciate uses specialized AI agents (via Claude Code) for development:
 
 ---
 
-## Current Sprint Status
+## Recent Development
 
-**Sprint 9: "Trials - Regression Testing System"** 🚀 In Progress (Nov 15, 2025)
+**Recently Completed:**
+- ✅ ECS optimization with Rayon parallelization (6.3x movement speedup)
+- ✅ Vision system refactor (split queries, 2x capacity)
+- ✅ Energy-modulated personal space (biological hunger mechanics)
+- ✅ Target radius seeking (edge-to-edge arrival)
+- ✅ Perlin noise locomotion (organic movement jitter)
+- ✅ Code quality improvements and technical debt cleanup
 
-**Goals:**
-- Trial infrastructure for recording/replaying scenarios
-- Spawning pattern trial (baseline)
-- Crowd navigation trial (obstacle weaving)
-- Deterministic outcomes with fixed RNG seeds
-
-**See:** `SPRINT_DOCS/SPRINT_PLAN_sprint-9-trials-regression-testing.md`
-
-**Previous Sprints:**
-- **Sprint 8:** Code quality, architecture docs, technical debt inventory ✅
-- **Sprint 7:** Electron desktop app, stdio IPC, MessagePack protocol ✅
-- **Sprint 6:** Seeking, wandering, locomotion noise, 133 tests ✅
+**See:** `sprint_summaries/` folder for detailed development history
 
 ---
 
@@ -365,9 +360,9 @@ Speciate uses specialized AI agents (via Claude Code) for development:
 ### Project Documentation
 - [docs/project-spec.md](docs/project-spec.md) - Complete technical specification
 - [docs/strategy/biz-strategy.md](docs/strategy/biz-strategy.md) - Business model & phase gates
-- [docs/strategy/goal.md](docs/strategy/goal.md) - Game narrative & design
+- [docs/gameplay/ideas/end game/goal.md](docs/gameplay/ideas/end game/goal.md) - Game narrative & design
 - [docs/architecture/electron-architecture.md](docs/architecture/electron-architecture.md) - Current architecture
-- [docs/biology/dna-driven-design.md](docs/biology/dna-driven-design.md) - Core design principle
+- [docs/biology/ideas/dna-driven-design.md](docs/biology/ideas/dna-driven-design.md) - Core design principle
 - [CLAUDE.md](CLAUDE.md) - TDD requirements & DNA enforcement
 
 ### Technology Documentation

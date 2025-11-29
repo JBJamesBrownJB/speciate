@@ -1,8 +1,8 @@
 # DNA-Driven Design Principle
 
-**Status**: Planned (Implementation begins Sprint 6 Phase 3)
-**Last Updated**: 2025-11-09
-**Related**: [biology-notes.md](./biology-notes.md), [alife-features.md](./alife-features.md)
+**Status:** ✅ PARTIALLY IMPLEMENTED (constants marked with TODO, no gene struct yet)
+
+**Related:** All biology files implement DNA-driven design principles
 
 ## Core Principle
 

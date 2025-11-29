@@ -1,8 +1,8 @@
 # Stigmergy: Environmental Modification as Communication
 
-**Status**: Design Concept
-**Last Updated**: 2025-11-09
-**Related**: [creature-behaviors.md](./creature-behaviors.md), [alife-features.md](./alife-features.md)
+**Status:** ⏳ FUTURE FEATURE (environmental modification)
+
+**Related:** `influence-maps.md`, `cellular-automata-terrain.md`
 
 ## Core Concept
 

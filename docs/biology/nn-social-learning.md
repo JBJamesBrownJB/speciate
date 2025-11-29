@@ -1,8 +1,8 @@
 # Neural Network Social Learning
 
-**Status**: Design Concept
-**Last Updated**: 2025-11-09
-**Related**: [dna-driven-design.md](./dna-driven-design.md), [creature-behaviors.md](./creature-behaviors.md), [alife-features.md](./alife-features.md)
+**Status:** ⏳ FUTURE FEATURE (advanced AI)
+
+**Related:** `dna-driven-design.md`, `influence-maps.md`, `drongo-species.md`
 
 ## Core Concept: Social Learning and Cultural Transmission
 

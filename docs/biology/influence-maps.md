@@ -1,8 +1,8 @@
-# Attraction Rating (Influence Maps)
+# Influence Maps - Attraction Rating System
 
-**Status**: Design Concept
-**Last Updated**: 2025-11-09
-**Related**: [dna-driven-design.md](./dna-driven-design.md), [alife-features.md](./alife-features.md)
+**Status:** ⏳ FUTURE FEATURE (strategic decision-making)
+
+**Related:** `dna-driven-design.md`, `wandering-behavior.md`
 
 This is your core concept, and it's the right way to go for an A-Life sim. You can think of your game world as having multiple "layers" of data stacked on top of the visual one. An "Influence Map" is just a grid of values representing one of these layers.
 

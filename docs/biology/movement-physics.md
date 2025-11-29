@@ -251,10 +251,11 @@ let personal_space = body_length + dna.express_gene("spacing_buffer");
 ## References
 
 - "The Nature of Code" by Dan Shiffman (Reynolds steering behaviors)
-- Movement ecology research (elastic tether model) - zoologist consultation 2025-11-08
+- Movement ecology research (elastic tether model) - See `wandering-behavior.md`
 - Kleiber's Law (metabolic scaling)
-- `/docs/biology/biology-notes.md` - Full zoologist consultation log
 - `/docs/architecture/behavior-engine.md` - Force accumulation architecture
+
+**See also:** `wandering-behavior.md`, `brain-decision-timing.md`, `collision-physics.md`
 
 ---
 

@@ -3,6 +3,7 @@ use super::constants::{
     WANDER_FORCE,
 };
 use crate::simulation::components::*;
+use crate::simulation::math::{clamp_force, magnitude_sq, normalize};
 use crate::simulation::queries::WanderQuery;
 use rand::Rng;
 
@@ -24,14 +25,13 @@ pub fn territory_wandering_system(
             continue;
         }
 
-        let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+        let speed_sq = magnitude_sq(velocity.vx, velocity.vy);
 
         let (heading_x, heading_y) = if speed_sq < 0.0001 {
             let random_angle = rng.gen_range(0.0..std::f32::consts::TAU);
             (random_angle.cos(), random_angle.sin())
         } else {
-            let speed = speed_sq.sqrt();
-            (velocity.vx / speed, velocity.vy / speed)
+            normalize(velocity.vx, velocity.vy)
         };
 
         let circle_center_x = heading_x * wander_state.wander_distance;
@@ -49,13 +49,7 @@ pub fn territory_wandering_system(
         let desired_vx = target_x;
         let desired_vy = target_y;
 
-        let desired_length_sq = desired_vx * desired_vx + desired_vy * desired_vy;
-        let (norm_desired_x, norm_desired_y) = if desired_length_sq > 0.0001 {
-            let desired_length = desired_length_sq.sqrt();
-            (desired_vx / desired_length, desired_vy / desired_length)
-        } else {
-            (0.0, 0.0)
-        };
+        let (norm_desired_x, norm_desired_y) = normalize(desired_vx, desired_vy);
 
         let max_speed = creature_state.max_speed;
         let scaled_desired_x = norm_desired_x * max_speed;
@@ -64,28 +58,14 @@ pub fn territory_wandering_system(
         let steer_x = scaled_desired_x - velocity.vx;
         let steer_y = scaled_desired_y - velocity.vy;
 
-        let steer_magnitude_sq = steer_x * steer_x + steer_y * steer_y;
-        let wander_force_sq = WANDER_FORCE * WANDER_FORCE;
-        let wander_force = if steer_magnitude_sq > wander_force_sq {
-            let steer_magnitude = steer_magnitude_sq.sqrt();
-            let scale = WANDER_FORCE / steer_magnitude;
-            (steer_x * scale, steer_y * scale)
-        } else {
-            (steer_x, steer_y)
-        };
+        let wander_force = clamp_force(steer_x, steer_y, WANDER_FORCE);
 
         let distance_from_home = home.distance_from(position.x, position.y);
 
         let to_home_x = home.x - position.x;
         let to_home_y = home.y - position.y;
-        let to_home_dist_sq = to_home_x * to_home_x + to_home_y * to_home_y;
 
-        let (norm_to_home_x, norm_to_home_y) = if to_home_dist_sq > 0.0001 {
-            let to_home_dist = to_home_dist_sq.sqrt();
-            (to_home_x / to_home_dist, to_home_y / to_home_dist)
-        } else {
-            (0.0, 0.0)
-        };
+        let (norm_to_home_x, norm_to_home_y) = normalize(to_home_x, to_home_y);
 
         let urgency = (distance_from_home / MAX_WANDER_DISTANCE).min(1.0);
 

@@ -582,7 +582,7 @@ mod behavior_tests {
 
 
 
-        for tick in 0..900 {
+        for _tick in 0..900 {
             sim.update(0.05);
 
 

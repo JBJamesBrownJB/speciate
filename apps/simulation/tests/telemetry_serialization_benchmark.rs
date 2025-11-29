@@ -32,6 +32,7 @@ fn benchmark_telemetry_json_serialization() {
         behavior_us: 1234,
         behavior_transition_us: 567,
         wander_us: 234,
+        seek_us: 178,
         flee_us: 123,
         avoidance_us: 345,
         rotation_us: 456,

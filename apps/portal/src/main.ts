@@ -202,9 +202,6 @@ async function main(): Promise<void> {
 
     document.title = "✅ Simulation Viewer - Live";
 
-    document.addEventListener('visibilitychange', () => {
-    });
-
     window.addEventListener("resize", () => {
       const newWidth = Math.floor(
         window.innerWidth * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO

@@ -327,7 +327,6 @@ mod tests {
 
     #[test]
     fn test_save_state_file_save_and_load() {
-        use std::path::PathBuf;
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();

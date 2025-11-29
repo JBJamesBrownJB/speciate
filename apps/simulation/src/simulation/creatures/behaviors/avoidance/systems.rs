@@ -1,5 +1,6 @@
 use super::constants::{AVOIDANCE_FORCE, PANIC_FORCE, SEEKING_PERSONAL_SPACE_BUFFER};
 use crate::simulation::core::components::*;
+use crate::simulation::math::{clamp_force, magnitude_sq};
 use crate::simulation::perception::constants::PANIC_THRESHOLD_RATIO;
 use crate::simulation::queries::AvoidanceQuery;
 use bevy_ecs::prelude::*;
@@ -45,7 +46,7 @@ pub fn avoidance_system(
 
             let away_x = position.x - other_pos.x;
             let away_y = position.y - other_pos.y;
-            let center_distance_sq = away_x * away_x + away_y * away_y;
+            let center_distance_sq = magnitude_sq(away_x, away_y);
 
             let other_radius = other_size.radius();
             let max_combined_radius = self_radius + other_radius;
@@ -81,20 +82,9 @@ pub fn avoidance_system(
             }
         }
 
-        let total_mag_sq = total_repulsion_x * total_repulsion_x
-            + total_repulsion_y * total_repulsion_y;
-        let max_force = avoidance.max_force;
-        let max_force_sq = max_force * max_force;
-
-        if total_mag_sq > max_force_sq {
-            let total_mag = total_mag_sq.sqrt();
-            let scale = max_force / total_mag;
-            acceleration.ax += total_repulsion_x * scale;
-            acceleration.ay += total_repulsion_y * scale;
-        } else {
-            acceleration.ax += total_repulsion_x;
-            acceleration.ay += total_repulsion_y;
-        }
+        let (clamped_x, clamped_y) = clamp_force(total_repulsion_x, total_repulsion_y, avoidance.max_force);
+        acceleration.ax += clamped_x;
+        acceleration.ay += clamped_y;
     }
 }
 

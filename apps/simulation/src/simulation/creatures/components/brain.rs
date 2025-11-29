@@ -196,7 +196,7 @@ mod tests {
 
         // Simulate serialize/deserialize (last_decision_time should reset)
         let json = serde_json::to_string(&brain).unwrap();
-        let mut reloaded_brain: Brain = serde_json::from_str(&json).unwrap();
+        let reloaded_brain: Brain = serde_json::from_str(&json).unwrap();
 
         // After reload, brain should be able to make decisions immediately
         // (or after base cooldown, not waiting for time 100.0+ again!)

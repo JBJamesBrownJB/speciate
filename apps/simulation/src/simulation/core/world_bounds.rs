@@ -86,16 +86,16 @@ mod tests {
     fn test_clamp_point_outside() {
         let bounds = WorldBounds::new(-100.0, 100.0, -50.0, 50.0);
 
-        let (x, y) = bounds.clamp_point(150.0, 0.0);
+        let (x, _) = bounds.clamp_point(150.0, 0.0);
         assert_eq!(x, 100.0);
 
-        let (x, y) = bounds.clamp_point(-150.0, 0.0);
+        let (x, _) = bounds.clamp_point(-150.0, 0.0);
         assert_eq!(x, -100.0);
 
-        let (x, y) = bounds.clamp_point(0.0, 75.0);
+        let (_, y) = bounds.clamp_point(0.0, 75.0);
         assert_eq!(y, 50.0);
 
-        let (x, y) = bounds.clamp_point(0.0, -75.0);
+        let (_, y) = bounds.clamp_point(0.0, -75.0);
         assert_eq!(y, -50.0);
     }
 

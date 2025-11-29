@@ -1,17 +1,9 @@
 import type { CreatureData } from "@/types/GameState";
 
-/**
- * State tracker for detecting when renderer should update
- */
 export class ChangeDetector {
   private lastCreatureCount = 0;
   private lastStateHash: string | null = null;
 
-  /**
-   * Check if state has changed and renderer should update
-   * @param creatures - Current creature data from simulation
-   * @returns true if renderer should update, false otherwise
-   */
   shouldUpdate(creatures: CreatureData[]): boolean {
     const currentCount = creatures.length;
 
@@ -34,10 +26,6 @@ export class ChangeDetector {
     return false;
   }
 
-  /**
-   * Compute lightweight hash of creature positions for change detection
-   * Only checks first and last 3 creatures to avoid O(n) hash on every frame
-   */
   private computeHash(creatures: CreatureData[]): string {
     if (creatures.length === 0) return "empty";
 
@@ -62,9 +50,6 @@ export class ChangeDetector {
     return hash;
   }
 
-  /**
-   * Reset detector state (e.g., when simulation restarts)
-   */
   reset(): void {
     this.lastCreatureCount = 0;
     this.lastStateHash = null;

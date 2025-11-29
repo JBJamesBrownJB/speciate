@@ -37,6 +37,7 @@ export interface SystemTimingsSnapshot {
   behaviorUs: number;
   behaviorTransitionUs: number;
   wanderUs: number;
+  seekUs: number;
   fleeUs: number;
   avoidanceUs: number;
   rotationUs: number;

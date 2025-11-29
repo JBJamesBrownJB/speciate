@@ -166,6 +166,7 @@ mod tests {
         assert!(system_timings.get("perceptionUs").is_some());
         assert!(system_timings.get("behaviorUs").is_some());
         assert!(system_timings.get("wanderUs").is_some());
+        assert!(system_timings.get("seekUs").is_some());
         assert!(system_timings.get("fleeUs").is_some());
         assert!(system_timings.get("avoidanceUs").is_some());
     }
@@ -179,6 +180,7 @@ mod tests {
             behavior_us: 200,
             behavior_transition_us: 100,
             wander_us: 50,
+            seek_us: 45,
             flee_us: 75,
             avoidance_us: 60,
             rotation_us: 40,

@@ -2,6 +2,7 @@ use super::constants::{
     ARRIVAL_THRESHOLD, BRAKE_FORCE, MAX_FORCE, POUNCE_SPEED, POUNCE_THRESHOLD, SLOW_ZONE_DECAY,
 };
 use crate::simulation::components::*;
+use crate::simulation::math::{clamp_force, magnitude_sq};
 use crate::simulation::movement::constants::{MAX_SPEED, SLOW_ZONE_MULTIPLIER};
 use crate::simulation::queries::SeekQuery;
 #[cfg(feature = "dev-tools")]
@@ -14,7 +15,7 @@ pub fn seek_system(
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
     #[cfg(feature = "dev-tools")]
-    crate::time_system!(timings, "behavior");
+    crate::time_system!(timings, "seek");
 
     for (position, mut acceleration, velocity, size, target, mut creature_state) in
         query.iter_mut()
@@ -25,7 +26,7 @@ pub fn seek_system(
 
         let to_target_x = target.x - position.x;
         let to_target_y = target.y - position.y;
-        let center_distance_sq = to_target_x * to_target_x + to_target_y * to_target_y;
+        let center_distance_sq = magnitude_sq(to_target_x, to_target_y);
 
         if center_distance_sq < 0.000001 {
             creature_state.behavior = BehaviorMode::Catatonic;
@@ -41,7 +42,7 @@ pub fn seek_system(
 
         let slow_zone = (ARRIVAL_THRESHOLD + self_radius + target_radius) * SLOW_ZONE_MULTIPLIER;
 
-        let current_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+        let current_speed_sq = magnitude_sq(velocity.vx, velocity.vy);
 
         // Pounce: Snap to target when very close AND moving slowly
         if edge_distance < POUNCE_THRESHOLD
@@ -77,14 +78,8 @@ pub fn seek_system(
         let steer_x = desired_vx - velocity.vx;
         let steer_y = desired_vy - velocity.vy;
 
-        let steer_mag_sq = steer_x * steer_x + steer_y * steer_y;
-        if steer_mag_sq > MAX_FORCE * MAX_FORCE {
-            let scale = MAX_FORCE / steer_mag_sq.sqrt();
-            acceleration.ax += steer_x * scale;
-            acceleration.ay += steer_y * scale;
-        } else {
-            acceleration.ax += steer_x;
-            acceleration.ay += steer_y;
-        }
+        let (clamped_x, clamped_y) = clamp_force(steer_x, steer_y, MAX_FORCE);
+        acceleration.ax += clamped_x;
+        acceleration.ay += clamped_y;
     }
 }

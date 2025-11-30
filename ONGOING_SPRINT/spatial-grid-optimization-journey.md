@@ -8,10 +8,11 @@
 
 ## TL;DR
 
-1. **Temporal distance sorting WORKED** (correct simulation) but **KILLED performance** (292ms)
+1. **Topological distance sorting WORKED** (correct simulation) but **KILLED performance** (292ms)
 2. **Rayon parallelization = MASSIVE win** (15ms) - we WILL use this
 3. **But first:** Try incremental cell tracking approach to reduce algorithmic complexity
 4. **Goal:** Incremental updates + Rayon = best of both worlds
+5. **Diagnostic overlay:** Need to visualise perception in portal
 
 ---
 
@@ -19,10 +20,14 @@
 
 Perception system became a bottleneck as creature count scaled toward 20K target:
 - Initial perception time: ~105ms at scale
-- After temporal neighbor changes: **292ms** (regression)
+- After topological neighbor changes: **292ms** (regression)
 - Target: <15ms per tick
 
 ---
+
+### Ideas
+
+- What if, a seperate system updated a new component on a crit which was something like 'cellid'. Then current 'temporal' system used that id, not entity id... 
 
 ## Journey Timeline
 
@@ -38,7 +43,7 @@ Perception system became a bottleneck as creature count scaled toward 20K target
 
 ---
 
-### Phase 2: Temporal Neighbor Sorting (CORRECT but SLOW)
+### Phase 2: Topological Neighbor Sorting (CORRECT but SLOW)
 
 **Goal:** Sort neighbors by distance so creatures interact with nearest neighbors first.
 
@@ -156,7 +161,7 @@ entity_data.par_iter_mut().for_each(|(entity, pos, perception, ...)| {
 1. At 60m cell size, most creatures stay in same cell between ticks
 2. ~5% cell-change rate means 95% less grid operations
 3. Lazy fill gives "good enough" spatial ordering without expensive heap sort
-4. Pre-temporal perception was fast because it used entity ID ordering (temporal locality)
+4. Pre-topological perception was fast because it used entity ID ordering (temporal locality)
 5. Cell-based ordering gives similar benefit (spatial locality)
 
 **Architecture:**
@@ -219,7 +224,7 @@ Perception queries that only read from shared grid are perfectly parallel.
 Don't rebuild what hasn't changed. Track changes, apply incrementally.
 
 ### 5. "Good Enough" Ordering Beats Precise Sorting
-Pre-temporal perception was fast because entity ID ordering gave temporal locality.
+Pre-topological perception was fast because entity ID ordering gave temporal locality.
 Cell-based iteration gives spatial locality - "roughly ordered" without sorting cost.
 
 ---
@@ -229,7 +234,7 @@ Cell-based iteration gives spatial locality - "roughly ordered" without sorting 
 | Approach | Time | Notes |
 |----------|------|-------|
 | Dense Vec (baseline) | ~105ms | Full rebuild every tick |
-| + Temporal distance sorting | 292ms | Correct but expensive heap operations |
+| + Topological distance sorting | 292ms | Correct but expensive heap operations |
 | HashMap (naive) | worse | Allocation churn disaster |
 | HashMap + occupied tracking | 115ms | Better but still full rebuild |
 | + Rayon parallelization | **15ms** | MASSIVE win (will use later) |

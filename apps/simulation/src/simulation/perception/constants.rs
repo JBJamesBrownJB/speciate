@@ -1,4 +1,4 @@
-pub const MAX_PERCEIVED_NEIGHBORS: usize = 21; // Maximum neighbors tracked per creature
+pub const MAX_PERCEIVED_NEIGHBORS: usize = 8; // Maximum neighbors tracked per creature
 pub const PERCEPTION_MULTIPLIER: f32 = 10.0; // Base perception range as multiple of body length
 pub const PERSONAL_SPACE: f32 = 1.5; // Spacing buffer distance in meters
 pub const PANIC_THRESHOLD_RATIO: f32 = 0.5; // Panic threshold as fraction of personal_space

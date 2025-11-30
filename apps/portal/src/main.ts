@@ -228,7 +228,8 @@ async function main(): Promise<void> {
 
       // Handle perception debug buffer updates (every tick - smooth visualization)
       ipcClient.onPerceptionDebugUpdate((debugData) => {
-        if (debugData) {
+        // Only update overlay if a creature is selected (prevents stale data race)
+        if (debugData && selectionManager.hasSelection()) {
           perceptionOverlay.update(debugData);
         } else {
           perceptionOverlay.clear();

@@ -1,29 +1,29 @@
 # Perception System (Current Implementation)
 
-**Status:** ✅ Implemented
+**Status:** Implemented
 **Location:** `apps/simulation/src/simulation/perception/`
 
 ## What It Does
 
-Provides basic 360° neighbor detection within a fixed range. Creatures detect nearby entities each tick and use this information for avoidance steering. This is a **basic omnidirectional system** - no field-of-view (FOV) restrictions or directional awareness yet.
+Provides FOV-based neighbor detection within a directional cone. Creatures detect nearby entities within their field of view each tick. FOV angle determines both the arc width and perception range through a biological tradeoff (narrow FOV = longer range).
 
-**Future:** Will add DNA-driven vision genes (range variation, FOV cones, neural speed, stochastic updates).
+**See also:** `docs/biology/done/dna-fov.md` for detailed FOV documentation.
 
 ## Key Components
 
 ### Perception Component
 
-**Location:** `perception/components.rs:12-75`
+**Location:** `perception/components.rs`
 
 **Key features:**
-- Fixed-size array (40 neighbors max) - no heap allocations, cache-friendly
-- 360° awareness - no blind spots (unrealistic, planned for future)
-- Range-based only - detects all entities within range, regardless of direction
-- `MAX_PERCEIVED_NEIGHBORS = 40` (components.rs:5)
+- Fixed-size array (21 neighbors max) - no heap allocations, cache-friendly
+- FOV cone perception - creatures only see within their field of view
+- Range derived from FOV angle (narrow = longer, wide = shorter)
+- `MAX_PERCEIVED_NEIGHBORS = 21` (constants.rs)
 
 **Scaling:**
-- `from_body_size(body_length)` - Range = body_length × 10.0
-- Default range: 10.0m
+- `from_body_size(body_length)` - Range = body_length × 10.0 (at 180 FOV)
+- Range varies with FOV: `range = base_range * (180/fov)^0.4`
 
 ### AvoidanceBehavior Component
 
@@ -120,29 +120,9 @@ Reusable allocation for position queries, reduces heap pressure during perceptio
 
 ## Current Limitations
 
-### 360° Omniscient Vision (Unrealistic)
-
-**Problem:** Creatures see in all directions simultaneously, no blind spots.
-
-**Biological reality:**
-- Predators: 90-120° FOV (binocular vision, depth perception)
-- Prey: 270-340° FOV (panoramic, early warning)
-
-**Fix:** Planned addition of FOV cones and facing direction.
-
-### Fixed Range (No Variation)
-
-**Problem:** All creatures have identical perception range (10× body size).
-
-**Biological reality:**
-- Hawks: Extreme long range (22× body length)
-- Rabbits: Short range, wide FOV (6× body length)
-
-**Fix:** Planned `visual_range_multiplier` gene (4.0-25.0 range).
-
 ### Instant Updates (No Reaction Time)
 
-**Problem:** Perception updates every tick (45ms), all creatures simultaneously.
+**Problem:** Perception updates every tick, all creatures simultaneously.
 
 **Biological reality:**
 - Small animals: ~68ms reaction time (fast)
@@ -150,27 +130,18 @@ Reusable allocation for position queries, reduces heap pressure during perceptio
 
 **Fix:** Planned `VisionTiming` component with stochastic updates.
 
-### No Directional Bias
-
-**Problem:** Stationary and moving creatures have identical perception.
-
-**Biological reality:**
-- Stationary: 360° awareness (scanning)
-- Moving: Forward-biased (attention on travel direction)
-
-**Fix:** Will use velocity vector as facing direction for FOV cone.
-
 ## Future Work
 
-### Future: DNA-Driven Vision & FOV
+### Stochastic Vision
 
-**Planned features:**
-1. Vision genes: range multiplier (4-25), FOV arc (60-360°), neural speed (0.5-2.0)
-2. FOV cones: Directional perception, blind spots behind creatures
-3. Stochastic updates: Reaction-time-gated (68-500ms per creature)
-4. Trade-offs: Wide FOV reduces effective range (0.7× penalty)
+Planned reaction-time-gated perception updates to reduce CPU load and add biological realism.
 
-**See:** Vision system design docs in project planning
+### Additional DNA Vision Genes
+
+- `visual_range_multiplier` - Independent range control (4-25x)
+- `neural_speed` - Reaction time modifier (0.5-2.0)
+
+**See:** `docs/biology/todo/dna-driven-fov.md` for full vision gene roadmap
 
 ### Spatial Awareness (Future)
 
@@ -185,4 +156,4 @@ Reusable allocation for position queries, reduces heap pressure during perceptio
 
 ---
 
-**Last Updated:** 2025-11-29
+**Last Updated:** 2025-11-30

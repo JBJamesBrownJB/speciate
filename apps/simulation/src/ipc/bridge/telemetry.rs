@@ -214,7 +214,7 @@ mod tests {
         assert!(json.contains("cyclesDelta"));
         assert!(json.contains("instructionsDelta"));
         assert!(json.contains("ipc"));
-        assert!(json.contains("cacheMissRate"));
+        assert!(json.contains("llcMissRate"));
     }
 
     #[test]

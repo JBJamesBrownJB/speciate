@@ -136,4 +136,46 @@ contextBridge.exposeInMainWorld('electron', {
     }
     return await ipcRenderer.invoke('resize-window', width);
   },
+
+  /**
+   * Select a creature for perception debug visualization (dev tools only)
+   * When selected, telemetry will include detailed perception data
+   *
+   * @param {number|null} creatureId - Creature ID to select, or null to clear
+   */
+  selectCreatureDebug: (creatureId) => {
+    if (creatureId !== null && typeof creatureId !== 'number') {
+      throw new Error('selectCreatureDebug: creatureId must be a number or null');
+    }
+    ipcRenderer.send('select-creature-debug', creatureId);
+  },
+
+  /**
+   * Subscribe to perception debug buffer updates (NEW - zero-copy direct buffer access)
+   * Callback receives Float32Array with perception debug data
+   *
+   * Buffer layout:
+   * - [0]: has_data (1.0 = valid)
+   * - [1]: target_id
+   * - [2]: target_x
+   * - [3]: target_y
+   * - [4]: perception_range
+   * - [5]: fov_angle (radians)
+   * - [6]: rotation (radians)
+   * - [7]: neighbor_count
+   * - [8..72]: neighbor_ids (max 64)
+   * - [72..136]: neighbor_xs
+   * - [136..200]: neighbor_ys
+   *
+   * @param {Function} callback - Function to call with perception debug buffer
+   */
+  onPerceptionDebugUpdate: (callback) => {
+    if (typeof callback !== 'function') {
+      throw new Error('onPerceptionDebugUpdate: callback must be a function');
+    }
+
+    ipcRenderer.on('perception-debug-update', (event, buffer) => {
+      callback(buffer);
+    });
+  },
 });

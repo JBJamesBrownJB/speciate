@@ -14,37 +14,43 @@
 
 ## High-Level Phases
 
-### Phase 1: Spatial Grid Data Structure
-**Outcome:** FxHashMap-based grid with 200m cells, entity position caching, and world-to-cell coordinate mapping
+### Phase 1: Spatial Grid Data Structure + Full Rebuild
+**Outcome:** FxHashMap-based grid with 50m cells, rebuilt every frame
 
 **Key Decisions:**
-- Cell size: 200m (2× max perception range for safety margin)
-- Use FxHashMap (2-5× faster than std HashMap for integer keys)
-- Cache positions to avoid redundant component queries
+- Cell size: **50m** (max perception ~35m, use 1.5× for safety)
+- Use FxHashMap via `rustc-hash` crate (2-5× faster than std HashMap)
+- Store `(Entity, x, y, radius)` in cells to avoid component double-lookup
+- **Full rebuild per frame** - simpler, ~1-3ms overhead acceptable
+- Replace existing `PerceptionScratchBuffer` with grid (not additive)
 
-### Phase 2: Incremental Grid Updates
-**Outcome:** Efficient system that only moves entities when they cross cell boundaries (~0.8% of creatures per tick)
+**Why not 200m?** At 200m cells with uniform distribution, you'd have ~1,500 creatures/cell = 13,500 comparisons per query. At 50m, ~100 creatures/cell = ~900 comparisons.
 
-**Key Decisions:**
-- Track previous cell per entity to detect boundary crossings
-- Batch insertions/removals for cache efficiency
-- Run BEFORE perception system in schedule
-
-### Phase 3: Grid-Accelerated Perception
-**Outcome:** Perception system queries 3×3 grid cells instead of entire population, reducing comparisons by 833×
+### Phase 2: Grid-Accelerated Perception
+**Outcome:** Perception system queries nearby grid cells instead of entire population
 
 **Key Decisions:**
-- Query radius determines cell range (typically 9 cells)
+- Query radius determines cell range (typically 3×3 = 9 cells)
 - Flatten iterator over cells for clean API
-- Keep stochastic vision compatible (if implemented in Sprint 18)
+- **Use `Res<SpatialGrid>` not `ResMut`** (immutable during perception, enables Rayon)
+- Keep existing FOV optimizations (sqrt-free, early-exit) in inner loop
 
-### Phase 4: Rayon Parallelization
+### Phase 3: Rayon Parallelization
 **Outcome:** Multi-core perception using read-only grid during parallel queries
 
 **Key Decisions:**
 - Collect entity data → parallel grid queries → write-back pattern
 - Grid is immutable during perception (no sync overhead)
 - Expected 4-8× speedup on multi-core CPUs
+
+### Phase 4: Incremental Updates (DEFERRED - Only If Needed)
+**Outcome:** Only move entities when they cross cell boundaries
+
+**Key Decisions:**
+- Only implement if Phase 1 profiling shows rebuild > 5ms
+- Requires tracking previous cell per entity
+- Requires `RemovedComponents<Position>` for despawn handling
+- **Higher complexity, marginal gain** - defer until proven necessary
 
 ---
 
@@ -59,10 +65,51 @@
 
 **Architecture Pattern:** Incremental updates are critical - full grid rebuild every tick would cost ~15ms @ 150K creatures.
 
+### Pre-Sprint Optimizations (Already Implemented)
+
+The following FOV optimizations are already in place and should be preserved:
+
+1. **Sqrt-free FOV check:** `rough_dot² >= cos_half_fov_sq × center_dist_sq` (no sqrt/division in hot path)
+2. **Cached `cos_half_fov_sq`:** Pre-computed in `Perception` component at construction
+3. **Early-exit for behind:** `if rough_dot <= 0.0 { continue; }` skips ~50% of candidates
+4. **Dot product FOV:** Replaced atan2 with dot product comparison
+
+These reduce per-comparison cost significantly. The grid reduces comparison COUNT.
+
+### Cell Size Rationale
+
+**50m chosen based on actual perception range analysis:**
+
+```
+PERCEPTION_MULTIPLIER = 10.0  (base_range = body_size × 10)
+FOV_RANGE_EXPONENT = 0.4
+Max body_size = 2.0 → base_range = 20m
+Max FOV bonus (45° narrow) = 1.74× → max_range = 34.8m
+```
+
+**Cell size = 50m (1.5× max perception):**
+- 3×3 query = 9 cells
+- At uniform distribution: ~100 creatures/cell
+- ~900 comparisons per query (vs 400M for O(n²))
+
+**Benchmarking guidance:** Start at 50m. If perception ranges change via DNA, validate cell size still appropriate. Add debug assertion:
+```rust
+debug_assert!(perception.range <= CELL_SIZE, "Perception exceeds cell size");
+```
+
+### Current Baseline (Measured)
+
+At 20K creatures with all FOV optimizations (sqrt-free, cached values, early-exit):
+- **Perception:** ~50ms (O(n²) = 400M comparisons)
+- **Total tick:** ~55-60ms
+
+This confirms O(n²) is the bottleneck - cache optimizations gave only marginal gains.
+
 ### Performance Scaling
 
 | Creatures | Current (Parallel) | With Grid (Sequential) | With Grid (Parallel) |
 |-----------|-------------------|------------------------|----------------------|
+| 20K | 50ms | ~3-5ms | ~1ms |
 | 50K | 425ms | ~40ms | ~7ms |
 | 150K | 3,825ms | ~120ms | ~20ms |
 
@@ -70,13 +117,35 @@
 
 Spatial grids mirror real animal cognition - creatures don't evaluate every entity in the world, only those in local proximity. This is both performant AND biologically accurate.
 
+### Future Optimizations (Post-Sprint)
+
+**Stochastic Vision (Sprint 18?):** DNA-driven reaction times. Small creatures check every tick, large creatures every 5-10 ticks. Biologically realistic AND 5× cheaper.
+
+**Hot/Cold Component Split:** Current `Perception` is ~192 bytes (3 cache lines). Could split to:
+- `PerceptionConfig` (16 bytes): range, cos_half_fov_sq - read-only hot data
+- `PerceptionResults` (separate): neighbors array - write-only
+- Delete unused `obstacles: Vec<Entity>` - heap allocation for nothing
+
 ---
 
 ## Success Criteria
 
 - [ ] Spatial grid supports 150K creatures @ <45ms total tick time
-- [ ] Perception system uses <10ms @ 150K (currently 70% of budget)
-- [ ] Grid update overhead <2ms (incremental updates only)
+- [ ] Perception system uses <10ms @ 150K (down from 70% of budget)
+- [ ] Grid rebuild overhead <5ms @ 150K (full rebuild per tick)
+- [ ] Grid memory footprint <200MB @ 150K creatures
 - [ ] All existing tests pass (zero behavioral regression)
 - [ ] Rayon parallel queries engage all CPU cores
+- [ ] Cell size validated via benchmarking (start 50m, tune if needed)
 - [ ] Validated at 200K creatures (stretch goal)
+
+## Dependencies (Add to Cargo.toml)
+
+```toml
+rustc-hash = "2.0"  # FxHashMap for fast integer hashing
+```
+
+## Pre-Sprint Cleanup
+
+- [ ] Delete unused `obstacles: Vec<Entity>` from Perception component (dead heap allocation)
+- [ ] Remove `PerceptionScratchBuffer` (replaced by SpatialGrid)

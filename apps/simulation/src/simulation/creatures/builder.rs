@@ -4,6 +4,7 @@ use crate::simulation::creatures::behaviors::wander::constants::{
     ANGLE_CHANGE, WANDER_DISTANCE, WANDER_RADIUS,
 };
 use crate::simulation::movement::constants::MAX_SPEED;
+use crate::simulation::perception::constants::DEFAULT_FOV_DEGREES;
 use crate::simulation::perception::*;
 use bevy_ecs::prelude::*;
 use rand::Rng;
@@ -62,6 +63,7 @@ pub struct CritBuilder {
     max_speed: f32,
     target: Option<Target>,
     size: f32,
+    fov_degrees: f32,
 }
 
 impl Default for CritBuilder {
@@ -83,6 +85,7 @@ impl CritBuilder {
             max_speed: MAX_SPEED,
             target: None,
             size: 1.0,
+            fov_degrees: DEFAULT_FOV_DEGREES,
         }
     }
 
@@ -161,6 +164,11 @@ impl CritBuilder {
         self
     }
 
+    pub fn with_fov(mut self, fov_degrees: f32) -> Self {
+        self.fov_degrees = fov_degrees;
+        self
+    }
+
     pub fn with_target(mut self, x: f32, y: f32) -> Self {
         self.target = Some(Target::at_point(x, y));
         self
@@ -226,7 +234,7 @@ impl CritBuilder {
             can_flee: CanFlee,
             can_wander: CanWander,
             can_avoid_obstacles: CanAvoidObstacles,
-            perception: Perception::from_body_size(self.size),
+            perception: Perception::from_body_size_with_fov(self.size, self.fov_degrees),
             avoidance_behavior: AvoidanceBehavior::from_body_size(self.size),
             target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
         }

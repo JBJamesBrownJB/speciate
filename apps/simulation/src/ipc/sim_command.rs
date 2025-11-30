@@ -5,4 +5,5 @@ pub enum SimCommand {
     SpawnAt { x: f32, y: f32 },
     KillAll,
     LoadTrial { trial_name: String },
+    SelectCreatureDebug(Option<u32>),
 }

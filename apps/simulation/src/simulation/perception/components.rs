@@ -3,8 +3,8 @@ use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 use super::constants::{
-    DEFAULT_PERCEPTION_RANGE, ENERGY_MODIFIER, MAX_PERCEIVED_NEIGHBORS, PANIC_THRESHOLD_RATIO,
-    PERCEPTION_MULTIPLIER, PERSONAL_SPACE,
+    DEFAULT_FOV_DEGREES, ENERGY_MODIFIER, FOV_RANGE_EXPONENT, MAX_PERCEIVED_NEIGHBORS,
+    PANIC_THRESHOLD_RATIO, PERCEPTION_MULTIPLIER, PERSONAL_SPACE,
 };
 use crate::simulation::creatures::behaviors::avoidance::constants::AVOIDANCE_FORCE;
 
@@ -15,24 +15,55 @@ pub struct PerceptionScratchBuffer {
 
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
-    pub range: f32,
+    pub fov_angle: f32,        // Field of view in radians (stored internally as radians for efficient checks)
+    pub range: f32,            // Derived from FOV and body size
+    pub cos_half_fov: f32,     // Cached cos(fov_angle/2) for fast FOV checks
+    pub cos_half_fov_sq: f32,  // Cached cos²(fov_angle/2) for sqrt-free FOV checks
     neighbor_count: u8,
     neighbors: [Entity; MAX_PERCEIVED_NEIGHBORS],
     pub obstacles: Vec<Entity>, // Placeholder for future obstacle tracking
 }
 
 impl Perception {
-    pub fn new(range: f32) -> Self {
+    /// Create perception with explicit FOV (in degrees) and body size
+    /// Range is automatically derived using biological tradeoff formula
+    pub fn new(fov_angle_degrees: f32, body_size: f32) -> Self {
+        let fov_rad = fov_angle_degrees.to_radians();
+        let range = Self::calculate_range(body_size, fov_angle_degrees);
+        let cos_half = (fov_rad / 2.0).cos();
         Self {
+            fov_angle: fov_rad,
             range,
+            cos_half_fov: cos_half,
+            cos_half_fov_sq: cos_half * cos_half,
             neighbor_count: 0,
             neighbors: [Entity::PLACEHOLDER; MAX_PERCEIVED_NEIGHBORS],
             obstacles: Vec::new(),
         }
     }
 
+    /// Calculate perception range from body size and FOV
+    /// Narrow FOV = longer range (more photoreceptors per degree)
+    /// Formula: range = base_range × (180° / fov_angle)^0.4
+    fn calculate_range(body_size: f32, fov_angle_degrees: f32) -> f32 {
+        let base_range = body_size * PERCEPTION_MULTIPLIER;
+        let fov_factor = (180.0 / fov_angle_degrees).powf(FOV_RANGE_EXPONENT);
+        base_range * fov_factor
+    }
+
+    /// Create perception with default FOV (180°) from body size
     pub fn from_body_size(body_length: f32) -> Self {
-        Self::new(body_length * PERCEPTION_MULTIPLIER)
+        Self::new(DEFAULT_FOV_DEGREES, body_length)
+    }
+
+    /// Create perception with explicit FOV and body size
+    pub fn from_body_size_with_fov(body_length: f32, fov_angle_degrees: f32) -> Self {
+        Self::new(fov_angle_degrees, body_length)
+    }
+
+    /// Get half FOV in radians (for cone check: angle must be within ±half_fov)
+    pub fn half_fov(&self) -> f32 {
+        self.fov_angle / 2.0
     }
 
     pub fn has_neighbors(&self) -> bool {
@@ -64,12 +95,6 @@ impl Perception {
 
     pub fn is_full(&self) -> bool {
         self.neighbor_count as usize >= MAX_PERCEIVED_NEIGHBORS
-    }
-}
-
-impl Default for Perception {
-    fn default() -> Self {
-        Self::new(DEFAULT_PERCEPTION_RANGE)
     }
 }
 
@@ -119,12 +144,54 @@ impl Default for AvoidanceBehavior {
     }
 }
 
+#[cfg(feature = "dev-tools")]
+#[derive(Resource, Default)]
+pub struct PerceptionDebugTarget(pub Option<Entity>);
+
+#[cfg(feature = "dev-tools")]
+impl PerceptionDebugTarget {
+    pub fn set_by_crit_id(&mut self, crit_id: Option<u32>, lookup: impl Fn(u32) -> Option<Entity>) {
+        self.0 = crit_id.and_then(lookup);
+    }
+
+    pub fn clear(&mut self) {
+        self.0 = None;
+    }
+
+    pub fn get(&self) -> Option<Entity> {
+        self.0
+    }
+}
+
+#[cfg(feature = "dev-tools")]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NeighborDebugInfo {
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[cfg(feature = "dev-tools")]
+#[derive(Resource, Default, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerceptionDebugSnapshot {
+    pub entity_id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub perception_range: f32,
+    pub fov_angle: f32,  // Field of view in radians
+    pub rotation: f32,   // Creature facing direction in radians
+    pub neighbors: Vec<NeighborDebugInfo>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_perception_scaling_with_body_size() {
+    fn test_perception_scaling_with_body_size_default_fov() {
+        // With 180° FOV (default), range multiplier is exactly 1.0
         let small_perception = Perception::from_body_size(0.5);
         assert_eq!(small_perception.range, 5.0);
 
@@ -133,6 +200,43 @@ mod tests {
 
         let large_perception = Perception::from_body_size(2.0);
         assert_eq!(large_perception.range, 20.0);
+    }
+
+    #[test]
+    fn test_fov_range_tradeoff() {
+        let body_size = 1.0;
+        let base_range = body_size * PERCEPTION_MULTIPLIER; // 10.0
+
+        // 180° FOV = baseline (multiplier 1.0)
+        let baseline = Perception::new(180.0, body_size);
+        assert!((baseline.range - base_range).abs() < 0.01);
+
+        // Narrow FOV (90°) = longer range
+        let narrow = Perception::new(90.0, body_size);
+        assert!(narrow.range > base_range);
+        // Expected: 10.0 × (180/90)^0.4 = 10.0 × 2^0.4 ≈ 13.2
+        assert!((narrow.range - 13.2).abs() < 0.1);
+
+        // Wide FOV (270°) = shorter range
+        let wide = Perception::new(270.0, body_size);
+        assert!(wide.range < base_range);
+        // Expected: 10.0 × (180/270)^0.4 = 10.0 × 0.667^0.4 ≈ 8.42
+        assert!((wide.range - 8.42).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_fov_stored_in_radians() {
+        let perception = Perception::new(180.0, 1.0);
+        assert!((perception.fov_angle - std::f32::consts::PI).abs() < 0.001);
+
+        let narrow = Perception::new(90.0, 1.0);
+        assert!((narrow.fov_angle - std::f32::consts::FRAC_PI_2).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_half_fov() {
+        let perception = Perception::new(180.0, 1.0);
+        assert!((perception.half_fov() - std::f32::consts::FRAC_PI_2).abs() < 0.001);
     }
 
     #[test]
@@ -158,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_perception_neighbor_tracking() {
-        let mut perception = Perception::new(10.0);
+        let mut perception = Perception::from_body_size(1.0);
 
         assert!(!perception.has_neighbors());
         assert_eq!(perception.neighbor_count(), 0);

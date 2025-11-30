@@ -27,6 +27,8 @@ use parking_lot::{Mutex, RwLock};
 use log::error;
 
 use crate::ipc::bridge::{DoubleBuffer, NapiApp, TelemetrySnapshot};
+#[cfg(feature = "dev-tools")]
+use crate::ipc::bridge::PerceptionDebugBuffer;
 use crate::config::SaveStateConfig;
 use crate::persistence::{SaveStateWorker, SaveType};
 
@@ -74,6 +76,8 @@ pub struct SimulationEngine {
     buffer_creature_count: Arc<AtomicU64>,
     save_state_worker: Option<Arc<Mutex<SaveStateWorker>>>,
     save_state_config: SaveStateConfig,
+    #[cfg(feature = "dev-tools")]
+    perception_debug_buffer: Arc<Mutex<PerceptionDebugBuffer>>,
 }
 
 #[napi]
@@ -114,6 +118,8 @@ impl SimulationEngine {
             buffer_creature_count: Arc::new(AtomicU64::new(0)),
             save_state_worker,
             save_state_config,
+            #[cfg(feature = "dev-tools")]
+            perception_debug_buffer: Arc::new(Mutex::new(PerceptionDebugBuffer::new())),
         }
     }
 
@@ -192,6 +198,8 @@ impl SimulationEngine {
         let assets_path_owned = assets_path.clone();
         let save_state_config = self.save_state_config.clone();
         let save_state_worker_ref = self.save_state_worker.clone();
+        #[cfg(feature = "dev-tools")]
+        let perception_debug_buffer_ref = Arc::clone(&self.perception_debug_buffer);
 
         // Spawn Bevy thread with JoinHandle (for clean shutdown)
         let handle = thread::spawn(move || {
@@ -231,10 +239,18 @@ impl SimulationEngine {
                     #[cfg(feature = "dev-tools")]
                     app.read_hardware_counters();
 
+                    // 4b. Export perception debug to buffer (dev-tools only)
+                    #[cfg(feature = "dev-tools")]
+                    app.export_perception_debug(&perception_debug_buffer_ref);
+
                     // 5. Record total tick timing (always enabled - negligible overhead ~1μs)
                     app.record_total_tick_timing(frame_start.elapsed().as_micros() as u64);
 
-                    // 5. Swap buffers after frame completes (lock-free)
+                    // 5b. Swap perception debug buffer (dev-tools only)
+                    #[cfg(feature = "dev-tools")]
+                    perception_debug_buffer_ref.lock().swap();
+
+                    // 6. Swap position buffers after frame completes (lock-free)
                     buffer_ref.lock().swap();
 
                     // 6. Update frame timing history
@@ -524,6 +540,40 @@ impl SimulationEngine {
         Ok(())
     }
 
+    /// Select a creature for perception debug visualization
+    ///
+    /// When a creature is selected, the simulation will include detailed
+    /// perception data (position, range, neighbors) in telemetry updates.
+    ///
+    /// # Arguments
+    /// * `creature_id` - The creature ID to select, or None to clear selection
+    ///
+    /// # Example (JavaScript)
+    /// ```js
+    /// // Select creature 123 for debug visualization
+    /// sim.selectCreatureDebug(123);
+    ///
+    /// // Clear selection
+    /// sim.selectCreatureDebug(null);
+    /// ```
+    #[napi]
+    pub fn select_creature_debug(&self, creature_id: Option<u32>) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(
+                Status::GenericFailure,
+                "Simulation not started",
+            ))?
+            .try_send(SimCommand::SelectCreatureDebug(creature_id))
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("Command queue full: {}", e),
+                )
+            })?;
+        Ok(())
+    }
+
     /// Get full telemetry snapshot (all 45+ metrics)
     ///
     /// **Performance:** 3-8µs per call (negligible overhead)
@@ -692,6 +742,49 @@ impl SimulationEngine {
     pub fn shutdown(&mut self) -> Result<()> {
         // Signal thread to stop (shutdown save happens in thread before exit)
         self.stop()
+    }
+}
+
+/// Dev-tools only NAPI methods
+///
+/// These methods are only available when compiled with `--features dev-tools`.
+/// They provide developer-facing debugging APIs that should NOT be shipped
+/// in production builds.
+#[cfg(feature = "dev-tools")]
+#[napi]
+impl SimulationEngine {
+    /// Get perception debug buffer
+    ///
+    /// Returns Float32Array with perception debug data for selected creature.
+    ///
+    /// **Layout:**
+    /// - [0]: has_data (1.0 = valid, 0.0 = no selection)
+    /// - [1]: target_id
+    /// - [2]: target_x
+    /// - [3]: target_y
+    /// - [4]: perception_range
+    /// - [5]: neighbor_count
+    /// - [6..6+64]: neighbor_ids
+    /// - [6+64..6+128]: neighbor_xs
+    /// - [6+128..6+192]: neighbor_ys
+    ///
+    /// # Example (JavaScript)
+    /// ```js
+    /// const debug = simulation.getPerceptionDebug();
+    /// if (debug[0] > 0.5) { // has_data
+    ///   const targetX = debug[2];
+    ///   const targetY = debug[3];
+    ///   const range = debug[4];
+    ///   const neighborCount = debug[5];
+    ///   // Draw circle at (targetX, targetY) with radius `range`
+    ///   // Draw lines to neighbors at indices 6+i, 70+i, 134+i
+    /// }
+    /// ```
+    #[napi]
+    pub fn get_perception_debug(&self) -> Float32Array {
+        let buffer = self.perception_debug_buffer.lock();
+        let read_slice = buffer.get_read_slice();
+        Float32Array::new(read_slice.to_vec())
     }
 }
 

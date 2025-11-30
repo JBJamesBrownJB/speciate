@@ -98,6 +98,12 @@ impl SimulationBuilder {
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::ParallelizationMetrics::new());
 
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(perception::PerceptionDebugTarget::default());
+
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(perception::PerceptionDebugSnapshot::default());
+
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
         world.insert_resource(perception::PerceptionScratchBuffer::default());

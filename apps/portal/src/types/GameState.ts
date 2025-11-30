@@ -44,6 +44,20 @@ export interface SystemTimingsSnapshot {
   entityCount: number;
 }
 
+export interface NeighborDebugInfo {
+  id: number;
+  x: number;
+  y: number;
+}
+
+export interface PerceptionDebugData {
+  entityId: number;
+  x: number;
+  y: number;
+  perceptionRange: number;
+  neighbors: NeighborDebugInfo[];
+}
+
 export interface GameState {
   protocolVersion: number;
   tick: number;
@@ -52,4 +66,5 @@ export interface GameState {
   entityCount?: number;
   systemTimingsUs?: SystemTimingsSnapshot;
   hardwareMetrics?: HardwareMetrics;
+  perceptionDebug?: PerceptionDebugData;
 }

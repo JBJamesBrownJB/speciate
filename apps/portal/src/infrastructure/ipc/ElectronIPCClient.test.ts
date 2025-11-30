@@ -25,6 +25,7 @@ describe('ElectronIPCClient', () => {
   let mockElectronAPI: {
     onNAPIBufferUpdate: ReturnType<typeof vi.fn>;
     onTelemetryUpdate: ReturnType<typeof vi.fn>;
+    onPerceptionDebugUpdate: ReturnType<typeof vi.fn>;
     removeStateUpdateListener: ReturnType<typeof vi.fn>;
   };
 
@@ -32,6 +33,7 @@ describe('ElectronIPCClient', () => {
     mockElectronAPI = {
       onNAPIBufferUpdate: vi.fn(),
       onTelemetryUpdate: vi.fn(),
+      onPerceptionDebugUpdate: vi.fn(),
       removeStateUpdateListener: vi.fn(),
     };
 

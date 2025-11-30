@@ -15,6 +15,10 @@ declare global {
       getLatestState: () => Promise<import('./types/GameState').GameState | null>;
 
       sendCommand: (command: { type: string; [key: string]: unknown }) => void;
+
+      selectCreatureDebug: (creatureId: number | null) => void;
+
+      onPerceptionDebugUpdate: (callback: (buffer: Float32Array) => void) => void;
     };
   }
 }

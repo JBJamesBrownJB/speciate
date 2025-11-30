@@ -119,6 +119,45 @@ impl Default for AvoidanceBehavior {
     }
 }
 
+#[cfg(feature = "dev-tools")]
+#[derive(Resource, Default)]
+pub struct PerceptionDebugTarget(pub Option<Entity>);
+
+#[cfg(feature = "dev-tools")]
+impl PerceptionDebugTarget {
+    pub fn set_by_crit_id(&mut self, crit_id: Option<u32>, lookup: impl Fn(u32) -> Option<Entity>) {
+        self.0 = crit_id.and_then(lookup);
+    }
+
+    pub fn clear(&mut self) {
+        self.0 = None;
+    }
+
+    pub fn get(&self) -> Option<Entity> {
+        self.0
+    }
+}
+
+#[cfg(feature = "dev-tools")]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NeighborDebugInfo {
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[cfg(feature = "dev-tools")]
+#[derive(Resource, Default, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerceptionDebugSnapshot {
+    pub entity_id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub perception_range: f32,
+    pub neighbors: Vec<NeighborDebugInfo>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

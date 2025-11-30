@@ -10,7 +10,10 @@ use crate::simulation::core::{Simulation, SimulationBuilder};
 use crate::simulation::components::*;
 use crate::simulation::creatures::builder::CritBuilder;
 use super::{DoubleBuffer, TelemetrySnapshot};
+#[cfg(feature = "dev-tools")]
+use super::PerceptionDebugBuffer;
 use crate::ipc::SimCommand;
+use bevy_ecs::prelude::Entity;
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -138,8 +141,35 @@ impl NapiApp {
                     });
                     self.simulation.world.flush();
                 }
+                SimCommand::SelectCreatureDebug(creature_id) => {
+                    #[cfg(feature = "dev-tools")]
+                    {
+                        use crate::simulation::perception::PerceptionDebugTarget;
+
+                        let entity = creature_id.and_then(|id| {
+                            self.lookup_entity_by_crit_id(id)
+                        });
+
+                        if let Some(mut target) = self.simulation.world.get_resource_mut::<PerceptionDebugTarget>() {
+                            target.0 = entity;
+                        }
+                    }
+                    #[cfg(not(feature = "dev-tools"))]
+                    {
+                        let _ = creature_id;
+                    }
+                }
             }
         }
+    }
+
+    /// Lookup entity by CritId
+    fn lookup_entity_by_crit_id(&mut self, crit_id: u32) -> Option<Entity> {
+        self.simulation.world
+            .query::<(Entity, &CritId)>()
+            .iter(&self.simulation.world)
+            .find(|(_, id)| id.0 == crit_id)
+            .map(|(entity, _)| entity)
     }
 
     /// Update simulation one tick
@@ -192,6 +222,53 @@ impl NapiApp {
         }
 
         export_count
+    }
+
+    /// Export perception debug data to buffer (dev-tools only)
+    ///
+    /// Called every tick to provide smooth visualization updates.
+    /// Buffer is swapped after this call.
+    #[cfg(feature = "dev-tools")]
+    pub fn export_perception_debug(&mut self, buffer: &Arc<Mutex<PerceptionDebugBuffer>>) {
+        use crate::simulation::perception::{PerceptionDebugSnapshot, PerceptionDebugTarget};
+
+        let world = &self.simulation.world;
+
+        // Check if there's an active debug target
+        let has_target = world
+            .get_resource::<PerceptionDebugTarget>()
+            .map(|t| t.get().is_some())
+            .unwrap_or(false);
+
+        let mut buffer_guard = buffer.lock();
+
+        if !has_target {
+            buffer_guard.clear_write();
+            return;
+        }
+
+        // Get the snapshot data
+        if let Some(snapshot) = world.get_resource::<PerceptionDebugSnapshot>() {
+            if snapshot.entity_id > 0 {
+                // Convert neighbors to tuple format
+                let neighbors: Vec<(u32, f32, f32)> = snapshot.neighbors
+                    .iter()
+                    .map(|n| (n.id, n.x, n.y))
+                    .collect();
+
+                buffer_guard.write_debug_data(
+                    snapshot.entity_id,
+                    snapshot.x,
+                    snapshot.y,
+                    snapshot.perception_range,
+                    &neighbors,
+                );
+            } else {
+                buffer_guard.clear_write();
+            }
+        } else {
+            buffer_guard.clear_write();
+        }
     }
 
     /// Get telemetry snapshot

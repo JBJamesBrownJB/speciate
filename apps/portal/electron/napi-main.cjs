@@ -145,6 +145,15 @@ function startSimulation() {
           });
         }
 
+        // Get perception debug buffer (dev-tools, every tick for smooth visualization)
+        if (simulationEngine.getPerceptionDebug) {
+          const debugBuffer = simulationEngine.getPerceptionDebug();
+          // Only send if has_data flag is set (debugBuffer[0] > 0.5)
+          if (debugBuffer[0] > 0.5 && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('perception-debug-update', debugBuffer);
+          }
+        }
+
         // Get telemetry (poll every 30 frames = ~500ms at 60Hz)
         const tick = simulationEngine.getTick();
         if (tick % 30 === 0) {
@@ -379,6 +388,28 @@ ipcMain.on('send-command', (event, command) => {
     }
   } catch (error) {
     console.error('[Electron NAPI] Failed to execute command:', error);
+  }
+});
+
+/**
+ * IPC handler: Select creature for perception debug (portal)
+ */
+ipcMain.on('select-creature-debug', (event, creatureId) => {
+  if (!simulationEngine) {
+    console.error('[Electron NAPI] Cannot select creature: simulation not running');
+    return;
+  }
+
+  try {
+    // creatureId is null to clear, or a number to select
+    simulationEngine.selectCreatureDebug(creatureId);
+    if (creatureId !== null) {
+      console.log(`[Electron NAPI] Selected creature ${creatureId} for debug`);
+    } else {
+      console.log('[Electron NAPI] Cleared creature debug selection');
+    }
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to select creature:', error);
   }
 });
 

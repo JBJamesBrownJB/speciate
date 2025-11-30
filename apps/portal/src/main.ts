@@ -12,6 +12,7 @@ import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRe
 import { ChangeDetector } from "@/core/ChangeDetection";
 import { SelectionManager } from "@/systems/SelectionManager";
 import { SelectionHighlight } from "@/rendering/SelectionHighlight";
+import { PerceptionOverlay } from "@/rendering/PerceptionOverlay";
 import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
 import type { CreatureData } from "@/types/GameState";
 
@@ -113,6 +114,7 @@ async function main(): Promise<void> {
     // Selection system
     const selectionManager = new SelectionManager();
     const selectionHighlight = new SelectionHighlight(worldContainer);
+    const perceptionOverlay = new PerceptionOverlay(worldContainer);
     const creatureInfoPanel = new CreatureInfoPanel(document.body);
     let latestCreatures: CreatureData[] = [];
 
@@ -126,6 +128,7 @@ async function main(): Promise<void> {
 
     selectionManager.on('creature-deselected', () => {
       selectionHighlight.hide();
+      perceptionOverlay.clear();
       creatureInfoPanel.hide();
     });
 
@@ -154,8 +157,10 @@ async function main(): Promise<void> {
 
       if (nearest) {
         selectionManager.selectCreature(nearest);
+        ipcClient?.selectCreatureDebug(nearest.id);
       } else {
         selectionManager.deselect();
+        ipcClient?.selectCreatureDebug(null);
       }
     });
 
@@ -218,6 +223,15 @@ async function main(): Promise<void> {
           }
           const spriteUpdateEnd = performance.now();
           perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
+        }
+      });
+
+      // Handle perception debug buffer updates (every tick - smooth visualization)
+      ipcClient.onPerceptionDebugUpdate((debugData) => {
+        if (debugData) {
+          perceptionOverlay.update(debugData);
+        } else {
+          perceptionOverlay.clear();
         }
       });
 

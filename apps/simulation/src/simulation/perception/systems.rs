@@ -2,6 +2,8 @@ use super::components::*;
 use crate::simulation::core::components::{BodySize, Position};
 use crate::simulation::creatures::components::CreatureState;
 #[cfg(feature = "dev-tools")]
+use crate::simulation::components::CritId;
+#[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "dev-tools")]
@@ -11,6 +13,9 @@ pub fn update_perception_system(
     mut query: Query<(Entity, &Position, &BodySize, &mut Perception, &CreatureState)>,
     mut scratch: ResMut<PerceptionScratchBuffer>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
+    #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
+    #[cfg(feature = "dev-tools")] mut debug_snapshot: ResMut<PerceptionDebugSnapshot>,
+    #[cfg(feature = "dev-tools")] crit_ids: Query<&CritId>,
 ) {
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "perception");
@@ -48,6 +53,44 @@ pub fn update_perception_system(
                     break;
                 }
             }
+        }
+    }
+
+    // Collect debug data for selected creature (dev-tools only)
+    #[cfg(feature = "dev-tools")]
+    {
+        if let Some(target_entity) = debug_target.get() {
+            if let Ok((_, pos, _, perception, _)) = query.get(target_entity) {
+                let entity_id = crit_ids.get(target_entity)
+                    .map(|id| id.0)
+                    .unwrap_or(0);
+
+                let neighbors: Vec<NeighborDebugInfo> = perception.iter_neighbors()
+                    .filter_map(|neighbor_entity| {
+                        let neighbor_id = crit_ids.get(neighbor_entity).ok()?.0;
+                        let (_, neighbor_pos, _, _, _) = query.get(neighbor_entity).ok()?;
+                        Some(NeighborDebugInfo {
+                            id: neighbor_id,
+                            x: neighbor_pos.x,
+                            y: neighbor_pos.y,
+                        })
+                    })
+                    .collect();
+
+                *debug_snapshot = PerceptionDebugSnapshot {
+                    entity_id,
+                    x: pos.x,
+                    y: pos.y,
+                    perception_range: perception.range,
+                    neighbors,
+                };
+            } else {
+                // Target entity no longer exists, clear snapshot
+                *debug_snapshot = PerceptionDebugSnapshot::default();
+            }
+        } else {
+            // No debug target, clear snapshot
+            *debug_snapshot = PerceptionDebugSnapshot::default();
         }
     }
 }

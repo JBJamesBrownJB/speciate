@@ -160,10 +160,12 @@ contextBridge.exposeInMainWorld('electron', {
    * - [2]: target_x
    * - [3]: target_y
    * - [4]: perception_range
-   * - [5]: neighbor_count
-   * - [6..70]: neighbor_ids (max 64)
-   * - [70..134]: neighbor_xs
-   * - [134..198]: neighbor_ys
+   * - [5]: fov_angle (radians)
+   * - [6]: rotation (radians)
+   * - [7]: neighbor_count
+   * - [8..72]: neighbor_ids (max 64)
+   * - [72..136]: neighbor_xs
+   * - [136..200]: neighbor_ys
    *
    * @param {Function} callback - Function to call with perception debug buffer
    */

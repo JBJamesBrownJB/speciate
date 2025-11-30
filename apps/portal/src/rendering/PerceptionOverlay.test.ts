@@ -29,6 +29,8 @@ describe('PerceptionOverlay', () => {
         x: 100,
         y: 200,
         perceptionRange: 50,
+        fovAngle: Math.PI,
+        rotation: 0,
         neighbors: [],
       };
       overlay.update(debugData);
@@ -41,6 +43,8 @@ describe('PerceptionOverlay', () => {
         x: 100,
         y: 200,
         perceptionRange: 50,
+        fovAngle: Math.PI,
+        rotation: 0,
         neighbors: [],
       };
       overlay.update(debugData);
@@ -53,6 +57,8 @@ describe('PerceptionOverlay', () => {
         x: 100,
         y: 200,
         perceptionRange: 50,
+        fovAngle: Math.PI,
+        rotation: 0,
         neighbors: [
           { id: 2, x: 120, y: 210 },
           { id: 3, x: 80, y: 190 },
@@ -70,6 +76,8 @@ describe('PerceptionOverlay', () => {
         x: 100,
         y: 200,
         perceptionRange: 50,
+        fovAngle: Math.PI,
+        rotation: 0,
         neighbors: [],
       };
       overlay.update(debugData);
@@ -85,6 +93,8 @@ describe('PerceptionOverlay', () => {
         x: 100,
         y: 200,
         perceptionRange: 50,
+        fovAngle: Math.PI,
+        rotation: 0,
         neighbors: [],
       };
       overlay.update(debugData);
@@ -101,6 +111,8 @@ describe('PerceptionOverlay', () => {
         x: 100,
         y: 200,
         perceptionRange: 50,
+        fovAngle: Math.PI,
+        rotation: 0,
         neighbors: [],
       };
       overlay.update(debugData);

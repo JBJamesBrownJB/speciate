@@ -9,15 +9,17 @@
 //! - [2]: target_x
 //! - [3]: target_y
 //! - [4]: perception_range
-//! - [5]: neighbor_count
-//! - [6..6+MAX]: neighbor_ids
-//! - [6+MAX..6+2*MAX]: neighbor_xs
-//! - [6+2*MAX..6+3*MAX]: neighbor_ys
+//! - [5]: fov_angle (radians)
+//! - [6]: rotation (radians)
+//! - [7]: neighbor_count
+//! - [8..8+MAX]: neighbor_ids
+//! - [8+MAX..8+2*MAX]: neighbor_xs
+//! - [8+2*MAX..8+3*MAX]: neighbor_ys
 
 #![cfg(feature = "dev-tools")]
 
 pub const MAX_DEBUG_NEIGHBORS: usize = 64;
-pub const HEADER_SIZE: usize = 6;
+pub const HEADER_SIZE: usize = 8;
 pub const BUFFER_SIZE: usize = HEADER_SIZE + MAX_DEBUG_NEIGHBORS * 3;
 
 pub struct PerceptionDebugBuffer {
@@ -57,6 +59,8 @@ impl PerceptionDebugBuffer {
         target_x: f32,
         target_y: f32,
         perception_range: f32,
+        fov_angle: f32,
+        rotation: f32,
         neighbors: &[(u32, f32, f32)], // (id, x, y)
     ) {
         let neighbor_count = neighbors.len().min(MAX_DEBUG_NEIGHBORS);
@@ -66,7 +70,9 @@ impl PerceptionDebugBuffer {
         self.write[2] = target_x;
         self.write[3] = target_y;
         self.write[4] = perception_range;
-        self.write[5] = neighbor_count as f32;
+        self.write[5] = fov_angle;
+        self.write[6] = rotation;
+        self.write[7] = neighbor_count as f32;
 
         let id_offset = HEADER_SIZE;
         let x_offset = HEADER_SIZE + MAX_DEBUG_NEIGHBORS;
@@ -98,10 +104,11 @@ mod tests {
     #[test]
     fn test_write_and_swap() {
         let mut buffer = PerceptionDebugBuffer::new();
+        let pi = std::f32::consts::PI;
 
         let neighbors = vec![(42, 10.0, 20.0), (43, 30.0, 40.0)];
 
-        buffer.write_debug_data(1, 100.0, 200.0, 50.0, &neighbors);
+        buffer.write_debug_data(1, 100.0, 200.0, 50.0, pi, 0.5, &neighbors);
 
         assert!(!buffer.has_data());
 
@@ -113,7 +120,9 @@ mod tests {
         assert_eq!(slice[2], 100.0); // target_x
         assert_eq!(slice[3], 200.0); // target_y
         assert_eq!(slice[4], 50.0); // perception_range
-        assert_eq!(slice[5], 2.0); // neighbor_count
+        assert_eq!(slice[5], pi); // fov_angle
+        assert_eq!(slice[6], 0.5); // rotation
+        assert_eq!(slice[7], 2.0); // neighbor_count
         assert_eq!(slice[HEADER_SIZE], 42.0); // first neighbor id
         assert_eq!(slice[HEADER_SIZE + MAX_DEBUG_NEIGHBORS], 10.0); // first neighbor x
     }
@@ -121,8 +130,9 @@ mod tests {
     #[test]
     fn test_clear_write() {
         let mut buffer = PerceptionDebugBuffer::new();
+        let pi = std::f32::consts::PI;
 
-        buffer.write_debug_data(1, 100.0, 200.0, 50.0, &[]);
+        buffer.write_debug_data(1, 100.0, 200.0, 50.0, pi, 0.0, &[]);
         buffer.swap();
         assert!(buffer.has_data());
 
@@ -134,13 +144,14 @@ mod tests {
     #[test]
     fn test_max_neighbors_clamped() {
         let mut buffer = PerceptionDebugBuffer::new();
+        let pi = std::f32::consts::PI;
 
         let neighbors: Vec<_> = (0..100).map(|i| (i, i as f32, i as f32)).collect();
 
-        buffer.write_debug_data(1, 0.0, 0.0, 50.0, &neighbors);
+        buffer.write_debug_data(1, 0.0, 0.0, 50.0, pi, 0.0, &neighbors);
         buffer.swap();
 
         let slice = buffer.get_read_slice();
-        assert_eq!(slice[5], MAX_DEBUG_NEIGHBORS as f32);
+        assert_eq!(slice[7], MAX_DEBUG_NEIGHBORS as f32); // neighbor_count at index 7 now
     }
 }

@@ -2,7 +2,7 @@ import type { IPCClient } from './IPCClient';
 import type { GameState, CreatureData, PerceptionDebugData, NeighborDebugInfo } from '../../types/GameState';
 import type { TelemetryFrame } from '../../types/TelemetryFrame';
 
-const HEADER_SIZE = 6;
+const HEADER_SIZE = 8;
 const MAX_DEBUG_NEIGHBORS = 64;
 
 export class ElectronIPCClient implements IPCClient {
@@ -79,9 +79,9 @@ export class ElectronIPCClient implements IPCClient {
     window.electron.onPerceptionDebugUpdate((buffer: Float32Array) => {
       try {
         // Parse buffer layout:
-        // [0]: has_data, [1]: target_id, [2]: x, [3]: y, [4]: range, [5]: neighbor_count
-        // [6..70]: neighbor_ids, [70..134]: neighbor_xs, [134..198]: neighbor_ys
-        const neighborCount = Math.min(buffer[5], MAX_DEBUG_NEIGHBORS);
+        // [0]: has_data, [1]: target_id, [2]: x, [3]: y, [4]: range, [5]: fov_angle, [6]: rotation, [7]: neighbor_count
+        // [8..72]: neighbor_ids, [72..136]: neighbor_xs, [136..200]: neighbor_ys
+        const neighborCount = Math.min(buffer[7], MAX_DEBUG_NEIGHBORS);
 
         const neighbors: NeighborDebugInfo[] = [];
         const idOffset = HEADER_SIZE;
@@ -101,6 +101,8 @@ export class ElectronIPCClient implements IPCClient {
           x: buffer[2],
           y: buffer[3],
           perceptionRange: buffer[4],
+          fovAngle: buffer[5],
+          rotation: buffer[6],
           neighbors,
         };
 

@@ -261,6 +261,8 @@ impl NapiApp {
                     snapshot.x,
                     snapshot.y,
                     snapshot.perception_range,
+                    snapshot.fov_angle,
+                    snapshot.rotation,
                     &neighbors,
                 );
             } else {

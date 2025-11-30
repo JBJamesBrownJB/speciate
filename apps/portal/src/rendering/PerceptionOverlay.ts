@@ -1,9 +1,8 @@
 import { Graphics, Container } from 'pixi.js';
 import type { PerceptionDebugData } from '../types/GameState';
 
-const PERCEPTION_CIRCLE_COLOR = 0x00ffff;
-const PERCEPTION_LINE_WIDTH = 0.8;
-const PERCEPTION_ALPHA = 0.20;
+const PERCEPTION_WEDGE_COLOR = 0x00ffff;
+const PERCEPTION_FILL_ALPHA = 0.15;
 
 const NEIGHBOR_LINE_COLOR = 0xffffff;
 const NEIGHBOR_LINE_WIDTH = 0.1;
@@ -44,13 +43,18 @@ export class PerceptionOverlay {
   private render(data: PerceptionDebugData): void {
     this.graphics.clear();
 
-    this.graphics.setStrokeStyle({
-      width: PERCEPTION_LINE_WIDTH,
-      color: PERCEPTION_CIRCLE_COLOR,
-      alpha: PERCEPTION_ALPHA,
+    const halfFov = data.fovAngle / 2;
+    const startAngle = data.rotation - halfFov;
+    const endAngle = data.rotation + halfFov;
+
+    this.graphics.setFillStyle({
+      color: PERCEPTION_WEDGE_COLOR,
+      alpha: PERCEPTION_FILL_ALPHA,
     });
-    this.graphics.circle(data.x, data.y, data.perceptionRange);
-    this.graphics.stroke();
+    this.graphics.moveTo(data.x, data.y);
+    this.graphics.arc(data.x, data.y, data.perceptionRange, startAngle, endAngle);
+    this.graphics.lineTo(data.x, data.y);
+    this.graphics.fill();
 
     if (data.neighbors.length > 0) {
       this.graphics.setStrokeStyle({

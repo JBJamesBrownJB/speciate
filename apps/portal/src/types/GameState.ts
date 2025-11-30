@@ -55,6 +55,8 @@ export interface PerceptionDebugData {
   x: number;
   y: number;
   perceptionRange: number;
+  fovAngle: number;
+  rotation: number;
   neighbors: NeighborDebugInfo[];
 }
 

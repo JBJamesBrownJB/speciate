@@ -15,8 +15,10 @@ pub struct PerceptionScratchBuffer {
 
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
-    pub fov_angle: f32, // Field of view in radians (stored internally as radians for efficient checks)
-    pub range: f32,     // Derived from FOV and body size
+    pub fov_angle: f32,        // Field of view in radians (stored internally as radians for efficient checks)
+    pub range: f32,            // Derived from FOV and body size
+    pub cos_half_fov: f32,     // Cached cos(fov_angle/2) for fast FOV checks
+    pub cos_half_fov_sq: f32,  // Cached cos²(fov_angle/2) for sqrt-free FOV checks
     neighbor_count: u8,
     neighbors: [Entity; MAX_PERCEIVED_NEIGHBORS],
     pub obstacles: Vec<Entity>, // Placeholder for future obstacle tracking
@@ -28,9 +30,12 @@ impl Perception {
     pub fn new(fov_angle_degrees: f32, body_size: f32) -> Self {
         let fov_rad = fov_angle_degrees.to_radians();
         let range = Self::calculate_range(body_size, fov_angle_degrees);
+        let cos_half = (fov_rad / 2.0).cos();
         Self {
             fov_angle: fov_rad,
             range,
+            cos_half_fov: cos_half,
+            cos_half_fov_sq: cos_half * cos_half,
             neighbor_count: 0,
             neighbors: [Entity::PLACEHOLDER; MAX_PERCEIVED_NEIGHBORS],
             obstacles: Vec::new(),

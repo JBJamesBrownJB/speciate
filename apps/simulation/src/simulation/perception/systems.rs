@@ -9,19 +9,6 @@ use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
 #[cfg(feature = "dev-tools")]
 use bevy_ecs::system::Res;
-use std::f32::consts::{PI, TAU};
-
-/// Normalize angle to [-PI, PI] range
-fn normalize_angle(angle: f32) -> f32 {
-    let mut a = angle;
-    while a > PI {
-        a -= TAU;
-    }
-    while a < -PI {
-        a += TAU;
-    }
-    a
-}
 
 pub fn update_perception_system(
     mut query: Query<(Entity, &Position, &Rotation, &BodySize, &mut Perception, &CreatureState)>,
@@ -50,8 +37,12 @@ pub fn update_perception_system(
 
         let self_radius = size.radius();
         let perception_range = perception.range;
-        let half_fov = perception.half_fov();
-        let facing_direction = rotation.radians;
+
+        // Pre-calculate facing vector (once per creature)
+        // cos_half_fov_sq is cached in Perception component for sqrt-free FOV check
+        let facing_x = rotation.radians.cos();
+        let facing_y = rotation.radians.sin();
+        let cos_half_fov_sq = perception.cos_half_fov_sq;
 
         for &(other_entity, other_x, other_y, other_radius) in &scratch.positions {
             if entity == other_entity {
@@ -68,11 +59,16 @@ pub fn update_perception_system(
                 continue;
             }
 
-            // FOV angle check - is target within the cone?
-            let angle_to_target = dy.atan2(dx);
-            let relative_angle = normalize_angle(angle_to_target - facing_direction);
+            // Early-exit: skip entities clearly behind (no sqrt needed)
+            let rough_dot = dx * facing_x + dy * facing_y;
+            if rough_dot <= 0.0 {
+                continue;
+            }
 
-            if relative_angle.abs() <= half_fov {
+            // FOV check using squared comparison (no sqrt, no division!)
+            // Math: dot >= cos_half_fov  =>  dot² >= cos_half_fov² × dist²
+            // (valid when rough_dot > 0, which we checked above)
+            if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
                 perception.add_neighbor(other_entity);
                 if perception.is_full() {
                     break;
@@ -482,112 +478,98 @@ mod tests {
         assert!(total_neighbors > 0, "Perception should detect some neighbors");
     }
 
+    fn is_in_fov(dx: f32, dy: f32, facing: f32, half_fov: f32) -> bool {
+        let dist = (dx * dx + dy * dy).sqrt();
+        let dir_x = dx / dist;
+        let dir_y = dy / dist;
+        let facing_x = facing.cos();
+        let facing_y = facing.sin();
+        let dot = dir_x * facing_x + dir_y * facing_y;
+        dot >= half_fov.cos()
+    }
+
     #[test]
     fn test_fov_detects_target_in_front() {
-        // Creature at origin, facing right (0 radians), target directly ahead
-        let perception = Perception::new(180.0, 1.0); // 180° FOV
-        let facing = 0.0_f32; // facing right
+        let perception = Perception::new(180.0, 1.0);
+        let facing = 0.0_f32;
         let half_fov = perception.half_fov();
 
-        // Target at (5, 0) - directly in front
         let dx = 5.0_f32;
         let dy = 0.0_f32;
-        let angle_to_target = dy.atan2(dx);
-        let relative_angle = normalize_angle(angle_to_target - facing);
 
         assert!(
-            relative_angle.abs() <= half_fov,
+            is_in_fov(dx, dy, facing, half_fov),
             "Target directly in front should be in FOV"
         );
     }
 
     #[test]
     fn test_fov_detects_target_at_edge() {
-        // 90° FOV (±45° from facing direction)
         let perception = Perception::new(90.0, 1.0);
         let facing = 0.0_f32;
         let half_fov = perception.half_fov();
 
-        // Target at 44° - just inside FOV
         let angle_44 = 44.0_f32.to_radians();
         let dx = angle_44.cos() * 5.0;
         let dy = angle_44.sin() * 5.0;
-        let angle_to_target = dy.atan2(dx);
-        let relative_angle = normalize_angle(angle_to_target - facing);
 
         assert!(
-            relative_angle.abs() <= half_fov,
+            is_in_fov(dx, dy, facing, half_fov),
             "Target at 44° should be in 90° FOV (±45°)"
         );
     }
 
     #[test]
     fn test_fov_misses_target_outside_cone() {
-        // 90° FOV (±45° from facing direction)
         let perception = Perception::new(90.0, 1.0);
         let facing = 0.0_f32;
         let half_fov = perception.half_fov();
 
-        // Target at 60° - outside FOV
         let angle_60 = 60.0_f32.to_radians();
         let dx = angle_60.cos() * 5.0;
         let dy = angle_60.sin() * 5.0;
-        let angle_to_target = dy.atan2(dx);
-        let relative_angle = normalize_angle(angle_to_target - facing);
 
         assert!(
-            relative_angle.abs() > half_fov,
+            !is_in_fov(dx, dy, facing, half_fov),
             "Target at 60° should NOT be in 90° FOV (±45°)"
         );
     }
 
     #[test]
     fn test_fov_misses_target_behind() {
-        // 120° FOV - should not see behind
         let perception = Perception::new(120.0, 1.0);
-        let facing = 0.0_f32; // facing right
+        let facing = 0.0_f32;
         let half_fov = perception.half_fov();
 
-        // Target directly behind at 180°
         let dx = -5.0_f32;
         let dy = 0.0_f32;
-        let angle_to_target = dy.atan2(dx);
-        let relative_angle = normalize_angle(angle_to_target - facing);
 
         assert!(
-            relative_angle.abs() > half_fov,
+            !is_in_fov(dx, dy, facing, half_fov),
             "Target behind should NOT be in 120° FOV"
         );
     }
 
     #[test]
     fn test_wide_fov_sees_almost_everywhere() {
-        // 320° FOV - only 40° blind spot behind
         let perception = Perception::new(320.0, 1.0);
         let facing = 0.0_f32;
         let half_fov = perception.half_fov();
 
-        // Target at 150° - should be visible with wide FOV
         let angle_150 = 150.0_f32.to_radians();
         let dx = angle_150.cos() * 5.0;
         let dy = angle_150.sin() * 5.0;
-        let angle_to_target = dy.atan2(dx);
-        let relative_angle = normalize_angle(angle_to_target - facing);
 
         assert!(
-            relative_angle.abs() <= half_fov,
+            is_in_fov(dx, dy, facing, half_fov),
             "Target at 150° should be in 320° FOV"
         );
 
-        // Target directly behind (180°) - should still be in blind spot
-        let angle_180 = std::f32::consts::PI;
-        let dx_behind = angle_180.cos() * 5.0;
-        let dy_behind = angle_180.sin() * 5.0;
-        let angle_to_behind = dy_behind.atan2(dx_behind);
-        let relative_behind = normalize_angle(angle_to_behind - facing);
+        let dx_behind = -5.0_f32;
+        let dy_behind = 0.0_f32;
 
         assert!(
-            relative_behind.abs() > half_fov,
+            !is_in_fov(dx_behind, dy_behind, facing, half_fov),
             "Target at 180° should be in blind spot of 320° FOV"
         );
     }

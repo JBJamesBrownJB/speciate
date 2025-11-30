@@ -3,8 +3,8 @@ use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 use super::constants::{
-    DEFAULT_PERCEPTION_RANGE, ENERGY_MODIFIER, MAX_PERCEIVED_NEIGHBORS, PANIC_THRESHOLD_RATIO,
-    PERCEPTION_MULTIPLIER, PERSONAL_SPACE,
+    ENERGY_MODIFIER, MAX_PERCEIVED_NEIGHBORS, PANIC_THRESHOLD_RATIO, PERCEPTION_MULTIPLIER,
+    PERSONAL_SPACE,
 };
 use crate::simulation::creatures::behaviors::avoidance::constants::AVOIDANCE_FORCE;
 
@@ -64,12 +64,6 @@ impl Perception {
 
     pub fn is_full(&self) -> bool {
         self.neighbor_count as usize >= MAX_PERCEIVED_NEIGHBORS
-    }
-}
-
-impl Default for Perception {
-    fn default() -> Self {
-        Self::new(DEFAULT_PERCEPTION_RANGE)
     }
 }
 

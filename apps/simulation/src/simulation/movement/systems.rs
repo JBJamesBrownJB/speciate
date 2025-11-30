@@ -4,7 +4,8 @@ use crate::config::MovementConfig;
 use crate::instrumentation::SystemTimings;
 use crate::simulation::components::*;
 use crate::simulation::core::components::*;
-use crate::simulation::movement::constants::{MAX_SPEED, STOPPED_THRESHOLD, VELOCITY_DAMPING};
+use crate::simulation::math::normalize_angle;
+use crate::simulation::movement::constants::{MAX_SPEED, MAX_TURN_RATE_RAD, STOPPED_THRESHOLD, VELOCITY_DAMPING};
 use crate::simulation::movement::noise::perlin_locomotion_noise;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
@@ -35,6 +36,9 @@ pub fn integrate_motion_system(
     // Collect entities into Vec for Rayon parallel processing
     let mut entities: Vec<_> = query.iter_mut().collect();
 
+    let max_turn_rate_rad = MAX_TURN_RATE_RAD;
+    let stopped_threshold_sq = STOPPED_THRESHOLD * STOPPED_THRESHOLD;
+
     // Parallel physics integration using Rayon
     entities.par_iter_mut().for_each(|(entity, size, position, velocity, acceleration, creature_state)| {
         if creature_state.behavior == BehaviorMode::Catatonic {
@@ -42,7 +46,7 @@ pub fn integrate_motion_system(
             acceleration.ay = 0.0;
 
             let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-            if speed_sq < STOPPED_THRESHOLD * STOPPED_THRESHOLD {
+            if speed_sq < stopped_threshold_sq {
                 if velocity.vx != 0.0 || velocity.vy != 0.0 {
                     velocity.vx = 0.0;
                     velocity.vy = 0.0;
@@ -58,6 +62,15 @@ pub fn integrate_motion_system(
 
             return;
         }
+
+        // Capture old heading before velocity changes
+        let old_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+        let old_angle = if old_speed_sq > stopped_threshold_sq {
+            velocity.vy.atan2(velocity.vx)
+        } else {
+            f32::NAN
+        };
+
         velocity.vx += acceleration.ax * dt;
         velocity.vy += acceleration.ay * dt;
         velocity.vx *= VELOCITY_DAMPING;
@@ -83,6 +96,22 @@ pub fn integrate_motion_system(
             let scale = (max_speed_sq / speed_sq).sqrt();
             velocity.vx *= scale;
             velocity.vy *= scale;
+        }
+
+        // Turn rate limiting: clamp velocity direction change per frame
+        let new_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+        if old_angle.is_finite() && new_speed_sq > stopped_threshold_sq {
+            let new_angle = velocity.vy.atan2(velocity.vx);
+            let delta = normalize_angle(new_angle - old_angle);
+            let max_delta = max_turn_rate_rad * dt;
+
+            if delta.abs() > max_delta {
+                let clamped_delta = delta.clamp(-max_delta, max_delta);
+                let final_angle = old_angle + clamped_delta;
+                let new_speed = new_speed_sq.sqrt();
+                velocity.vx = new_speed * final_angle.cos();
+                velocity.vy = new_speed * final_angle.sin();
+            }
         }
 
         acceleration.ax = 0.0;
@@ -375,5 +404,137 @@ mod tests {
 
         // Entity 3: was beyond min_y, velocity.vy should be clamped to >= 0
         assert!(velocities[3].vy >= 0.0, "Velocity at min_y boundary should be non-negative");
+    }
+
+    #[test]
+    fn test_turn_rate_limits_direction_change() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.05));
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(MovementConfig::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut state = CreatureState::default();
+        state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        let entity = world.spawn((
+            BodySize::new(1.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 10.0, vy: 0.0 },
+            Acceleration { ax: 0.0, ay: 100.0 },
+            state,
+        )).id();
+
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        let vel = world.get::<Velocity>(entity).unwrap();
+
+        let initial_angle = 0.0_f32;
+        let final_angle = vel.vy.atan2(vel.vx);
+        let delta_degrees = (final_angle - initial_angle).to_degrees().abs();
+
+        let max_expected = crate::simulation::movement::constants::MAX_TURN_RATE * 0.05 + 0.1;
+        assert!(
+            delta_degrees <= max_expected,
+            "Turn rate should be limited to ~0.9 deg, got {} deg",
+            delta_degrees
+        );
+        assert!(delta_degrees > 0.0, "Should have some turn, got {} deg", delta_degrees);
+    }
+
+    #[test]
+    fn test_small_turns_not_affected() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.05));
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(MovementConfig::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut state = CreatureState::default();
+        state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        let entity = world.spawn((
+            BodySize::new(1.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 10.0, vy: 0.0 },
+            Acceleration { ax: 1.0, ay: 0.1 },
+            state,
+        )).id();
+
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        let vel = world.get::<Velocity>(entity).unwrap();
+        assert!(vel.vy > 0.0, "Small upward component should be preserved");
+    }
+
+    #[test]
+    fn test_stopped_creatures_can_turn_freely() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.05));
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(MovementConfig::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut state = CreatureState::default();
+        state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        let entity = world.spawn((
+            BodySize::new(1.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 0.0, vy: 0.0 },
+            Acceleration { ax: 0.0, ay: 10.0 },
+            state,
+        )).id();
+
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        let vel = world.get::<Velocity>(entity).unwrap();
+        assert!(vel.vy > 0.0, "Should be moving up");
+        assert!(vel.vx.abs() < 0.001, "Should not have horizontal component");
+    }
+
+    #[test]
+    fn test_180_degree_reversal_is_gradual() {
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.05));
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(MovementConfig::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut state = CreatureState::default();
+        state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        let entity = world.spawn((
+            BodySize::new(1.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 10.0, vy: 0.0 },
+            Acceleration { ax: -100.0, ay: 0.0 },
+            state,
+        )).id();
+
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        let vel = world.get::<Velocity>(entity).unwrap();
+        assert!(vel.vx > 0.0, "Should still be moving right after one tick, got vx={}", vel.vx);
     }
 }

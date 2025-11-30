@@ -1,3 +1,5 @@
+use std::f32::consts::{PI, TAU};
+
 const EPSILON: f32 = 0.0001;
 
 #[inline]
@@ -30,6 +32,15 @@ pub fn clamp_force(x: f32, y: f32, max_force: f32) -> (f32, f32) {
     } else {
         (x, y)
     }
+}
+
+#[inline]
+pub fn normalize_angle(angle: f32) -> f32 {
+    let mut a = angle.rem_euclid(TAU);
+    if a > PI {
+        a -= TAU;
+    }
+    a
 }
 
 #[cfg(test)]
@@ -142,5 +153,38 @@ mod tests {
     fn test_clamp_force_zero_input() {
         let (x, y) = clamp_force(0.0, 0.0, 10.0);
         assert_eq!((x, y), (0.0, 0.0));
+    }
+
+    #[test]
+    fn test_normalize_angle_zero() {
+        assert!((normalize_angle(0.0) - 0.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_normalize_angle_positive() {
+        assert!((normalize_angle(PI / 2.0) - PI / 2.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_normalize_angle_negative() {
+        assert!((normalize_angle(-PI / 2.0) - (-PI / 2.0)).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_normalize_angle_over_pi() {
+        let result = normalize_angle(3.0 * PI / 2.0);
+        assert!((result - (-PI / 2.0)).abs() < 0.0001, "Expected -PI/2, got {}", result);
+    }
+
+    #[test]
+    fn test_normalize_angle_over_2pi() {
+        let result = normalize_angle(2.5 * PI);
+        assert!((result - PI / 2.0).abs() < 0.0001, "Expected PI/2, got {}", result);
+    }
+
+    #[test]
+    fn test_normalize_angle_negative_wrap() {
+        let result = normalize_angle(-3.0 * PI / 2.0);
+        assert!((result - PI / 2.0).abs() < 0.0001, "Expected PI/2, got {}", result);
     }
 }

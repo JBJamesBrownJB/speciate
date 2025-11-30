@@ -10,6 +10,10 @@ import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
 import { ChangeDetector } from "@/core/ChangeDetection";
+import { SelectionManager } from "@/systems/SelectionManager";
+import { SelectionHighlight } from "@/rendering/SelectionHighlight";
+import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
+import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
   container: HTMLElement,
@@ -106,6 +110,55 @@ async function main(): Promise<void> {
     const scaleBarManager = new ScaleBarManager("scale-line", "scale-label");
     scaleBarManager.update(camera.zoom);
 
+    // Selection system
+    const selectionManager = new SelectionManager();
+    const selectionHighlight = new SelectionHighlight(worldContainer);
+    const creatureInfoPanel = new CreatureInfoPanel(document.body);
+    let latestCreatures: CreatureData[] = [];
+
+    // Wire up selection events
+    selectionManager.on('creature-selected', (creature) => {
+      if (creature) {
+        selectionHighlight.show(creature.x, creature.y, creature.size / 2);
+        creatureInfoPanel.show(creature);
+      }
+    });
+
+    selectionManager.on('creature-deselected', () => {
+      selectionHighlight.hide();
+      creatureInfoPanel.hide();
+    });
+
+    // Click handler for creature selection
+    const CLICK_RADIUS = 15; // World units for click detection
+
+    container.addEventListener('click', (event: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const screenX = event.clientX - rect.left;
+      const screenY = event.clientY - rect.top;
+
+      // Convert screen to world coordinates
+      // Account for camera being centered in viewport
+      const worldPos = camera.screenToWorld(
+        screenX - viewportWidth / 2,
+        screenY - viewportHeight / 2
+      );
+
+      // Find nearest creature
+      const nearest = selectionManager.findNearestCreature(
+        latestCreatures,
+        worldPos.x,
+        worldPos.y,
+        CLICK_RADIUS
+      );
+
+      if (nearest) {
+        selectionManager.selectCreature(nearest);
+      } else {
+        selectionManager.deselect();
+      }
+    });
+
     const creatureRenderer = new InterpolatedCreatureRenderer(texture, 200000);
     worldContainer.addChild(creatureRenderer.getMesh());
 
@@ -137,11 +190,15 @@ async function main(): Promise<void> {
       ipcClient.onStateUpdate((state) => {
         const creatures = state.creatures;
         currentCreatureCount = creatures.length;
+        latestCreatures = creatures;
 
         // Update tick rate when telemetry provides it
         if (state.tickRateHz && !isNaN(state.tickRateHz)) {
           creatureRenderer.setTickRate(state.tickRateHz);
         }
+
+        // Update selection tracking (creature may have moved or died)
+        selectionManager.updateSelectedFromBuffer(creatures);
 
         // Detect if state changed (count or positions changed)
         const stateChanged = changeDetector.shouldUpdate(creatures);
@@ -194,6 +251,14 @@ async function main(): Promise<void> {
         viewportWidth,
         viewportHeight
       );
+
+      // Update selection highlight animation and position
+      const selected = selectionManager.getSelected();
+      if (selected) {
+        selectionHighlight.updatePosition(selected.x, selected.y);
+        selectionHighlight.update(deltaMs);
+        creatureInfoPanel.update(selected);
+      }
 
       hudManager.updateFPS(fps);
 

@@ -25,9 +25,15 @@ Perception system became a bottleneck as creature count scaled toward 20K target
 
 ---
 
+## Steps
+- Visualise the problem - diagnostic overlay
+- Try ideas....
+
 ### Ideas
 
 - What if, a seperate system updated a new component on a crit which was something like 'cellid'. Then current 'temporal' system used that id, not entity id... 
+
+- In future, where we have static cell occupants, like obstacles, water, food etc... Do we have a seperate grid / hash / system for percieving them?
 
 ## Journey Timeline
 

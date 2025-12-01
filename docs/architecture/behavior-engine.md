@@ -426,8 +426,8 @@ perception::update_perception_system  →  behavior systems  →  physics
 - State transitions may depend on threat detection
 
 **Perception Performance:**
-- Current: 200m bucket grid with FxHash (O(N) average case)
-- See: `docs/architecture/spatial-partitioning.md` for implementation details
+- Planned: 50m bucket grid with FxHash (O(N) average case)
+- See: `SPRINTS/spatial-grid/SPRINT_PLAN.md` for implementation plan
 - See `src/simulation/perception/systems.rs`
 
 ## Force Hierarchy & Priority
@@ -480,14 +480,14 @@ The simulation runs all systems at a single tick rate:
 - Force calculation: ~8ms
 - Total: ~50ms ⚠️ (at budget limit)
 
-**Bottleneck:** Perception system (spatial grid queries). Optimized via 200m bucket grid with incremental updates.
+**Bottleneck:** Perception system (O(N²) brute force). Optimization planned via 50m bucket grid - see `SPRINTS/spatial-grid/SPRINT_PLAN.md`.
 
 ### Scalability Targets
 
 | Creature Count | Physics | AI | Strategy |
 |----------------|---------|-----|----------|
 | 0-10,000       | 30 Hz   | 20 Hz | Current dual-tick implementation |
-| 10,000-50,000  | 30 Hz   | 20 Hz | Spatial grid + incremental updates |
+| 10,000-50,000  | 30 Hz   | 20 Hz | Spatial grid (see `SPRINTS/spatial-grid/SPRINT_PLAN.md`) |
 | 50,000-100,000 | 30 Hz   | 20 Hz | Parallel queries, SIMD distance calc |
 | 100,000-200,000| 30 Hz   | 20 Hz | Optimized dual-tick (target) |
 | 200,000+       | 30 Hz   | 10 Hz | LOD simulation (partial update) |

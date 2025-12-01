@@ -167,7 +167,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 *No items currently in this category.*
 
-**Note:** Spatial partitioning optimization has been promoted from technical debt to core architecture. See `docs/architecture/spatial-partitioning.md` for the unified spatial query strategy that serves perception, collision detection, and viewport culling.
+**Note:** Spatial partitioning optimization has been promoted to Sprint 16. See `SPRINTS/spatial-grid/SPRINT_PLAN.md` for the implementation plan.
 
 ---
 

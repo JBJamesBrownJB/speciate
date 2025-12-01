@@ -132,6 +132,14 @@ struct VisionTiming {
 
 ---
 
+## The Photoreceptor Budget
+
+Retinal real estate is finite. Wide FOV spreads photoreceptors thin (lower acuity per degree). Narrow FOV concentrates them (higher acuity, longer effective range).
+
+This is why `visual_arc > π` applies the 0.7× range penalty - peripheral vision trades resolution for coverage.
+
+---
+
 ## Ecological Niches
 
 **Open terrain:** Hawks dominate (extreme range)
@@ -142,6 +150,17 @@ struct VisionTiming {
 - Domesticate fast-reacting creatures for early warning
 - Breed long-range vision for scouting/surveillance
 - Exploit predator blind spots (approach from behind)
+
+---
+
+## Expected Emergent Evolution
+
+Over generations, lineages should specialize:
+
+- **Predator lineages** → narrower FOV, longer range (hunting efficiency)
+- **Prey lineages** → wider FOV, faster neural speed (threat detection)
+- **Ambush predators** → extreme narrow FOV, slow neural speed (patient strikes)
+- **Herd animals** → moderate wide FOV (rely on group vigilance, less individual investment)
 
 ---
 
@@ -163,3 +182,9 @@ struct VisionTiming {
 **Current values:** Hardcoded 10× multiplier, 360° awareness, every-tick updates
 
 **Location:** `apps/simulation/src/simulation/perception/`
+
+---
+
+## Source
+
+Zoologist-tom consultation, 2025-11-30

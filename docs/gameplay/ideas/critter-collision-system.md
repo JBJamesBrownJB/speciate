@@ -68,10 +68,10 @@ See `docs/biology/biology-notes.md` for mass scaling rationale.
 ### 3.2 System Logic (Per-Frame)
 
 **Broadphase:**
-Use unified spatial partitioning strategy (see `docs/architecture/spatial-partitioning.md`).
+Use unified spatial partitioning strategy (see `SPRINTS/spatial-grid/SPRINT_PLAN.md`).
 
 - Initial: O(N²) brute-force (acceptable for <500 creatures)
-- Future: Spatial hash grid when scaling beyond 500 creatures
+- Future: 50m spatial hash grid when scaling beyond 500 creatures
 - Same structure serves perception and collision queries
 
 **Narrowphase (Iterate on Pairs):**
@@ -286,7 +286,7 @@ println!("Ooof, that hurt! Entity {:?} took {:.1} damage", entity, damage);
 
 ## 7. References
 
-- **Spatial partitioning:** `docs/architecture/spatial-partitioning.md`
+- **Spatial partitioning:** `SPRINTS/spatial-grid/SPRINT_PLAN.md`
 - **Physics rationale:** `docs/biology/biology-notes.md` (2025-11-16 entry)
 - **Behavior engine:** `docs/architecture/behavior-engine.md`
 - **DNA-driven design:** `docs/biology/dna-driven-design.md`

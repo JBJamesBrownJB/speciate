@@ -161,7 +161,7 @@ The core food chain is implemented through DNA-defined behaviors:
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
 | **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | Dual-tick simulation: 30Hz physics, 20Hz AI |
-| **Spatial Grid** | `FxHashMap` + 200m cells | O(N) queries for 150K-200K creatures |
+| **Spatial Grid** | `FxHashMap` + 50m cells | O(N) queries for 150K-200K creatures (see `SPRINTS/spatial-grid/SPRINT_PLAN.md`) |
 | **IPC Protocol** | `stdio` + `MessagePack` | Length-prefixed binary frames at 30 Hz |
 | **Serialization** | `serde` + `rmp_serde` | GameState serialization to MessagePack |
 | **Save/Load** | `bincode` or `MessagePack` | World persistence to disk |

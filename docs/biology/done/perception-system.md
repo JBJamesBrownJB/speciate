@@ -58,7 +58,7 @@ Provides FOV-based neighbor detection within a directional cone. Creatures detec
 
 **Location:** `perception/systems.rs`
 
-**Algorithm:** O(N²) brute force (optimized to O(N·log N) with spatial grid)
+**Algorithm:** O(N²) brute force (see `SPRINTS/spatial-grid/SPRINT_PLAN.md` for O(N) optimization)
 
 **Process:**
 1. Collect all (Entity, Position, BodySize) into scratch buffer
@@ -114,9 +114,9 @@ Reusable allocation for position queries, reduces heap pressure during perceptio
 
 | Implementation | Complexity | Cost @ 20K | Notes |
 |---------------|------------|------------|-------|
-| **Current (Brute Force)** | O(N²) | ~120ms | All-pairs distance checks |
-| **Spatial Grid (Optimized)** | O(N·log N) | ~15ms | 833× fewer comparisons |
-| **Stochastic Updates (Planned)** | O(N·log N) | ~1-2ms @ 200K | Only ~10% update per tick |
+| **Current (Brute Force)** | O(N²) | ~50ms | All-pairs distance checks |
+| **Spatial Grid (Planned)** | O(N) | ~3-5ms | See `SPRINTS/spatial-grid/SPRINT_PLAN.md` |
+| **Stochastic Updates (Future)** | O(N) | ~1-2ms @ 200K | Only ~10% update per tick |
 
 ## Current Limitations
 

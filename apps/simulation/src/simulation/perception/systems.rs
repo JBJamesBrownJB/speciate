@@ -42,19 +42,17 @@ pub fn update_perception_system(
         let facing_y = rot.radians.sin();
         let query_radius = range + self_radius + MAX_OTHER_RADIUS;
 
-        for &(other_entity, other_x, other_y, other_radius) in
-            grid.query_radius(x, y, query_radius)
-        {
-            if entity == other_entity {
+        for proxy in grid.query_radius(x, y, query_radius) {
+            if entity == proxy.entity {
                 continue;
             }
 
-            let dx = other_x - x;
-            let dy = other_y - y;
+            let dx = proxy.x - x;
+            let dy = proxy.y - y;
             let center_dist_sq = dx * dx + dy * dy;
 
             // Distance check (cheaper)
-            let max_dist = range + self_radius + other_radius;
+            let max_dist = range + self_radius + proxy.radius;
             if center_dist_sq > max_dist * max_dist {
                 continue;
             }
@@ -67,7 +65,7 @@ pub fn update_perception_system(
 
             // FOV check using squared comparison (no sqrt, no division)
             if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
-                perception.add_neighbor(other_entity);
+                perception.add_neighbor(proxy.entity);
                 if perception.is_full() {
                     break;
                 }

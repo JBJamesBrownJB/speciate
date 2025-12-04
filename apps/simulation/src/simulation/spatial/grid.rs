@@ -2,16 +2,38 @@ use bevy_ecs::prelude::*;
 
 use super::constants::CELL_SIZE;
 
-pub type EntityData = (Entity, f32, f32, f32);
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct PerceptionProxy {
+    pub x: f32,
+    pub y: f32,
+    pub radius: f32,
+    pub entity: Entity,
+}
 
-/// Flat dense spatial grid with automatic bounds tracking.
+impl Default for PerceptionProxy {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            radius: 0.0,
+            entity: Entity::PLACEHOLDER,
+        }
+    }
+}
+
+/// DOD Spatial Grid with contiguous buffer storage.
 ///
-/// Replaces FxHashMap with direct Vec indexing for cache-friendly access.
-/// Only allocates cells for the active (populated) region of the world.
+/// Uses counting sort to bin entities into a single Vec for cache-friendly access.
+/// Zero pointer chasing during queries - all data is contiguous in memory.
 #[derive(Resource)]
 pub struct SpatialGrid {
-    // Flat 1D array indexed as 2D (row-major: y * width + x)
-    cells: Vec<Vec<EntityData>>,
+    // Single contiguous buffer of all proxies
+    proxies: Vec<PerceptionProxy>,
+
+    // Cell -> slice mapping: (start_index, count)
+    // Index = (cy - min_cell_y) * width + (cx - min_cell_x)
+    cells: Vec<(u32, u32)>,
 
     // Active region bounds
     min_cell_x: i32,
@@ -26,6 +48,7 @@ pub struct SpatialGrid {
 impl SpatialGrid {
     pub fn new(cell_size: f32) -> Self {
         Self {
+            proxies: Vec::new(),
             cells: Vec::new(),
             min_cell_x: 0,
             min_cell_y: 0,
@@ -44,7 +67,6 @@ impl SpatialGrid {
         self.cell_size
     }
 
-    /// Convert world coordinates to cell coordinates
     #[inline]
     pub fn world_to_cell(&self, x: f32, y: f32) -> (i32, i32) {
         (
@@ -57,7 +79,6 @@ impl SpatialGrid {
         (cell_x as f32 * self.cell_size, cell_y as f32 * self.cell_size)
     }
 
-    /// Convert cell coordinates to flat array index (if within bounds)
     #[inline]
     fn cell_index(&self, cx: i32, cy: i32) -> Option<usize> {
         let lx = cx - self.min_cell_x;
@@ -69,16 +90,28 @@ impl SpatialGrid {
         }
     }
 
-    /// Rebuild grid with automatic bounds detection.
-    /// Two-pass: first finds bounds, then inserts entities.
+    #[inline]
+    fn cell_index_unchecked(&self, x: f32, y: f32) -> usize {
+        let (cx, cy) = self.world_to_cell(x, y);
+        let lx = (cx - self.min_cell_x) as usize;
+        let ly = (cy - self.min_cell_y) as usize;
+        ly * self.width + lx
+    }
+
+    /// Rebuild grid using O(N) counting sort for cache-friendly layout.
+    ///
+    /// Phase 0: Collect entities and find bounds
+    /// Phase 1: Count histogram (entities per cell)
+    /// Phase 2: Prefix sum (compute offsets)
+    /// Phase 3: Scatter (bin entities into contiguous buffer)
     pub fn rebuild(&mut self, entities: impl Iterator<Item = (Entity, f32, f32, f32)>) {
-        // Pass 1: Collect entities and find bounds
+        // Phase 0: Collect and find bounds
         let all_entities: Vec<_> = entities.collect();
 
         if all_entities.is_empty() {
-            // Clear everything for empty grid
+            self.proxies.clear();
             for cell in &mut self.cells {
-                cell.clear();
+                *cell = (0, 0);
             }
             return;
         }
@@ -103,28 +136,42 @@ impl SpatialGrid {
         self.width = (max_cx - min_cx + 3) as usize;
         self.height = (max_cy - min_cy + 3) as usize;
 
-        // Resize cells array (preserve capacity of existing Vecs)
+        // Resize arrays
         let total_cells = self.width * self.height;
-        self.cells.resize_with(total_cells, Vec::new);
+        self.cells.resize(total_cells, (0, 0));
+        self.proxies.resize(all_entities.len(), PerceptionProxy::default());
 
-        // Clear all cells
+        // Phase 1: Count histogram
         for cell in &mut self.cells {
-            cell.clear();
+            cell.1 = 0;
         }
 
-        // Pass 2: Insert entities using direct indexing
+        for (_, x, y, _) in &all_entities {
+            let idx = self.cell_index_unchecked(*x, *y);
+            self.cells[idx].1 += 1;
+        }
+
+        // Phase 2: Prefix sum (compute offsets)
+        let mut offset = 0u32;
+        for cell in &mut self.cells {
+            cell.0 = offset;
+            offset += cell.1;
+            cell.1 = 0; // Reset count for scatter phase
+        }
+
+        // Phase 3: Scatter into contiguous buffer
         for (entity, x, y, radius) in all_entities {
-            let (cx, cy) = self.world_to_cell(x, y);
-            if let Some(idx) = self.cell_index(cx, cy) {
-                self.cells[idx].push((entity, x, y, radius));
-            }
+            let idx = self.cell_index_unchecked(x, y);
+            let (start, count) = &mut self.cells[idx];
+            let write_pos = (*start + *count) as usize;
+            self.proxies[write_pos] = PerceptionProxy { x, y, radius, entity };
+            *count += 1;
         }
     }
 
-    /// Query entities within radius using direct array indexing.
-    /// Row-major iteration for cache locality.
+    /// Query entities within radius. Returns iterator over contiguous slices.
     #[inline]
-    pub fn query_radius(&self, x: f32, y: f32, radius: f32) -> impl Iterator<Item = &EntityData> {
+    pub fn query_radius(&self, x: f32, y: f32, radius: f32) -> impl Iterator<Item = &PerceptionProxy> {
         let (center_cx, center_cy) = self.world_to_cell(x, y);
         let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
 
@@ -136,13 +183,16 @@ impl SpatialGrid {
 
         // Row-major iteration for cache locality
         (min_qy..=max_qy).flat_map(move |cy| {
-            (min_qx..=max_qx).filter_map(move |cx| {
-                self.cell_index(cx, cy).map(|idx| self.cells[idx].iter())
-            }).flatten()
+            (min_qx..=max_qx).flat_map(move |cx| {
+                let idx = ((cy - self.min_cell_y) as usize) * self.width
+                        + ((cx - self.min_cell_x) as usize);
+                let (start, count) = self.cells[idx];
+                // Return slice of contiguous memory
+                &self.proxies[start as usize..(start + count) as usize]
+            })
         })
     }
 
-    /// Get list of cell coordinates that would be queried (for visualization)
     pub fn get_query_cells(&self, x: f32, y: f32, radius: f32) -> Vec<(i32, i32)> {
         let (center_cx, center_cy) = self.world_to_cell(x, y);
         let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
@@ -160,46 +210,37 @@ impl SpatialGrid {
     }
 
     pub fn entity_count(&self) -> usize {
-        self.cells.iter().map(|v| v.len()).sum()
+        self.proxies.len()
     }
 
     pub fn cell_count(&self) -> usize {
-        self.cells.iter().filter(|v| !v.is_empty()).count()
+        self.cells.iter().filter(|(_, count)| *count > 0).count()
     }
 
-    /// Total allocated cells (including empty padding)
     pub fn allocated_cells(&self) -> usize {
         self.cells.len()
     }
 
-    /// Grid dimensions
     pub fn dimensions(&self) -> (usize, usize) {
         (self.width, self.height)
     }
 
-    /// Grid bounds (min cell coordinates)
     pub fn bounds(&self) -> (i32, i32) {
         (self.min_cell_x, self.min_cell_y)
     }
 
-    // Legacy API compatibility - these call rebuild() internally
-
-    /// Clear grid (legacy API - prefer rebuild())
     pub fn clear(&mut self) {
+        self.proxies.clear();
         for cell in &mut self.cells {
-            cell.clear();
+            *cell = (0, 0);
         }
     }
 
-    /// Insert single entity (legacy API - prefer rebuild())
-    /// Note: Only works if bounds are already set correctly!
     #[inline]
-    pub fn insert(&mut self, entity: Entity, x: f32, y: f32, radius: f32) {
-        let (cx, cy) = self.world_to_cell(x, y);
-        if let Some(idx) = self.cell_index(cx, cy) {
-            self.cells[idx].push((entity, x, y, radius));
-        }
-        // Silently ignore out-of-bounds inserts (bounds must be set via rebuild first)
+    pub fn insert(&mut self, _entity: Entity, _x: f32, _y: f32, _radius: f32) {
+        // Legacy API - not supported with counting sort approach
+        // Use rebuild() instead
+        panic!("insert() not supported - use rebuild() for DOD grid");
     }
 }
 
@@ -271,7 +312,7 @@ mod tests {
         assert_eq!(grid.entity_count(), 3);
 
         let nearby: Vec<_> = grid.query_radius(25.0, 25.0, 30.0).collect();
-        assert!(nearby.iter().any(|(e, _, _, _)| *e == entity1));
+        assert!(nearby.iter().any(|p| p.entity == entity1));
     }
 
     #[test]
@@ -372,5 +413,33 @@ mod tests {
         // Then rebuild with empty
         grid.rebuild(std::iter::empty());
         assert_eq!(grid.entity_count(), 0);
+    }
+
+    #[test]
+    fn test_perception_proxy_size() {
+        // Entity requires 8-byte alignment, so struct is 24 bytes
+        // (3 f32s = 12 bytes + Entity = 8 bytes + 4 bytes padding = 24)
+        // Still 2.66 proxies per cache line - key benefit is contiguous buffer
+        assert_eq!(std::mem::size_of::<PerceptionProxy>(), 24);
+    }
+
+    #[test]
+    fn test_contiguous_buffer() {
+        let mut grid = SpatialGrid::new(50.0);
+
+        let entities = vec![
+            (Entity::from_raw(1), 25.0, 25.0, 1.0),
+            (Entity::from_raw(2), 26.0, 26.0, 1.0), // Same cell
+            (Entity::from_raw(3), 27.0, 27.0, 1.0), // Same cell
+        ];
+
+        grid.rebuild(entities.into_iter());
+
+        // All 3 entities should be in contiguous memory
+        assert_eq!(grid.proxies.len(), 3);
+
+        // Query should return all 3
+        let nearby: Vec<_> = grid.query_radius(25.0, 25.0, 10.0).collect();
+        assert_eq!(nearby.len(), 3);
     }
 }

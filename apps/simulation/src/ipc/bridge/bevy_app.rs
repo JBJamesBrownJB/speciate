@@ -291,6 +291,7 @@ impl NapiApp {
                 tick,
                 count,
                 tick_rate_hz,
+                crate::simulation::spatial::CELL_SIZE,
                 system_timings,
                 hardware_metrics,
                 parallelization_metrics,
@@ -303,6 +304,7 @@ impl NapiApp {
                 tick,
                 count,
                 tick_rate_hz,
+                crate::simulation::spatial::CELL_SIZE,
                 system_timings,
             )
         }

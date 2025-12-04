@@ -10,6 +10,9 @@ repository = "https://github.com/anthropics/speciate"
 [dependencies]
 # Bevy ECS Framework
 bevy_ecs = "0.14"
+
+# Fast hashing for spatial grid (5x faster than SipHash for integer keys)
+rustc-hash = "2.0"
 bevy_app = "0.14"
 bevy_reflect = "0.14"  # Reflection for automatic component serialization
 bevy_scene = "0.14"    # DynamicScene for automatic snapshot serialization

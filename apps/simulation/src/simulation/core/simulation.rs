@@ -11,6 +11,7 @@ use crate::simulation::movement::{
     integrate_motion_system, rotation_system, update_body_size_cache,
 };
 use crate::simulation::perception;
+use crate::simulation::spatial::{rebuild_spatial_grid_system, SpatialGrid};
 use bevy_ecs::prelude::*;
 
 /// Result of loading a trial
@@ -68,7 +69,8 @@ impl SimulationBuilder {
         schedule.add_systems(process_spawn_events);
 
         schedule.add_systems((
-            perception::update_perception_system,
+            rebuild_spatial_grid_system,
+            perception::update_perception_system.after(rebuild_spatial_grid_system),
             behavior_transition_system,
             territory_wandering_system,
             flee_system,
@@ -107,6 +109,7 @@ impl SimulationBuilder {
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
         world.insert_resource(perception::PerceptionScratchBuffer::default());
+        world.insert_resource(SpatialGrid::default());
 
         Self { world, schedule }
     }

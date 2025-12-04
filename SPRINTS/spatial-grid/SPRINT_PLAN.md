@@ -48,15 +48,15 @@
 
 ## Phase Structure
 
-### Phase 0: Pre-Sprint Cleanup (Day 0)
+### Phase 0: Pre-Sprint Cleanup (Day 0) - DEFERRED
 
-**Outcome:** Clean component architecture ready for grid integration
+**Status:** Mostly deferred to end of sprint
 
 **Tasks:**
-- [ ] Delete `obstacles: Vec<Entity>` from Perception (dead heap allocation)
-- [ ] Split `Perception` into `PerceptionConfig` + `PerceptionResult` (Hot/Cold)
-- [ ] Remove `PerceptionScratchBuffer` (replaced by SpatialGrid)
-- [ ] Add explicit system ordering documentation
+- [x] Delete `obstacles: Vec<Entity>` from Perception - N/A (field doesn't exist)
+- [ ] Split `Perception` into `PerceptionConfig` + `PerceptionResult` (Hot/Cold) - DEFERRED
+- [ ] Remove `PerceptionScratchBuffer` (replaced by SpatialGrid) - DEFERRED to Phase 2
+- [x] Add explicit system ordering documentation - Done via `.after()`
 
 **Hot/Cold Component Split:**
 
@@ -82,16 +82,28 @@ pub struct PerceptionResult {
 
 ---
 
-### Phase 1: Spatial Grid Data Structure (Day 1-2)
+### Phase 1: Spatial Grid Data Structure (Day 1-2) - COMPLETE ✅
 
-**Outcome:** FxHashMap-based grid with 50m cells, rebuilt every frame
+**Outcome:** std HashMap-based grid with 50m cells, rebuilt every frame
+
+**Status:** COMPLETE - Grid builds every tick but perception NOT YET USING IT
+- ⚠️ **No performance change expected** - perception still uses O(N²) brute force
+- Grid is built but not queried until Phase 2 integration
+
+**Implementation:**
+- `apps/simulation/src/simulation/spatial/` module created
+- `CELL_SIZE = 50.0` constant
+- `SpatialGrid` resource with std HashMap (FxHashMap comparison deferred to stretch goals)
+- `rebuild_spatial_grid_system` runs before perception via `.after()` ordering
+- `spatial_grid_rebuild_us` timing instrumentation added
+- 11 unit tests passing
 
 **Key Decisions:**
 - Cell size: **50m** (max perception ~35m, use 1.5× for safety)
-- Use FxHashMap via `rustc-hash` crate (2-5× faster than std HashMap)
+- Started with std HashMap (FxHashMap benchmark at end of sprint)
 - Store `(Entity, x, y, radius)` in cells to avoid component double-lookup
 - **Full rebuild per frame** - simpler, ~1-2ms overhead acceptable
-- **Pre-allocate capacity** to avoid rehashing during rebuild
+- `clear()` preserves Vec capacities to avoid reallocation
 
 **Grid API:**
 
@@ -138,15 +150,24 @@ app.add_systems(Update, (
 
 ---
 
-### Phase 1.5: Grid Visualization (Dev-Tools)
+### Phase 1.5: Grid Visualization (Dev-Tools) - COMPLETE ✅
 
 **Outcome:** Visual debug overlay showing spatial grid cell boundaries
+
+**Status:** COMPLETE - Grid overlay toggles with 'G' key, renders efficiently
+
+**Implementation:**
+- `SpatialGridOverlay.ts` created with PixiJS Graphics
+- Cell size synced via IPC telemetry (`spatialGridCellSize` field)
+- Only visible cells rendered (viewport-clipped)
+- Grid hidden by default, 'G' toggles
+- Line width scales with zoom (constant screen pixels)
 
 **Features:**
 - Toggle with 'G' key
 - Renders grid lines at 50m cell boundaries in world coordinates
 - Only renders cells visible in current viewport (performance)
-- Behind `--dev-tools` feature flag
+- Cell size comes from Rust via telemetry (not hardcoded)
 
 **Frontend Implementation:**
 
@@ -189,77 +210,18 @@ window.addEventListener('keydown', (event: KeyboardEvent) => {
 
 ---
 
-### Phase 1.6: Perception Query Visualization (Dev-Tools)
-
-**Outcome:** When a creature is selected, highlight which grid cells its perception system queries
-
-**Features:**
-- Requires grid overlay visible ('G' key)
-- When creature selected: show queried cells with green fill
-- Selected creature's cell highlighted in yellow
-- Updates in real-time as creature moves
-
-**Rust: Export Queried Cells**
-
-```rust
-// apps/simulation/src/simulation/spatial/debug.rs
-#[cfg(feature = "dev-tools")]
-#[derive(Resource, Default)]
-pub struct SpatialGridDebugSnapshot {
-    pub cell_size: f32,
-    pub queried_cells: Vec<(i32, i32)>,  // Cell coordinates being searched
-}
-
-// In perception system, when processing debug target:
-if entity == debug_target {
-    let cells = grid.get_query_cells(pos.x, pos.y, config.range);
-    debug_snapshot.queried_cells = cells;
-}
-```
-
-**IPC Extension:**
-
-Extend `PerceptionDebugBuffer` or create separate buffer:
-```
-// Add to perception debug data:
-// [200]=cell_size, [201]=num_cells, [202..]=cell_x, cell_y pairs
-```
-
-**Frontend Visualization:**
-
-```typescript
-// Extend SpatialGridOverlay
-updateQueriedCells(cells: Array<{x: number, y: number}>, creatureCell: {x: number, y: number}): void {
-  this.queriedCellsGraphics.clear();
-
-  // Draw queried cells (green)
-  for (const cell of cells) {
-    this.queriedCellsGraphics.rect(cell.x * cellSize, cell.y * cellSize, cellSize, cellSize);
-  }
-  this.queriedCellsGraphics.fill({ color: 0x00ff00, alpha: 0.2 });
-
-  // Draw creature's cell (yellow)
-  this.queriedCellsGraphics.rect(creatureCell.x * cellSize, creatureCell.y * cellSize, cellSize, cellSize);
-  this.queriedCellsGraphics.fill({ color: 0xffff00, alpha: 0.3 });
-}
-```
-
-**Visual Design:**
-- Queried cells: `0x00ff00` (green) fill, alpha `0.2`
-- Selected creature's cell: `0xffff00` (yellow) fill, alpha `0.3`
-
-**Files:**
-- `apps/simulation/src/simulation/spatial/debug.rs` (NEW)
-- `apps/simulation/src/ipc/bridge/perception_debug_buffer.rs` (MODIFY)
-- `apps/portal/src/rendering/SpatialGridOverlay.ts` (MODIFY)
-- `apps/portal/src/types/GameState.ts` (MODIFY - add queriedCells)
-- `apps/portal/src/infrastructure/ipc/ElectronIPCClient.ts` (MODIFY)
-
----
-
-### Phase 2: Two-Phase Perception Pattern (Day 2-3)
+### Phase 2: Two-Phase Perception Pattern (Day 2-3) - COMPLETE ✅
 
 **Outcome:** Perception system uses grid with Rayon-compatible architecture
+
+**Status:** COMPLETE - Perception now queries spatial grid instead of O(N²) brute force
+
+**Implementation:**
+- Added `SpatialGrid` as system parameter (`Res<SpatialGrid>`)
+- Three-phase pattern: collect inputs → parallel grid queries (Rayon) → sequential write-back
+- `MAX_OTHER_RADIUS = 5.0` constant for query radius calculation
+- All 35 perception tests pass
+- All 11 spatial tests pass
 
 **Critical Pattern:** The current `&mut Perception` borrow blocks Rayon. Must use two-phase:
 
@@ -345,6 +307,76 @@ impl XorShift32 {
 | + Global sort | +15-20ms | O(n log n) ❌ |
 | + Per-cell sort | +5-8ms | ⚠️ Acceptable but slow |
 | + Random offset (XorShift32) | +0ms | ✅ Free |
+
+---
+
+### Phase 2.1: Perception Query Visualization (Dev-Tools)
+
+**Outcome:** When a creature is selected, highlight which grid cells its perception system queries
+
+**Prerequisites:** Phase 2 complete (perception must be querying the grid)
+
+**Features:**
+- Requires grid overlay visible ('G' key)
+- When creature selected: show queried cells with green fill
+- Selected creature's cell highlighted in yellow
+- Updates in real-time as creature moves
+
+**Rust: Export Queried Cells**
+
+```rust
+// apps/simulation/src/simulation/spatial/debug.rs
+#[cfg(feature = "dev-tools")]
+#[derive(Resource, Default)]
+pub struct SpatialGridDebugSnapshot {
+    pub cell_size: f32,
+    pub queried_cells: Vec<(i32, i32)>,  // Cell coordinates being searched
+}
+
+// In perception system, when processing debug target:
+if entity == debug_target {
+    let cells = grid.get_query_cells(pos.x, pos.y, config.range);
+    debug_snapshot.queried_cells = cells;
+}
+```
+
+**IPC Extension:**
+
+Extend `PerceptionDebugBuffer` or create separate buffer:
+```
+// Add to perception debug data:
+// [200]=cell_size, [201]=num_cells, [202..]=cell_x, cell_y pairs
+```
+
+**Frontend Visualization:**
+
+```typescript
+// Extend SpatialGridOverlay
+updateQueriedCells(cells: Array<{x: number, y: number}>, creatureCell: {x: number, y: number}): void {
+  this.queriedCellsGraphics.clear();
+
+  // Draw queried cells (green)
+  for (const cell of cells) {
+    this.queriedCellsGraphics.rect(cell.x * cellSize, cell.y * cellSize, cellSize, cellSize);
+  }
+  this.queriedCellsGraphics.fill({ color: 0x00ff00, alpha: 0.2 });
+
+  // Draw creature's cell (yellow)
+  this.queriedCellsGraphics.rect(creatureCell.x * cellSize, creatureCell.y * cellSize, cellSize, cellSize);
+  this.queriedCellsGraphics.fill({ color: 0xffff00, alpha: 0.3 });
+}
+```
+
+**Visual Design:**
+- Queried cells: `0x00ff00` (green) fill, alpha `0.2`
+- Selected creature's cell: `0xffff00` (yellow) fill, alpha `0.3`
+
+**Files:**
+- `apps/simulation/src/simulation/spatial/debug.rs` (NEW)
+- `apps/simulation/src/ipc/bridge/perception_debug_buffer.rs` (MODIFY)
+- `apps/portal/src/rendering/SpatialGridOverlay.ts` (MODIFY)
+- `apps/portal/src/types/GameState.ts` (MODIFY - add queriedCells)
+- `apps/portal/src/infrastructure/ipc/ElectronIPCClient.ts` (MODIFY)
 
 ---
 
@@ -646,9 +678,9 @@ Spatial grids mirror real animal cognition - creatures don't evaluate every enti
 - [ ] Grid pre-allocates capacity
 
 ### Dev-Tools Visualization (Phase 1.5 & 1.6)
-- [ ] 'G' key toggles grid overlay on/off
-- [ ] Grid cells align with 50m boundaries
-- [ ] Grid renders efficiently (only visible cells)
+- [x] 'G' key toggles grid overlay on/off
+- [x] Grid cells align with 50m boundaries (cell size from Rust via IPC)
+- [x] Grid renders efficiently (only visible cells)
 - [ ] When creature selected: queried cells highlighted in green
 - [ ] Selected creature's cell highlighted in yellow
 - [ ] Queried cells update in real-time as creature moves
@@ -663,6 +695,7 @@ Spatial grids mirror real animal cognition - creatures don't evaluate every enti
 - [ ] Double-buffer with staggered grid rebuild saves ~1ms avg
 - [ ] Parallel grid rebuild (Rayon) reduces rebuild from 2ms to <0.5ms
 - [ ] Validated at 200K creatures sustained
+- [ ] FxHashMap comparison: Add `rustc-hash` crate, benchmark vs std HashMap (expected 2-5x faster for integer keys)
 
 ---
 

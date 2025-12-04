@@ -42,6 +42,7 @@ export interface SystemTimingsSnapshot {
   totalTickUs: number;
   movementUs: number;
   perceptionUs: number;
+  spatialGridRebuildUs: number;
   behaviorUs: number;
   behaviorTransitionUs: number;
   wanderUs: number;
@@ -57,6 +58,7 @@ export interface TelemetryFrame {
   tick: number;
   creatureCount: number;
   tickRateHz: number;
+  spatialGridCellSize: number;
   systemTimings: SystemTimingsSnapshot;
   hardwareMetrics?: HardwareMetrics;
   parallelizationMetrics?: ParallelizationMetrics;

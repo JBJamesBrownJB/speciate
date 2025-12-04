@@ -7,3 +7,5 @@
 5. Visualise the spatial grid 
 
 6. Crits use pseudo random neighbour sorting O(1).
+
+7. Gain to only query neighbour cells if with perception range of cell wall?

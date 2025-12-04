@@ -2,17 +2,20 @@ use super::components::*;
 use crate::simulation::components::Rotation;
 use crate::simulation::core::components::{BodySize, Position};
 use crate::simulation::creatures::components::CreatureState;
+use crate::simulation::spatial::SpatialGrid;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::components::CritId;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
-#[cfg(feature = "dev-tools")]
-use bevy_ecs::system::Res;
+
+const MAX_OTHER_RADIUS: f32 = 5.0;
 
 pub fn update_perception_system(
+    grid: Res<SpatialGrid>,
     mut query: Query<(Entity, &Position, &Rotation, &BodySize, &mut Perception, &CreatureState)>,
-    mut scratch: ResMut<PerceptionScratchBuffer>,
+    #[allow(unused_variables)]
+    scratch: ResMut<PerceptionScratchBuffer>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
     #[cfg(feature = "dev-tools")] mut debug_snapshot: ResMut<PerceptionDebugSnapshot>,
@@ -21,53 +24,48 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "perception");
 
-    scratch.positions.clear();
-    let count_hint = query.iter().size_hint().0;
-    scratch.positions.reserve(count_hint);
-    for (entity, pos, _, size, _, _) in query.iter() {
-        scratch.positions.push((entity, pos.x, pos.y, size.radius()));
-    }
-
-    for (entity, pos, rotation, size, mut perception, state) in query.iter_mut() {
+    // Single-pass: process in archetype order for cache coherence
+    // Grid queries happen inline - no intermediate allocations
+    for (entity, pos, rot, size, mut perception, state) in query.iter_mut() {
         perception.clear();
 
         if !state.behavior.is_active() {
             continue;
         }
 
+        let x = pos.x;
+        let y = pos.y;
         let self_radius = size.radius();
-        let perception_range = perception.range;
-
-        // Pre-calculate facing vector (once per creature)
-        // cos_half_fov_sq is cached in Perception component for sqrt-free FOV check
-        let facing_x = rotation.radians.cos();
-        let facing_y = rotation.radians.sin();
+        let range = perception.range;
         let cos_half_fov_sq = perception.cos_half_fov_sq;
+        let facing_x = rot.radians.cos();
+        let facing_y = rot.radians.sin();
+        let query_radius = range + self_radius + MAX_OTHER_RADIUS;
 
-        for &(other_entity, other_x, other_y, other_radius) in &scratch.positions {
+        for &(other_entity, other_x, other_y, other_radius) in
+            grid.query_radius(x, y, query_radius)
+        {
             if entity == other_entity {
                 continue;
             }
 
-            let dx = other_x - pos.x;
-            let dy = other_y - pos.y;
+            let dx = other_x - x;
+            let dy = other_y - y;
             let center_dist_sq = dx * dx + dy * dy;
 
-            // Distance check first (cheaper)
-            let max_dist = perception_range + self_radius + other_radius;
+            // Distance check (cheaper)
+            let max_dist = range + self_radius + other_radius;
             if center_dist_sq > max_dist * max_dist {
                 continue;
             }
 
-            // Early-exit: skip entities clearly behind (no sqrt needed)
+            // Early-exit: skip entities clearly behind
             let rough_dot = dx * facing_x + dy * facing_y;
             if rough_dot <= 0.0 {
                 continue;
             }
 
-            // FOV check using squared comparison (no sqrt, no division!)
-            // Math: dot >= cos_half_fov  =>  dot² >= cos_half_fov² × dist²
-            // (valid when rough_dot > 0, which we checked above)
+            // FOV check using squared comparison (no sqrt, no division)
             if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
                 perception.add_neighbor(other_entity);
                 if perception.is_full() {

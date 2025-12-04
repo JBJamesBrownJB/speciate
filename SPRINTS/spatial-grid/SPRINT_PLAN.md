@@ -138,6 +138,125 @@ app.add_systems(Update, (
 
 ---
 
+### Phase 1.5: Grid Visualization (Dev-Tools)
+
+**Outcome:** Visual debug overlay showing spatial grid cell boundaries
+
+**Features:**
+- Toggle with 'G' key
+- Renders grid lines at 50m cell boundaries in world coordinates
+- Only renders cells visible in current viewport (performance)
+- Behind `--dev-tools` feature flag
+
+**Frontend Implementation:**
+
+```typescript
+// apps/portal/src/rendering/SpatialGridOverlay.ts
+export class SpatialGridOverlay {
+  private graphics: Graphics;
+  private visible: boolean = false;
+  private cellSize: number = 50;  // Must match Rust CELL_SIZE
+
+  constructor(container: Container) {
+    this.graphics = new Graphics();
+    container.addChild(this.graphics);
+  }
+
+  setVisible(visible: boolean): void { ... }
+  updateGrid(viewportBounds: ViewportBounds, zoom: number): void { ... }
+}
+```
+
+**Keyboard Toggle (main.ts):**
+
+```typescript
+window.addEventListener('keydown', (event: KeyboardEvent) => {
+  if (event.key === 'g' || event.key === 'G') {
+    showSpatialGrid = !showSpatialGrid;
+    spatialGridOverlay.setVisible(showSpatialGrid);
+  }
+});
+```
+
+**Visual Design:**
+- Grid lines: `0x444444` (dark gray), alpha `0.3`
+- Line width: `1.0 / zoom` (constant screen pixels)
+
+**Files:**
+- `apps/portal/src/rendering/SpatialGridOverlay.ts` (NEW)
+- `apps/portal/src/main.ts` (MODIFY - add keyboard toggle)
+- `apps/portal/index.html` (MODIFY - add 'G' to shortcuts panel)
+
+---
+
+### Phase 1.6: Perception Query Visualization (Dev-Tools)
+
+**Outcome:** When a creature is selected, highlight which grid cells its perception system queries
+
+**Features:**
+- Requires grid overlay visible ('G' key)
+- When creature selected: show queried cells with green fill
+- Selected creature's cell highlighted in yellow
+- Updates in real-time as creature moves
+
+**Rust: Export Queried Cells**
+
+```rust
+// apps/simulation/src/simulation/spatial/debug.rs
+#[cfg(feature = "dev-tools")]
+#[derive(Resource, Default)]
+pub struct SpatialGridDebugSnapshot {
+    pub cell_size: f32,
+    pub queried_cells: Vec<(i32, i32)>,  // Cell coordinates being searched
+}
+
+// In perception system, when processing debug target:
+if entity == debug_target {
+    let cells = grid.get_query_cells(pos.x, pos.y, config.range);
+    debug_snapshot.queried_cells = cells;
+}
+```
+
+**IPC Extension:**
+
+Extend `PerceptionDebugBuffer` or create separate buffer:
+```
+// Add to perception debug data:
+// [200]=cell_size, [201]=num_cells, [202..]=cell_x, cell_y pairs
+```
+
+**Frontend Visualization:**
+
+```typescript
+// Extend SpatialGridOverlay
+updateQueriedCells(cells: Array<{x: number, y: number}>, creatureCell: {x: number, y: number}): void {
+  this.queriedCellsGraphics.clear();
+
+  // Draw queried cells (green)
+  for (const cell of cells) {
+    this.queriedCellsGraphics.rect(cell.x * cellSize, cell.y * cellSize, cellSize, cellSize);
+  }
+  this.queriedCellsGraphics.fill({ color: 0x00ff00, alpha: 0.2 });
+
+  // Draw creature's cell (yellow)
+  this.queriedCellsGraphics.rect(creatureCell.x * cellSize, creatureCell.y * cellSize, cellSize, cellSize);
+  this.queriedCellsGraphics.fill({ color: 0xffff00, alpha: 0.3 });
+}
+```
+
+**Visual Design:**
+- Queried cells: `0x00ff00` (green) fill, alpha `0.2`
+- Selected creature's cell: `0xffff00` (yellow) fill, alpha `0.3`
+
+**Files:**
+- `apps/simulation/src/simulation/spatial/debug.rs` (NEW)
+- `apps/simulation/src/ipc/bridge/perception_debug_buffer.rs` (MODIFY)
+- `apps/portal/src/rendering/SpatialGridOverlay.ts` (MODIFY)
+- `apps/portal/src/types/GameState.ts` (MODIFY - add queriedCells)
+- `apps/portal/src/infrastructure/ipc/ElectronIPCClient.ts` (MODIFY)
+
+---
+
 ### Phase 2: Two-Phase Perception Pattern (Day 2-3)
 
 **Outcome:** Perception system uses grid with Rayon-compatible architecture
@@ -526,6 +645,14 @@ Spatial grids mirror real animal cognition - creatures don't evaluate every enti
 - [ ] XorShift32 for random offset (not fxhash)
 - [ ] Grid pre-allocates capacity
 
+### Dev-Tools Visualization (Phase 1.5 & 1.6)
+- [ ] 'G' key toggles grid overlay on/off
+- [ ] Grid cells align with 50m boundaries
+- [ ] Grid renders efficiently (only visible cells)
+- [ ] When creature selected: queried cells highlighted in green
+- [ ] Selected creature's cell highlighted in yellow
+- [ ] Queried cells update in real-time as creature moves
+
 ### Validation
 - [ ] Benchmarked at 50K, 100K, 150K, 200K creatures
 - [ ] Determinism test: same seed → same perception results
@@ -551,13 +678,23 @@ rustc-hash = "2.0"  # FxHashMap for fast integer hashing
 ## Files to Create/Modify
 
 ```
+# Spatial Grid (Rust)
 apps/simulation/src/simulation/spatial/mod.rs       (NEW)
 apps/simulation/src/simulation/spatial/grid.rs      (NEW)
 apps/simulation/src/simulation/spatial/systems.rs   (NEW)
 apps/simulation/src/simulation/spatial/rng.rs       (NEW - XorShift32)
+apps/simulation/src/simulation/spatial/debug.rs     (NEW - Phase 1.6 dev-tools)
 apps/simulation/src/simulation/perception/components.rs (MODIFY - Hot/Cold split)
 apps/simulation/src/simulation/perception/systems.rs    (MODIFY - Two-phase)
 apps/simulation/src/simulation/mod.rs               (MODIFY - system ordering)
+apps/simulation/src/ipc/bridge/perception_debug_buffer.rs (MODIFY - Phase 1.6 cell data)
+
+# Grid Visualization (Frontend - Phase 1.5 & 1.6)
+apps/portal/src/rendering/SpatialGridOverlay.ts     (NEW)
+apps/portal/src/main.ts                             (MODIFY - keyboard toggle)
+apps/portal/src/types/GameState.ts                  (MODIFY - queriedCells interface)
+apps/portal/src/infrastructure/ipc/ElectronIPCClient.ts (MODIFY - parse cell data)
+apps/portal/index.html                              (MODIFY - 'G' shortcut docs)
 ```
 
 ---

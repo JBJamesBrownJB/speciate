@@ -6,7 +6,7 @@ use crate::simulation::components::*;
 use crate::simulation::core::components::*;
 use crate::simulation::math::normalize_angle;
 use crate::simulation::movement::constants::{MAX_SPEED, MAX_TURN_RATE_RAD, STOPPED_THRESHOLD, VELOCITY_DAMPING};
-use crate::simulation::movement::noise::perlin_locomotion_noise;
+use crate::simulation::movement::noise::NoiseTable;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 pub fn integrate_motion_system(
@@ -22,6 +22,7 @@ pub fn integrate_motion_system(
     physics_tick: Res<PhysicsTick>,
     world_bounds: Res<crate::simulation::core::WorldBounds>,
     movement_config: Res<MovementConfig>,
+    noise_table: Res<NoiseTable>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
     #[cfg(feature = "dev-tools")]
@@ -33,13 +34,22 @@ pub fn integrate_motion_system(
     let noise_base = movement_config.locomotion_noise_base;
     let noise_time_scale = movement_config.noise_time_scale;
 
+    // Capture bounds for parallel access
+    let min_x = world_bounds.min_x;
+    let max_x = world_bounds.max_x;
+    let min_y = world_bounds.min_y;
+    let max_y = world_bounds.max_y;
+
+    // Get reference to noise table for parallel access
+    let noise_ref = &*noise_table;
+
     // Collect entities into Vec for Rayon parallel processing
     let mut entities: Vec<_> = query.iter_mut().collect();
 
     let max_turn_rate_rad = MAX_TURN_RATE_RAD;
     let stopped_threshold_sq = STOPPED_THRESHOLD * STOPPED_THRESHOLD;
 
-    // Parallel physics integration using Rayon
+    // Parallel physics integration + boundary enforcement (merged into single loop)
     entities.par_iter_mut().for_each(|(entity, size, position, velocity, acceleration, creature_state)| {
         if creature_state.behavior == BehaviorMode::Catatonic {
             acceleration.ax = 0.0;
@@ -59,6 +69,22 @@ pub fn integrate_motion_system(
 
             position.x += velocity.vx * dt;
             position.y += velocity.vy * dt;
+
+            // Boundary enforcement for coasting catatonic creatures
+            if position.x < min_x {
+                position.x = min_x;
+                velocity.vx = velocity.vx.max(0.0);
+            } else if position.x > max_x {
+                position.x = max_x;
+                velocity.vx = velocity.vx.min(0.0);
+            }
+            if position.y < min_y {
+                position.y = min_y;
+                velocity.vy = velocity.vy.max(0.0);
+            } else if position.y > max_y {
+                position.y = max_y;
+                velocity.vy = velocity.vy.min(0.0);
+            }
 
             return;
         }
@@ -82,8 +108,8 @@ pub fn integrate_motion_system(
             let size_factor = size.inv_sqrt_length;
             let noise_magnitude = noise_base * speed_ratio * speed_ratio * size_factor;
 
-            let noise_x = perlin_locomotion_noise(entity.index(), tick, 0, noise_time_scale);
-            let noise_y = perlin_locomotion_noise(entity.index(), tick, 1, noise_time_scale);
+            let noise_x = noise_ref.get(entity.index(), tick, 0, noise_time_scale);
+            let noise_y = noise_ref.get(entity.index(), tick, 1, noise_time_scale);
 
             let perpendicular_x = -velocity.vy / speed;
             let perpendicular_y = velocity.vx / speed;
@@ -119,15 +145,8 @@ pub fn integrate_motion_system(
 
         position.x += velocity.vx * dt;
         position.y += velocity.vy * dt;
-    });
 
-    // Parallel boundary enforcement (reuse collected entities)
-    let min_x = world_bounds.min_x;
-    let max_x = world_bounds.max_x;
-    let min_y = world_bounds.min_y;
-    let max_y = world_bounds.max_y;
-
-    entities.par_iter_mut().for_each(|(_entity, _size, position, velocity, _accel, _state)| {
+        // Boundary enforcement (merged into main loop)
         if position.x < min_x {
             position.x = min_x;
             velocity.vx = velocity.vx.max(0.0);
@@ -209,6 +228,7 @@ mod tests {
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
         world.insert_resource(MovementConfig::default());
+        world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
 
@@ -246,6 +266,7 @@ mod tests {
         world2.insert_resource(PhysicsTick(0));
         world2.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
         world2.insert_resource(MovementConfig::default());
+        world2.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world2.insert_resource(crate::instrumentation::SystemTimings::new());
 
@@ -298,6 +319,7 @@ mod tests {
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
         world.insert_resource(MovementConfig::default());
+        world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
 
@@ -347,6 +369,7 @@ mod tests {
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
         world.insert_resource(MovementConfig::default());
+        world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
 
@@ -413,6 +436,7 @@ mod tests {
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
         world.insert_resource(MovementConfig::default());
+        world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
 
@@ -453,7 +477,9 @@ mod tests {
         world.insert_resource(DeltaTime(0.05));
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
-        world.insert_resource(MovementConfig::default());
+        // Disable noise so it doesn't interfere with turn rate test
+        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
 
@@ -484,6 +510,7 @@ mod tests {
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
         world.insert_resource(MovementConfig::default());
+        world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
 
@@ -515,6 +542,7 @@ mod tests {
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
         world.insert_resource(MovementConfig::default());
+        world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
 

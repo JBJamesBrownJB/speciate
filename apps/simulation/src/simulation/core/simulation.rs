@@ -87,6 +87,7 @@ impl SimulationBuilder {
         world.insert_resource(PhysicsTick::default());
         world.insert_resource(ActualTickRate::default());
         world.insert_resource(MovementConfig::default());
+        world.insert_resource(crate::simulation::movement::noise::NoiseTable::default());
 
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());

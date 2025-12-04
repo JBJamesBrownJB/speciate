@@ -71,7 +71,7 @@ impl SpatialGrid {
         self.cell_size
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn world_to_cell(&self, x: f32, y: f32) -> (i32, i32) {
         (
             (x * self.inv_cell_size).floor() as i32,
@@ -83,18 +83,7 @@ impl SpatialGrid {
         (cell_x as f32 * self.cell_size, cell_y as f32 * self.cell_size)
     }
 
-    #[inline]
-    fn cell_index(&self, cx: i32, cy: i32) -> Option<usize> {
-        let lx = cx - self.min_cell_x;
-        let ly = cy - self.min_cell_y;
-        if lx >= 0 && ly >= 0 && (lx as usize) < self.width && (ly as usize) < self.height {
-            Some((ly as usize) * self.width + (lx as usize))
-        } else {
-            None
-        }
-    }
-
-    #[inline]
+    #[inline(always)]
     fn cell_index_unchecked(&self, x: f32, y: f32) -> usize {
         let (cx, cy) = self.world_to_cell(x, y);
         let lx = (cx - self.min_cell_x) as usize;
@@ -175,7 +164,7 @@ impl SpatialGrid {
     }
 
     /// Query entities within radius. Returns iterator over contiguous slices.
-    #[inline]
+    #[inline(always)]
     pub fn query_radius(&self, x: f32, y: f32, radius: f32) -> impl Iterator<Item = &PerceptionProxy> {
         let (center_cx, center_cy) = self.world_to_cell(x, y);
         let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
@@ -187,23 +176,25 @@ impl SpatialGrid {
         let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
 
         // Row-major iteration for cache locality
+        // SAFETY: min/max are pre-clamped to valid cell bounds above
         (min_qy..=max_qy).flat_map(move |cy| {
             (min_qx..=max_qx).filter_map(move |cx| {
                 let idx = ((cy - self.min_cell_y) as usize) * self.width
                         + ((cx - self.min_cell_x) as usize);
-                let (start, count) = self.cells[idx];
-                // Skip empty cells early
+                let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
                 if count == 0 {
                     None
                 } else {
-                    Some(&self.proxies[start as usize..(start + count) as usize])
+                    Some(unsafe {
+                        self.proxies.get_unchecked(start as usize..(start + count) as usize)
+                    })
                 }
             }).flatten()
         })
     }
 
     /// Query entities into a pre-allocated buffer (for Rayon thread-local buffers).
-    #[inline]
+    #[inline(always)]
     pub fn query_radius_into(&self, x: f32, y: f32, radius: f32, results: &mut Vec<PerceptionProxy>) {
         results.clear();
 
@@ -215,13 +206,21 @@ impl SpatialGrid {
         let min_qy = (center_cy - cells_radius).max(self.min_cell_y);
         let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
 
+        // Pre-reserve for typical density (~3 entities per cell, capped at 64)
+        let cell_count = ((max_qx - min_qx + 1) * (max_qy - min_qy + 1)) as usize;
+        results.reserve((cell_count * 3).min(64));
+
+        // SAFETY: min/max are pre-clamped to valid cell bounds above
         for cy in min_qy..=max_qy {
             for cx in min_qx..=max_qx {
                 let idx = ((cy - self.min_cell_y) as usize) * self.width
                         + ((cx - self.min_cell_x) as usize);
-                let (start, count) = self.cells[idx];
+                let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
                 if count > 0 {
-                    results.extend_from_slice(&self.proxies[start as usize..(start + count) as usize]);
+                    let slice = unsafe {
+                        self.proxies.get_unchecked(start as usize..(start + count) as usize)
+                    };
+                    results.extend_from_slice(slice);
                 }
             }
         }

@@ -8,6 +8,7 @@ use crate::simulation::components::CritId;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
+use rayon::prelude::*;
 
 const MAX_OTHER_RADIUS: f32 = 5.0;
 
@@ -24,13 +25,18 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "perception");
 
-    // Single-pass: process in archetype order for cache coherence
-    // Grid queries happen inline - no intermediate allocations
-    for (entity, pos, rot, size, mut perception, state) in query.iter_mut() {
+    // Collect entities into Vec for Rayon parallel processing
+    let mut entities: Vec<_> = query.iter_mut().collect();
+
+    // Get grid reference for parallel access (read-only, thread-safe)
+    let grid_ref = &*grid;
+
+    // Parallel perception using Rayon
+    entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, state)| {
         perception.clear();
 
         if !state.behavior.is_active() {
-            continue;
+            return;
         }
 
         let x = pos.x;
@@ -42,8 +48,8 @@ pub fn update_perception_system(
         let facing_y = rot.radians.sin();
         let query_radius = range + self_radius + MAX_OTHER_RADIUS;
 
-        for proxy in grid.query_radius(x, y, query_radius) {
-            if entity == proxy.entity {
+        for proxy in grid_ref.query_radius(x, y, query_radius) {
+            if *entity == proxy.entity {
                 continue;
             }
 
@@ -71,7 +77,7 @@ pub fn update_perception_system(
                 }
             }
         }
-    }
+    });
 
     // Collect debug data for selected creature (dev-tools only)
     #[cfg(feature = "dev-tools")]

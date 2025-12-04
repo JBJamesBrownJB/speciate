@@ -83,7 +83,7 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     {
         if let Some(target_entity) = debug_target.get() {
-            if let Ok((_, pos, rotation, _, perception, _)) = query.get(target_entity) {
+            if let Ok((_, pos, rotation, size, perception, _)) = query.get(target_entity) {
                 let entity_id = crit_ids.get(target_entity)
                     .map(|id| id.0)
                     .unwrap_or(0);
@@ -100,6 +100,16 @@ pub fn update_perception_system(
                     })
                     .collect();
 
+                // Capture the actual grid cells being queried (TRUE representation)
+                let query_radius = perception.range + size.radius() + MAX_OTHER_RADIUS;
+                let raw_cells = grid_ref.get_query_cells(pos.x, pos.y, query_radius);
+                let queried_cells: Vec<QueriedCell> = raw_cells
+                    .into_iter()
+                    .map(|(x, y)| QueriedCell { x, y })
+                    .collect();
+
+                let (creature_cx, creature_cy) = grid_ref.world_to_cell(pos.x, pos.y);
+
                 *debug_snapshot = PerceptionDebugSnapshot {
                     entity_id,
                     x: pos.x,
@@ -108,6 +118,8 @@ pub fn update_perception_system(
                     fov_angle: perception.fov_angle,
                     rotation: rotation.radians,
                     neighbors,
+                    queried_cells,
+                    creature_cell: QueriedCell { x: creature_cx, y: creature_cy },
                 };
             } else {
                 // Target entity no longer exists, clear snapshot

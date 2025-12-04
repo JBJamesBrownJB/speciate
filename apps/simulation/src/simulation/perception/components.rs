@@ -169,6 +169,14 @@ pub struct NeighborDebugInfo {
 }
 
 #[cfg(feature = "dev-tools")]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct QueriedCell {
+    pub x: i32,
+    pub y: i32,
+}
+
+#[cfg(feature = "dev-tools")]
 #[derive(Resource, Default, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PerceptionDebugSnapshot {
@@ -179,6 +187,8 @@ pub struct PerceptionDebugSnapshot {
     pub fov_angle: f32,  // Field of view in radians
     pub rotation: f32,   // Creature facing direction in radians
     pub neighbors: Vec<NeighborDebugInfo>,
+    pub queried_cells: Vec<QueriedCell>,  // Grid cells being polled for perception
+    pub creature_cell: QueriedCell,       // The cell the creature is in
 }
 
 #[cfg(test)]

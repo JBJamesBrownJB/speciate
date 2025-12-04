@@ -35,6 +35,9 @@ pub struct SpatialGrid {
     // Index = (cy - min_cell_y) * width + (cx - min_cell_x)
     cells: Vec<(u32, u32)>,
 
+    // Reusable scratch buffer for rebuild (avoids allocation each tick)
+    entity_scratch: Vec<(Entity, f32, f32, f32)>,
+
     // Active region bounds
     min_cell_x: i32,
     min_cell_y: i32,
@@ -50,6 +53,7 @@ impl SpatialGrid {
         Self {
             proxies: Vec::new(),
             cells: Vec::new(),
+            entity_scratch: Vec::new(),
             min_cell_x: 0,
             min_cell_y: 0,
             width: 0,
@@ -105,10 +109,11 @@ impl SpatialGrid {
     /// Phase 2: Prefix sum (compute offsets)
     /// Phase 3: Scatter (bin entities into contiguous buffer)
     pub fn rebuild(&mut self, entities: impl Iterator<Item = (Entity, f32, f32, f32)>) {
-        // Phase 0: Collect and find bounds
-        let all_entities: Vec<_> = entities.collect();
+        // Phase 0: Collect into reusable scratch buffer (avoids allocation after first call)
+        self.entity_scratch.clear();
+        self.entity_scratch.extend(entities);
 
-        if all_entities.is_empty() {
+        if self.entity_scratch.is_empty() {
             self.proxies.clear();
             for cell in &mut self.cells {
                 *cell = (0, 0);
@@ -122,7 +127,7 @@ impl SpatialGrid {
         let mut min_cy = i32::MAX;
         let mut max_cy = i32::MIN;
 
-        for (_, x, y, _) in &all_entities {
+        for (_, x, y, _) in &self.entity_scratch {
             let (cx, cy) = self.world_to_cell(*x, *y);
             min_cx = min_cx.min(cx);
             max_cx = max_cx.max(cx);
@@ -139,14 +144,14 @@ impl SpatialGrid {
         // Resize arrays
         let total_cells = self.width * self.height;
         self.cells.resize(total_cells, (0, 0));
-        self.proxies.resize(all_entities.len(), PerceptionProxy::default());
+        self.proxies.resize(self.entity_scratch.len(), PerceptionProxy::default());
 
         // Phase 1: Count histogram
         for cell in &mut self.cells {
             cell.1 = 0;
         }
 
-        for (_, x, y, _) in &all_entities {
+        for (_, x, y, _) in &self.entity_scratch {
             let idx = self.cell_index_unchecked(*x, *y);
             self.cells[idx].1 += 1;
         }
@@ -160,7 +165,7 @@ impl SpatialGrid {
         }
 
         // Phase 3: Scatter into contiguous buffer
-        for (entity, x, y, radius) in all_entities {
+        for &(entity, x, y, radius) in &self.entity_scratch {
             let idx = self.cell_index_unchecked(x, y);
             let (start, count) = &mut self.cells[idx];
             let write_pos = (*start + *count) as usize;
@@ -183,14 +188,43 @@ impl SpatialGrid {
 
         // Row-major iteration for cache locality
         (min_qy..=max_qy).flat_map(move |cy| {
-            (min_qx..=max_qx).flat_map(move |cx| {
+            (min_qx..=max_qx).filter_map(move |cx| {
                 let idx = ((cy - self.min_cell_y) as usize) * self.width
                         + ((cx - self.min_cell_x) as usize);
                 let (start, count) = self.cells[idx];
-                // Return slice of contiguous memory
-                &self.proxies[start as usize..(start + count) as usize]
-            })
+                // Skip empty cells early
+                if count == 0 {
+                    None
+                } else {
+                    Some(&self.proxies[start as usize..(start + count) as usize])
+                }
+            }).flatten()
         })
+    }
+
+    /// Query entities into a pre-allocated buffer (for Rayon thread-local buffers).
+    #[inline]
+    pub fn query_radius_into(&self, x: f32, y: f32, radius: f32, results: &mut Vec<PerceptionProxy>) {
+        results.clear();
+
+        let (center_cx, center_cy) = self.world_to_cell(x, y);
+        let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
+
+        let min_qx = (center_cx - cells_radius).max(self.min_cell_x);
+        let max_qx = (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1);
+        let min_qy = (center_cy - cells_radius).max(self.min_cell_y);
+        let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
+
+        for cy in min_qy..=max_qy {
+            for cx in min_qx..=max_qx {
+                let idx = ((cy - self.min_cell_y) as usize) * self.width
+                        + ((cx - self.min_cell_x) as usize);
+                let (start, count) = self.cells[idx];
+                if count > 0 {
+                    results.extend_from_slice(&self.proxies[start as usize..(start + count) as usize]);
+                }
+            }
+        }
     }
 
     pub fn get_query_cells(&self, x: f32, y: f32, radius: f32) -> Vec<(i32, i32)> {

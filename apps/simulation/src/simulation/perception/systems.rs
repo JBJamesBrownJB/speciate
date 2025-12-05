@@ -48,7 +48,8 @@ pub fn update_perception_system(
         let facing_y = rot.radians.sin();
         let query_radius = range + self_radius + MAX_OTHER_RADIUS;
 
-        for proxy in grid_ref.query_radius(x, y, query_radius) {
+        // Use FOV-culled query to skip entire cells behind the creature
+        for proxy in grid_ref.query_radius_fov(x, y, query_radius, facing_x, facing_y) {
             if *entity == proxy.entity {
                 continue;
             }
@@ -100,9 +101,11 @@ pub fn update_perception_system(
                     })
                     .collect();
 
-                // Capture the actual grid cells being queried (TRUE representation)
+                // Capture the actual grid cells being queried (TRUE representation with FOV culling)
                 let query_radius = perception.range + size.radius() + MAX_OTHER_RADIUS;
-                let raw_cells = grid_ref.get_query_cells(pos.x, pos.y, query_radius);
+                let facing_x = rotation.radians.cos();
+                let facing_y = rotation.radians.sin();
+                let raw_cells = grid_ref.get_query_cells_fov(pos.x, pos.y, query_radius, facing_x, facing_y);
                 let queried_cells: Vec<QueriedCell> = raw_cells
                     .into_iter()
                     .map(|(x, y)| QueriedCell { x, y })

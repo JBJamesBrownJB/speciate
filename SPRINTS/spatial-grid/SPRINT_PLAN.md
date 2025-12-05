@@ -32,50 +32,15 @@
 
 ## Remaining Work
 
-### 1. Cache Locality Optimizations
+### 1. ~~Cache Locality Optimizations~~ SKIPPED
 
-**Context:** Profiling at 150K creatures shows 88% frontend stalls, 24% L3 miss rate, IPC of 1.74. The bottleneck is memory bandwidth, not compute or branch prediction (0.76% miss rate is healthy).
+**Status:** ❌ Failed performance test - sorting overhead > cache benefit
 
-**Goal:** Same work, faster execution through better memory access patterns.
+**Attempted:** Sort entities by grid cell + `par_chunks_mut(2000)` chunked parallelism.
 
-#### 1.1 Sort Entities by Grid Cell (30-40% L3 reduction)
+**Result:** Perception time increased from 14ms → 20ms (43% regression). The O(n log n) sorting overhead (~6ms for 150K entities) and reduced parallelism (75 chunks vs 150K fine-grained tasks) outweighed any cache locality gains.
 
-**Problem:** Rayon threads randomly access different grid regions → cache thrashing.
-
-**Solution:** Pre-sort entities by spatial locality before parallel processing:
-
-```rust
-// Sort by grid cell so nearby creatures process together
-let mut sorted: Vec<_> = entities.into_iter()
-    .map(|e| (grid.world_to_cell_idx(e.pos.x, e.pos.y), e))
-    .collect();
-sorted.sort_unstable_by_key(|(idx, _)| *idx);
-
-// Process in chunks - each chunk shares cached grid data
-sorted.par_chunks_mut(2000).for_each(|chunk| { ... });
-```
-
-- [ ] Add `world_to_cell_idx()` method to SpatialGrid
-- [ ] Implement entity sorting before parallel phase
-- [ ] Benchmark L3 miss rate before/after
-
-#### 1.2 Chunked Parallelism (10-20% IPC improvement)
-
-**Quick win:** Replace fine-grained `par_iter_mut` with chunked processing for better prefetching.
-
-```rust
-// BEFORE: Per-entity parallelism
-entities.par_iter_mut().for_each(|e| { ... });
-
-// AFTER: Chunked parallelism (better cache reuse)
-entities.par_chunks_mut(1000).for_each(|chunk| {
-    for e in chunk { ... }
-});
-```
-
-- [ ] Update perception system to use `par_chunks_mut`
-- [ ] Tune chunk size (1000-2000 entities)
-- [ ] Measure IPC improvement
+**Conclusion:** Fine-grained `par_iter_mut` remains optimal. The bottleneck is memory bandwidth from scattered grid access, but sorting doesn't help because the sorting cost exceeds the cache benefit. Future alternatives: stochastic perception (reduce work) or cell-level FOV culling (reduce candidates)
 
 ### 2. Code Cleanup
 

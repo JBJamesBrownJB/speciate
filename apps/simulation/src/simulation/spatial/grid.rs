@@ -163,6 +163,54 @@ impl SpatialGrid {
         }
     }
 
+    /// Query entities within radius with cell-level FOV culling.
+    /// Skips entire cells that are behind the creature before examining any proxies.
+    /// This can reduce candidates by 25-50% depending on FOV.
+    #[inline(always)]
+    pub fn query_radius_fov(
+        &self,
+        x: f32,
+        y: f32,
+        radius: f32,
+        facing_x: f32,
+        facing_y: f32,
+    ) -> impl Iterator<Item = &PerceptionProxy> {
+        let (center_cx, center_cy) = self.world_to_cell(x, y);
+        let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
+        let cell_size = self.cell_size;
+        let half_cell = cell_size * 0.5;
+
+        let min_qx = (center_cx - cells_radius).max(self.min_cell_x);
+        let max_qx = (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1);
+        let min_qy = (center_cy - cells_radius).max(self.min_cell_y);
+        let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
+
+        (min_qy..=max_qy).flat_map(move |cy| {
+            (min_qx..=max_qx).filter_map(move |cx| {
+                // Cell center in world coordinates
+                let cell_center_x = (cx as f32 * cell_size) + half_cell;
+                let cell_center_y = (cy as f32 * cell_size) + half_cell;
+
+                // Check if cell is behind creature (conservative: use cell_size threshold)
+                let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
+                if cell_dir_dot < -cell_size {
+                    return None; // Entire cell is behind, skip
+                }
+
+                let idx = ((cy - self.min_cell_y) as usize) * self.width
+                        + ((cx - self.min_cell_x) as usize);
+                let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
+                if count == 0 {
+                    None
+                } else {
+                    Some(unsafe {
+                        self.proxies.get_unchecked(start as usize..(start + count) as usize)
+                    })
+                }
+            }).flatten()
+        })
+    }
+
     /// Query entities within radius. Returns iterator over contiguous slices.
     #[inline(always)]
     pub fn query_radius(&self, x: f32, y: f32, radius: f32) -> impl Iterator<Item = &PerceptionProxy> {
@@ -236,6 +284,45 @@ impl SpatialGrid {
         for dy in -cells_radius..=cells_radius {
             for dx in -cells_radius..=cells_radius {
                 cells.push((center_cx + dx, center_cy + dy));
+            }
+        }
+
+        cells
+    }
+
+    /// Get query cells with FOV culling - matches what query_radius_fov actually queries.
+    pub fn get_query_cells_fov(
+        &self,
+        x: f32,
+        y: f32,
+        radius: f32,
+        facing_x: f32,
+        facing_y: f32,
+    ) -> Vec<(i32, i32)> {
+        let (center_cx, center_cy) = self.world_to_cell(x, y);
+        let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
+        let cell_size = self.cell_size;
+        let half_cell = cell_size * 0.5;
+
+        let capacity = ((2 * cells_radius + 1) * (2 * cells_radius + 1)) as usize;
+        let mut cells = Vec::with_capacity(capacity);
+
+        for dy in -cells_radius..=cells_radius {
+            for dx in -cells_radius..=cells_radius {
+                let cx = center_cx + dx;
+                let cy = center_cy + dy;
+
+                // Cell center in world coordinates
+                let cell_center_x = (cx as f32 * cell_size) + half_cell;
+                let cell_center_y = (cy as f32 * cell_size) + half_cell;
+
+                // Check if cell is behind creature (same logic as query_radius_fov)
+                let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
+                if cell_dir_dot < -cell_size {
+                    continue; // Cell is behind, skip
+                }
+
+                cells.push((cx, cy));
             }
         }
 
@@ -474,5 +561,59 @@ mod tests {
         // Query should return all 3
         let nearby: Vec<_> = grid.query_radius(25.0, 25.0, 10.0).collect();
         assert_eq!(nearby.len(), 3);
+    }
+
+    #[test]
+    fn test_query_radius_fov_skips_cells_behind() {
+        let mut grid = SpatialGrid::new(50.0);
+
+        // Entity at origin facing right (+X direction)
+        // Place targets in front (right) and behind (left)
+        let entities = vec![
+            (Entity::from_raw(1), 100.0, 0.0, 1.0),  // In front (right)
+            (Entity::from_raw(2), -100.0, 0.0, 1.0), // Behind (left)
+            (Entity::from_raw(3), 0.0, 100.0, 1.0),  // To the side (up)
+        ];
+
+        grid.rebuild(entities.into_iter());
+
+        // Query from origin, facing right (+X), large radius
+        let facing_x = 1.0;
+        let facing_y = 0.0;
+        let results: Vec<_> = grid.query_radius_fov(0.0, 0.0, 150.0, facing_x, facing_y).collect();
+
+        // Should find entity in front and to the side, but NOT the one behind
+        let found_ids: Vec<u32> = results.iter().map(|p| p.entity.index()).collect();
+
+        assert!(found_ids.contains(&1), "Should find entity in front");
+        assert!(!found_ids.contains(&2), "Should NOT find entity behind (cell culled)");
+        assert!(found_ids.contains(&3), "Should find entity to the side");
+    }
+
+    #[test]
+    fn test_query_radius_fov_vs_regular_query() {
+        let mut grid = SpatialGrid::new(50.0);
+
+        let entities = vec![
+            (Entity::from_raw(1), 75.0, 25.0, 1.0),   // Front-right
+            (Entity::from_raw(2), -75.0, 25.0, 1.0),  // Back-left
+            (Entity::from_raw(3), 75.0, -25.0, 1.0),  // Front-right
+            (Entity::from_raw(4), -75.0, -25.0, 1.0), // Back-left
+        ];
+
+        grid.rebuild(entities.into_iter());
+
+        // Regular query finds all 4
+        let all_results: Vec<_> = grid.query_radius(0.0, 0.0, 100.0).collect();
+        assert_eq!(all_results.len(), 4);
+
+        // FOV query facing right should find only front entities
+        let fov_results: Vec<_> = grid.query_radius_fov(0.0, 0.0, 100.0, 1.0, 0.0).collect();
+        assert!(fov_results.len() < all_results.len(), "FOV query should return fewer results");
+
+        // Entities 1 and 3 are in front, 2 and 4 are behind
+        let found_ids: Vec<u32> = fov_results.iter().map(|p| p.entity.index()).collect();
+        assert!(found_ids.contains(&1), "Should find front-right entity");
+        assert!(found_ids.contains(&3), "Should find front-right entity");
     }
 }

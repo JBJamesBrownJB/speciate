@@ -34,65 +34,40 @@
 
 ## Remaining Work
 
-### 1. ~~Cache Locality Optimizations~~ SKIPPED
-
-**Status:** ❌ Failed performance test - sorting overhead > cache benefit
-
-**Attempted:** Sort entities by grid cell + `par_chunks_mut(2000)` chunked parallelism.
-
-**Result:** Perception time increased from 14ms → 20ms (43% regression). The O(n log n) sorting overhead (~6ms for 150K entities) and reduced parallelism (75 chunks vs 150K fine-grained tasks) outweighed any cache locality gains.
-
-**Conclusion:** Fine-grained `par_iter_mut` remains optimal. The bottleneck is memory bandwidth from scattered grid access, but sorting doesn't help because the sorting cost exceeds the cache benefit. Future alternatives: stochastic perception (reduce work) or cell-level FOV culling (reduce candidates)
-
-### 2. Code Cleanup
-
-- [ ] **Hot/Cold Perception split** - Split `Perception` into `PerceptionConfig` (16B) + `PerceptionResult` (reduces cache traffic)
-- [x] **Remove PerceptionScratchBuffer** - Removed (was unused since spatial grid replaced brute-force)
-- [ ] **Fix test compilation errors** - `instrumentation_test.rs`, `trial_integration.rs`
-
-### 3. ~~Neighbor Sorting Strategy~~ ✅ COMPLETE
-
-**Status:** Implemented topological sort (distance-based)
-
-**Solution:** Collect all FOV-passing candidates with distance², sort by distance, take closest MAX_PERCEIVED_NEIGHBORS.
-
-**Result:** Biologically accurate - creatures perceive closest neighbors first. No more ID bias.
-
-**Performance:** O(k log k) where k ≈ candidates per creature. Negligible overhead at 150K (candidates typically < 50 per creature).
-
-**Files:** `perception/systems.rs:49-86`
-
 ### 4. Grid Rebuild Optimizations
 
 **Current cost:** ~4ms per tick for full rebuild @ 150K creatures
 
-#### 4.1 Static Component (Immediate Win)
+#### 4.1 Exclude Non-Movers (Immediate Win)
 
-**Concept:** Exclude non-moving entities from grid rebuild entirely.
+**Concept:** Skip entities that don't need grid updates.
+
+**Two approaches (no archetype changes):**
 
 ```rust
+// 1. Static component - for PERMANENT non-movers (terrain, plants)
 #[derive(Component, Default)]
-pub struct Static;  // Marker for entities that never move
+pub struct Static;  // Added at spawn, NEVER removed
 
-// Grid rebuild only processes moving entities
-fn rebuild_spatial_grid(
-    query: Query<(Entity, &Position, &BodySize), Without<Static>>,
-    ...
-)
+// 2. Runtime check - for creatures with behavior states
+if !state.behavior.is_active() {
+    continue;  // Skip catatonic/waiting creatures
+}
 ```
 
-**Use cases for `Static`:**
-- Catatonic creatures (sleeping, waiting)
-- Terrain obstacles (rocks, trees)
-- Food patches, resource nodes
-- Plants, flora
+**Use cases for `Static` component:**
+- Terrain obstacles (rocks, trees) - permanent
+- Food patches, resource nodes - permanent
+- Plants, flora - permanent
 
-**Impact:** If 50% of entities are static → 2ms saved per tick
+**Use runtime `is_active()` check for:**
+- Creatures (transition between catatonic ↔ active without archetype change)
 
-- [ ] Add `Static` component to `core/components.rs`
-- [ ] Update `CritBuilder` to optionally add `Static`
-- [ ] Filter grid rebuild query with `Without<Static>`
-- [ ] Filter movement system with `Without<Static>`
+**Impact:** If 50% of entities are inactive → 2ms saved per tick
+
+- [ ] Add `Static` component to `core/components.rs` (for terrain/plants only)
+- [ ] Filter grid rebuild with `Without<Static>` AND `state.behavior.is_active()`
+- [ ] Filter movement system similarly
 
 #### 4.2 Incremental Grid Update (Major Optimization)
 

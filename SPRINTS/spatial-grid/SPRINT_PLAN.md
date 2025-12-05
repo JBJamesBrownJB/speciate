@@ -13,6 +13,7 @@
 - 5 systems parallelized with Rayon (perception, seek, wander, avoidance, transitions)
 - Spatial grid with 50m cells, full rebuild per tick
 - Grid visualization ('G' key) with queried cell highlighting
+- **Real cell tracking** - Debug overlay shows ACTUAL queried vs skipped cells from perception execution
 - Movement optimized with NoiseTable (eliminated 200K allocations/tick)
 - 238 unit tests passing
 
@@ -26,6 +27,7 @@
 | Phase 1.5 | Grid visualization ('G' key toggle) |
 | Phase 2 | Two-phase perception pattern with Rayon |
 | Phase 2.1 | Queried cells visualization (green/yellow highlights) |
+| Phase 2.2 | **Real cell tracking** - Debug target processed separately with instrumentation, captures ACTUAL queried vs skipped cells |
 | Phase 3 | Rayon validation (all 5 steering systems parallelized) |
 
 ---
@@ -60,11 +62,87 @@
 
 **Files:** `perception/systems.rs:49-86`
 
-### 4. Workload Reduction Optimizations
+### 4. Grid Rebuild Optimizations
+
+**Current cost:** ~4ms per tick for full rebuild @ 150K creatures
+
+#### 4.1 Static Component (Immediate Win)
+
+**Concept:** Exclude non-moving entities from grid rebuild entirely.
+
+```rust
+#[derive(Component, Default)]
+pub struct Static;  // Marker for entities that never move
+
+// Grid rebuild only processes moving entities
+fn rebuild_spatial_grid(
+    query: Query<(Entity, &Position, &BodySize), Without<Static>>,
+    ...
+)
+```
+
+**Use cases for `Static`:**
+- Catatonic creatures (sleeping, waiting)
+- Terrain obstacles (rocks, trees)
+- Food patches, resource nodes
+- Plants, flora
+
+**Impact:** If 50% of entities are static → 2ms saved per tick
+
+- [ ] Add `Static` component to `core/components.rs`
+- [ ] Update `CritBuilder` to optionally add `Static`
+- [ ] Filter grid rebuild query with `Without<Static>`
+- [ ] Filter movement system with `Without<Static>`
+
+#### 4.2 Incremental Grid Update (Major Optimization)
+
+**Concept:** Don't clear and rebuild entire grid. Update in place.
+
+**Current approach (expensive):**
+```rust
+grid.clear();  // Throw away everything
+for (entity, pos, size) in query.iter() {
+    grid.insert(entity, pos, size);  // Rebuild from scratch
+}
+```
+
+**Incremental approach (cheap):**
+```rust
+// Track previous cell for each entity
+#[derive(Component)]
+pub struct GridCell {
+    pub prev_x: i32,
+    pub prev_y: i32,
+}
+
+// Only update when entity crosses cell boundary
+let (new_cx, new_cy) = grid.world_to_cell(pos.x, pos.y);
+if new_cx != cell.prev_x || new_cy != cell.prev_y {
+    grid.remove(entity, cell.prev_x, cell.prev_y);
+    grid.insert(entity, new_cx, new_cy);
+    cell.prev_x = new_cx;
+    cell.prev_y = new_cy;
+}
+// Also update position within proxy (cheap)
+grid.update_position(entity, pos.x, pos.y);
+```
+
+**Impact:** Most creatures stay in same cell per tick. With 50m cells and 50 unit/s max speed, creatures cross boundaries every ~22 ticks on average. Only ~5% of entities need cell updates per tick.
+
+**Estimated savings:** 4ms → 0.5ms (87% reduction)
+
+- [ ] Add `GridCell` component tracking previous cell coords
+- [ ] Implement `grid.remove()` and `grid.update_position()` methods
+- [ ] Change rebuild to incremental update
+- [ ] Handle entity spawn/despawn edge cases
+
+---
+
+### 5. Workload Reduction Optimizations
 
 **Goal:** Less work per tick through temporal amortization and algorithmic culling.
 
-#### 4.1 Stochastic Perception (60-75% reduction)
+#### 5.1 Stochastic Perception (60-75% reduction)
 
 **Concept:** Not every creature needs fresh perception every tick. DNA-driven "alertness" determines update frequency.
 
@@ -95,7 +173,7 @@ let due_for_update: Vec<_> = query
 - [ ] Add jitter to prevent sync waves
 - [ ] Integrate with DNA system
 
-#### 4.2 Cell-Level FOV Culling (25-50% candidate reduction)
+#### 5.2 Cell-Level FOV Culling (25-50% candidate reduction)
 
 **Concept:** Skip entire grid cells that are behind the creature before examining any proxies.
 
@@ -115,7 +193,7 @@ if cell_dir_dot < -cell_size {
 - [ ] Integrate with perception system
 - [ ] Verify correctness at FOV boundaries
 
-### 5. Stretch Goals (Future Sprints)
+### 6. Stretch Goals (Future Sprints)
 
 - [ ] Double-buffer grid architecture
 - [ ] FxHashMap vs std HashMap benchmark
@@ -129,7 +207,7 @@ if cell_dir_dot < -cell_size {
 ### Spatial Grid
 - **Cell size:** 50m (1.5× max perception range of ~35m)
 - **Storage:** `HashMap<(i32, i32), Vec<PerceptionProxy>>`
-- **Rebuild:** Full rebuild every tick (~2ms @ 150K)
+- **Rebuild:** Full rebuild every tick (~4ms @ 150K) - see 4.2 for incremental optimization
 - **Query:** `query_radius()` returns all entities in overlapping cells
 
 ### Two-Phase Perception Pattern

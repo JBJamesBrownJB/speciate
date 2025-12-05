@@ -270,6 +270,17 @@ impl SpatialGrid {
         unsafe { self.proxies.get_unchecked(start as usize..(start + count) as usize) }
     }
 
+    /// Get cell coordinates (cx, cy) from a cell index.
+    #[inline(always)]
+    pub fn get_cell_coords_by_index(&self, cell_idx: usize) -> (i32, i32) {
+        let local_y = cell_idx / self.width;
+        let local_x = cell_idx % self.width;
+        (
+            local_x as i32 + self.min_cell_x,
+            local_y as i32 + self.min_cell_y,
+        )
+    }
+
     /// Query entities within radius. Returns iterator over contiguous slices.
     #[inline(always)]
     pub fn query_radius(&self, x: f32, y: f32, radius: f32) -> impl Iterator<Item = &PerceptionProxy> {
@@ -350,6 +361,7 @@ impl SpatialGrid {
     }
 
     /// Get query cells with FOV culling - matches what query_radius_fov actually queries.
+    /// Only returns cells that have creatures in them (non-empty cells).
     pub fn get_query_cells_fov(
         &self,
         x: f32,
@@ -363,14 +375,16 @@ impl SpatialGrid {
         let cell_size = self.cell_size;
         let half_cell = cell_size * 0.5;
 
-        let capacity = ((2 * cells_radius + 1) * (2 * cells_radius + 1)) as usize;
-        let mut cells = Vec::with_capacity(capacity);
+        let min_qx = (center_cx - cells_radius).max(self.min_cell_x);
+        let max_qx = (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1);
+        let min_qy = (center_cy - cells_radius).max(self.min_cell_y);
+        let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
 
-        for dy in -cells_radius..=cells_radius {
-            for dx in -cells_radius..=cells_radius {
-                let cx = center_cx + dx;
-                let cy = center_cy + dy;
+        let capacity = ((max_qx - min_qx + 1) * (max_qy - min_qy + 1)) as usize;
+        let mut cells = Vec::with_capacity(capacity.min(100));
 
+        for cy in min_qy..=max_qy {
+            for cx in min_qx..=max_qx {
                 // Cell center in world coordinates
                 let cell_center_x = (cx as f32 * cell_size) + half_cell;
                 let cell_center_y = (cy as f32 * cell_size) + half_cell;
@@ -381,7 +395,15 @@ impl SpatialGrid {
                     continue; // Cell is behind, skip
                 }
 
-                cells.push((cx, cy));
+                // Only include cells that have creatures in them
+                let idx = ((cy - self.min_cell_y) as usize) * self.width
+                        + ((cx - self.min_cell_x) as usize);
+                if idx < self.cells.len() {
+                    let (_, count) = self.cells[idx];
+                    if count > 0 {
+                        cells.push((cx, cy));
+                    }
+                }
             }
         }
 

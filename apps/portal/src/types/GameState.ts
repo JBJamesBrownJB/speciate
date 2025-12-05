@@ -66,6 +66,7 @@ export interface PerceptionDebugData {
   cellSize: number;
   creatureCell: QueriedCell;
   queriedCells: QueriedCell[];
+  checkedCells: QueriedCell[];
 }
 
 export interface GameState {

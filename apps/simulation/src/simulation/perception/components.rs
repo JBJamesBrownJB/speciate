@@ -182,7 +182,8 @@ pub struct PerceptionDebugSnapshot {
     pub fov_angle: f32,  // Field of view in radians
     pub rotation: f32,   // Creature facing direction in radians
     pub neighbors: Vec<NeighborDebugInfo>,
-    pub queried_cells: Vec<QueriedCell>,  // Grid cells being polled for perception
+    pub queried_cells: Vec<QueriedCell>,  // Grid cells in range (potential)
+    pub checked_cells: Vec<QueriedCell>,  // Grid cells actually checked (before early break)
     pub creature_cell: QueriedCell,       // The cell the creature is in
 }
 

@@ -273,10 +273,15 @@ impl NapiApp {
                     .iter()
                     .map(|c| (c.x, c.y))
                     .collect();
+                let checked_cells: Vec<(i32, i32)> = snapshot.checked_cells
+                    .iter()
+                    .map(|c| (c.x, c.y))
+                    .collect();
                 buffer_guard.write_cell_data(
                     cell_size,
                     (snapshot.creature_cell.x, snapshot.creature_cell.y),
                     &queried_cells,
+                    &checked_cells,
                 );
             } else {
                 buffer_guard.clear_write();

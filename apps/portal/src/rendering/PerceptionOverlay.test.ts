@@ -35,6 +35,7 @@ describe('PerceptionOverlay', () => {
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
         queriedCells: [],
+        checkedCells: [],
       };
       overlay.update(debugData);
       expect(overlay.isVisible()).toBe(true);
@@ -52,6 +53,7 @@ describe('PerceptionOverlay', () => {
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
         queriedCells: [],
+        checkedCells: [],
       };
       overlay.update(debugData);
       expect(container.children.length).toBe(1);
@@ -72,6 +74,7 @@ describe('PerceptionOverlay', () => {
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
         queriedCells: [{ x: 1, y: 3 }, { x: 2, y: 4 }, { x: 3, y: 5 }],
+        checkedCells: [{ x: 1, y: 3 }, { x: 2, y: 4 }],
       };
       expect(() => overlay.update(debugData)).not.toThrow();
       expect(overlay.isVisible()).toBe(true);
@@ -91,6 +94,7 @@ describe('PerceptionOverlay', () => {
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
         queriedCells: [],
+        checkedCells: [],
       };
       overlay.update(debugData);
       overlay.clear();
@@ -111,6 +115,7 @@ describe('PerceptionOverlay', () => {
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
         queriedCells: [],
+        checkedCells: [],
       };
       overlay.update(debugData);
       expect(overlay.isVisible()).toBe(true);
@@ -132,6 +137,7 @@ describe('PerceptionOverlay', () => {
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
         queriedCells: [],
+        checkedCells: [],
       };
       overlay.update(debugData);
       expect(() => overlay.destroy()).not.toThrow();

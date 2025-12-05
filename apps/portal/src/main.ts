@@ -240,9 +240,13 @@ async function main(): Promise<void> {
         // Only update overlay if a creature is selected (prevents stale data race)
         if (debugData && selectionManager.hasSelection()) {
           perceptionOverlay.update(debugData);
-          // Update spatial grid overlay with queried cells
-          if (debugData.queriedCells && debugData.creatureCell) {
-            spatialGridOverlay.updateQueriedCells(debugData.queriedCells, debugData.creatureCell);
+          // Update spatial grid overlay with queried + checked cells
+          if (debugData.queriedCells && debugData.checkedCells && debugData.creatureCell) {
+            spatialGridOverlay.updateQueriedCells(
+              debugData.queriedCells,
+              debugData.checkedCells,
+              debugData.creatureCell
+            );
           }
         } else {
           perceptionOverlay.clear();

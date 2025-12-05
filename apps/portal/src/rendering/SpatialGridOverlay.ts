@@ -3,8 +3,10 @@ import type { QueriedCell } from '@/types/GameState';
 
 const GRID_LINE_COLOR = 0x444444;
 const GRID_LINE_ALPHA = 0.6;
-const QUERIED_CELL_COLOR = 0x22aa22;
-const QUERIED_CELL_ALPHA = 0.25;
+const CHECKED_CELL_COLOR = 0x22aa22;
+const CHECKED_CELL_ALPHA = 0.35;
+const SKIPPED_CELL_COLOR = 0xaa4422;
+const SKIPPED_CELL_ALPHA = 0.25;
 const CREATURE_CELL_COLOR = 0xdddd22;
 const CREATURE_CELL_ALPHA = 0.35;
 
@@ -13,7 +15,8 @@ export class SpatialGridOverlay {
   private cellGraphics: Graphics;
   private visible: boolean = false;
   private cellSize: number = 50;
-  private queriedCells: QueriedCell[] = [];
+  private checkedCells: QueriedCell[] = [];
+  private skippedCells: QueriedCell[] = [];
   private creatureCell: QueriedCell | null = null;
 
   constructor(container: Container) {
@@ -48,13 +51,21 @@ export class SpatialGridOverlay {
     this.cellGraphics.visible = false;
   }
 
-  updateQueriedCells(queriedCells: QueriedCell[], creatureCell: QueriedCell): void {
-    this.queriedCells = queriedCells;
+  updateQueriedCells(
+    queriedCells: QueriedCell[],
+    skippedCells: QueriedCell[],
+    creatureCell: QueriedCell
+  ): void {
+    // queriedCells = cells we actually checked (from REAL perception execution)
+    // skippedCells = cells we skipped due to early break (from REAL perception execution)
+    this.checkedCells = queriedCells;   // Green: cells we checked
+    this.skippedCells = skippedCells;   // Orange: cells we skipped
     this.creatureCell = creatureCell;
   }
 
   clearQueriedCells(): void {
-    this.queriedCells = [];
+    this.checkedCells = [];
+    this.skippedCells = [];
     this.creatureCell = null;
   }
 
@@ -102,14 +113,24 @@ export class SpatialGridOverlay {
     const startCellY = Math.floor(worldTop / this.cellSize);
     const endCellY = Math.ceil(worldBottom / this.cellSize);
 
-    // Render queried cells (green fill)
-    if (this.queriedCells.length > 0) {
-      for (const cell of this.queriedCells) {
+    // Render skipped cells (orange/red fill) - cells in range but skipped due to early break
+    if (this.skippedCells.length > 0) {
+      for (const cell of this.skippedCells) {
         const worldX = cell.x * this.cellSize;
         const worldY = cell.y * this.cellSize;
         this.cellGraphics.rect(worldX, worldY, this.cellSize, this.cellSize);
       }
-      this.cellGraphics.fill({ color: QUERIED_CELL_COLOR, alpha: QUERIED_CELL_ALPHA });
+      this.cellGraphics.fill({ color: SKIPPED_CELL_COLOR, alpha: SKIPPED_CELL_ALPHA });
+    }
+
+    // Render checked cells (green fill) - cells actually examined
+    if (this.checkedCells.length > 0) {
+      for (const cell of this.checkedCells) {
+        const worldX = cell.x * this.cellSize;
+        const worldY = cell.y * this.cellSize;
+        this.cellGraphics.rect(worldX, worldY, this.cellSize, this.cellSize);
+      }
+      this.cellGraphics.fill({ color: CHECKED_CELL_COLOR, alpha: CHECKED_CELL_ALPHA });
     }
 
     // Render creature's cell (yellow fill) on top

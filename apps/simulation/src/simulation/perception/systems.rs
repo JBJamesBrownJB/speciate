@@ -71,10 +71,8 @@ pub fn update_perception_system(
                         grid_ref,
                     );
 
-                    // Add neighbors to perception component
-                    for neighbor in &neighbors {
-                        perception.add_neighbor(neighbor.entity);
-                    }
+                    // Note: Don't add neighbors here - Phase 3 will clear() and re-add anyway
+                    // We only need the neighbors Vec for building neighbor_debug below
 
                     // Capture values before releasing the borrow
                     let fov_angle = perception.fov_angle;
@@ -101,8 +99,8 @@ pub fn update_perception_system(
                         fov_angle,
                         rotation: rotation_radians,
                         neighbors: neighbor_debug,
-                        queried_cells,   // Cells we actually checked
-                        checked_cells: skipped_cells,  // Cells we skipped (reusing field)
+                        queried_cells,              // Green: cells we actually examined
+                        checked_cells: skipped_cells, // Orange: cells skipped due to early break
                         creature_cell: QueriedCell { x: creature_cx, y: creature_cy },
                     };
                 } else {

@@ -13,6 +13,7 @@ import { ChangeDetector } from "@/core/ChangeDetection";
 import { SelectionManager } from "@/systems/SelectionManager";
 import { SelectionHighlight } from "@/rendering/SelectionHighlight";
 import { PerceptionOverlay } from "@/rendering/PerceptionOverlay";
+import { SpatialGridOverlay } from "@/rendering/SpatialGridOverlay";
 import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
 import type { CreatureData } from "@/types/GameState";
 
@@ -115,8 +116,16 @@ async function main(): Promise<void> {
     const selectionManager = new SelectionManager();
     const selectionHighlight = new SelectionHighlight(worldContainer);
     const perceptionOverlay = new PerceptionOverlay(worldContainer);
+    const spatialGridOverlay = new SpatialGridOverlay(worldContainer);
     const creatureInfoPanel = new CreatureInfoPanel(document.body);
     let latestCreatures: CreatureData[] = [];
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (event: KeyboardEvent) => {
+      if (event.key === 'g' || event.key === 'G') {
+        spatialGridOverlay.toggle();
+      }
+    });
 
     // Wire up selection events
     selectionManager.on('creature-selected', (creature) => {
@@ -231,8 +240,24 @@ async function main(): Promise<void> {
         // Only update overlay if a creature is selected (prevents stale data race)
         if (debugData && selectionManager.hasSelection()) {
           perceptionOverlay.update(debugData);
+          // Update spatial grid overlay with queried + checked cells
+          if (debugData.queriedCells && debugData.checkedCells && debugData.creatureCell) {
+            spatialGridOverlay.updateQueriedCells(
+              debugData.queriedCells,
+              debugData.checkedCells,
+              debugData.creatureCell
+            );
+          }
         } else {
           perceptionOverlay.clear();
+          spatialGridOverlay.clearQueriedCells();
+        }
+      });
+
+      // Handle telemetry updates (cell size for grid overlay)
+      ipcClient.onTelemetryUpdate((telemetry) => {
+        if (telemetry.spatialGridCellSize) {
+          spatialGridOverlay.setCellSize(telemetry.spatialGridCellSize);
         }
       });
 
@@ -260,6 +285,15 @@ async function main(): Promise<void> {
       // Render with interpolation every frame
       creatureRenderer.render(
         deltaMs,
+        camera.x,
+        camera.y,
+        camera.zoom,
+        viewportWidth,
+        viewportHeight
+      );
+
+      // Update spatial grid overlay (only redraws when visible)
+      spatialGridOverlay.update(
         camera.x,
         camera.y,
         camera.zoom,

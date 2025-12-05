@@ -50,6 +50,11 @@ export interface NeighborDebugInfo {
   y: number;
 }
 
+export interface QueriedCell {
+  x: number;
+  y: number;
+}
+
 export interface PerceptionDebugData {
   entityId: number;
   x: number;
@@ -58,6 +63,10 @@ export interface PerceptionDebugData {
   fovAngle: number;
   rotation: number;
   neighbors: NeighborDebugInfo[];
+  cellSize: number;
+  creatureCell: QueriedCell;
+  queriedCells: QueriedCell[];
+  checkedCells: QueriedCell[];
 }
 
 export interface GameState {

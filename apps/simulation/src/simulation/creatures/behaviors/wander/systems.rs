@@ -6,6 +6,7 @@ use crate::simulation::components::*;
 use crate::simulation::math::{clamp_force, magnitude_sq, normalize};
 use crate::simulation::queries::WanderQuery;
 use rand::Rng;
+use rayon::prelude::*;
 
 pub fn territory_wandering_system(
     mut query: WanderQuery,
@@ -16,14 +17,16 @@ pub fn territory_wandering_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "wander");
 
-    let mut rng = rand::thread_rng();
+    // Collect entities for parallel processing
+    let mut entities: Vec<_> = query.iter_mut().collect();
 
-    for (mut acceleration, mut wander_state, velocity, position, home, creature_state) in
-        query.iter_mut()
-    {
+    entities.par_iter_mut().for_each(|(acceleration, wander_state, velocity, position, home, creature_state)| {
         if creature_state.behavior != BehaviorMode::Wandering {
-            continue;
+            return;
         }
+
+        // Thread-local RNG for parallel safety
+        let mut rng = rand::thread_rng();
 
         let speed_sq = magnitude_sq(velocity.vx, velocity.vy);
 
@@ -82,7 +85,7 @@ pub fn territory_wandering_system(
             acceleration.ax += final_force.0;
             acceleration.ay += final_force.1;
         }
-    }
+    });
 }
 
 #[cfg(test)]

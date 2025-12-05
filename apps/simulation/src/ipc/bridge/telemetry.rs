@@ -25,6 +25,7 @@ pub struct TelemetrySnapshot {
     pub tick: u64,
     pub creature_count: usize,
     pub tick_rate_hz: f32,
+    pub spatial_grid_cell_size: f32,
 
     #[cfg(feature = "dev-tools")]
     pub hardware_metrics: HardwareSnapshot,
@@ -80,6 +81,7 @@ impl TelemetrySnapshot {
         tick: u64,
         creature_count: usize,
         tick_rate_hz: f32,
+        spatial_grid_cell_size: f32,
         system_timings: SystemTimingsSnapshot,
         #[cfg(feature = "dev-tools")]
         hardware_metrics: HardwareSnapshot,
@@ -90,6 +92,7 @@ impl TelemetrySnapshot {
             tick,
             creature_count,
             tick_rate_hz,
+            spatial_grid_cell_size,
             system_timings,
             #[cfg(feature = "dev-tools")]
             hardware_metrics,
@@ -113,6 +116,7 @@ impl Default for TelemetrySnapshot {
             tick: 0,
             creature_count: 0,
             tick_rate_hz: 0.0,
+            spatial_grid_cell_size: crate::simulation::spatial::CELL_SIZE,
             system_timings: SystemTimingsSnapshot::default(),
             #[cfg(feature = "dev-tools")]
             hardware_metrics: HardwareSnapshot::default(),
@@ -177,6 +181,7 @@ mod tests {
             total_tick_us: 5000,
             movement_us: 1000,
             perception_us: 500,
+            spatial_grid_rebuild_us: 100,
             behavior_us: 200,
             behavior_transition_us: 100,
             wander_us: 50,
@@ -192,6 +197,7 @@ mod tests {
             42,
             1000,
             29.5,
+            50.0, // spatial_grid_cell_size
             system_timings,
             #[cfg(feature = "dev-tools")]
             HardwareSnapshot::default(),

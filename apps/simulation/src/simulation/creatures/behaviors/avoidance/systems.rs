@@ -4,10 +4,12 @@ use crate::simulation::math::{clamp_force, magnitude_sq};
 use crate::simulation::perception::constants::PANIC_THRESHOLD_RATIO;
 use crate::simulation::queries::AvoidanceQuery;
 use bevy_ecs::prelude::*;
+use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 
 pub fn avoidance_system(
     mut query: AvoidanceQuery,
-    others: Query<(&Position, &BodySize)>,
+    others: Query<(Entity, &Position, &BodySize)>,
     #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
         crate::instrumentation::SystemTimings,
     >,
@@ -15,9 +17,18 @@ pub fn avoidance_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "avoidance");
 
-    for (entity, position, size, mut acceleration, perception, avoidance, state) in query.iter_mut() {
+    // Pre-collect all position/size data for parallel access (FxHashMap for faster hashing)
+    let position_lookup: FxHashMap<Entity, (f32, f32, f32)> = others
+        .iter()
+        .map(|(entity, pos, size)| (entity, (pos.x, pos.y, size.radius())))
+        .collect();
+
+    // Collect entities for parallel processing
+    let mut entities: Vec<_> = query.iter_mut().collect();
+
+    entities.par_iter_mut().for_each(|(entity, position, size, acceleration, perception, avoidance, state)| {
         if !perception.has_neighbors() {
-            continue;
+            return;
         }
 
         // Seeking creatures tolerate very close proximity (body + buffer)
@@ -36,19 +47,18 @@ pub fn avoidance_system(
         let mut total_repulsion_y = 0.0;
 
         for other_entity in perception.iter_neighbors() {
-            if other_entity == entity {
+            if other_entity == *entity {
                 continue;
             }
 
-            let Ok((other_pos, other_size)) = others.get(other_entity) else {
+            let Some(&(other_x, other_y, other_radius)) = position_lookup.get(&other_entity) else {
                 continue;
             };
 
-            let away_x = position.x - other_pos.x;
-            let away_y = position.y - other_pos.y;
+            let away_x = position.x - other_x;
+            let away_y = position.y - other_y;
             let center_distance_sq = magnitude_sq(away_x, away_y);
 
-            let other_radius = other_size.radius();
             let max_combined_radius = self_radius + other_radius;
             let max_interaction_distance = effective_space + max_combined_radius;
             let max_interaction_distance_sq = max_interaction_distance * max_interaction_distance;
@@ -85,7 +95,7 @@ pub fn avoidance_system(
         let (clamped_x, clamped_y) = clamp_force(total_repulsion_x, total_repulsion_y, avoidance.max_force);
         acceleration.ax += clamped_x;
         acceleration.ay += clamped_y;
-    }
+    });
 }
 
 #[cfg(test)]

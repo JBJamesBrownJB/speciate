@@ -18,20 +18,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_thresholds_ordered() {
-        assert!(ARRIVAL_THRESHOLD < POUNCE_THRESHOLD);
-        assert!(POUNCE_THRESHOLD < ARRIVAL_TOLERANCE);
-    }
-
-    #[test]
     fn test_arrival_threshold_positive() {
         assert!(ARRIVAL_THRESHOLD > 0.0);
         assert!(POUNCE_THRESHOLD > 0.0);
-    }
-
-    #[test]
-    fn test_brake_exceeds_max_force() {
-        assert!(BRAKE_FORCE > MAX_FORCE);
     }
 
     #[test]

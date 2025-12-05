@@ -1,9 +1,15 @@
 import type { IPCClient } from './IPCClient';
-import type { GameState, CreatureData, PerceptionDebugData, NeighborDebugInfo } from '../../types/GameState';
+import type { GameState, CreatureData, PerceptionDebugData, NeighborDebugInfo, QueriedCell } from '../../types/GameState';
 import type { TelemetryFrame } from '../../types/TelemetryFrame';
 
 const HEADER_SIZE = 8;
 const MAX_DEBUG_NEIGHBORS = 64;
+const CELL_SECTION_OFFSET = HEADER_SIZE + MAX_DEBUG_NEIGHBORS * 3; // 200
+const CELL_HEADER_SIZE = 4;
+const MAX_QUERIED_CELLS = 100;
+const CHECKED_CELL_SECTION_OFFSET = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 404
+const CHECKED_CELL_HEADER_SIZE = 1;
+const MAX_CHECKED_CELLS = 100;
 
 export class ElectronIPCClient implements IPCClient {
   private latestState: GameState | null = null;
@@ -81,6 +87,8 @@ export class ElectronIPCClient implements IPCClient {
         // Parse buffer layout:
         // [0]: has_data, [1]: target_id, [2]: x, [3]: y, [4]: range, [5]: fov_angle, [6]: rotation, [7]: neighbor_count
         // [8..72]: neighbor_ids, [72..136]: neighbor_xs, [136..200]: neighbor_ys
+        // [200]: cell_size, [201]: num_cells, [202]: creature_cell_x, [203]: creature_cell_y
+        // [204..]: queried cells as (x, y) pairs
         const neighborCount = Math.min(buffer[7], MAX_DEBUG_NEIGHBORS);
 
         const neighbors: NeighborDebugInfo[] = [];
@@ -96,6 +104,34 @@ export class ElectronIPCClient implements IPCClient {
           });
         }
 
+        // Parse cell section
+        const cellSize = buffer[CELL_SECTION_OFFSET];
+        const numCells = Math.min(buffer[CELL_SECTION_OFFSET + 1], MAX_QUERIED_CELLS);
+        const creatureCell: QueriedCell = {
+          x: buffer[CELL_SECTION_OFFSET + 2],
+          y: buffer[CELL_SECTION_OFFSET + 3],
+        };
+
+        const queriedCells: QueriedCell[] = [];
+        const cellsOffset = CELL_SECTION_OFFSET + CELL_HEADER_SIZE;
+        for (let i = 0; i < numCells; i++) {
+          queriedCells.push({
+            x: buffer[cellsOffset + i * 2],
+            y: buffer[cellsOffset + i * 2 + 1],
+          });
+        }
+
+        // Parse checked cells section
+        const numCheckedCells = Math.min(buffer[CHECKED_CELL_SECTION_OFFSET], MAX_CHECKED_CELLS);
+        const checkedCells: QueriedCell[] = [];
+        const checkedCellsOffset = CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE;
+        for (let i = 0; i < numCheckedCells; i++) {
+          checkedCells.push({
+            x: buffer[checkedCellsOffset + i * 2],
+            y: buffer[checkedCellsOffset + i * 2 + 1],
+          });
+        }
+
         const debugData: PerceptionDebugData = {
           entityId: buffer[1],
           x: buffer[2],
@@ -104,6 +140,10 @@ export class ElectronIPCClient implements IPCClient {
           fovAngle: buffer[5],
           rotation: buffer[6],
           neighbors,
+          cellSize,
+          creatureCell,
+          queriedCells,
+          checkedCells,
         };
 
         this.perceptionDebugCallbacks.forEach(callback => {

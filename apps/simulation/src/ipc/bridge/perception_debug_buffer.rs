@@ -12,15 +12,36 @@
 //! - [5]: fov_angle (radians)
 //! - [6]: rotation (radians)
 //! - [7]: neighbor_count
-//! - [8..8+MAX]: neighbor_ids
-//! - [8+MAX..8+2*MAX]: neighbor_xs
-//! - [8+2*MAX..8+3*MAX]: neighbor_ys
+//! - [8..8+MAX_NEIGHBORS]: neighbor_ids
+//! - [8+MAX_NEIGHBORS..8+2*MAX_NEIGHBORS]: neighbor_xs
+//! - [8+2*MAX_NEIGHBORS..8+3*MAX_NEIGHBORS]: neighbor_ys
+//!
+//! **Grid cell section (starting at CELL_SECTION_OFFSET):**
+//! - [200]: cell_size (world units per cell)
+//! - [201]: num_queried_cells
+//! - [202]: creature_cell_x
+//! - [203]: creature_cell_y
+//! - [204..204+MAX_CELLS*2]: queried cells (x, y pairs interleaved)
+//!
+//! **Checked cells section (starting at CHECKED_CELL_SECTION_OFFSET):**
+//! - [404]: num_checked_cells
+//! - [405..405+MAX_CELLS*2]: checked cells (x, y pairs interleaved)
 
 #![cfg(feature = "dev-tools")]
 
 pub const MAX_DEBUG_NEIGHBORS: usize = 64;
 pub const HEADER_SIZE: usize = 8;
-pub const BUFFER_SIZE: usize = HEADER_SIZE + MAX_DEBUG_NEIGHBORS * 3;
+pub const NEIGHBOR_SECTION_SIZE: usize = MAX_DEBUG_NEIGHBORS * 3;
+
+pub const CELL_SECTION_OFFSET: usize = HEADER_SIZE + NEIGHBOR_SECTION_SIZE; // 200
+pub const CELL_HEADER_SIZE: usize = 4; // cell_size, num_cells, creature_x, creature_y
+pub const MAX_QUERIED_CELLS: usize = 100; // Up to 10x10 grid query
+
+pub const CHECKED_CELL_SECTION_OFFSET: usize = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 404
+pub const CHECKED_CELL_HEADER_SIZE: usize = 1; // num_checked_cells
+pub const MAX_CHECKED_CELLS: usize = 100;
+
+pub const BUFFER_SIZE: usize = CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE + MAX_CHECKED_CELLS * 2;
 
 pub struct PerceptionDebugBuffer {
     read: [f32; BUFFER_SIZE],
@@ -82,6 +103,38 @@ impl PerceptionDebugBuffer {
             self.write[id_offset + i] = *id as f32;
             self.write[x_offset + i] = *x;
             self.write[y_offset + i] = *y;
+        }
+    }
+
+    pub fn write_cell_data(
+        &mut self,
+        cell_size: f32,
+        creature_cell: (i32, i32),
+        queried_cells: &[(i32, i32)],
+        checked_cells: &[(i32, i32)],
+    ) {
+        // Write queried cells section
+        let queried_count = queried_cells.len().min(MAX_QUERIED_CELLS);
+
+        self.write[CELL_SECTION_OFFSET] = cell_size;
+        self.write[CELL_SECTION_OFFSET + 1] = queried_count as f32;
+        self.write[CELL_SECTION_OFFSET + 2] = creature_cell.0 as f32;
+        self.write[CELL_SECTION_OFFSET + 3] = creature_cell.1 as f32;
+
+        let queried_offset = CELL_SECTION_OFFSET + CELL_HEADER_SIZE;
+        for (i, (cx, cy)) in queried_cells.iter().take(queried_count).enumerate() {
+            self.write[queried_offset + i * 2] = *cx as f32;
+            self.write[queried_offset + i * 2 + 1] = *cy as f32;
+        }
+
+        // Write checked cells section
+        let checked_count = checked_cells.len().min(MAX_CHECKED_CELLS);
+        self.write[CHECKED_CELL_SECTION_OFFSET] = checked_count as f32;
+
+        let checked_offset = CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE;
+        for (i, (cx, cy)) in checked_cells.iter().take(checked_count).enumerate() {
+            self.write[checked_offset + i * 2] = *cx as f32;
+            self.write[checked_offset + i * 2 + 1] = *cy as f32;
         }
     }
 

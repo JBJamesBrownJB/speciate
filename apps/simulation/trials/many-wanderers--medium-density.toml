@@ -1,0 +1,19 @@
+# Many wanderers
+#
+# Purpose: Create a large crowd of 10k wanderers
+# This trial creates a dense grid of wandering creatures
+
+name = "Many Wanderers Medium Dense"
+description = """
+"""
+
+# Primary spawn pattern: 100×100 grid at world center
+[[spawns]]
+type = "grid"
+start_x = -500.0    # Center grid at (0, 0): starts at -25m to span [-25, 25]
+start_y = -500.0
+spacing = 20.0
+rows = 50
+cols = 50
+creature_type = "wanderer"
+grid_offset_y = 1.0  # Offset even columns by half spacing for staggered pattern

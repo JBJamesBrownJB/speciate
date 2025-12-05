@@ -10,8 +10,8 @@
 /// relative to the binary (../../trials/ from target/debug)
 
 use bevy_ecs::prelude::*;
-use speciate::simulation::core::components::{Catatonic, Position};
-use speciate::simulation::creatures::components::Target;
+use speciate::simulation::core::components::Position;
+use speciate::simulation::creatures::components::{BehaviorMode, CreatureState, Target};
 
 #[cfg(feature = "dev-tools")]
 use speciate::trials::loader::load_trial;
@@ -122,8 +122,10 @@ fn test_load_crowd_navigation_trial() {
     );
 
     // Verify catatonic count (20×10 grid = 200)
-    let mut catatonic_query = world.query::<&Catatonic>();
-    let catatonic_count = catatonic_query.iter(&world).count();
+    let mut catatonic_query = world.query::<&CreatureState>();
+    let catatonic_count = catatonic_query.iter(&world)
+        .filter(|state| state.behavior == BehaviorMode::Catatonic)
+        .count();
     assert_eq!(catatonic_count, 200, "Should have 200 static obstacles");
 
     // Verify seeker count (circle with 50 creatures)

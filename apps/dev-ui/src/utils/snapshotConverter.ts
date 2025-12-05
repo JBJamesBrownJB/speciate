@@ -40,6 +40,7 @@ export function snapshotToTelemetry(snapshot: MetricsSnapshot): TelemetryFrame {
     tick: Math.round(snapshot.tick.avg),
     creatureCount: Math.round(snapshot.creatureCount.avg),
     tickRateHz: snapshot.tickRateHz.avg,
+    spatialGridCellSize: 50, // Default cell size (from Rust CELL_SIZE constant)
     systemTimings: systemTimings,
     hardwareMetrics,
     parallelizationMetrics,

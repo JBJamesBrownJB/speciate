@@ -8,11 +8,6 @@ use super::constants::{
 };
 use crate::simulation::creatures::behaviors::avoidance::constants::AVOIDANCE_FORCE;
 
-#[derive(Resource, Default)]
-pub struct PerceptionScratchBuffer {
-    pub positions: Vec<(Entity, f32, f32, f32)>,
-}
-
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
     pub fov_angle: f32,        // Field of view in radians (stored internally as radians for efficient checks)
@@ -169,6 +164,14 @@ pub struct NeighborDebugInfo {
 }
 
 #[cfg(feature = "dev-tools")]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct QueriedCell {
+    pub x: i32,
+    pub y: i32,
+}
+
+#[cfg(feature = "dev-tools")]
 #[derive(Resource, Default, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PerceptionDebugSnapshot {
@@ -179,6 +182,9 @@ pub struct PerceptionDebugSnapshot {
     pub fov_angle: f32,  // Field of view in radians
     pub rotation: f32,   // Creature facing direction in radians
     pub neighbors: Vec<NeighborDebugInfo>,
+    pub queried_cells: Vec<QueriedCell>,  // Grid cells actually checked (green in overlay)
+    pub checked_cells: Vec<QueriedCell>,  // Grid cells skipped due to early break (orange in overlay)
+    pub creature_cell: QueriedCell,       // The cell the creature is in
 }
 
 #[cfg(test)]

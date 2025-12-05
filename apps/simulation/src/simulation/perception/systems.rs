@@ -2,17 +2,27 @@ use super::components::*;
 use crate::simulation::components::Rotation;
 use crate::simulation::core::components::{BodySize, Position};
 use crate::simulation::creatures::components::CreatureState;
+use crate::simulation::spatial::{DoubleBufferedSpatialGrid, SpatialGrid};
 #[cfg(feature = "dev-tools")]
 use crate::simulation::components::CritId;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
-#[cfg(feature = "dev-tools")]
-use bevy_ecs::system::Res;
+use rayon::prelude::*;
+use std::cell::RefCell;
+
+const MAX_OTHER_RADIUS: f32 = 5.0;
+const CELL_HALF_DIAGONAL: f32 = crate::simulation::spatial::constants::CELL_SIZE * 0.7072; // sqrt(2)/2
+
+// Thread-local scratch buffer for sorted cell indices (avoids allocation per creature)
+// Format: (distance_sq, cell_index)
+thread_local! {
+    static CELL_SCRATCH: RefCell<Vec<(f32, usize)>> = RefCell::new(Vec::with_capacity(64));
+}
 
 pub fn update_perception_system(
+    grid: Res<DoubleBufferedSpatialGrid>,
     mut query: Query<(Entity, &Position, &Rotation, &BodySize, &mut Perception, &CreatureState)>,
-    mut scratch: ResMut<PerceptionScratchBuffer>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
     #[cfg(feature = "dev-tools")] mut debug_snapshot: ResMut<PerceptionDebugSnapshot>,
@@ -21,101 +31,306 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "perception");
 
-    scratch.positions.clear();
-    let count_hint = query.iter().size_hint().0;
-    scratch.positions.reserve(count_hint);
-    for (entity, pos, _, size, _, _) in query.iter() {
-        scratch.positions.push((entity, pos.x, pos.y, size.radius()));
+    // Read from FRONT buffer (back buffer is being rebuilt in parallel)
+    let grid_ref = grid.read_grid();
+
+    // Phase 1: Process debug target FIRST with cell tracking (dev-tools only)
+    // This captures REAL queried/skipped cells from actual perception execution
+    #[cfg(feature = "dev-tools")]
+    let debug_target_entity = debug_target.get();
+
+    #[cfg(feature = "dev-tools")]
+    {
+        if let Some(target_entity) = debug_target_entity {
+            if let Ok((_, pos, rotation, size, mut perception, state)) = query.get_mut(target_entity) {
+                perception.clear();
+
+                let entity_id = crit_ids.get(target_entity)
+                    .map(|id| id.0)
+                    .unwrap_or(0);
+
+                if state.behavior.is_active() {
+                    let x = pos.x;
+                    let y = pos.y;
+                    let self_radius = size.radius();
+                    let range = perception.range;
+                    let cos_half_fov_sq = perception.cos_half_fov_sq;
+                    let facing_x = rotation.radians.cos();
+                    let facing_y = rotation.radians.sin();
+                    let query_radius = range + self_radius + MAX_OTHER_RADIUS;
+
+                    // Run perception WITH cell tracking - this is the REAL execution
+                    let (neighbors, queried_cells, skipped_cells) = run_perception_with_tracking(
+                        target_entity,
+                        x, y,
+                        self_radius,
+                        range,
+                        cos_half_fov_sq,
+                        facing_x, facing_y,
+                        query_radius,
+                        grid_ref,
+                    );
+
+                    // Note: Don't add neighbors here - Phase 3 will clear() and re-add anyway
+                    // We only need the neighbors Vec for building neighbor_debug below
+
+                    // Capture values before releasing the borrow
+                    let fov_angle = perception.fov_angle;
+                    let rotation_radians = rotation.radians;
+                    let (creature_cx, creature_cy) = grid_ref.world_to_cell(x, y);
+
+                    // Build neighbor debug info directly from captured positions (O(n), not O(n²))
+                    let neighbor_debug: Vec<NeighborDebugInfo> = neighbors.iter()
+                        .filter_map(|neighbor| {
+                            let neighbor_id = crit_ids.get(neighbor.entity).ok()?.0;
+                            Some(NeighborDebugInfo {
+                                id: neighbor_id,
+                                x: neighbor.x,
+                                y: neighbor.y,
+                            })
+                        })
+                        .collect();
+
+                    *debug_snapshot = PerceptionDebugSnapshot {
+                        entity_id,
+                        x,
+                        y,
+                        perception_range: range,
+                        fov_angle,
+                        rotation: rotation_radians,
+                        neighbors: neighbor_debug,
+                        queried_cells,              // Green: cells we actually examined
+                        checked_cells: skipped_cells, // Orange: cells skipped due to early break
+                        creature_cell: QueriedCell { x: creature_cx, y: creature_cy },
+                    };
+                } else {
+                    // Inactive creature - empty debug snapshot
+                    let (creature_cx, creature_cy) = grid_ref.world_to_cell(pos.x, pos.y);
+                    *debug_snapshot = PerceptionDebugSnapshot {
+                        entity_id,
+                        x: pos.x,
+                        y: pos.y,
+                        perception_range: perception.range,
+                        fov_angle: perception.fov_angle,
+                        rotation: rotation.radians,
+                        neighbors: vec![],
+                        queried_cells: vec![],
+                        checked_cells: vec![],
+                        creature_cell: QueriedCell { x: creature_cx, y: creature_cy },
+                    };
+                }
+            } else {
+                *debug_snapshot = PerceptionDebugSnapshot::default();
+            }
+        } else {
+            *debug_snapshot = PerceptionDebugSnapshot::default();
+        }
     }
 
-    for (entity, pos, rotation, size, mut perception, state) in query.iter_mut() {
+    // Phase 2: Collect ALL entities for parallel processing
+    // Debug target runs again (cheap: 1 creature) - much faster than 150K filter calls
+    // Its debug snapshot was already captured in Phase 1
+    let mut entities: Vec<_> = query.iter_mut().collect();
+
+    // Phase 3: Parallel perception using Rayon (unchanged hot path)
+    entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, state)| {
         perception.clear();
 
         if !state.behavior.is_active() {
-            continue;
+            return;
         }
 
+        let x = pos.x;
+        let y = pos.y;
         let self_radius = size.radius();
-        let perception_range = perception.range;
-
-        // Pre-calculate facing vector (once per creature)
-        // cos_half_fov_sq is cached in Perception component for sqrt-free FOV check
-        let facing_x = rotation.radians.cos();
-        let facing_y = rotation.radians.sin();
+        let range = perception.range;
         let cos_half_fov_sq = perception.cos_half_fov_sq;
+        let facing_x = rot.radians.cos();
+        let facing_y = rot.radians.sin();
+        let query_radius = range + self_radius + MAX_OTHER_RADIUS;
 
-        for &(other_entity, other_x, other_y, other_radius) in &scratch.positions {
-            if entity == other_entity {
+        // Fixed-size buffer for top-k closest neighbors (no heap allocation)
+        const CAPACITY: usize = super::constants::MAX_PERCEIVED_NEIGHBORS;
+        let mut closest: [(Entity, f32); CAPACITY] = [(Entity::PLACEHOLDER, f32::MAX); CAPACITY];
+        let mut count = 0usize;
+
+        // Get cells sorted by distance (closest first) for faster buffer filling
+        CELL_SCRATCH.with(|scratch| {
+            let mut cells = scratch.borrow_mut();
+            grid_ref.collect_cells_sorted(x, y, query_radius, facing_x, facing_y, &mut cells);
+
+            // Iterate cells in distance order
+            for &(cell_dist_sq, cell_idx) in cells.iter() {
+                // Early break: if buffer full and cell is definitely farther than 8th closest, stop
+                if count == CAPACITY {
+                    let cell_dist = cell_dist_sq.sqrt();
+                    let min_proxy_dist = cell_dist - CELL_HALF_DIAGONAL;
+                    if min_proxy_dist * min_proxy_dist > closest[CAPACITY - 1].1 {
+                        break; // All remaining cells are farther, done
+                    }
+                }
+
+                for proxy in grid_ref.get_cell_proxies(cell_idx) {
+                    if *entity == proxy.entity {
+                        continue;
+                    }
+
+                    let dx = proxy.x - x;
+                    let dy = proxy.y - y;
+                    let center_dist_sq = dx * dx + dy * dy;
+
+                    // Distance check (cheaper)
+                    let max_dist = range + self_radius + proxy.radius;
+                    if center_dist_sq > max_dist * max_dist {
+                        continue;
+                    }
+
+                    // Quick rejection: skip if farther than our 8th closest (avoids FOV check)
+                    if center_dist_sq >= closest[CAPACITY - 1].1 {
+                        continue;
+                    }
+
+                    // Early-exit: skip entities clearly behind
+                    let rough_dot = dx * facing_x + dy * facing_y;
+                    if rough_dot <= 0.0 {
+                        continue;
+                    }
+
+                    // FOV check using squared comparison (no sqrt, no division)
+                    if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
+                        // Insert into sorted buffer (closest first, max 8 items)
+                        let insert_limit = if count < CAPACITY { count } else { CAPACITY - 1 };
+                        let mut i = insert_limit;
+                        while i > 0 && closest[i - 1].1 > center_dist_sq {
+                            closest[i] = closest[i - 1];
+                            i -= 1;
+                        }
+                        closest[i] = (proxy.entity, center_dist_sq);
+                        if count < CAPACITY {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Add sorted neighbors to perception
+        for i in 0..count {
+            perception.add_neighbor(closest[i].0);
+        }
+    });
+}
+
+/// Neighbor info captured during perception (avoids re-querying grid)
+#[cfg(feature = "dev-tools")]
+struct NeighborInfo {
+    entity: Entity,
+    x: f32,
+    y: f32,
+}
+
+/// Run ACTUAL perception for debug target with cell tracking.
+/// Returns: (neighbors_with_positions, queried_cells, skipped_cells)
+/// - neighbors_with_positions: entities AND their positions (captured during perception)
+/// - queried_cells: cells we actually examined
+/// - skipped_cells: cells we would have examined but skipped due to early break
+#[cfg(feature = "dev-tools")]
+fn run_perception_with_tracking(
+    self_entity: Entity,
+    x: f32,
+    y: f32,
+    self_radius: f32,
+    range: f32,
+    cos_half_fov_sq: f32,
+    facing_x: f32,
+    facing_y: f32,
+    query_radius: f32,
+    grid: &SpatialGrid,
+) -> (Vec<NeighborInfo>, Vec<QueriedCell>, Vec<QueriedCell>) {
+    const CAPACITY: usize = super::constants::MAX_PERCEIVED_NEIGHBORS;
+    // Store entity, distance, AND position (avoid re-query later)
+    let mut closest: [(Entity, f32, f32, f32); CAPACITY] = [(Entity::PLACEHOLDER, f32::MAX, 0.0, 0.0); CAPACITY];
+    let mut count = 0usize;
+    let mut queried_cells = Vec::new();
+    let mut skipped_cells = Vec::new();
+
+    // Get cells sorted by distance (same as main loop)
+    let mut cells: Vec<(f32, usize)> = Vec::with_capacity(64);
+    grid.collect_cells_sorted(x, y, query_radius, facing_x, facing_y, &mut cells);
+
+    let mut early_break_index: Option<usize> = None;
+
+    // Iterate cells in distance order, tracking which we check
+    for (i, &(cell_dist_sq, cell_idx)) in cells.iter().enumerate() {
+        // Early break: if buffer full and cell is definitely farther than 8th closest, stop
+        if count == CAPACITY {
+            let cell_dist = cell_dist_sq.sqrt();
+            let min_proxy_dist = cell_dist - CELL_HALF_DIAGONAL;
+            if min_proxy_dist * min_proxy_dist > closest[CAPACITY - 1].1 {
+                early_break_index = Some(i);
+                break; // All remaining cells are farther, done
+            }
+        }
+
+        // This cell was queried (not skipped by early break)
+        let (cx, cy) = grid.get_cell_coords_by_index(cell_idx);
+        queried_cells.push(QueriedCell { x: cx, y: cy });
+
+        // Process proxies (same logic as main loop)
+        for proxy in grid.get_cell_proxies(cell_idx) {
+            if self_entity == proxy.entity {
                 continue;
             }
 
-            let dx = other_x - pos.x;
-            let dy = other_y - pos.y;
+            let dx = proxy.x - x;
+            let dy = proxy.y - y;
             let center_dist_sq = dx * dx + dy * dy;
 
-            // Distance check first (cheaper)
-            let max_dist = perception_range + self_radius + other_radius;
+            let max_dist = range + self_radius + proxy.radius;
             if center_dist_sq > max_dist * max_dist {
                 continue;
             }
 
-            // Early-exit: skip entities clearly behind (no sqrt needed)
+            if center_dist_sq >= closest[CAPACITY - 1].1 {
+                continue;
+            }
+
             let rough_dot = dx * facing_x + dy * facing_y;
             if rough_dot <= 0.0 {
                 continue;
             }
 
-            // FOV check using squared comparison (no sqrt, no division!)
-            // Math: dot >= cos_half_fov  =>  dot² >= cos_half_fov² × dist²
-            // (valid when rough_dot > 0, which we checked above)
             if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
-                perception.add_neighbor(other_entity);
-                if perception.is_full() {
-                    break;
+                let insert_limit = if count < CAPACITY { count } else { CAPACITY - 1 };
+                let mut i = insert_limit;
+                while i > 0 && closest[i - 1].1 > center_dist_sq {
+                    closest[i] = closest[i - 1];
+                    i -= 1;
+                }
+                // Store position along with entity and distance
+                closest[i] = (proxy.entity, center_dist_sq, proxy.x, proxy.y);
+                if count < CAPACITY {
+                    count += 1;
                 }
             }
         }
     }
 
-    // Collect debug data for selected creature (dev-tools only)
-    #[cfg(feature = "dev-tools")]
-    {
-        if let Some(target_entity) = debug_target.get() {
-            if let Ok((_, pos, rotation, _, perception, _)) = query.get(target_entity) {
-                let entity_id = crit_ids.get(target_entity)
-                    .map(|id| id.0)
-                    .unwrap_or(0);
-
-                let neighbors: Vec<NeighborDebugInfo> = perception.iter_neighbors()
-                    .filter_map(|neighbor_entity| {
-                        let neighbor_id = crit_ids.get(neighbor_entity).ok()?.0;
-                        let (_, neighbor_pos, _, _, _, _) = query.get(neighbor_entity).ok()?;
-                        Some(NeighborDebugInfo {
-                            id: neighbor_id,
-                            x: neighbor_pos.x,
-                            y: neighbor_pos.y,
-                        })
-                    })
-                    .collect();
-
-                *debug_snapshot = PerceptionDebugSnapshot {
-                    entity_id,
-                    x: pos.x,
-                    y: pos.y,
-                    perception_range: perception.range,
-                    fov_angle: perception.fov_angle,
-                    rotation: rotation.radians,
-                    neighbors,
-                };
-            } else {
-                // Target entity no longer exists, clear snapshot
-                *debug_snapshot = PerceptionDebugSnapshot::default();
-            }
-        } else {
-            // No debug target, clear snapshot
-            *debug_snapshot = PerceptionDebugSnapshot::default();
+    // Collect skipped cells (remaining cells after early break)
+    if let Some(break_idx) = early_break_index {
+        for &(_, cell_idx) in &cells[break_idx..] {
+            let (cx, cy) = grid.get_cell_coords_by_index(cell_idx);
+            skipped_cells.push(QueriedCell { x: cx, y: cy });
         }
     }
+
+    // Extract neighbors with positions from closest buffer
+    let neighbors: Vec<NeighborInfo> = closest[..count]
+        .iter()
+        .map(|(e, _, px, py)| NeighborInfo { entity: *e, x: *px, y: *py })
+        .collect();
+
+    (neighbors, queried_cells, skipped_cells)
 }
 
 #[cfg(test)]

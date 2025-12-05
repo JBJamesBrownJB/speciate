@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style> body { margin: 0; overflow: hidden; background: #000; } </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+<body>
+<script>
+    // 1. Setup Application
+    const app = new PIXI.Application({
+        width: window.innerWidth,
+        height: window.innerHeight,
+        backgroundColor: 0x050505,
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true,
+        antialias: true
+    });
+    document.body.appendChild(app.view);
+
+    // 2. Setup Container & Content
+    const container = new PIXI.Container();
+    app.stage.addChild(container);
+    container.position.set(window.innerWidth/2, window.innerHeight/2);
+
+    // The World Content
+    const world = new PIXI.Graphics();
+    world.lineStyle(2, 0x004400, 0.5);
+    for (let i = -500; i <= 500; i += 50) {
+        world.moveTo(i, -500).lineTo(i, 500);
+        world.moveTo(-500, i).lineTo(500, i);
+    }
+    const style = new PIXI.TextStyle({ fontFamily: 'Courier New', fontSize: 30, fill: '#00ff00', fontWeight: 'bold' });
+    const text = new PIXI.Text('SYSTEM ONLINE', style);
+    text.anchor.set(0.5);
+    world.addChild(text);
+    container.addChild(world);
+
+    // 3. The Beam (Mask)
+    const beam = new PIXI.Graphics();
+    beam.beginFill(0xFF5500);
+    beam.drawRect(-300, -300, 600, 600);
+    beam.endFill();
+    beam.scale.set(0);
+    container.addChild(beam);
+    container.mask = beam;
+
+    // 4. Custom CRT Shader (No external dependencies)
+    const crtFrag = `
+    varying vec2 vTextureCoord;
+    uniform sampler2D uSampler;
+    uniform float time;
+    uniform vec2 dimensions;
+    void main(void) {
+        vec2 uv = vTextureCoord;
+        vec2 dc = abs(0.5 - uv);
+        dc *= dc;
+        uv.x -= 0.5; uv.x *= 1.0 + (dc.y * (0.3)); uv.x += 0.5;
+        uv.y -= 0.5; uv.y *= 1.0 + (dc.x * (0.3)); uv.y += 0.5;
+        if (uv.y > 1.0 || uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return;
+        }
+        float scanline = sin(uv.y * dimensions.y * 0.5 + time * 5.0) * 0.1;
+        vec4 color = texture2D(uSampler, uv);
+        gl_FragColor = color - vec4(scanline, scanline, scanline, 0.0);
+    }
+    `;
+    const crtFilter = new PIXI.Filter(null, crtFrag, { time: 0, dimensions: [window.innerWidth, window.innerHeight] });
+    const blurFilter = new PIXI.BlurFilter(8);
+    app.stage.filters = [crtFilter, blurFilter];
+
+    app.ticker.add((delta) => { crtFilter.uniforms.time += 0.05 * delta; });
+
+    // 5. Animation
+    const tl = gsap.timeline({ delay: 0.5, repeat: -1, repeatDelay: 2 });
+    tl.to(beam.scale, { x: 0.01, y: 0.01, duration: 0.2, ease: "back.out(1.7)" })
+      .to(beam.scale, { x: 0.005, y: 1, duration: 0.5, ease: "power4.inOut" })
+      .to(beam.scale, { x: 1, y: 1, duration: 0.8, ease: "circ.inOut" })
+      .to(blurFilter, { blur: 2, duration: 0.8 }, "<");
+</script>
+</body>
+</html>

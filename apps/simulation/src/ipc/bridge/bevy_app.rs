@@ -265,6 +265,24 @@ impl NapiApp {
                     snapshot.rotation,
                     &neighbors,
                 );
+
+                // Write cell data for grid visualization
+                let grid = world.get_resource::<crate::simulation::spatial::SpatialGrid>();
+                let cell_size = grid.map(|g| g.cell_size()).unwrap_or(10.0);
+                let queried_cells: Vec<(i32, i32)> = snapshot.queried_cells
+                    .iter()
+                    .map(|c| (c.x, c.y))
+                    .collect();
+                let checked_cells: Vec<(i32, i32)> = snapshot.checked_cells
+                    .iter()
+                    .map(|c| (c.x, c.y))
+                    .collect();
+                buffer_guard.write_cell_data(
+                    cell_size,
+                    (snapshot.creature_cell.x, snapshot.creature_cell.y),
+                    &queried_cells,
+                    &checked_cells,
+                );
             } else {
                 buffer_guard.clear_write();
             }
@@ -291,6 +309,7 @@ impl NapiApp {
                 tick,
                 count,
                 tick_rate_hz,
+                crate::simulation::spatial::CELL_SIZE,
                 system_timings,
                 hardware_metrics,
                 parallelization_metrics,
@@ -303,6 +322,7 @@ impl NapiApp {
                 tick,
                 count,
                 tick_rate_hz,
+                crate::simulation::spatial::CELL_SIZE,
                 system_timings,
             )
         }

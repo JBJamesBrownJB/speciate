@@ -9,8 +9,15 @@ use crate::simulation::components::CritId;
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
+use std::cell::RefCell;
 
 const MAX_OTHER_RADIUS: f32 = 5.0;
+
+// Thread-local scratch buffer for sorted cell indices (avoids allocation per creature)
+// Format: (distance_sq, cell_index)
+thread_local! {
+    static CELL_SCRATCH: RefCell<Vec<(f32, usize)>> = RefCell::new(Vec::with_capacity(64));
+}
 
 pub fn update_perception_system(
     grid: Res<SpatialGrid>,
@@ -51,51 +58,56 @@ pub fn update_perception_system(
         let mut closest: [(Entity, f32); CAPACITY] = [(Entity::PLACEHOLDER, f32::MAX); CAPACITY];
         let mut count = 0usize;
 
-        // Use FOV-culled query to skip entire cells behind the creature
-        for proxy in grid_ref.query_radius_fov(x, y, query_radius, facing_x, facing_y) {
-            if *entity == proxy.entity {
-                continue;
-            }
+        // Get cells sorted by distance (closest first) for faster buffer filling
+        CELL_SCRATCH.with(|scratch| {
+            let mut cells = scratch.borrow_mut();
+            grid_ref.collect_cells_sorted(x, y, query_radius, facing_x, facing_y, &mut cells);
 
-            let dx = proxy.x - x;
-            let dy = proxy.y - y;
-            let center_dist_sq = dx * dx + dy * dy;
-
-            // Distance check (cheaper)
-            let max_dist = range + self_radius + proxy.radius;
-            if center_dist_sq > max_dist * max_dist {
-                continue;
-            }
-
-            // Early-exit: skip entities clearly behind
-            let rough_dot = dx * facing_x + dy * facing_y;
-            if rough_dot <= 0.0 {
-                continue;
-            }
-
-            // FOV check using squared comparison (no sqrt, no division)
-            if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
-                // Insert into sorted buffer (closest first, max 8 items)
-                if count < CAPACITY {
-                    // Buffer not full - insert in sorted position
-                    let mut i = count;
-                    while i > 0 && closest[i - 1].1 > center_dist_sq {
-                        closest[i] = closest[i - 1];
-                        i -= 1;
+            // Iterate cells in distance order
+            for &(_cell_dist_sq, cell_idx) in cells.iter() {
+                for proxy in grid_ref.get_cell_proxies(cell_idx) {
+                    if *entity == proxy.entity {
+                        continue;
                     }
-                    closest[i] = (proxy.entity, center_dist_sq);
-                    count += 1;
-                } else if center_dist_sq < closest[CAPACITY - 1].1 {
-                    // Buffer full but this is closer than farthest - replace
-                    let mut i = CAPACITY - 1;
-                    while i > 0 && closest[i - 1].1 > center_dist_sq {
-                        closest[i] = closest[i - 1];
-                        i -= 1;
+
+                    let dx = proxy.x - x;
+                    let dy = proxy.y - y;
+                    let center_dist_sq = dx * dx + dy * dy;
+
+                    // Distance check (cheaper)
+                    let max_dist = range + self_radius + proxy.radius;
+                    if center_dist_sq > max_dist * max_dist {
+                        continue;
                     }
-                    closest[i] = (proxy.entity, center_dist_sq);
+
+                    // Quick rejection: skip if farther than our 8th closest (avoids FOV check)
+                    if center_dist_sq >= closest[CAPACITY - 1].1 {
+                        continue;
+                    }
+
+                    // Early-exit: skip entities clearly behind
+                    let rough_dot = dx * facing_x + dy * facing_y;
+                    if rough_dot <= 0.0 {
+                        continue;
+                    }
+
+                    // FOV check using squared comparison (no sqrt, no division)
+                    if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
+                        // Insert into sorted buffer (closest first, max 8 items)
+                        let insert_limit = if count < CAPACITY { count } else { CAPACITY - 1 };
+                        let mut i = insert_limit;
+                        while i > 0 && closest[i - 1].1 > center_dist_sq {
+                            closest[i] = closest[i - 1];
+                            i -= 1;
+                        }
+                        closest[i] = (proxy.entity, center_dist_sq);
+                        if count < CAPACITY {
+                            count += 1;
+                        }
+                    }
                 }
             }
-        }
+        });
 
         // Add sorted neighbors to perception
         for i in 0..count {

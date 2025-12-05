@@ -1,7 +1,10 @@
 # Dynamic Range Reduction in Crowds
 
-**Status:** ✅ Implemented
+**Status:** TODO
 **Location:** `apps/simulation/src/simulation/perception/components.rs:100-104`
+
+## IMPORTANT ##
+Maybe redundant since we query cells by distance, meaning we kinda get this anyway?
 
 ## What It Does
 

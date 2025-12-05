@@ -211,6 +211,65 @@ impl SpatialGrid {
         })
     }
 
+    /// Collect cell indices sorted by distance from creature (closest first).
+    /// Output: Vec of (distance_sq, cell_index) pairs, sorted by distance.
+    /// Use `get_cell_proxies` to retrieve the actual proxies for each cell.
+    #[inline(always)]
+    pub fn collect_cells_sorted(
+        &self,
+        x: f32,
+        y: f32,
+        radius: f32,
+        facing_x: f32,
+        facing_y: f32,
+        out: &mut Vec<(f32, usize)>,
+    ) {
+        out.clear();
+
+        let (center_cx, center_cy) = self.world_to_cell(x, y);
+        let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
+        let cell_size = self.cell_size;
+        let half_cell = cell_size * 0.5;
+
+        let min_qx = (center_cx - cells_radius).max(self.min_cell_x);
+        let max_qx = (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1);
+        let min_qy = (center_cy - cells_radius).max(self.min_cell_y);
+        let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
+
+        for cy in min_qy..=max_qy {
+            for cx in min_qx..=max_qx {
+                let cell_center_x = (cx as f32 * cell_size) + half_cell;
+                let cell_center_y = (cy as f32 * cell_size) + half_cell;
+
+                // Check if cell is behind creature
+                let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
+                if cell_dir_dot < -cell_size {
+                    continue;
+                }
+
+                let idx = ((cy - self.min_cell_y) as usize) * self.width
+                        + ((cx - self.min_cell_x) as usize);
+                let (_, count) = unsafe { *self.cells.get_unchecked(idx) };
+                if count > 0 {
+                    let dx = cell_center_x - x;
+                    let dy = cell_center_y - y;
+                    let dist_sq = dx * dx + dy * dy;
+                    out.push((dist_sq, idx));
+                }
+            }
+        }
+
+        // Sort by distance (closest cells first)
+        out.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    }
+
+    /// Get proxies for a cell by index. Use after collect_cells_sorted.
+    #[inline(always)]
+    pub fn get_cell_proxies(&self, cell_idx: usize) -> &[PerceptionProxy] {
+        let (start, count) = unsafe { *self.cells.get_unchecked(cell_idx) };
+        unsafe { self.proxies.get_unchecked(start as usize..(start + count) as usize) }
+    }
+
     /// Query entities within radius. Returns iterator over contiguous slices.
     #[inline(always)]
     pub fn query_radius(&self, x: f32, y: f32, radius: f32) -> impl Iterator<Item = &PerceptionProxy> {

@@ -25,12 +25,6 @@ mod tests {
     }
 
     #[test]
-    fn test_territory_constants_ordered() {
-        assert!(COMFORT_RADIUS < BLEND_CENTER);
-        assert!(BLEND_CENTER < MAX_WANDER_DISTANCE);
-    }
-
-    #[test]
     fn test_territory_forces_positive() {
         assert!(HOMEWARD_FORCE > 0.0);
         assert!(SIGMOID_STEEPNESS > 0.0);

@@ -8,11 +8,6 @@ use super::constants::{
 };
 use crate::simulation::creatures::behaviors::avoidance::constants::AVOIDANCE_FORCE;
 
-#[derive(Resource, Default)]
-pub struct PerceptionScratchBuffer {
-    pub positions: Vec<(Entity, f32, f32, f32)>,
-}
-
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
     pub fov_angle: f32,        // Field of view in radians (stored internally as radians for efficient checks)

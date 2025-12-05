@@ -109,7 +109,6 @@ impl SimulationBuilder {
 
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(perception::PerceptionScratchBuffer::default());
         world.insert_resource(SpatialGrid::default());
 
         Self { world, schedule }

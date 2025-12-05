@@ -45,7 +45,7 @@
 ### 2. Code Cleanup
 
 - [ ] **Hot/Cold Perception split** - Split `Perception` into `PerceptionConfig` (16B) + `PerceptionResult` (reduces cache traffic)
-- [ ] **Remove PerceptionScratchBuffer** - No longer needed with spatial grid
+- [x] **Remove PerceptionScratchBuffer** - Removed (was unused since spatial grid replaced brute-force)
 - [ ] **Fix test compilation errors** - `instrumentation_test.rs`, `trial_integration.rs`
 
 ### 3. Neighbor Sorting Strategy (ID Bias Problem)

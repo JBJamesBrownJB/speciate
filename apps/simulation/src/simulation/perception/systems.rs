@@ -15,8 +15,6 @@ const MAX_OTHER_RADIUS: f32 = 5.0;
 pub fn update_perception_system(
     grid: Res<SpatialGrid>,
     mut query: Query<(Entity, &Position, &Rotation, &BodySize, &mut Perception, &CreatureState)>,
-    #[allow(unused_variables)]
-    scratch: ResMut<PerceptionScratchBuffer>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
     #[cfg(feature = "dev-tools")] mut debug_snapshot: ResMut<PerceptionDebugSnapshot>,

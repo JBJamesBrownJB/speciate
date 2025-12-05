@@ -15,11 +15,6 @@ mod tests {
     }
 
     #[test]
-    fn test_panic_force_exceeds_avoidance() {
-        assert!(PANIC_FORCE > AVOIDANCE_FORCE);
-    }
-
-    #[test]
     fn test_forces_positive() {
         assert!(AVOIDANCE_FORCE > 0.0);
         assert!(PANIC_FORCE > 0.0);

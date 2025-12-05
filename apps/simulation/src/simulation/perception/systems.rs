@@ -12,6 +12,7 @@ use rayon::prelude::*;
 use std::cell::RefCell;
 
 const MAX_OTHER_RADIUS: f32 = 5.0;
+const CELL_HALF_DIAGONAL: f32 = crate::simulation::spatial::constants::CELL_SIZE * 0.7072; // sqrt(2)/2
 
 // Thread-local scratch buffer for sorted cell indices (avoids allocation per creature)
 // Format: (distance_sq, cell_index)
@@ -64,7 +65,16 @@ pub fn update_perception_system(
             grid_ref.collect_cells_sorted(x, y, query_radius, facing_x, facing_y, &mut cells);
 
             // Iterate cells in distance order
-            for &(_cell_dist_sq, cell_idx) in cells.iter() {
+            for &(cell_dist_sq, cell_idx) in cells.iter() {
+                // Early break: if buffer full and cell is definitely farther than 8th closest, stop
+                if count == CAPACITY {
+                    let cell_dist = cell_dist_sq.sqrt();
+                    let min_proxy_dist = cell_dist - CELL_HALF_DIAGONAL;
+                    if min_proxy_dist * min_proxy_dist > closest[CAPACITY - 1].1 {
+                        break; // All remaining cells are farther, done
+                    }
+                }
+
                 for proxy in grid_ref.get_cell_proxies(cell_idx) {
                     if *entity == proxy.entity {
                         continue;

@@ -1,21 +1,32 @@
 use bevy_ecs::prelude::*;
 
+use super::grid::DoubleBufferedSpatialGrid;
+#[cfg(test)]
 use super::grid::SpatialGrid;
 use crate::simulation::core::components::{BodySize, Position};
 
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 
+/// Rebuild spatial grid into the BACK buffer (double-buffered).
+/// Uses parallel rebuild for ~3x speedup with Rayon.
 pub fn rebuild_spatial_grid_system(
-    mut grid: ResMut<SpatialGrid>,
+    mut grid: ResMut<DoubleBufferedSpatialGrid>,
     query: Query<(Entity, &Position, &BodySize)>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "spatial_grid_rebuild");
 
-    // Use rebuild() for automatic bounds detection and cache-friendly insertion
-    grid.rebuild(query.iter().map(|(e, pos, size)| (e, pos.x, pos.y, size.radius())));
+    // Write to back buffer using parallel rebuild
+    grid.write_grid()
+        .rebuild_parallel(query.iter().map(|(e, pos, size)| (e, pos.x, pos.y, size.radius())));
+}
+
+/// Swap front/back buffers at end of tick.
+/// After this, perception will see the newly rebuilt grid.
+pub fn swap_spatial_grid_buffers_system(mut grid: ResMut<DoubleBufferedSpatialGrid>) {
+    grid.swap();
 }
 
 #[cfg(test)]

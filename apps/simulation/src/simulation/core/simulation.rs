@@ -11,7 +11,9 @@ use crate::simulation::movement::{
     integrate_motion_system, rotation_system, update_body_size_cache,
 };
 use crate::simulation::perception;
-use crate::simulation::spatial::{rebuild_spatial_grid_system, SpatialGrid};
+use crate::simulation::spatial::{
+    rebuild_spatial_grid_system, swap_spatial_grid_buffers_system, DoubleBufferedSpatialGrid,
+};
 use bevy_ecs::prelude::*;
 
 /// Result of loading a trial
@@ -79,6 +81,8 @@ impl SimulationBuilder {
             update_body_size_cache,
             integrate_motion_system,
             rotation_system,
+            // Swap grid buffers at END of tick - next tick sees newly rebuilt grid
+            swap_spatial_grid_buffers_system.after(rotation_system),
         ));
 
         world.insert_resource(DeltaTime::default());
@@ -109,7 +113,7 @@ impl SimulationBuilder {
 
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(SpatialGrid::default());
+        world.insert_resource(DoubleBufferedSpatialGrid::default());
 
         Self { world, schedule }
     }

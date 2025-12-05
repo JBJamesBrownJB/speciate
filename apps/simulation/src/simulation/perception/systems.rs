@@ -2,7 +2,7 @@ use super::components::*;
 use crate::simulation::components::Rotation;
 use crate::simulation::core::components::{BodySize, Position};
 use crate::simulation::creatures::components::CreatureState;
-use crate::simulation::spatial::SpatialGrid;
+use crate::simulation::spatial::{DoubleBufferedSpatialGrid, SpatialGrid};
 #[cfg(feature = "dev-tools")]
 use crate::simulation::components::CritId;
 #[cfg(feature = "dev-tools")]
@@ -21,7 +21,7 @@ thread_local! {
 }
 
 pub fn update_perception_system(
-    grid: Res<SpatialGrid>,
+    grid: Res<DoubleBufferedSpatialGrid>,
     mut query: Query<(Entity, &Position, &Rotation, &BodySize, &mut Perception, &CreatureState)>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
@@ -31,8 +31,8 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "perception");
 
-    // Get grid reference for parallel access (read-only, thread-safe)
-    let grid_ref = &*grid;
+    // Read from FRONT buffer (back buffer is being rebuilt in parallel)
+    let grid_ref = grid.read_grid();
 
     // Phase 1: Process debug target FIRST with cell tracking (dev-tools only)
     // This captures REAL queried/skipped cells from actual perception execution

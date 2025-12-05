@@ -46,6 +46,11 @@ pub fn update_perception_system(
         let facing_y = rot.radians.sin();
         let query_radius = range + self_radius + MAX_OTHER_RADIUS;
 
+        // Fixed-size buffer for top-k closest neighbors (no heap allocation)
+        const CAPACITY: usize = super::constants::MAX_PERCEIVED_NEIGHBORS;
+        let mut closest: [(Entity, f32); CAPACITY] = [(Entity::PLACEHOLDER, f32::MAX); CAPACITY];
+        let mut count = 0usize;
+
         // Use FOV-culled query to skip entire cells behind the creature
         for proxy in grid_ref.query_radius_fov(x, y, query_radius, facing_x, facing_y) {
             if *entity == proxy.entity {
@@ -70,11 +75,31 @@ pub fn update_perception_system(
 
             // FOV check using squared comparison (no sqrt, no division)
             if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
-                perception.add_neighbor(proxy.entity);
-                if perception.is_full() {
-                    break;
+                // Insert into sorted buffer (closest first, max 8 items)
+                if count < CAPACITY {
+                    // Buffer not full - insert in sorted position
+                    let mut i = count;
+                    while i > 0 && closest[i - 1].1 > center_dist_sq {
+                        closest[i] = closest[i - 1];
+                        i -= 1;
+                    }
+                    closest[i] = (proxy.entity, center_dist_sq);
+                    count += 1;
+                } else if center_dist_sq < closest[CAPACITY - 1].1 {
+                    // Buffer full but this is closer than farthest - replace
+                    let mut i = CAPACITY - 1;
+                    while i > 0 && closest[i - 1].1 > center_dist_sq {
+                        closest[i] = closest[i - 1];
+                        i -= 1;
+                    }
+                    closest[i] = (proxy.entity, center_dist_sq);
                 }
             }
+        }
+
+        // Add sorted neighbors to perception
+        for i in 0..count {
+            perception.add_neighbor(closest[i].0);
         }
     });
 

@@ -48,46 +48,17 @@
 - [x] **Remove PerceptionScratchBuffer** - Removed (was unused since spatial grid replaced brute-force)
 - [ ] **Fix test compilation errors** - `instrumentation_test.rs`, `trial_integration.rs`
 
-### 3. Neighbor Sorting Strategy (ID Bias Problem)
+### 3. ~~Neighbor Sorting Strategy~~ ✅ COMPLETE
 
-**Current State:** Neighbors are returned in arbitrary order based on grid cell iteration and entity spawn order. This creates "ID bias" where lower-ID creatures are consistently perceived first when `MAX_PERCEIVED_NEIGHBORS` is hit.
+**Status:** Implemented topological sort (distance-based)
 
-**Priority:** Lower than cache optimizations - this is a correctness/fairness issue, not a performance bottleneck.
+**Solution:** Collect all FOV-passing candidates with distance², sort by distance, take closest MAX_PERCEIVED_NEIGHBORS.
 
-**Options to evaluate:**
+**Result:** Biologically accurate - creatures perceive closest neighbors first. No more ID bias.
 
-| Approach | Complexity | Accuracy | Cache | Notes |
-|----------|------------|----------|-------|-------|
-| **ID Bias (current)** | O(1) | Poor | Poor | Lower IDs always win when capacity hit |
-| **Random Offset** | O(1) | Fair | Poor | Start iteration at random index, breaks bias |
-| **Topological Sort** | O(k log k) | Best | Poor | Sort by distance, closest neighbors first |
+**Performance:** O(k log k) where k ≈ candidates per creature. Negligible overhead at 150K (candidates typically < 50 per creature).
 
-**Recommendation:** Topological sort (distance-based) is biologically accurate - creatures should perceive their closest neighbors first.
-
-**Decision needed:**
-- [ ] **Trial topological sort** - Sort candidates by distance before FOV check
-- [ ] **Trial random offset** - Add XorShift32 random start index per query (simpler fallback)
-- [ ] **Benchmark chosen approach** - Measure overhead at 150K creatures
-
-**Topological Sort Implementation (O(k log k)):**
-```rust
-candidates.sort_by(|a, b| {
-    let dist_a = (a.x - pos.x).powi(2) + (a.y - pos.y).powi(2);
-    let dist_b = (b.x - pos.x).powi(2) + (b.y - pos.y).powi(2);
-    dist_a.partial_cmp(&dist_b).unwrap()
-});
-```
-
-**Random Offset Implementation (O(1)):**
-```rust
-let offset = xorshift32(entity.index()) as usize % candidates.len();
-for i in 0..candidates.len() {
-    let idx = (offset + i) % candidates.len();
-    // process candidates[idx]
-}
-```
-
-**Note:** Morton grid indexing was tried for cache locality but showed no improvement - the bottleneck is scattered Rayon thread access, not grid cell ordering.
+**Files:** `perception/systems.rs:49-86`
 
 ### 4. Workload Reduction Optimizations
 

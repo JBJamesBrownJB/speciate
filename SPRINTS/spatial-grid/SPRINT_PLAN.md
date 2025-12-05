@@ -32,97 +32,11 @@
 
 ## Remaining Work
 
-### 1. Neighbor Sorting Strategy (ID Bias Problem)
-
-**Current State:** Neighbors are returned in arbitrary order based on grid cell iteration and entity spawn order. This creates "ID bias" where lower-ID creatures are consistently perceived first when `MAX_PERCEIVED_NEIGHBORS` is hit.
-
-**Options to evaluate:**
-
-| Approach | Complexity | Accuracy | Cache | Notes |
-|----------|------------|----------|-------|-------|
-| **ID Bias (current)** | O(1) | Poor | Poor | Lower IDs always win when capacity hit |
-| **Random Offset** | O(1) | Fair | Poor | Start iteration at random index, breaks bias |
-| **Topological Sort** | O(k log k) | Best | Poor | Sort by distance, closest neighbors first |
-| **Morton Sort** | O(k log k) | Fair | Best | Z-order curve, cache-friendly spatial locality |
-
-**Key distinction:**
-- **Topological** = "Who's closest to ME?" (per-query distance sort, biologically accurate)
-- **Morton Result Sort** = Sort query results by Z-order before taking top-k (doesn't solve bias meaningfully)
-- **Morton Grid Indexing** = Store grid cells in Z-order for cache locality (TRIED - no measurable improvement, reverted)
-
-**Note:** Morton grid indexing was implemented and tested but showed no performance difference. The bottleneck is not grid cell access patterns but rather scattered memory access when Rayon threads query different world regions. See Section 3 for optimizations that address the actual bottleneck.
-
-**Decision needed:**
-- [ ] **Trial random offset** - Add XorShift32 random start index per query
-- [ ] **Trial topological sort** - Sort candidates by distance before FOV check
-- [ ] **Trial Morton sort** - Sort by Z-order code for cache locality
-- [ ] **Benchmark all three** - Measure overhead at 150K creatures
-- [ ] **Implement chosen approach**
-
-**Random Offset Implementation (O(1)):**
-```rust
-let offset = xorshift32(entity.index()) as usize % candidates.len();
-for i in 0..candidates.len() {
-    let idx = (offset + i) % candidates.len();
-    // process candidates[idx]
-}
-```
-
-**Topological Sort Implementation (O(k log k)):**
-```rust
-candidates.sort_by(|a, b| {
-    let dist_a = (a.x - pos.x).powi(2) + (a.y - pos.y).powi(2);
-    let dist_b = (b.x - pos.x).powi(2) + (b.y - pos.y).powi(2);
-    dist_a.partial_cmp(&dist_b).unwrap()
-});
-```
-
-**Morton Sort Implementation (O(k log k)):**
-```rust
-// Morton code: interleave bits of x and y for Z-order curve
-fn morton_code(x: f32, y: f32, cell_size: f32) -> u32 {
-    let ix = ((x / cell_size) as i32).max(0) as u32;
-    let iy = ((y / cell_size) as i32).max(0) as u32;
-    interleave_bits(ix, iy)
-}
-
-fn interleave_bits(x: u32, y: u32) -> u32 {
-    let x = (x | (x << 8)) & 0x00FF00FF;
-    let x = (x | (x << 4)) & 0x0F0F0F0F;
-    let x = (x | (x << 2)) & 0x33333333;
-    let x = (x | (x << 1)) & 0x55555555;
-
-    let y = (y | (y << 8)) & 0x00FF00FF;
-    let y = (y | (y << 4)) & 0x0F0F0F0F;
-    let y = (y | (y << 2)) & 0x33333333;
-    let y = (y | (y << 1)) & 0x55555555;
-
-    x | (y << 1)
-}
-
-// Sort candidates by Morton code
-candidates.sort_by_key(|c| morton_code(c.x, c.y, CELL_SIZE));
-```
-
-**Morton can also apply at grid rebuild time:**
-```rust
-// Sort entities within each cell by Morton code during rebuild
-for cell in grid.cells.values_mut() {
-    cell.sort_by_key(|(_, x, y, _)| morton_code(*x, *y, CELL_SIZE));
-}
-```
-
-### 2. Code Cleanup
-
-- [ ] **Hot/Cold Perception split** - Split `Perception` into `PerceptionConfig` (16B) + `PerceptionResult` (reduces cache traffic)
-- [ ] **Remove PerceptionScratchBuffer** - No longer needed with spatial grid
-- [ ] **Fix test compilation errors** - `instrumentation_test.rs`, `trial_integration.rs`
-
-### 3. Cache Locality & Throughput Optimizations
+### 1. Cache Locality & Throughput Optimizations
 
 **Context:** Profiling at 150K creatures shows 88% frontend stalls, 24% L3 miss rate, IPC of 1.74. The bottleneck is memory bandwidth, not compute or branch prediction (0.76% miss rate is healthy).
 
-#### 3.1 Stochastic Perception (HIGHEST PRIORITY - 60-75% reduction)
+#### 1.1 Stochastic Perception (HIGHEST PRIORITY - 60-75% reduction)
 
 **Concept:** Not every creature needs fresh perception every tick. DNA-driven "alertness" determines update frequency.
 
@@ -153,7 +67,7 @@ let due_for_update: Vec<_> = query
 - [ ] Add jitter to prevent sync waves
 - [ ] Integrate with DNA system
 
-#### 3.2 Sort Entities by Grid Cell (30-40% L3 reduction)
+#### 1.2 Sort Entities by Grid Cell (30-40% L3 reduction)
 
 **Problem:** Rayon threads randomly access different grid regions → cache thrashing.
 
@@ -174,7 +88,7 @@ sorted.par_chunks_mut(2000).for_each(|chunk| { ... });
 - [ ] Implement entity sorting before parallel phase
 - [ ] Benchmark L3 miss rate before/after
 
-#### 3.3 Cell-Level FOV Culling (25-50% candidate reduction)
+#### 1.3 Cell-Level FOV Culling (25-50% candidate reduction)
 
 **Concept:** Skip entire grid cells that are behind the creature before examining any proxies.
 
@@ -194,7 +108,7 @@ if cell_dir_dot < -cell_size {
 - [ ] Integrate with perception system
 - [ ] Verify correctness at FOV boundaries
 
-#### 3.4 Chunked Parallelism (10-20% IPC improvement)
+#### 1.4 Chunked Parallelism (10-20% IPC improvement)
 
 **Quick win:** Replace fine-grained `par_iter_mut` with chunked processing for better prefetching.
 
@@ -211,6 +125,53 @@ entities.par_chunks_mut(1000).for_each(|chunk| {
 - [ ] Update perception system to use `par_chunks_mut`
 - [ ] Tune chunk size (1000-2000 entities)
 - [ ] Measure IPC improvement
+
+### 2. Code Cleanup
+
+- [ ] **Hot/Cold Perception split** - Split `Perception` into `PerceptionConfig` (16B) + `PerceptionResult` (reduces cache traffic)
+- [ ] **Remove PerceptionScratchBuffer** - No longer needed with spatial grid
+- [ ] **Fix test compilation errors** - `instrumentation_test.rs`, `trial_integration.rs`
+
+### 3. Neighbor Sorting Strategy (ID Bias Problem)
+
+**Current State:** Neighbors are returned in arbitrary order based on grid cell iteration and entity spawn order. This creates "ID bias" where lower-ID creatures are consistently perceived first when `MAX_PERCEIVED_NEIGHBORS` is hit.
+
+**Priority:** Lower than cache optimizations - this is a correctness/fairness issue, not a performance bottleneck.
+
+**Options to evaluate:**
+
+| Approach | Complexity | Accuracy | Cache | Notes |
+|----------|------------|----------|-------|-------|
+| **ID Bias (current)** | O(1) | Poor | Poor | Lower IDs always win when capacity hit |
+| **Random Offset** | O(1) | Fair | Poor | Start iteration at random index, breaks bias |
+| **Topological Sort** | O(k log k) | Best | Poor | Sort by distance, closest neighbors first |
+
+**Recommendation:** Topological sort (distance-based) is biologically accurate - creatures should perceive their closest neighbors first.
+
+**Decision needed:**
+- [ ] **Trial topological sort** - Sort candidates by distance before FOV check
+- [ ] **Trial random offset** - Add XorShift32 random start index per query (simpler fallback)
+- [ ] **Benchmark chosen approach** - Measure overhead at 150K creatures
+
+**Topological Sort Implementation (O(k log k)):**
+```rust
+candidates.sort_by(|a, b| {
+    let dist_a = (a.x - pos.x).powi(2) + (a.y - pos.y).powi(2);
+    let dist_b = (b.x - pos.x).powi(2) + (b.y - pos.y).powi(2);
+    dist_a.partial_cmp(&dist_b).unwrap()
+});
+```
+
+**Random Offset Implementation (O(1)):**
+```rust
+let offset = xorshift32(entity.index()) as usize % candidates.len();
+for i in 0..candidates.len() {
+    let idx = (offset + i) % candidates.len();
+    // process candidates[idx]
+}
+```
+
+**Note:** Morton grid indexing was tried for cache locality but showed no improvement - the bottleneck is scattered Rayon thread access, not grid cell ordering.
 
 ### 4. Stretch Goals (Future Sprints)
 

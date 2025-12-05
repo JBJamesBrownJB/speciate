@@ -32,42 +32,13 @@
 
 ## Remaining Work
 
-### 1. Cache Locality & Throughput Optimizations
+### 1. Cache Locality Optimizations
 
 **Context:** Profiling at 150K creatures shows 88% frontend stalls, 24% L3 miss rate, IPC of 1.74. The bottleneck is memory bandwidth, not compute or branch prediction (0.76% miss rate is healthy).
 
-#### 1.1 Stochastic Perception (HIGHEST PRIORITY - 60-75% reduction)
+**Goal:** Same work, faster execution through better memory access patterns.
 
-**Concept:** Not every creature needs fresh perception every tick. DNA-driven "alertness" determines update frequency.
-
-**Implementation:**
-```rust
-#[derive(Component)]
-pub struct PerceptionCadence {
-    pub next_update_tick: u32,
-    pub interval: u8,  // 1-8 ticks, from DNA "alertness" gene
-}
-
-// Only process creatures due for update THIS tick
-let due_for_update: Vec<_> = query
-    .iter_mut()
-    .filter(|(.., cadence)| cadence.next_update_tick == current_tick)
-    .collect();
-```
-
-**DNA Integration:**
-- Predators: interval 1-2 (high alertness, expensive)
-- Prey: interval 2-4 (reactive)
-- Grazers: interval 4-8 (docile, cheap)
-
-**Gameplay Benefit:** Creates emergent "surprise attacks" - alertness becomes a survival trait subject to natural selection.
-
-- [ ] Add `PerceptionCadence` component
-- [ ] Filter perception system by due tick
-- [ ] Add jitter to prevent sync waves
-- [ ] Integrate with DNA system
-
-#### 1.2 Sort Entities by Grid Cell (30-40% L3 reduction)
+#### 1.1 Sort Entities by Grid Cell (30-40% L3 reduction)
 
 **Problem:** Rayon threads randomly access different grid regions → cache thrashing.
 
@@ -88,27 +59,7 @@ sorted.par_chunks_mut(2000).for_each(|chunk| { ... });
 - [ ] Implement entity sorting before parallel phase
 - [ ] Benchmark L3 miss rate before/after
 
-#### 1.3 Cell-Level FOV Culling (25-50% candidate reduction)
-
-**Concept:** Skip entire grid cells that are behind the creature before examining any proxies.
-
-```rust
-// Before examining proxies, check if cell center is behind creature
-let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
-if cell_dir_dot < -cell_size {
-    continue; // Entire cell is behind, skip all its proxies
-}
-```
-
-**Impact by FOV:**
-- 180° FOV: ~50% cells skipped
-- 90° FOV (predators): ~75% cells skipped
-
-- [ ] Add `query_visible_cells()` method to SpatialGrid
-- [ ] Integrate with perception system
-- [ ] Verify correctness at FOV boundaries
-
-#### 1.4 Chunked Parallelism (10-20% IPC improvement)
+#### 1.2 Chunked Parallelism (10-20% IPC improvement)
 
 **Quick win:** Replace fine-grained `par_iter_mut` with chunked processing for better prefetching.
 
@@ -173,7 +124,62 @@ for i in 0..candidates.len() {
 
 **Note:** Morton grid indexing was tried for cache locality but showed no improvement - the bottleneck is scattered Rayon thread access, not grid cell ordering.
 
-### 4. Stretch Goals (Future Sprints)
+### 4. Workload Reduction Optimizations
+
+**Goal:** Less work per tick through temporal amortization and algorithmic culling.
+
+#### 4.1 Stochastic Perception (60-75% reduction)
+
+**Concept:** Not every creature needs fresh perception every tick. DNA-driven "alertness" determines update frequency.
+
+**Implementation:**
+```rust
+#[derive(Component)]
+pub struct PerceptionCadence {
+    pub next_update_tick: u32,
+    pub interval: u8,  // 1-8 ticks, from DNA "alertness" gene
+}
+
+// Only process creatures due for update THIS tick
+let due_for_update: Vec<_> = query
+    .iter_mut()
+    .filter(|(.., cadence)| cadence.next_update_tick == current_tick)
+    .collect();
+```
+
+**DNA Integration:**
+- Predators: interval 1-2 (high alertness, expensive)
+- Prey: interval 2-4 (reactive)
+- Grazers: interval 4-8 (docile, cheap)
+
+**Gameplay Benefit:** Creates emergent "surprise attacks" - alertness becomes a survival trait subject to natural selection.
+
+- [ ] Add `PerceptionCadence` component
+- [ ] Filter perception system by due tick
+- [ ] Add jitter to prevent sync waves
+- [ ] Integrate with DNA system
+
+#### 4.2 Cell-Level FOV Culling (25-50% candidate reduction)
+
+**Concept:** Skip entire grid cells that are behind the creature before examining any proxies.
+
+```rust
+// Before examining proxies, check if cell center is behind creature
+let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
+if cell_dir_dot < -cell_size {
+    continue; // Entire cell is behind, skip all its proxies
+}
+```
+
+**Impact by FOV:**
+- 180° FOV: ~50% cells skipped
+- 90° FOV (predators): ~75% cells skipped
+
+- [ ] Add `query_visible_cells()` method to SpatialGrid
+- [ ] Integrate with perception system
+- [ ] Verify correctness at FOV boundaries
+
+### 5. Stretch Goals (Future Sprints)
 
 - [ ] Double-buffer grid architecture
 - [ ] FxHashMap vs std HashMap benchmark

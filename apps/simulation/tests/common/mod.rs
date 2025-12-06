@@ -1,5 +1,7 @@
 //! Common test utilities for integration tests
 
+#![allow(dead_code)]
+
 use speciate::config::SaveStateConfig;
 use speciate::simulation::{Simulation, SimulationBuilder};
 use speciate::{spawn_creature, CreatureSpawnRequest};
@@ -25,21 +27,32 @@ pub fn test_save_state_config(interval_secs: u64, keep_last_n: usize) -> SaveSta
         enabled: true,
         interval_secs,
         keep_last_n,
+        save_dir: PathBuf::from("save-states"),
     }
 }
 
-/// Count total number of save states (all .msgpack files)
-///
-/// In the new simplified save system, all saves (periodic and shutdown) create
-/// timestamped files with no prefix, so we just count all .msgpack files.
-pub fn count_save_states() -> usize {
-    let snapshots_dir = PathBuf::from("save-states");
+/// Create a save state config with custom save directory (for test isolation)
+pub fn test_save_state_config_with_dir(interval_secs: u64, keep_last_n: usize, save_dir: PathBuf) -> SaveStateConfig {
+    SaveStateConfig {
+        enabled: true,
+        interval_secs,
+        keep_last_n,
+        save_dir,
+    }
+}
 
+/// Count total number of save states (all .msgpack files) in default directory
+pub fn count_save_states() -> usize {
+    count_save_states_in_dir(&PathBuf::from("save-states"))
+}
+
+/// Count total number of save states (all .msgpack files) in specified directory
+pub fn count_save_states_in_dir(snapshots_dir: &PathBuf) -> usize {
     if !snapshots_dir.exists() {
         return 0;
     }
 
-    fs::read_dir(&snapshots_dir)
+    fs::read_dir(snapshots_dir)
         .unwrap()
         .filter_map(|entry| entry.ok())
         .filter(|entry| {
@@ -81,15 +94,18 @@ pub fn latest_save_state_exists() -> bool {
     false  // latest.msgpack no longer exists in new system
 }
 
-/// Get the most recent save state file path (sorted by timestamp in filename)
+/// Get the most recent save state file path (sorted by timestamp in filename) from default directory
 pub fn get_most_recent_save_state() -> Option<PathBuf> {
-    let snapshots_dir = PathBuf::from("save-states");
+    get_most_recent_save_state_in_dir(&PathBuf::from("save-states"))
+}
 
+/// Get the most recent save state file path from specified directory
+pub fn get_most_recent_save_state_in_dir(snapshots_dir: &PathBuf) -> Option<PathBuf> {
     if !snapshots_dir.exists() {
         return None;
     }
 
-    let mut save_files: Vec<PathBuf> = fs::read_dir(&snapshots_dir)
+    let mut save_files: Vec<PathBuf> = fs::read_dir(snapshots_dir)
         .ok()?
         .filter_map(|entry| entry.ok())
         .filter_map(|entry| {

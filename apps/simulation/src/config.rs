@@ -13,11 +13,14 @@ impl Default for MovementConfig {
     }
 }
 
+use std::path::PathBuf;
+
 #[derive(Debug, Clone)]
 pub struct SaveStateConfig {
     pub enabled: bool,
     pub interval_secs: u64,
     pub keep_last_n: usize,
+    pub save_dir: PathBuf,
 }
 
 impl Default for SaveStateConfig {
@@ -26,6 +29,7 @@ impl Default for SaveStateConfig {
             enabled: true,
             interval_secs: 300,
             keep_last_n: 20,
+            save_dir: PathBuf::from("save-states"),
         }
     }
 }

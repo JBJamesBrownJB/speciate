@@ -164,7 +164,8 @@ impl NapiApp {
         }
     }
 
-    /// Lookup entity by CritId
+    /// Lookup entity by CritId (reserved for future use)
+    #[allow(dead_code)]
     fn lookup_entity_by_crit_id(&mut self, crit_id: u32) -> Option<Entity> {
         self.simulation.world
             .query::<(Entity, &CritId)>()

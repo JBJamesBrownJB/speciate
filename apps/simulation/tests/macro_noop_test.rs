@@ -1,4 +1,5 @@
 #![cfg(not(feature = "dev-tools"))]
+#![allow(unused_variables)]
 
 use speciate::time_system;
 

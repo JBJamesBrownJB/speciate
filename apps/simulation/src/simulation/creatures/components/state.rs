@@ -1,7 +1,10 @@
-
 use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
+
+pub const DEFAULT_ENERGY: f32 = 100.0;
+pub const LOW_ENERGY_THRESHOLD: f32 = 30.0;
+pub const EXHAUSTED_THRESHOLD: f32 = 10.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize, Reflect)]
 #[repr(u8)]
@@ -32,7 +35,7 @@ impl Default for CreatureState {
     fn default() -> Self {
         Self {
             behavior: BehaviorMode::Catatonic,
-            energy: 100.0,
+            energy: DEFAULT_ENERGY,
             age: 0.0,
             max_speed: 20.0,
         }
@@ -45,11 +48,11 @@ impl CreatureState {
     }
 
     pub fn is_low_energy(&self) -> bool {
-        self.energy < 30.0
+        self.energy < LOW_ENERGY_THRESHOLD
     }
 
     pub fn is_exhausted(&self) -> bool {
-        self.energy < 10.0
+        self.energy < EXHAUSTED_THRESHOLD
     }
 
     pub fn consume_energy(&mut self, amount: f32) {

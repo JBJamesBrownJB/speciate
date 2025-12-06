@@ -51,7 +51,7 @@ fn test_performance_snapshot_schema_completeness() {
         &sys_timings,
     );
 
-    assert_eq!(snapshot.label, "pre-napi-re-migration");
+    assert_eq!(snapshot.label, "post-napi-migration");
     assert_eq!(snapshot.creature_count, 27500);
     assert!(!snapshot.timestamp.is_empty(), "Timestamp should not be empty");
     assert!(

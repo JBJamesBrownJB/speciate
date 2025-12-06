@@ -1,15 +1,6 @@
 //! Integration tests for NAPI mode save state functionality
 //!
-//! **TDD RED PHASE:** These tests assert DESIRED behavior and currently FAIL
-//! because SimulationEngine doesn't integrate SaveStateWorker yet.
-//!
-//! After GREEN phase implementation, these tests will PASS and remain as
-//! permanent regression tests.
-//!
-//! **IMPORTANT**: Run with `--test-threads=1` to avoid race conditions:
-//! ```bash
-//! cargo test --test napi_save_state_integration -- --test-threads=1
-//! ```
+//! Each test uses an isolated temp directory to avoid race conditions.
 
 mod common;
 
@@ -17,27 +8,21 @@ use common::*;
 use speciate::persistence::{WorldSaveState, SaveStateWorker, SaveType};
 use speciate::config::SaveStateConfig;
 use speciate::ipc::bridge::NapiApp;
-use std::env;
 use std::time::{Duration, Instant};
+use tempfile::tempdir;
 
 /// Test periodic saves with fast interval (for testing)
-///
-/// **RED PHASE:** This test FAILS because SimulationEngine doesn't save states
-/// **GREEN PHASE:** Will PASS after implementing SaveStateWorker integration
-/// **FOREVER:** Protects against regression - catches if saves break again
 #[test]
 fn test_napi_periodic_saves_with_2_second_interval() {
-    cleanup_test_save_states();
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let save_dir = temp_dir.path().to_path_buf();
 
-    // Set test-friendly interval via environment variables
-    env::set_var("SAVE_STATE_ENABLED", "true");
-    env::set_var("SAVE_STATE_INTERVAL_SECS", "2");
-
-    // Create config and worker
+    // Create config and worker with isolated directory
     let config = SaveStateConfig {
         enabled: true,
         interval_secs: 2,
         keep_last_n: 10,
+        save_dir: save_dir.clone(),
     };
     let worker = SaveStateWorker::start(config.clone());
 
@@ -67,10 +52,8 @@ fn test_napi_periodic_saves_with_2_second_interval() {
     worker.shutdown();
     std::thread::sleep(Duration::from_millis(500));
 
-    let save_count = count_save_states();
+    let save_count = count_save_states_in_dir(&save_dir);
 
-    // This assertion FAILS now (save_count == 0)
-    // Will PASS after GREEN phase (save_count >= 2)
     assert!(
         save_count >= 2,
         "Should create at least 2 saves in 5 seconds with 2-second interval, got {}",
@@ -78,33 +61,25 @@ fn test_napi_periodic_saves_with_2_second_interval() {
     );
 
     // Verify we can retrieve the most recent save
-    let most_recent = get_most_recent_save_state();
+    let most_recent = get_most_recent_save_state_in_dir(&save_dir);
     assert!(
         most_recent.is_some(),
         "Should be able to find most recent save state after periodic saves"
     );
-
-    env::remove_var("SAVE_STATE_ENABLED");
-    env::remove_var("SAVE_STATE_INTERVAL_SECS");
-    cleanup_test_save_states();
 }
 
-/// Test shutdown save creates latest.msgpack
-///
-/// **RED PHASE:** This test FAILS because SimulationEngine doesn't save on shutdown
-/// **GREEN PHASE:** Will PASS after implementing shutdown() method
-/// **FOREVER:** Protects against regression - catches if shutdown save breaks
+/// Test shutdown save creates timestamped file
 #[test]
 fn test_napi_shutdown_save_creates_latest() {
-    cleanup_test_save_states();
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let save_dir = temp_dir.path().to_path_buf();
 
-    env::set_var("SAVE_STATE_ENABLED", "true");
-
-    // Create config and worker
+    // Create config and worker with isolated directory
     let config = SaveStateConfig {
         enabled: true,
         interval_secs: 300, // Long interval (won't trigger during test)
         keep_last_n: 10,
+        save_dir: save_dir.clone(),
     };
     let worker = SaveStateWorker::start(config.clone());
 
@@ -126,9 +101,7 @@ fn test_napi_shutdown_save_creates_latest() {
     worker.shutdown();
     std::thread::sleep(Duration::from_millis(500));
 
-    // This assertion FAILS now (save doesn't exist)
-    // Will PASS after GREEN phase (save exists)
-    let most_recent = get_most_recent_save_state();
+    let most_recent = get_most_recent_save_state_in_dir(&save_dir);
     assert!(
         most_recent.is_some(),
         "Should have a timestamped save state after shutdown"
@@ -143,28 +116,20 @@ fn test_napi_shutdown_save_creates_latest() {
         "2.0.0",
         "Save state should have correct version"
     );
-
-    env::remove_var("SAVE_STATE_ENABLED");
-    cleanup_test_save_states();
 }
 
 /// Test that disabled config prevents saves
-///
-/// **RED PHASE:** This test FAILS because config isn't implemented
-/// **GREEN PHASE:** Will PASS after accepting SaveStateConfig parameter
-/// **FOREVER:** Protects against regression - catches if disabled flag ignored
 #[test]
 fn test_napi_disabled_config_prevents_saves() {
-    cleanup_test_save_states();
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let save_dir = temp_dir.path().to_path_buf();
 
-    env::set_var("SAVE_STATE_ENABLED", "false");
-    env::set_var("SAVE_STATE_INTERVAL_SECS", "1");
-
-    // Create config with saves DISABLED
+    // Create config with saves DISABLED (we don't start a worker)
     let _config = SaveStateConfig {
         enabled: false,
         interval_secs: 1,
         keep_last_n: 10,
+        save_dir: save_dir.clone(),
     };
 
     // Note: We don't create a worker since saves are disabled
@@ -180,8 +145,8 @@ fn test_napi_disabled_config_prevents_saves() {
         std::thread::sleep(Duration::from_millis(45));
     }
 
-    // No worker, so no saves should be created
-    let save_count = count_save_states();
+    // No worker, so no saves should be created in our isolated temp dir
+    let save_count = count_save_states_in_dir(&save_dir);
 
     assert_eq!(
         save_count,
@@ -191,35 +156,25 @@ fn test_napi_disabled_config_prevents_saves() {
     );
 
     // Verify no save state files exist
-    let most_recent = get_most_recent_save_state();
+    let most_recent = get_most_recent_save_state_in_dir(&save_dir);
     assert!(
         most_recent.is_none(),
         "Should NOT have any save state files when saves are disabled"
     );
-
-    env::remove_var("SAVE_STATE_ENABLED");
-    env::remove_var("SAVE_STATE_INTERVAL_SECS");
-    cleanup_test_save_states();
 }
 
 /// Test cleanup keeps only last N saves
-///
-/// **RED PHASE:** This test FAILS because no saves are created
-/// **GREEN PHASE:** Will PASS after implementing cleanup logic
-/// **FOREVER:** Protects against regression - catches if cleanup breaks
 #[test]
 fn test_napi_cleanup_keeps_last_n() {
-    cleanup_test_save_states();
-
-    env::set_var("SAVE_STATE_ENABLED", "true");
-    env::set_var("SAVE_STATE_INTERVAL_SECS", "1");
-    env::set_var("SAVE_STATE_KEEP_LAST_N", "3");
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let save_dir = temp_dir.path().to_path_buf();
 
     // Create config with keep_last_n=3
     let config = SaveStateConfig {
         enabled: true,
         interval_secs: 1,
         keep_last_n: 3,
+        save_dir: save_dir.clone(),
     };
     let worker = SaveStateWorker::start(config.clone());
 
@@ -249,18 +204,11 @@ fn test_napi_cleanup_keeps_last_n() {
     worker.shutdown();
     std::thread::sleep(Duration::from_millis(500));
 
-    let save_count = count_save_states();
+    let save_count = count_save_states_in_dir(&save_dir);
 
-    // This will FAIL now (save_count == 0)
-    // Will PASS after GREEN phase (save_count == 3)
     assert!(
         save_count <= 3 && save_count > 0,
         "Should keep at most 3 saves (got {}). Must have at least 1 to prove saves work.",
         save_count
     );
-
-    env::remove_var("SAVE_STATE_ENABLED");
-    env::remove_var("SAVE_STATE_INTERVAL_SECS");
-    env::remove_var("SAVE_STATE_KEEP_LAST_N");
-    cleanup_test_save_states();
 }

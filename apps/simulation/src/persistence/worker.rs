@@ -60,7 +60,7 @@ impl SaveStateWorker {
 }
 
 fn worker_thread_loop(receiver: Receiver<WorkerMessage>, config: SaveStateConfig) {
-    if let Err(e) = fs::create_dir_all("save-states") {
+    if let Err(e) = fs::create_dir_all(&config.save_dir) {
         error!("Failed to create save-states directory: {}", e);
         return;
     }
@@ -87,7 +87,7 @@ fn handle_save_world_state(
     config: &SaveStateConfig,
 ) {
     let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S");
-    let save_path = PathBuf::from(format!("save-states/{}.msgpack", timestamp));
+    let save_path = config.save_dir.join(format!("{}.msgpack", timestamp));
 
     let type_label = match save_type {
         SaveType::Periodic => "periodic",
@@ -115,11 +115,11 @@ fn handle_save_world_state(
     }
 
     // Run cleanup after every save (periodic or shutdown)
-    cleanup_old_save_states(config.keep_last_n);
+    cleanup_old_save_states(&config.save_dir, config.keep_last_n);
 }
 
-fn cleanup_old_save_states(keep_last_n: usize) {
-    let snapshots_dir = PathBuf::from("save-states");
+fn cleanup_old_save_states(save_dir: &PathBuf, keep_last_n: usize) {
+    let snapshots_dir = save_dir;
 
     let entries = match fs::read_dir(&snapshots_dir) {
         Ok(entries) => entries,
@@ -165,6 +165,7 @@ fn cleanup_old_save_states(keep_last_n: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_save_state_config_default() {
@@ -176,31 +177,24 @@ mod tests {
 
     #[test]
     fn test_cleanup_with_no_files() {
-        cleanup_old_save_states(10);
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let save_dir = temp_dir.path().to_path_buf();
+        fs::create_dir_all(&save_dir).ok();
+        cleanup_old_save_states(&save_dir, 10);
     }
 
     #[test]
     fn test_cleanup_with_fewer_than_keep() {
-        let test_dir = PathBuf::from("save-states");
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let test_dir = temp_dir.path().to_path_buf();
         fs::create_dir_all(&test_dir).ok();
 
-        if let Ok(entries) = fs::read_dir(&test_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with("simulation_") && name.ends_with(".msgpack") {
-                        fs::remove_file(path).ok();
-                    }
-                }
-            }
-        }
-
         for i in 1..=3 {
-            let path = test_dir.join(format!("simulation_2025-01-0{}_12-00-00.msgpack", i));
+            let path = test_dir.join(format!("2025-01-0{}_12-00-00.msgpack", i));
             fs::write(&path, b"test").ok();
         }
 
-        cleanup_old_save_states(10);
+        cleanup_old_save_states(&test_dir, 10);
 
         let count = fs::read_dir(&test_dir)
             .unwrap()
@@ -208,19 +202,12 @@ mod tests {
                 e.as_ref()
                     .unwrap()
                     .path()
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .starts_with("simulation_")
+                    .extension()
+                    .map(|ext| ext == "msgpack")
+                    .unwrap_or(false)
             })
             .count();
 
         assert_eq!(count, 3);
-
-        for i in 1..=3 {
-            let path = test_dir.join(format!("simulation_2025-01-0{}_12-00-00.msgpack", i));
-            fs::remove_file(path).ok();
-        }
     }
 }

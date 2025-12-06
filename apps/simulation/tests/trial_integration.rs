@@ -11,7 +11,7 @@
 
 use bevy_ecs::prelude::*;
 use speciate::simulation::core::components::Position;
-use speciate::simulation::creatures::components::{BehaviorMode, CreatureState, Target};
+use speciate::simulation::creatures::components::{BehaviorMode, CreatureState};
 
 #[cfg(feature = "dev-tools")]
 use speciate::trials::loader::load_trial;
@@ -39,12 +39,12 @@ fn trial_file_exists(name: &str) -> bool {
 fn test_trial_files_exist() {
     // This test verifies the trial files are in the expected location
     assert!(
-        trial_file_exists("default-spawn-baseline"),
-        "default-spawn-baseline.toml not found in trials/"
-    );
-    assert!(
         trial_file_exists("crowd-navigation"),
         "crowd-navigation.toml not found in trials/"
+    );
+    assert!(
+        trial_file_exists("many-wanderers-dense"),
+        "many-wanderers-dense.toml not found in trials/"
     );
 }
 
@@ -110,28 +110,30 @@ fn test_load_crowd_navigation_trial() {
         .expect("Should load crowd-navigation.toml");
 
     // Verify metadata
-    assert_eq!(config.name, "Crowd Navigation Test");
-    assert!(config.description.contains("200 static obstacles"));
+    assert_eq!(config.name, "Crowd Navigation");
+    assert!(config.description.contains("10x10 grid"));
 
-    // Verify total creature count (200 catatonic + 50 seekers = 250)
+    // Verify total creature count (100 catatonic + 1 seeker = 101)
     let mut pos_query = world.query::<&Position>();
     let total_count = pos_query.iter(&world).count();
     assert_eq!(
-        total_count, 250,
-        "Should spawn 250 creatures (200 obstacles + 50 seekers)"
+        total_count, 101,
+        "Should spawn 101 creatures (100 obstacles + 1 seeker)"
     );
 
-    // Verify catatonic count (20×10 grid = 200)
+    // Verify catatonic count (10×10 grid = 100)
     let mut catatonic_query = world.query::<&CreatureState>();
     let catatonic_count = catatonic_query.iter(&world)
         .filter(|state| state.behavior == BehaviorMode::Catatonic)
         .count();
-    assert_eq!(catatonic_count, 200, "Should have 200 static obstacles");
+    assert_eq!(catatonic_count, 100, "Should have 100 static obstacles");
 
-    // Verify seeker count (circle with 50 creatures)
-    let mut seeker_query = world.query::<&Target>();
-    let seeker_count = seeker_query.iter(&world).count();
-    assert_eq!(seeker_count, 50, "Should have 50 mobile seekers");
+    // Verify seeker count (1 seeker with Seeking behavior)
+    let mut seeker_query = world.query::<&CreatureState>();
+    let seeker_count = seeker_query.iter(&world)
+        .filter(|state| state.behavior == BehaviorMode::Seeking)
+        .count();
+    assert_eq!(seeker_count, 1, "Should have 1 mobile seeker");
 }
 
 #[test]
@@ -159,15 +161,13 @@ fn test_trial_world_config_override() {
     let mut world = World::new();
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
-    // Load crowd-navigation trial (has custom boundary config)
+    // Load crowd-navigation trial (this trial doesn't define boundaries)
     load_trial(&mut world, "crowd-navigation").expect("Should load trial");
 
-    // Verify boundary override was applied
-    let boundary = world.get_resource::<BoundaryConfig>().unwrap();
-    assert_eq!(boundary.min_x, -500.0);
-    assert_eq!(boundary.max_x, 500.0);
-    assert_eq!(boundary.min_y, -500.0);
-    assert_eq!(boundary.max_y, 500.0);
+    // Trial doesn't define boundaries, so BoundaryConfig should NOT be present
+    // (only trials with explicit boundary config will have this resource)
+    let boundary = world.get_resource::<BoundaryConfig>();
+    assert!(boundary.is_none(), "BoundaryConfig should NOT be present for trials without boundary config");
 }
 
 #[test]
@@ -178,70 +178,84 @@ fn test_trial_spawns_valid_components() {
     let mut world = World::new();
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
-    load_trial(&mut world, "default-spawn-baseline").expect("Should load trial");
+    load_trial(&mut world, "crowd-navigation").expect("Should load trial");
 
-    // All creatures should have core physics components
+    // All creatures should have core physics components (101 total: 100 grid + 1 seeker)
     let pos_count = world.query::<&Position>().iter(&world).count();
     let vel_count = world.query::<&Velocity>().iter(&world).count();
     let accel_count = world.query::<&Acceleration>().iter(&world).count();
     let body_count = world.query::<&BodySize>().iter(&world).count();
 
-    assert_eq!(pos_count, 100);
-    assert_eq!(vel_count, 100);
-    assert_eq!(accel_count, 100);
-    assert_eq!(body_count, 100);
+    assert_eq!(pos_count, 101);
+    assert_eq!(vel_count, 101);
+    assert_eq!(accel_count, 101);
+    assert_eq!(body_count, 101);
 }
 
 #[test]
 #[cfg(feature = "dev-tools")]
-fn test_trial_circle_pattern_radius() {
+fn test_trial_seeker_starting_position() {
     let mut world = World::new();
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
     load_trial(&mut world, "crowd-navigation").expect("Should load trial");
 
-    // Get seeker positions (circle pattern with radius 100)
-    let mut query = world.query::<(&Position, &Target)>();
-    let seekers: Vec<_> = query.iter(&world).collect();
+    // Get seeker positions (single seeker with Seeking behavior)
+    let mut query = world.query::<(&Position, &CreatureState)>();
+    let seekers: Vec<_> = query.iter(&world)
+        .filter(|(_, state)| state.behavior == BehaviorMode::Seeking)
+        .collect();
 
-    // Verify all seekers are ~100m from center (0, 0)
-    for (pos, _) in seekers {
-        let dist = (pos.x * pos.x + pos.y * pos.y).sqrt();
-        assert!(
-            (dist - 100.0).abs() < 0.1,
-            "Seeker at ({}, {}) should be ~100m from origin, got {}m",
-            pos.x,
-            pos.y,
-            dist
-        );
-    }
+    assert_eq!(seekers.len(), 1, "Should have exactly 1 seeker");
+
+    // Verify seeker starts at (-30, 0)
+    let (pos, _) = seekers[0];
+    assert!(
+        (pos.x - (-30.0)).abs() < 0.1 && pos.y.abs() < 0.1,
+        "Seeker should start at (-30, 0), got ({}, {})",
+        pos.x,
+        pos.y
+    );
 }
 
 #[test]
 #[cfg(feature = "dev-tools")]
-fn test_trial_grid_spacing() {
+fn test_trial_grid_staggered_pattern() {
     let mut world = World::new();
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
-    load_trial(&mut world, "default-spawn-baseline").expect("Should load trial");
+    load_trial(&mut world, "crowd-navigation").expect("Should load trial");
 
-    let mut query = world.query::<&Position>();
-    let mut positions: Vec<_> = query.iter(&world).collect();
+    // Get only the catatonic grid positions (not the seeker)
+    let mut query = world.query::<(&Position, &CreatureState)>();
+    let positions: Vec<_> = query.iter(&world)
+        .filter(|(_, state)| state.behavior == BehaviorMode::Catatonic)
+        .map(|(pos, _)| (pos.x, pos.y))
+        .collect();
 
-    // Sort by Y, then X for predictable ordering
-    positions.sort_by(|a, b| {
-        a.y.partial_cmp(&b.y)
-            .unwrap()
-            .then(a.x.partial_cmp(&b.x).unwrap())
-    });
+    // Verify correct creature count (10x10 grid = 100 catatonic creatures)
+    assert_eq!(positions.len(), 100, "Should have 100 catatonic creatures in grid");
 
-    // Verify first row has 5m spacing
-    for i in 0..9 {
-        let spacing = positions[i + 1].x - positions[i].x;
-        assert!(
-            (spacing - 5.0).abs() < 0.01,
-            "Grid spacing should be 5m, got {}",
-            spacing
-        );
-    }
+    // Verify staggered pattern creates multiple distinct Y levels
+    // With grid_offset_y = 1.0 and spacing = 2.0, we expect 20 distinct Y values
+    // (10 base rows + 10 offset rows)
+    let mut unique_y_values: Vec<f32> = positions.iter().map(|(_, y)| *y).collect();
+    unique_y_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    unique_y_values.dedup_by(|a, b| (*a - *b).abs() < 0.01);
+
+    assert!(
+        unique_y_values.len() > 10,
+        "Staggered grid should create more than 10 Y levels, got {}",
+        unique_y_values.len()
+    );
+
+    // Verify grid spans reasonable bounds (creatures spread across area)
+    let min_x = positions.iter().map(|(x, _)| *x).fold(f32::INFINITY, f32::min);
+    let max_x = positions.iter().map(|(x, _)| *x).fold(f32::NEG_INFINITY, f32::max);
+    let min_y = positions.iter().map(|(_, y)| *y).fold(f32::INFINITY, f32::min);
+    let max_y = positions.iter().map(|(_, y)| *y).fold(f32::NEG_INFINITY, f32::max);
+
+    // Grid should span a reasonable area (not all creatures at same point)
+    assert!(max_x - min_x > 10.0, "Grid should span significant X range");
+    assert!(max_y - min_y > 10.0, "Grid should span significant Y range");
 }

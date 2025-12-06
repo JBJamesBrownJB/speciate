@@ -89,9 +89,10 @@ fn test_snapshot_cleanup_keeps_last_n() {
 
 #[test]
 fn test_periodic_and_shutdown_both_create_timestamped_files() {
-    cleanup_test_save_states();
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let save_dir = temp_dir.path().to_path_buf();
 
-    let config = test_save_state_config(60, 5);
+    let config = test_save_state_config_with_dir(60, 5, save_dir.clone());
     let worker = SaveStateWorker::start(config);
 
     let mut simulation = setup_test_simulation(25);
@@ -111,21 +112,20 @@ fn test_periodic_and_shutdown_both_create_timestamped_files() {
     thread::sleep(Duration::from_millis(500));
 
     // Both periodic and shutdown saves create timestamped files
-    let save_count = count_save_states();
+    let save_count = count_save_states_in_dir(&save_dir);
     assert_eq!(
         save_count, 2,
         "Should have 2 timestamped save files (1 periodic + 1 shutdown)"
     );
 
     // Verify we can get the most recent one
-    let most_recent = get_most_recent_save_state();
+    let most_recent = get_most_recent_save_state_in_dir(&save_dir);
     assert!(
         most_recent.is_some(),
         "Should be able to find most recent save state"
     );
 
     worker.shutdown();
-    cleanup_test_save_states();
 }
 
 #[test]
@@ -226,12 +226,14 @@ fn test_graceful_shutdown_flag() {
 
 #[test]
 fn test_disabled_snapshots_creates_no_files() {
-    cleanup_test_save_states();
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let save_dir = temp_dir.path().to_path_buf();
 
     let config = SaveStateConfig {
         enabled: false,
         interval_secs: 1,
         keep_last_n: 10,
+        save_dir: save_dir.clone(),
     };
 
     let worker = SaveStateWorker::start(config.clone());
@@ -257,15 +259,14 @@ fn test_disabled_snapshots_creates_no_files() {
 
     thread::sleep(Duration::from_millis(500));
 
-    // No save states should have been created
-    let save_count = count_save_states();
+    // No save states should have been created in our isolated temp dir
+    let save_count = count_save_states_in_dir(&save_dir);
     assert_eq!(
         save_count, 0,
         "Should have 0 save states when disabled"
     );
 
     worker.shutdown();
-    cleanup_test_save_states();
 }
 
 #[test]

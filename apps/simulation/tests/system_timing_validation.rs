@@ -1,3 +1,4 @@
+#[cfg(feature = "dev-tools")]
 use std::fs;
 
 #[cfg(feature = "dev-tools")]

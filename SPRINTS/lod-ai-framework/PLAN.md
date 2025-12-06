@@ -17,9 +17,4 @@ When camera is zoomed out by x% (viewing alot of small crtis)
 The first thing we will do, is have the system mark cells that are low/hi-def and send these to the portal (feature flagged for --dev-tools) so we can visualise it in portal.
 
 Some initial ideas for hi/low def AI:
-- Neighbour sorting
-- perception skipping ticks
-- movement skip ticks (Is it better to skip ticks or have seperate systems work on cells in low-def?)
-- Behaviour tick skips
-- rotation tick skips?
-- Grid rebuild skip ticks for cells on low-def? 
+- Neighbour sorting PRIORITY

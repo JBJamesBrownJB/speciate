@@ -32,7 +32,8 @@ pub fn territory_wandering_system(
 
         let (heading_x, heading_y) = if speed_sq < 0.0001 {
             let random_angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            (random_angle.cos(), random_angle.sin())
+            let (sin_a, cos_a) = random_angle.sin_cos();
+            (cos_a, sin_a)
         } else {
             normalize(velocity.vx, velocity.vy)
         };
@@ -44,10 +45,9 @@ pub fn territory_wandering_system(
         wander_state.wander_angle += angle_change.to_radians();
         wander_state.wander_angle = wander_state.wander_angle.rem_euclid(std::f32::consts::TAU);
 
-        let target_x =
-            circle_center_x + wander_state.wander_radius * wander_state.wander_angle.cos();
-        let target_y =
-            circle_center_y + wander_state.wander_radius * wander_state.wander_angle.sin();
+        let (sin_wander, cos_wander) = wander_state.wander_angle.sin_cos();
+        let target_x = circle_center_x + wander_state.wander_radius * cos_wander;
+        let target_y = circle_center_y + wander_state.wander_radius * sin_wander;
 
         let desired_vx = target_x;
         let desired_vy = target_y;

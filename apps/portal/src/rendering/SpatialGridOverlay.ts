@@ -38,6 +38,13 @@ export class SpatialGridOverlay {
   }
 
   setBounds(minX: number, maxX: number, minY: number, maxY: number): void {
+    // Validate bounds are finite and in correct order
+    if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) {
+      return;
+    }
+    if (minX >= maxX || minY >= maxY) {
+      return;
+    }
     this.gridMinX = minX;
     this.gridMaxX = maxX;
     this.gridMinY = minY;
@@ -131,10 +138,21 @@ export class SpatialGridOverlay {
       return;
     }
 
+    // Guard against invalid cell size
+    if (this.cellSize <= 0 || !isFinite(this.cellSize)) {
+      return;
+    }
+
     const startCellX = Math.floor(worldLeft / this.cellSize);
     const endCellX = Math.ceil(worldRight / this.cellSize);
     const startCellY = Math.floor(worldTop / this.cellSize);
     const endCellY = Math.ceil(worldBottom / this.cellSize);
+
+    // Guard against too many cells (prevent infinite loops)
+    const maxCells = 10000;
+    if ((endCellX - startCellX) * (endCellY - startCellY) > maxCells) {
+      return;
+    }
 
     // Render skipped cells (orange/red fill) - cells in range but skipped due to early break
     if (this.skippedCells.length > 0) {

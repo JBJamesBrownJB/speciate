@@ -1,5 +1,11 @@
 use bevy_ecs::prelude::*;
 
+/// Maximum world extent from center in meters.
+/// Used as: set_boundaries(MAX_WORLD_SIZE, MAX_WORLD_SIZE) = ±5km = 10km total.
+/// At 10m cell size, 10km × 10km = 1000×1000 = 1M cells (manageable).
+/// Larger worlds cause spatial grid rebuild bottlenecks.
+pub const MAX_WORLD_SIZE: f32 = 5_000.0;
+
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct WorldBounds {
     pub min_x: f32,
@@ -57,7 +63,7 @@ impl WorldBounds {
 
 impl Default for WorldBounds {
     fn default() -> Self {
-        Self::from_dimensions(2_000_000.0, 2_000_000.0)
+        Self::from_dimensions(MAX_WORLD_SIZE, MAX_WORLD_SIZE)
     }
 }
 
@@ -135,8 +141,8 @@ mod tests {
     #[test]
     fn test_default_bounds() {
         let bounds = WorldBounds::default();
-        assert_eq!(bounds.width(), 2_000_000.0);
-        assert_eq!(bounds.height(), 2_000_000.0);
+        assert_eq!(bounds.width(), MAX_WORLD_SIZE);
+        assert_eq!(bounds.height(), MAX_WORLD_SIZE);
         assert!(bounds.contains(0.0, 0.0));
     }
 }

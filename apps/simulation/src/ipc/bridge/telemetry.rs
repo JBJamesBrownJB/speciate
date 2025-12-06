@@ -26,6 +26,10 @@ pub struct TelemetrySnapshot {
     pub creature_count: usize,
     pub tick_rate_hz: f32,
     pub spatial_grid_cell_size: f32,
+    pub spatial_grid_min_x: f32,
+    pub spatial_grid_max_x: f32,
+    pub spatial_grid_min_y: f32,
+    pub spatial_grid_max_y: f32,
 
     #[cfg(feature = "dev-tools")]
     pub hardware_metrics: HardwareSnapshot,
@@ -82,6 +86,7 @@ impl TelemetrySnapshot {
         creature_count: usize,
         tick_rate_hz: f32,
         spatial_grid_cell_size: f32,
+        spatial_grid_bounds: (f32, f32, f32, f32), // (min_x, max_x, min_y, max_y)
         system_timings: SystemTimingsSnapshot,
         #[cfg(feature = "dev-tools")]
         hardware_metrics: HardwareSnapshot,
@@ -93,6 +98,10 @@ impl TelemetrySnapshot {
             creature_count,
             tick_rate_hz,
             spatial_grid_cell_size,
+            spatial_grid_min_x: spatial_grid_bounds.0,
+            spatial_grid_max_x: spatial_grid_bounds.1,
+            spatial_grid_min_y: spatial_grid_bounds.2,
+            spatial_grid_max_y: spatial_grid_bounds.3,
             system_timings,
             #[cfg(feature = "dev-tools")]
             hardware_metrics,
@@ -112,11 +121,16 @@ impl TelemetrySnapshot {
 
 impl Default for TelemetrySnapshot {
     fn default() -> Self {
+        use crate::simulation::core::MAX_WORLD_SIZE;
         Self {
             tick: 0,
             creature_count: 0,
             tick_rate_hz: 0.0,
             spatial_grid_cell_size: crate::simulation::spatial::CELL_SIZE,
+            spatial_grid_min_x: -MAX_WORLD_SIZE,
+            spatial_grid_max_x: MAX_WORLD_SIZE,
+            spatial_grid_min_y: -MAX_WORLD_SIZE,
+            spatial_grid_max_y: MAX_WORLD_SIZE,
             system_timings: SystemTimingsSnapshot::default(),
             #[cfg(feature = "dev-tools")]
             hardware_metrics: HardwareSnapshot::default(),
@@ -198,6 +212,7 @@ mod tests {
             1000,
             29.5,
             50.0, // spatial_grid_cell_size
+            (-500.0, 500.0, -500.0, 500.0), // spatial_grid_bounds
             system_timings,
             #[cfg(feature = "dev-tools")]
             HardwareSnapshot::default(),

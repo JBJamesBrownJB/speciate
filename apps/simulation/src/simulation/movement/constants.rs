@@ -10,5 +10,6 @@ pub const MAX_TURN_RATE: f32 = 90.0; // Maximum turn rate in degrees/second
 pub const MAX_TURN_RATE_RAD: f32 = MAX_TURN_RATE * PI / 180.0; // Turn rate in radians/second
 pub const VELOCITY_DAMPING: f32 = 0.90; // Per-frame velocity damping (mimics air resistance, achieves ~90% reduction in 46 ticks/~2s at 22.2Hz)
 pub const STOPPED_THRESHOLD: f32 = 0.01; // Speed below which creatures snap to zero (m/s)
+pub const NOISE_SPEED_THRESHOLD_SQ: f32 = 0.01; // Speed² above which locomotion noise is applied (corresponds to 0.1 m/s)
 pub const DT: f32 = 0.05; // Simulation time step in seconds (20 Hz)
 pub const SLOW_ZONE_MULTIPLIER: f32 = 30.0; // Slow zone size as multiple of personal_space

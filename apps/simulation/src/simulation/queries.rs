@@ -1,8 +1,13 @@
 use bevy_ecs::prelude::*;
-use crate::simulation::components::*;
-use crate::simulation::core::components::*;
+use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
+use crate::simulation::creatures::components::{
+    CanAvoidObstacles, CanSeek, CanWander, CreatureState, HomePosition, Target, WanderState,
+};
 use crate::simulation::perception::{AvoidanceBehavior, Perception};
 
+// Wander behavior query. Used by: territory_wandering_system
+// MUTATES: Acceleration (force), WanderState (angle)
+// READS: Velocity, Position, HomePosition, CreatureState
 pub type WanderQuery<'w, 's> = Query<
     'w,
     's,
@@ -17,11 +22,14 @@ pub type WanderQuery<'w, 's> = Query<
     With<CanWander>,
 >;
 
+// Seek behavior query. Used by: seek_system
+// MUTATES: Acceleration (force), CreatureState (behavior transition)
+// READS: Position, Velocity, BodySize, Target
 pub type SeekQuery<'w, 's> = Query<
     'w,
     's,
     (
-        &'static Position,  // Read-only: seek only reads position
+        &'static Position,
         &'static mut Acceleration,
         &'static Velocity,
         &'static BodySize,
@@ -31,6 +39,9 @@ pub type SeekQuery<'w, 's> = Query<
     With<CanSeek>,
 >;
 
+// Avoidance behavior query. Used by: avoidance_system
+// MUTATES: Acceleration (force)
+// READS: Entity, Position, BodySize, Perception, AvoidanceBehavior, CreatureState
 pub type AvoidanceQuery<'w, 's> = Query<
     'w,
     's,

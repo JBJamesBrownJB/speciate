@@ -1,5 +1,8 @@
-use crate::simulation::components::*;
-use crate::simulation::core::components::BodySize;
+use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
+use crate::simulation::creatures::components::{
+    BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
+    CreatureState, CritId, HomePosition, Target, WanderState,
+};
 use crate::simulation::creatures::behaviors::wander::constants::{
     ANGLE_CHANGE, WANDER_DISTANCE, WANDER_RADIUS,
 };

@@ -1,4 +1,4 @@
-use super::components::*;
+use super::components::{ActualTickRate, BoundaryConfig, DeltaTime, PhysicsTick};
 use super::world_bounds::WorldBounds;
 use crate::config::MovementConfig;
 use crate::simulation::creatures::behaviors::{
@@ -33,8 +33,11 @@ impl SimulationBuilder {
         let mut world = World::new();
         let mut schedule = Schedule::default();
 
-        use crate::simulation::components::*;
-        use crate::simulation::core::components::*;
+        use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
+        use crate::simulation::creatures::components::{
+            BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
+            CreatureState, CritId, FleeState, HomePosition, Target, WanderState,
+        };
         use crate::simulation::perception::AvoidanceBehavior;
         use bevy_ecs::prelude::AppTypeRegistry;
 
@@ -129,6 +132,12 @@ impl SimulationBuilder {
         });
         self.world
             .insert_resource(WorldBounds::new(-extent_x, extent_x, -extent_y, extent_y));
+
+        // Set spatial grid bounds for fixed-bounds optimization
+        if let Some(mut grid) = self.world.get_resource_mut::<DoubleBufferedSpatialGrid>() {
+            grid.set_world_bounds(-extent_x, extent_x, -extent_y, extent_y);
+        }
+
         self
     }
 
@@ -165,6 +174,11 @@ impl Simulation {
         });
         self.world
             .insert_resource(WorldBounds::new(-extent_x, extent_x, -extent_y, extent_y));
+
+        // Set spatial grid bounds for fixed-bounds optimization
+        if let Some(mut grid) = self.world.get_resource_mut::<DoubleBufferedSpatialGrid>() {
+            grid.set_world_bounds(-extent_x, extent_x, -extent_y, extent_y);
+        }
     }
 
     pub fn get_boundaries(&self) -> (f32, f32, f32, f32) {
@@ -358,12 +372,13 @@ mod tests {
 
     #[test]
     fn test_builder_default_boundaries() {
+        use crate::simulation::core::MAX_WORLD_SIZE;
         let simulation = SimulationBuilder::new().build();
         let (min_x, max_x, min_y, max_y) = simulation.get_boundaries();
-        assert_eq!(min_x, -1_000_000.0);
-        assert_eq!(max_x, 1_000_000.0);
-        assert_eq!(min_y, -1_000_000.0);
-        assert_eq!(max_y, 1_000_000.0);
+        assert_eq!(min_x, -MAX_WORLD_SIZE);
+        assert_eq!(max_x, MAX_WORLD_SIZE);
+        assert_eq!(min_y, -MAX_WORLD_SIZE);
+        assert_eq!(max_y, MAX_WORLD_SIZE);
     }
 
     #[test]

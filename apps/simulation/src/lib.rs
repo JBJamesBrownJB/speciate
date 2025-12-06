@@ -50,7 +50,7 @@ macro_rules! time_system {
 
 
 // Core simulation types
-pub use simulation::core::{Simulation, SimulationBuilder};
+pub use simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
 pub use simulation::core::components::{
     Acceleration, BodySize, BoundaryConfig, DeltaTime,
     PhysicsTick, Position, Velocity,
@@ -61,7 +61,7 @@ pub use simulation::creatures::components::{
     BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
     CreatureState, CritId, FleeState, HomePosition, Target, WanderState,
 };
-pub use simulation::components::Rotation;
+pub use simulation::core::components::Rotation;
 
 // Perception
 pub use simulation::perception::{AvoidanceBehavior, Perception};

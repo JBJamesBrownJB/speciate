@@ -7,11 +7,8 @@ pub mod perception;
 pub mod queries;
 pub mod spatial;
 
-// Legacy modules (to be refactored)
-pub mod components; // Will be split across domains
-
 // Re-export commonly used types from core
-pub use core::components::{Acceleration, BodySize, BoundaryConfig, DeltaTime, PhysicsTick, Position, Velocity};
+pub use core::components::{Acceleration, BodySize, BoundaryConfig, DeltaTime, PhysicsTick, Position, Rotation, Velocity};
 pub use core::{Simulation, SimulationBuilder};
 
 #[cfg(test)]

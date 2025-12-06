@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Receiver;
 
 use super::Command;
-use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
-use crate::simulation::components::{CritId, CreatureState, Rotation};
+use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
+use crate::simulation::creatures::components::{CritId, CreatureState};
 use crate::simulation::creatures::systems::NextCreatureId;
 
 #[derive(bevy_ecs::system::Resource, Clone)]

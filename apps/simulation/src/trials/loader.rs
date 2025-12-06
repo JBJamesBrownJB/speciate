@@ -177,8 +177,7 @@ fn spawn_creature(
 mod tests {
     use super::*;
     use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
-    use crate::simulation::components::CreatureState;
-    use crate::simulation::creatures::components::Target;
+    use crate::simulation::creatures::components::{CreatureState, Target};
 
     #[test]
     fn test_spawn_single_catatonic() {

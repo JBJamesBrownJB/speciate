@@ -1,10 +1,11 @@
 use super::components::*;
-use crate::simulation::components::Rotation;
-use crate::simulation::core::components::{BodySize, Position};
+use crate::simulation::core::components::{BodySize, Position, Rotation};
 use crate::simulation::creatures::components::CreatureState;
-use crate::simulation::spatial::{DoubleBufferedSpatialGrid, SpatialGrid};
 #[cfg(feature = "dev-tools")]
-use crate::simulation::components::CritId;
+use crate::simulation::creatures::components::CritId;
+use crate::simulation::spatial::DoubleBufferedSpatialGrid;
+#[cfg(feature = "dev-tools")]
+use crate::simulation::spatial::SpatialGrid;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;

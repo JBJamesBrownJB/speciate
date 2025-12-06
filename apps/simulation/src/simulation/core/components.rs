@@ -125,13 +125,13 @@ pub struct BoundaryConfig {
 
 impl Default for BoundaryConfig {
     fn default() -> Self {
-        const EXTENT: f32 = 1_000_000.0;
+        use super::world_bounds::MAX_WORLD_SIZE;
         Self {
-            min_x: -EXTENT,
-            max_x: EXTENT,
-            min_y: -EXTENT,
-            max_y: EXTENT,
-            margin: 10_000.0,
+            min_x: -MAX_WORLD_SIZE,
+            max_x: MAX_WORLD_SIZE,
+            min_y: -MAX_WORLD_SIZE,
+            max_y: MAX_WORLD_SIZE,
+            margin: MAX_WORLD_SIZE / 100.0,
             max_force: 1.0,
         }
     }
@@ -148,6 +148,12 @@ impl BoundaryConfig {
     pub fn dimensions(&self) -> (f32, f32) {
         (self.max_x - self.min_x, self.max_y - self.min_y)
     }
+}
+
+#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
+pub struct Rotation {
+    pub radians: f32,
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@ use super::constants::{
     ARRIVAL_THRESHOLD, BRAKE_FORCE, MAX_FORCE, POUNCE_SPEED, POUNCE_THRESHOLD, SLOW_ZONE_DECAY,
     SLOW_ZONE_DECAY_EXP,
 };
-use crate::simulation::components::*;
+use crate::simulation::creatures::components::BehaviorMode;
 use crate::simulation::math::{clamp_force, magnitude_sq};
 use crate::simulation::movement::constants::{MAX_SPEED, SLOW_ZONE_MULTIPLIER};
 use crate::simulation::queries::SeekQuery;

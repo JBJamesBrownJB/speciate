@@ -254,10 +254,24 @@ async function main(): Promise<void> {
         }
       });
 
-      // Handle telemetry updates (cell size for grid overlay)
+      // Handle telemetry updates (cell size and bounds for grid overlay)
       ipcClient.onTelemetryUpdate((telemetry) => {
         if (telemetry.spatialGridCellSize) {
           spatialGridOverlay.setCellSize(telemetry.spatialGridCellSize);
+        }
+        // Update grid bounds from actual spatial grid data
+        if (
+          telemetry.spatialGridMinX !== undefined &&
+          telemetry.spatialGridMaxX !== undefined &&
+          telemetry.spatialGridMinY !== undefined &&
+          telemetry.spatialGridMaxY !== undefined
+        ) {
+          spatialGridOverlay.setBounds(
+            telemetry.spatialGridMinX,
+            telemetry.spatialGridMaxX,
+            telemetry.spatialGridMinY,
+            telemetry.spatialGridMaxY
+          );
         }
       });
 

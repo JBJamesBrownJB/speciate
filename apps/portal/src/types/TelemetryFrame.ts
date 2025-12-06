@@ -51,6 +51,10 @@ export interface TelemetryFrame {
   creatureCount: number;
   tickRateHz: number;
   spatialGridCellSize: number;
+  spatialGridMinX: number;
+  spatialGridMaxX: number;
+  spatialGridMinY: number;
+  spatialGridMaxY: number;
   systemTimings: SystemTimingsSnapshot;
   hardwareMetrics?: HardwareMetrics;
   parallelizationMetrics?: ParallelizationMetrics;

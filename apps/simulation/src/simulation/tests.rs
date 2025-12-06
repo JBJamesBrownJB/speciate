@@ -60,7 +60,7 @@ mod simulation_tests {
 #[cfg(test)]
 mod system_tests {
 
-    use crate::simulation::components::{Acceleration, DeltaTime, Position, Rotation, Velocity};
+    use crate::simulation::core::components::{Acceleration, DeltaTime, Position, Rotation, Velocity};
     use bevy_ecs::prelude::*;
 
     #[test]
@@ -150,7 +150,8 @@ mod system_tests {
 #[cfg(test)]
 mod behavior_tests {
 
-    use crate::simulation::components::{BehaviorMode, CreatureState, CritId, Position, Target, Velocity};
+    use crate::simulation::core::components::{Position, Velocity};
+    use crate::simulation::creatures::components::{BehaviorMode, CreatureState, CritId, Target};
     use crate::simulation::creatures::builder::CritBuilder;
     use crate::simulation::SimulationBuilder;
 
@@ -502,7 +503,7 @@ mod behavior_tests {
 
     #[test]
     fn test_catatonic_crit_ignores_target() {
-        use crate::simulation::components::{CanSeek, Target};
+        use crate::simulation::creatures::components::{CanSeek, Target};
 
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(200.0, 200.0);

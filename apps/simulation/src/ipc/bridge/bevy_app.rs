@@ -6,8 +6,9 @@
 //! - Position export to DoubleBuffer (SoA layout)
 //! - Telemetry collection and reporting
 
-use crate::simulation::core::{Simulation, SimulationBuilder};
-use crate::simulation::components::*;
+use crate::simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
+use crate::simulation::core::components::{Position, Rotation};
+use crate::simulation::creatures::components::{BehaviorMode, CritId};
 use crate::simulation::creatures::builder::CritBuilder;
 use super::{DoubleBuffer, TelemetrySnapshot};
 #[cfg(feature = "dev-tools")]
@@ -53,7 +54,7 @@ impl NapiApp {
                             Err(e) => {
                                 eprintln!("[NAPI] ⚠️  Failed to restore simulation from save state: {}. Starting fresh.", e);
                                 SimulationBuilder::new()
-                                    .set_boundaries(100_000.0, 100_000.0)
+                                    .set_boundaries(MAX_WORLD_SIZE, MAX_WORLD_SIZE)
                                     .build()
                             }
                         }
@@ -61,20 +62,20 @@ impl NapiApp {
                     Err(e) => {
                         eprintln!("[NAPI] ⚠️  Failed to load save state: {}. Starting fresh.", e);
                         SimulationBuilder::new()
-                            .set_boundaries(100_000.0, 100_000.0)
+                            .set_boundaries(MAX_WORLD_SIZE, MAX_WORLD_SIZE)
                             .build()
                     }
                 }
             } else {
                 eprintln!("[NAPI] Save state not found at: {}. Starting fresh.", path_str);
                 SimulationBuilder::new()
-                    .set_boundaries(100_000.0, 100_000.0)
+                    .set_boundaries(MAX_WORLD_SIZE, MAX_WORLD_SIZE)
                     .build()
             }
         } else {
             eprintln!("[NAPI] No save state provided. Starting fresh.");
             SimulationBuilder::new()
-                .set_boundaries(100_000.0, 100_000.0)
+                .set_boundaries(MAX_WORLD_SIZE, MAX_WORLD_SIZE)
                 .build()
         };
 
@@ -293,12 +294,28 @@ impl NapiApp {
 
     /// Get telemetry snapshot
     pub fn get_telemetry(&mut self, tick: u64, tick_rate_hz: f32) -> TelemetrySnapshot {
+        use crate::simulation::spatial::DoubleBufferedSpatialGrid;
+
         // Query creature count directly (no EntityIdMap dependency)
         let count = self.simulation.world
             .query::<&CritId>()
             .iter(&self.simulation.world)
             .count();
         let system_timings = self.simulation.get_system_timings();
+
+        // Get actual spatial grid bounds
+        let grid = self.simulation.world.resource::<DoubleBufferedSpatialGrid>();
+        let read_grid = grid.read_grid();
+        let cell_size = read_grid.cell_size();
+        let (min_cell_x, min_cell_y) = read_grid.bounds();
+        let (width, height) = read_grid.dimensions();
+
+        // Convert cell bounds to world coordinates
+        let grid_min_x = min_cell_x as f32 * cell_size;
+        let grid_min_y = min_cell_y as f32 * cell_size;
+        let grid_max_x = grid_min_x + (width as f32 * cell_size);
+        let grid_max_y = grid_min_y + (height as f32 * cell_size);
+        let grid_bounds = (grid_min_x, grid_max_x, grid_min_y, grid_max_y);
 
         #[cfg(feature = "dev-tools")]
         {
@@ -309,7 +326,8 @@ impl NapiApp {
                 tick,
                 count,
                 tick_rate_hz,
-                crate::simulation::spatial::CELL_SIZE,
+                cell_size,
+                grid_bounds,
                 system_timings,
                 hardware_metrics,
                 parallelization_metrics,
@@ -322,7 +340,8 @@ impl NapiApp {
                 tick,
                 count,
                 tick_rate_hz,
-                crate::simulation::spatial::CELL_SIZE,
+                cell_size,
+                grid_bounds,
                 system_timings,
             )
         }

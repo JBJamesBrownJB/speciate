@@ -1,5 +1,5 @@
-use crate::simulation::components::*;
-use crate::simulation::core::components::*;
+use crate::simulation::core::components::{Acceleration, Velocity};
+use crate::simulation::creatures::components::{BehaviorMode, CreatureState, FleeState};
 use bevy_ecs::prelude::*;
 
 // TODO: Flee behavior not yet implemented

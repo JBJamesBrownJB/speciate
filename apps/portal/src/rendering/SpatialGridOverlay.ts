@@ -15,6 +15,10 @@ export class SpatialGridOverlay {
   private cellGraphics: Graphics;
   private visible: boolean = false;
   private cellSize: number = 50;
+  private gridMinX: number = -5000;
+  private gridMaxX: number = 5000;
+  private gridMinY: number = -5000;
+  private gridMaxY: number = 5000;
   private checkedCells: QueriedCell[] = [];
   private skippedCells: QueriedCell[] = [];
   private creatureCell: QueriedCell | null = null;
@@ -31,6 +35,13 @@ export class SpatialGridOverlay {
 
   setCellSize(cellSize: number): void {
     this.cellSize = cellSize;
+  }
+
+  setBounds(minX: number, maxX: number, minY: number, maxY: number): void {
+    this.gridMinX = minX;
+    this.gridMaxX = maxX;
+    this.gridMinY = minY;
+    this.gridMaxY = maxY;
   }
 
   toggle(): void {
@@ -103,10 +114,22 @@ export class SpatialGridOverlay {
     const halfViewW = (viewportWidth / 2) / zoom;
     const halfViewH = (viewportHeight / 2) / zoom;
 
-    const worldLeft = cameraX - halfViewW;
-    const worldRight = cameraX + halfViewW;
-    const worldTop = cameraY - halfViewH;
-    const worldBottom = cameraY + halfViewH;
+    // Viewport bounds in world coordinates
+    const viewLeft = cameraX - halfViewW;
+    const viewRight = cameraX + halfViewW;
+    const viewTop = cameraY - halfViewH;
+    const viewBottom = cameraY + halfViewH;
+
+    // Clamp to actual spatial grid bounds
+    const worldLeft = Math.max(viewLeft, this.gridMinX);
+    const worldRight = Math.min(viewRight, this.gridMaxX);
+    const worldTop = Math.max(viewTop, this.gridMinY);
+    const worldBottom = Math.min(viewBottom, this.gridMaxY);
+
+    // If grid is completely outside viewport, nothing to render
+    if (worldLeft >= worldRight || worldTop >= worldBottom) {
+      return;
+    }
 
     const startCellX = Math.floor(worldLeft / this.cellSize);
     const endCellX = Math.ceil(worldRight / this.cellSize);

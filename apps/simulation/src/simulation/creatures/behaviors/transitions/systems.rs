@@ -2,8 +2,8 @@ use super::constants::{
     AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING, RANDOM_TARGET_MAX_DISTANCE,
     RANDOM_TARGET_MIN_DISTANCE, TICK_INTERVAL_SECONDS,
 };
-use crate::simulation::components::*;
-use crate::simulation::core::components::PhysicsTick;
+use crate::simulation::core::components::{PhysicsTick, Position};
+use crate::simulation::creatures::components::{BehaviorMode, Brain, BrainMode, CreatureState, Target};
 use bevy_ecs::prelude::*;
 
 pub fn behavior_transition_system(

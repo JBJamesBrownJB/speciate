@@ -2,6 +2,7 @@ use speciate::{
     persistence::WorldSaveState,
     simulation::{Simulation, SimulationBuilder},
     CritBuilder,
+    MAX_WORLD_SIZE,
 };
 use tempfile::TempDir;
 
@@ -19,7 +20,7 @@ fn test_large_scale_save_load_10k_creatures() {
 
     // Spawn 10,000 creatures with varied configurations
     let mut sim = SimulationBuilder::new()
-        .set_boundaries(50000.0, 50000.0)
+        .set_boundaries(MAX_WORLD_SIZE, MAX_WORLD_SIZE)
         .build();
 
     println!("Spawning 10,000 creatures...");
@@ -95,10 +96,10 @@ fn test_large_scale_save_load_10k_creatures() {
 
     // Verify boundaries were preserved
     let (min_x, max_x, min_y, max_y) = restored_sim.get_boundaries();
-    assert_eq!(min_x, -50000.0, "Min X should be preserved");
-    assert_eq!(max_x, 50000.0, "Max X should be preserved");
-    assert_eq!(min_y, -50000.0, "Min Y should be preserved");
-    assert_eq!(max_y, 50000.0, "Max Y should be preserved");
+    assert_eq!(min_x, -MAX_WORLD_SIZE, "Min X should be preserved");
+    assert_eq!(max_x, MAX_WORLD_SIZE, "Max X should be preserved");
+    assert_eq!(min_y, -MAX_WORLD_SIZE, "Min Y should be preserved");
+    assert_eq!(max_y, MAX_WORLD_SIZE, "Max Y should be preserved");
 
     println!("✅ Large-scale save/load test passed!");
 }

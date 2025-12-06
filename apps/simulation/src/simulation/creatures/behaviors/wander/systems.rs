@@ -2,7 +2,7 @@ use super::constants::{
     BLEND_CENTER, COMFORT_RADIUS, HOMEWARD_FORCE, MAX_WANDER_DISTANCE, SIGMOID_STEEPNESS,
     WANDER_FORCE,
 };
-use crate::simulation::components::*;
+use crate::simulation::creatures::components::BehaviorMode;
 use crate::simulation::math::{clamp_force, magnitude_sq, normalize};
 use crate::simulation::queries::WanderQuery;
 use rand::Rng;

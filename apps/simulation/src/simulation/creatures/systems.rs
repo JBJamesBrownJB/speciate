@@ -41,7 +41,7 @@ pub fn process_spawn_events(
         let bundle = event.builder.clone().build(id);
 
 
-        let _entity = commands.spawn(bundle).id();
+        commands.spawn(bundle);
 
         info!("[SPAWN] Creature #{} spawned via event system", id);
     }

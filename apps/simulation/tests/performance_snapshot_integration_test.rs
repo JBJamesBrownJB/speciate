@@ -31,24 +31,20 @@ fn test_performance_snapshot_schema_completeness() {
         total_tick_us: 1500,
         movement_us: 200,
         perception_us: 300,
+        spatial_grid_rebuild_us: 100,
         behavior_us: 150,
         behavior_transition_us: 50,
         wander_us: 30,
+        seek_us: 25,
         flee_us: 20,
         avoidance_us: 40,
         rotation_us: 10,
-        ipc_query_us: 100,
-        ipc_serialize_us: 400,
-        ipc_write_us: 50,
-        ipc_frame_drops_total: 0,
-        ipc_channel_utilization_pct: 0,
-        ipc_writer_thread_us: 150,
         archetype_count: 5,
         entity_count: 27500,
     };
 
     let snapshot = PerformanceSnapshot::new(
-        "pre-napi-re-migration".to_string(),
+        "post-napi-migration".to_string(),
         "Baseline snapshot before NAPI-RS migration".to_string(),
         27500,
         hw_snapshot.clone(),
@@ -213,18 +209,14 @@ fn test_system_timings_snapshot_all_fields_present() {
         total_tick_us: 1500,
         movement_us: 200,
         perception_us: 300,
+        spatial_grid_rebuild_us: 100,
         behavior_us: 150,
         behavior_transition_us: 50,
         wander_us: 30,
+        seek_us: 25,
         flee_us: 20,
         avoidance_us: 40,
         rotation_us: 10,
-        ipc_query_us: 100,
-        ipc_serialize_us: 400,
-        ipc_write_us: 50,
-        ipc_frame_drops_total: 0,
-        ipc_channel_utilization_pct: 0,
-        ipc_writer_thread_us: 150,
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -236,18 +228,14 @@ fn test_system_timings_snapshot_all_fields_present() {
         "totalTickUs",
         "movementUs",
         "perceptionUs",
+        "spatialGridRebuildUs",
         "behaviorUs",
         "behaviorTransitionUs",
         "wanderUs",
+        "seekUs",
         "fleeUs",
         "avoidanceUs",
         "rotationUs",
-        "ipcQueryUs",
-        "ipcSerializeUs",
-        "ipcWriteUs",
-        "ipcFrameDropsTotal",
-        "ipcChannelUtilizationPct",
-        "ipcWriterThreadUs",
         "archetypeCount",
         "entityCount",
     ];
@@ -266,10 +254,6 @@ fn test_system_timings_snapshot_all_fields_present() {
     assert_eq!(deserialized.total_tick_us, sys_timings.total_tick_us);
     assert_eq!(deserialized.movement_us, sys_timings.movement_us);
     assert_eq!(deserialized.entity_count, sys_timings.entity_count);
-    assert_eq!(
-        deserialized.ipc_serialize_us,
-        sys_timings.ipc_serialize_us
-    );
 }
 
 #[test]
@@ -298,26 +282,21 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
         total_tick_us: 1500,
         movement_us: 200,
         perception_us: 300,
+        spatial_grid_rebuild_us: 100,
         behavior_us: 150,
         behavior_transition_us: 50,
         wander_us: 30,
+        seek_us: 25,
         flee_us: 20,
         avoidance_us: 40,
         rotation_us: 10,
-        ipc_query_us: 100,
-        ipc_serialize_us: 810,
-        ipc_write_us: 50,
-        ipc_frame_drops_total: 42,
-        ipc_channel_utilization_pct: 100,
-        ipc_writer_thread_us: 19355,
         archetype_count: 5,
         entity_count: 27500,
     };
 
     let snapshot = PerformanceSnapshot::new(
-        "pre-napi-re-migration".to_string(),
-        "Baseline at 27.5K entity ceiling before NAPI-RS migration. IPC serialization: 810μs (57% of ECS time). Writer thread: 19.3ms. Frame drops: 42 avg."
-            .to_string(),
+        "post-napi-migration".to_string(),
+        "Baseline at 27.5K entities after NAPI-RS migration. Zero-copy IPC.".to_string(),
         27500,
         hw_snapshot,
         &sys_timings,
@@ -330,7 +309,7 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
     println!("{}", json);
     println!("=== END BASELINE SNAPSHOT ===");
 
-    assert!(json.contains("\"pre-napi-re-migration\""));
+    assert!(json.contains("\"post-napi-migration\""));
     assert!(json.contains("27500"));
     assert!(
         json.contains("\"ipc\": 1.2"),
@@ -344,7 +323,7 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
     let deserialized: PerformanceSnapshot = serde_json::from_str(&json)
         .expect("Baseline snapshot should deserialize");
 
-    assert_eq!(deserialized.label, "pre-napi-re-migration");
+    assert_eq!(deserialized.label, "post-napi-migration");
     assert_eq!(deserialized.creature_count, 27500);
     assert_eq!(deserialized.hardware_metrics.ipc, 1.2);
 }

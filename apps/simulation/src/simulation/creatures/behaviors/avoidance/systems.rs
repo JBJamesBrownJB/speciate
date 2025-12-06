@@ -1,5 +1,5 @@
 use super::constants::{AVOIDANCE_FORCE, PANIC_FORCE, SEEKING_PERSONAL_SPACE_BUFFER};
-use crate::simulation::core::components::*;
+use crate::simulation::core::components::{BodySize, Position};
 use crate::simulation::math::{clamp_force, magnitude_sq};
 use crate::simulation::perception::constants::PANIC_THRESHOLD_RATIO;
 use crate::simulation::queries::AvoidanceQuery;
@@ -102,7 +102,8 @@ pub fn avoidance_system(
 mod tests {
     use super::*;
     use bevy_ecs::system::IntoSystem;
-    use crate::simulation::components::*;
+    use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
+    use crate::simulation::creatures::components::{BehaviorMode, CanAvoidObstacles, CreatureState};
     use crate::simulation::perception::{AvoidanceBehavior, Perception};
 
     fn run_system(world: &mut World) {

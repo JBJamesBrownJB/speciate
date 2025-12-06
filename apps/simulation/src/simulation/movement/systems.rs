@@ -2,10 +2,10 @@
 use crate::config::MovementConfig;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
-use crate::simulation::components::*;
-use crate::simulation::core::components::*;
+use crate::simulation::core::components::{Acceleration, BodySize, DeltaTime, PhysicsTick, Position, Velocity};
+use crate::simulation::creatures::components::{BehaviorMode, CreatureState};
 use crate::simulation::math::normalize_angle;
-use crate::simulation::movement::constants::{MAX_SPEED, MAX_TURN_RATE_RAD, STOPPED_THRESHOLD, VELOCITY_DAMPING};
+use crate::simulation::movement::constants::{MAX_SPEED, MAX_TURN_RATE_RAD, NOISE_SPEED_THRESHOLD_SQ, STOPPED_THRESHOLD, VELOCITY_DAMPING};
 use crate::simulation::movement::noise::NoiseTable;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
@@ -102,7 +102,7 @@ pub fn integrate_motion_system(
         velocity.vx *= VELOCITY_DAMPING;
         velocity.vy *= VELOCITY_DAMPING;
         let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-        if speed_sq > 0.01 {
+        if speed_sq > NOISE_SPEED_THRESHOLD_SQ {
             let speed = speed_sq.sqrt();
             let speed_ratio = speed / MAX_SPEED;
             let size_factor = size.inv_sqrt_length;

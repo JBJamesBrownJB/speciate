@@ -3,6 +3,7 @@ use rayon::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::constants::CELL_SIZE;
+use crate::simulation::core::MAX_WORLD_SIZE;
 
 /// Wrapper to allow raw pointer in parallel iteration.
 /// SAFETY: Each thread writes to a unique position via atomic increment.
@@ -44,6 +45,8 @@ impl Default for PerceptionProxy {
 ///
 /// Uses counting sort to bin entities into a single Vec for cache-friendly access.
 /// Zero pointer chasing during queries - all data is contiguous in memory.
+///
+/// Fixed-bounds mode: Pre-allocates grid for world bounds, eliminating per-tick allocations.
 #[derive(Resource)]
 pub struct SpatialGrid {
     // Single contiguous buffer of all proxies
@@ -56,11 +59,21 @@ pub struct SpatialGrid {
     // Reusable scratch buffer for rebuild (avoids allocation each tick)
     entity_scratch: Vec<(Entity, f32, f32, f32)>,
 
-    // Active region bounds
+    // Pre-allocated atomic counters for scatter phase (reused each tick)
+    atomic_counters: Vec<AtomicU32>,
+
+    // Fixed grid bounds (derived from world bounds + cell size)
     min_cell_x: i32,
     min_cell_y: i32,
     width: usize,
     height: usize,
+
+    // World bounds for fixed-grid mode
+    world_min_x: f32,
+    world_max_x: f32,
+    world_min_y: f32,
+    world_max_y: f32,
+    fixed_bounds: bool,
 
     cell_size: f32,
     inv_cell_size: f32,
@@ -72,17 +85,81 @@ impl SpatialGrid {
             proxies: Vec::new(),
             cells: Vec::new(),
             entity_scratch: Vec::new(),
+            atomic_counters: Vec::new(),
             min_cell_x: 0,
             min_cell_y: 0,
             width: 0,
             height: 0,
+            world_min_x: 0.0,
+            world_max_x: 0.0,
+            world_min_y: 0.0,
+            world_max_y: 0.0,
+            fixed_bounds: false,
             cell_size,
             inv_cell_size: 1.0 / cell_size,
         }
     }
 
+    /// Create grid with fixed world bounds (pre-allocated, no per-tick allocations).
+    pub fn with_fixed_bounds(cell_size: f32, min_x: f32, max_x: f32, min_y: f32, max_y: f32) -> Self {
+        let mut grid = Self::new(cell_size);
+        grid.set_world_bounds(min_x, max_x, min_y, max_y);
+        grid
+    }
+
+    /// Create grid with default cell size and MAX_WORLD_SIZE bounds.
+    pub fn with_default_bounds() -> Self {
+        Self::with_fixed_bounds(CELL_SIZE, -MAX_WORLD_SIZE, MAX_WORLD_SIZE, -MAX_WORLD_SIZE, MAX_WORLD_SIZE)
+    }
+
     pub fn with_default_cell_size() -> Self {
         Self::new(CELL_SIZE)
+    }
+
+    /// Set fixed world bounds. Pre-allocates grid cells and atomic counters.
+    /// Call this once at startup or when world/cell size changes.
+    pub fn set_world_bounds(&mut self, min_x: f32, max_x: f32, min_y: f32, max_y: f32) {
+        self.world_min_x = min_x;
+        self.world_max_x = max_x;
+        self.world_min_y = min_y;
+        self.world_max_y = max_y;
+        self.fixed_bounds = true;
+        self.recalculate_grid_dimensions();
+    }
+
+    /// Change cell size and recalculate grid dimensions.
+    pub fn set_cell_size(&mut self, cell_size: f32) {
+        self.cell_size = cell_size;
+        self.inv_cell_size = 1.0 / cell_size;
+        if self.fixed_bounds {
+            self.recalculate_grid_dimensions();
+        }
+    }
+
+    /// Recalculate grid dimensions from world bounds and cell size.
+    fn recalculate_grid_dimensions(&mut self) {
+        let min_cx = (self.world_min_x * self.inv_cell_size).floor() as i32 - 1;
+        let max_cx = (self.world_max_x * self.inv_cell_size).ceil() as i32 + 1;
+        let min_cy = (self.world_min_y * self.inv_cell_size).floor() as i32 - 1;
+        let max_cy = (self.world_max_y * self.inv_cell_size).ceil() as i32 + 1;
+
+        self.min_cell_x = min_cx;
+        self.min_cell_y = min_cy;
+        self.width = (max_cx - min_cx + 1) as usize;
+        self.height = (max_cy - min_cy + 1) as usize;
+
+        let total_cells = self.width * self.height;
+
+        // Pre-allocate cells and atomic counters
+        self.cells = vec![(0, 0); total_cells];
+        self.atomic_counters = (0..total_cells).map(|_| AtomicU32::new(0)).collect();
+
+        log::info!(
+            "SpatialGrid: {}x{} = {} cells for world ({:.0},{:.0}) to ({:.0},{:.0}) @ {:.1}m",
+            self.width, self.height, total_cells,
+            self.world_min_x, self.world_min_y, self.world_max_x, self.world_max_y,
+            self.cell_size
+        );
     }
 
     pub fn cell_size(&self) -> f32 {
@@ -181,10 +258,10 @@ impl SpatialGrid {
         }
     }
 
-    /// Parallel rebuild using Rayon for ~3x speedup.
+    /// Parallel rebuild using Rayon.
     ///
-    /// - Phase 1: Thread-local histograms + merge (8-10x speedup)
-    /// - Phase 3: Atomic scatter (4-5x speedup)
+    /// In fixed-bounds mode: Zero allocations per tick, uses pre-allocated buffers.
+    /// In dynamic mode: Falls back to histogram-based approach (allocates per tick).
     pub fn rebuild_parallel(&mut self, entities: impl Iterator<Item = (Entity, f32, f32, f32)>) {
         // Phase 0: Collect into scratch buffer
         self.entity_scratch.clear();
@@ -199,13 +276,93 @@ impl SpatialGrid {
             return;
         }
 
+        if self.fixed_bounds {
+            self.rebuild_parallel_fixed_bounds(n);
+        } else {
+            self.rebuild_parallel_dynamic_bounds(n);
+        }
+    }
+
+    /// Fast path: Fixed bounds, no allocations per tick.
+    /// Uses two-pass algorithm: count then scatter.
+    fn rebuild_parallel_fixed_bounds(&mut self, n: usize) {
+        let inv_cell_size = self.inv_cell_size;
+        let min_cell_x = self.min_cell_x;
+        let min_cell_y = self.min_cell_y;
+        let width = self.width;
+
+        // Resize proxies buffer (no realloc if capacity sufficient)
+        self.proxies.resize(n, PerceptionProxy::default());
+
+        // Reset cell counts to zero (reuse existing allocation)
+        for cell in &mut self.cells {
+            *cell = (0, 0);
+        }
+
+        // Phase 1: Count entities per cell (sequential, simple)
+        for &(_, x, y, _) in &self.entity_scratch {
+            let cx = (x * inv_cell_size).floor() as i32;
+            let cy = (y * inv_cell_size).floor() as i32;
+            let lx = (cx - min_cell_x) as usize;
+            let ly = (cy - min_cell_y) as usize;
+            if lx < width && ly < self.height {
+                let idx = ly * width + lx;
+                self.cells[idx].1 += 1;
+            }
+        }
+
+        // Phase 2: Prefix sum (compute offsets)
+        let mut offset = 0u32;
+        for cell in &mut self.cells {
+            cell.0 = offset;
+            offset += cell.1;
+        }
+
+        // Reset atomic counters (reuse existing allocation)
+        for counter in &self.atomic_counters {
+            counter.store(0, Ordering::Relaxed);
+        }
+
+        // Phase 3: Parallel atomic scatter
+        let proxies_ptr = SyncPtr(self.proxies.as_mut_ptr());
+        let cells_ref = &self.cells;
+        let atomic_counters = &self.atomic_counters;
+        let height = self.height;
+
+        // SAFETY: Each entity writes to a unique position via atomic increment
+        self.entity_scratch.par_iter().for_each(|&(entity, x, y, radius)| {
+            let cx = (x * inv_cell_size).floor() as i32;
+            let cy = (y * inv_cell_size).floor() as i32;
+            let lx = (cx - min_cell_x) as usize;
+            let ly = (cy - min_cell_y) as usize;
+
+            // Bounds check (entities outside world are clamped to edge cells)
+            let lx = lx.min(width - 1);
+            let ly = ly.min(height - 1);
+            let idx = ly * width + lx;
+
+            let start = cells_ref[idx].0;
+            let local_offset = atomic_counters[idx].fetch_add(1, Ordering::Relaxed);
+            let write_pos = (start + local_offset) as usize;
+
+            // SAFETY: Unique write position guaranteed by atomic increment
+            unsafe {
+                proxies_ptr.write_at(write_pos, PerceptionProxy { x, y, radius, entity });
+            }
+        });
+    }
+
+    /// Slow path: Dynamic bounds (legacy, allocates per tick).
+    fn rebuild_parallel_dynamic_bounds(&mut self, n: usize) {
+        let inv_cell_size = self.inv_cell_size;
+
         // Find bounds (parallel reduction)
         let (min_cx, max_cx, min_cy, max_cy) = self.entity_scratch
             .par_iter()
             .map(|(_, x, y, _)| {
                 let (cx, cy) = (
-                    (*x * self.inv_cell_size).floor() as i32,
-                    (*y * self.inv_cell_size).floor() as i32,
+                    (*x * inv_cell_size).floor() as i32,
+                    (*y * inv_cell_size).floor() as i32,
                 );
                 (cx, cx, cy, cy)
             })
@@ -228,7 +385,6 @@ impl SpatialGrid {
 
         // Phase 1: Parallel histogram with thread-local counts
         const CHUNK_SIZE: usize = 4096;
-        let inv_cell_size = self.inv_cell_size;
         let min_cell_x = self.min_cell_x;
         let min_cell_y = self.min_cell_y;
         let width = self.width;
@@ -264,8 +420,7 @@ impl SpatialGrid {
             offset += cell.1;
         }
 
-        // Phase 3: Atomic scatter
-        // Create atomic counters for each cell
+        // Phase 3: Atomic scatter (allocates counters each time)
         let atomic_counters: Vec<AtomicU32> = self.cells
             .iter()
             .map(|_| AtomicU32::new(0))
@@ -599,8 +754,36 @@ impl DoubleBufferedSpatialGrid {
         }
     }
 
+    /// Create with fixed world bounds (pre-allocated, no per-tick allocations).
+    pub fn with_fixed_bounds(cell_size: f32, min_x: f32, max_x: f32, min_y: f32, max_y: f32) -> Self {
+        Self {
+            grids: [
+                SpatialGrid::with_fixed_bounds(cell_size, min_x, max_x, min_y, max_y),
+                SpatialGrid::with_fixed_bounds(cell_size, min_x, max_x, min_y, max_y),
+            ],
+            front_index: 0,
+        }
+    }
+
+    /// Create with default cell size and MAX_WORLD_SIZE bounds.
+    pub fn with_default_bounds() -> Self {
+        Self::with_fixed_bounds(CELL_SIZE, -MAX_WORLD_SIZE, MAX_WORLD_SIZE, -MAX_WORLD_SIZE, MAX_WORLD_SIZE)
+    }
+
     pub fn with_default_cell_size() -> Self {
         Self::new(CELL_SIZE)
+    }
+
+    /// Set fixed world bounds on both grids. Call once at startup.
+    pub fn set_world_bounds(&mut self, min_x: f32, max_x: f32, min_y: f32, max_y: f32) {
+        self.grids[0].set_world_bounds(min_x, max_x, min_y, max_y);
+        self.grids[1].set_world_bounds(min_x, max_x, min_y, max_y);
+    }
+
+    /// Change cell size on both grids.
+    pub fn set_cell_size(&mut self, cell_size: f32) {
+        self.grids[0].set_cell_size(cell_size);
+        self.grids[1].set_cell_size(cell_size);
     }
 
     /// Get the front buffer for reading (perception queries this)

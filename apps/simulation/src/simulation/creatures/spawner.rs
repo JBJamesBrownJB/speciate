@@ -1,5 +1,5 @@
 use super::builder::CritBuilder;
-use crate::simulation::components::*;
+use crate::simulation::creatures::components::CreatureState;
 use crate::simulation::core::WorldBounds;
 use crate::simulation::Simulation;
 use crate::state::loader::{Rectangle, SpawnSection};
@@ -138,6 +138,7 @@ pub fn spawn_seek_test_scenario(simulation: &mut Simulation) -> (u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simulation::creatures::components::BehaviorMode;
     use crate::simulation::SimulationBuilder;
 
     #[test]

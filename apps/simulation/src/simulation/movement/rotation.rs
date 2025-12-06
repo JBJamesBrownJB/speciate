@@ -1,5 +1,5 @@
 
-use crate::simulation::components::*;
+use crate::simulation::core::components::{Rotation, Velocity};
 use bevy_ecs::prelude::*;
 
 pub fn rotation_system(

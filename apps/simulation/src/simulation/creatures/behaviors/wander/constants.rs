@@ -1,9 +1,9 @@
 // Wander behavior constants
 
-pub const WANDER_FORCE: f32 = 5.0; // Random exploration force (Newtons)
-pub const WANDER_RADIUS: f32 = 5.0; // Radius of wander circle (meters)
-pub const WANDER_DISTANCE: f32 = 3.0; // Distance ahead to project wander circle (meters)
-pub const ANGLE_CHANGE: f32 = 20.5; // Maximum angle change per tick (degrees)
+pub const WANDER_FORCE: f32 = 10.0; // Random exploration force (Newtons)
+pub const WANDER_RADIUS: f32 = 10.0; // Radius of wander circle (meters)
+pub const WANDER_DISTANCE: f32 = 50.0; // Distance ahead to project wander circle (meters)
+pub const ANGLE_CHANGE: f32 = 4.5; // Maximum angle change per tick (degrees)
 
 // Territory constants (moved from movement::TERRITORY)
 pub const COMFORT_RADIUS: f32 = 100.0; // Territory core radius where creature explores freely (meters)

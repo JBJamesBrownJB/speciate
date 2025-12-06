@@ -1,12 +1,12 @@
 // Seek behavior constants
 
 pub const SEEK_FORCE: f32 = 10.0; // Force for goal-directed movement (Newtons)
-pub const ARRIVAL_THRESHOLD: f32 = 0.05; // Edge-to-edge distance when target is reached (meters)
+pub const ARRIVAL_THRESHOLD: f32 = 0.1; // Edge-to-edge distance when target is reached (meters)
 pub const POUNCE_THRESHOLD: f32 = 0.1; // Distance for pounce snap (meters)
 
 // Seeking behavior constants (moved from movement::SEEKING)
 pub const MAX_FORCE: f32 = 50.0; // Maximum seeking force (Newtons)
-pub const BRAKE_FORCE: f32 = 70.0; // Emergency brake force when overshooting (Newtons)
+pub const BRAKE_FORCE: f32 = 170.0; // Emergency brake force when overshooting (Newtons)
 pub const POUNCE_DISTANCE: f32 = 0.5; // Snap-to-target distance threshold (meters)
 pub const POUNCE_SPEED: f32 = 5.5; // Maximum speed for pounce snap (m/s)
 pub const ARRIVAL_TOLERANCE: f32 = 0.5; // Stop when this close to target (meters)

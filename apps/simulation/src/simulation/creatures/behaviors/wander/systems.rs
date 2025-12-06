@@ -17,22 +17,19 @@ pub fn territory_wandering_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "wander");
 
-    // Collect entities for parallel processing
     let mut entities: Vec<_> = query.iter_mut().collect();
 
-    entities.par_iter_mut().for_each(|(acceleration, wander_state, velocity, position, home, creature_state)| {
+    entities.par_iter_mut().for_each(|(_entity, acceleration, wander_state, velocity, position, home, creature_state)| {
         if creature_state.behavior != BehaviorMode::Wandering {
             return;
         }
 
-        // Thread-local RNG for parallel safety
         let mut rng = rand::thread_rng();
 
         let speed_sq = magnitude_sq(velocity.vx, velocity.vy);
 
         let (heading_x, heading_y) = if speed_sq < 0.0001 {
-            let random_angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            let (sin_a, cos_a) = random_angle.sin_cos();
+            let (sin_a, cos_a) = wander_state.wander_angle.sin_cos();
             (cos_a, sin_a)
         } else {
             normalize(velocity.vx, velocity.vy)
@@ -159,8 +156,6 @@ pub fn calculate_territory_blend(
         return 0.5;
     }
 
-    // Sigmoid blend between wander (free roam) and homeward (territory bound)
-    // Steepness controls how quickly the blend transitions
     let normalized = (distance_from_home - blend_center) / comfort_radius;
     let sigmoid = 1.0 / (1.0 + (-SIGMOID_STEEPNESS * normalized).exp());
     sigmoid.clamp(0.0, 1.0)

@@ -2,9 +2,13 @@
 //!
 //! Tests the complete pipeline from command receipt to perception buffer export.
 
+#[cfg(feature = "dev-tools")]
 use parking_lot::Mutex;
+#[cfg(feature = "dev-tools")]
 use speciate::ipc::bridge::{NapiApp, PerceptionDebugBuffer};
+#[cfg(feature = "dev-tools")]
 use speciate::ipc::SimCommand;
+#[cfg(feature = "dev-tools")]
 use std::sync::Arc;
 
 #[test]

@@ -184,4 +184,16 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on('perception-debug-update', handler);
     return () => ipcRenderer.removeListener('perception-debug-update', handler);
   },
+
+  /**
+   * Set simulation pause state
+   *
+   * @param {boolean} paused - true to pause, false to resume
+   */
+  setPaused: (paused) => {
+    if (typeof paused !== 'boolean') {
+      throw new Error('setPaused: paused must be a boolean');
+    }
+    ipcRenderer.send('set-paused', paused);
+  },
 });

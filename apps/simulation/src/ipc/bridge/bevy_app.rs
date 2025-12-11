@@ -18,11 +18,13 @@ use bevy_ecs::prelude::Entity;
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 /// NAPI-specific Bevy app wrapper
 pub struct NapiApp {
     simulation: Simulation,
     command_rx: Receiver<SimCommand>,
+    paused: Option<Arc<AtomicBool>>,
 }
 
 impl NapiApp {
@@ -100,7 +102,17 @@ impl NapiApp {
         Self {
             simulation,
             command_rx,
+            paused: None,
         }
+    }
+
+    pub fn set_paused_flag(&mut self, paused: Arc<AtomicBool>) {
+        self.paused = Some(paused);
+    }
+
+    #[cfg(feature = "test-helpers")]
+    pub fn simulation(&self) -> &Simulation {
+        &self.simulation
     }
 
     /// Process commands from JavaScript (non-blocking)
@@ -158,6 +170,12 @@ impl NapiApp {
                     #[cfg(not(feature = "dev-tools"))]
                     {
                         let _ = creature_id;
+                    }
+                }
+                SimCommand::SetPaused(is_paused) => {
+                    if let Some(paused_ref) = &self.paused {
+                        paused_ref.store(is_paused, std::sync::atomic::Ordering::SeqCst);
+                        eprintln!("[NAPI] Simulation {}", if is_paused { "PAUSED" } else { "RESUMED" });
                     }
                 }
             }

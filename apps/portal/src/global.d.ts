@@ -19,6 +19,8 @@ declare global {
       selectCreatureDebug: (creatureId: number | null) => void;
 
       onPerceptionDebugUpdate: (callback: (buffer: Float32Array) => void) => () => void;
+
+      setPaused: (paused: boolean) => void;
     };
   }
 }

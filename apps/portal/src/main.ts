@@ -19,6 +19,7 @@ import {
   ForceOverlay,
 } from "@/rendering/overlays";
 import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
+import { PauseControl } from "@/ui/PauseControl";
 import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
@@ -205,6 +206,15 @@ async function main(): Promise<void> {
 
     let isFirstFrame = true;
     const changeDetector = new ChangeDetector();
+
+    // Pause control
+    const pauseControl = new PauseControl({
+      buttonId: 'pause-button',
+      onPauseChange: (paused) => {
+        window.electron?.setPaused?.(paused);
+      },
+    });
+    pauseControl.enableKeyboardShortcut();
 
     const ipcClient: IPCClient | null = createIPCClient();
 

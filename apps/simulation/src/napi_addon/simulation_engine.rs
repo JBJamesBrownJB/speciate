@@ -69,6 +69,7 @@ pub fn init_logger() {
 pub struct SimulationEngine {
     buffer: Arc<Mutex<DoubleBuffer>>,
     running: Arc<AtomicBool>,
+    paused: Arc<AtomicBool>,
     command_sender: Option<crossbeam_channel::Sender<SimCommand>>,
     telemetry_cb: Option<ThreadsafeFunction<String>>,
     thread_handle: Option<JoinHandle<()>>,
@@ -112,6 +113,7 @@ impl SimulationEngine {
         Self {
             buffer: Arc::new(Mutex::new(DoubleBuffer::new(0))),
             running: Arc::new(AtomicBool::new(false)),
+            paused: Arc::new(AtomicBool::new(false)),
             command_sender: None,
             telemetry_cb: None,
             thread_handle: None,
@@ -193,6 +195,7 @@ impl SimulationEngine {
         // Clone references for Bevy thread
         let buffer_ref = Arc::clone(&self.buffer);
         let running_ref = Arc::clone(&self.running);
+        let paused_ref = Arc::clone(&self.paused);
         let telemetry_cb = self.telemetry_cb.clone();
         let telemetry_ref = Arc::clone(&self.telemetry);
         let buffer_count_ref = Arc::clone(&self.buffer_creature_count);
@@ -214,6 +217,7 @@ impl SimulationEngine {
 
                 // Initialize Bevy App (with optional save state path)
                 let mut app = NapiApp::new(rx, count, assets_path_owned.clone(), save_state_path);
+                app.set_paused_flag(Arc::clone(&paused_ref));
                 let delta_time = 1.0 / TARGET_SIMULATION_HZ;
 
                 // Frame timing tracking for tick rate measurement
@@ -227,90 +231,95 @@ impl SimulationEngine {
                 while running_ref.load(Ordering::SeqCst) {
                     let frame_start = Instant::now();
                     // 1. Process commands from queue (non-blocking)
+                    // ALWAYS process commands even when paused (to receive unpause)
                     app.process_commands();
 
-                    // 2. Update Bevy ECS (one frame)
-                    app.update(delta_time);
+                    // 2. Check if paused - skip simulation update when paused
+                    let is_paused = paused_ref.load(Ordering::SeqCst);
+                    if !is_paused {
+                        // 2a. Update Bevy ECS (one frame) - ONLY when not paused
+                        app.update(delta_time);
 
-                    // 3. Export positions to write buffer (SoA layout)
-                    let exported_count = app.export_positions(&buffer_ref);
-                    buffer_count_ref.store(exported_count as u64, Ordering::Relaxed);
+                        // 3. Export positions to write buffer (SoA layout)
+                        let exported_count = app.export_positions(&buffer_ref);
+                        buffer_count_ref.store(exported_count as u64, Ordering::Relaxed);
 
-                    // 4. Read hardware counters (dev-tools only)
-                    #[cfg(feature = "dev-tools")]
-                    app.read_hardware_counters();
+                        // 4. Read hardware counters (dev-tools only)
+                        #[cfg(feature = "dev-tools")]
+                        app.read_hardware_counters();
 
-                    // 4b. Export perception debug to buffer (dev-tools only)
-                    #[cfg(feature = "dev-tools")]
-                    app.export_perception_debug(&perception_debug_buffer_ref);
+                        // 4b. Export perception debug to buffer (dev-tools only)
+                        #[cfg(feature = "dev-tools")]
+                        app.export_perception_debug(&perception_debug_buffer_ref);
 
-                    // 5. Record total tick timing (always enabled - negligible overhead ~1μs)
-                    app.record_total_tick_timing(frame_start.elapsed().as_micros() as u64);
+                        // 5. Record total tick timing (always enabled - negligible overhead ~1μs)
+                        app.record_total_tick_timing(frame_start.elapsed().as_micros() as u64);
 
-                    // 5b. Swap perception debug buffer (dev-tools only)
-                    #[cfg(feature = "dev-tools")]
-                    perception_debug_buffer_ref.lock().swap();
+                        // 5b. Swap perception debug buffer (dev-tools only)
+                        #[cfg(feature = "dev-tools")]
+                        perception_debug_buffer_ref.lock().swap();
 
-                    // 6. Swap position buffers after frame completes (lock-free)
-                    buffer_ref.lock().swap();
+                        // 6. Swap position buffers after frame completes (lock-free)
+                        buffer_ref.lock().swap();
 
-                    // 6. Update frame timing history
-                    frame_times.push_back(frame_start);
-                    if frame_times.len() > 30 {
-                        frame_times.pop_front();
-                    }
-
-                    // 7. Calculate actual tick rate from last 30 frames
-                    let tick_rate_hz = if frame_times.len() >= 2 {
-                        // Safe to unwrap: len() >= 2 guarantees both front() and back() exist
-                        let elapsed = frame_times.back()
-                            .expect("frame_times.back() exists (len >= 2)")
-                            .duration_since(*frame_times.front()
-                                .expect("frame_times.front() exists (len >= 2)"));
-                        (frame_times.len() - 1) as f32 / elapsed.as_secs_f32()
-                    } else {
-                        30.0 // Default until enough samples
-                    };
-
-                    // 7. Update telemetry (once per second)
-                    if tick % 30 == 0 {
-                        let telemetry = app.get_telemetry(tick, tick_rate_hz);
-
-                        // Write to shared state (for NAPI polling)
-                        *telemetry_ref.write() = telemetry.clone();
-
-                        // Also send via callback if registered (send FULL telemetry)
-                        if let Some(ref tsfn) = telemetry_cb {
-                            let telemetry_json = telemetry.to_json().unwrap_or_else(|e| {
-                                eprintln!("⚠️  Failed to serialize telemetry: {}", e);
-                                "{}".to_string()
-                            });
-
-                            let _ = tsfn.call(Ok(telemetry_json), ThreadsafeFunctionCallMode::NonBlocking);
+                        // 7. Update frame timing history (only when not paused)
+                        frame_times.push_back(frame_start);
+                        if frame_times.len() > 30 {
+                            frame_times.pop_front();
                         }
-                    }
 
-                    // 8. Periodic save state (if enabled and interval elapsed)
-                    if save_state_config.enabled {
-                        let save_interval = Duration::from_secs(save_state_config.interval_secs);
-                        if last_save.elapsed() >= save_interval {
-                            match app.to_save_state() {
-                                Ok(save_state) => {
-                                    if let Some(ref worker_ref) = save_state_worker_ref {
-                                        worker_ref.lock().save_world_state(save_state, SaveType::Periodic);
+                        // 8. Calculate actual tick rate from last 30 frames
+                        let tick_rate_hz = if frame_times.len() >= 2 {
+                            // Safe to unwrap: len() >= 2 guarantees both front() and back() exist
+                            let elapsed = frame_times.back()
+                                .expect("frame_times.back() exists (len >= 2)")
+                                .duration_since(*frame_times.front()
+                                    .expect("frame_times.front() exists (len >= 2)"));
+                            (frame_times.len() - 1) as f32 / elapsed.as_secs_f32()
+                        } else {
+                            30.0 // Default until enough samples
+                        };
+
+                        // 9. Update telemetry (once per second)
+                        if tick % 30 == 0 {
+                            let telemetry = app.get_telemetry(tick, tick_rate_hz);
+
+                            // Write to shared state (for NAPI polling)
+                            *telemetry_ref.write() = telemetry.clone();
+
+                            // Also send via callback if registered (send FULL telemetry)
+                            if let Some(ref tsfn) = telemetry_cb {
+                                let telemetry_json = telemetry.to_json().unwrap_or_else(|e| {
+                                    eprintln!("⚠️  Failed to serialize telemetry: {}", e);
+                                    "{}".to_string()
+                                });
+
+                                let _ = tsfn.call(Ok(telemetry_json), ThreadsafeFunctionCallMode::NonBlocking);
+                            }
+                        }
+
+                        // 10. Periodic save state (if enabled and interval elapsed)
+                        if save_state_config.enabled {
+                            let save_interval = Duration::from_secs(save_state_config.interval_secs);
+                            if last_save.elapsed() >= save_interval {
+                                match app.to_save_state() {
+                                    Ok(save_state) => {
+                                        if let Some(ref worker_ref) = save_state_worker_ref {
+                                            worker_ref.lock().save_world_state(save_state, SaveType::Periodic);
+                                        }
+                                        last_save = Instant::now();
                                     }
-                                    last_save = Instant::now();
-                                }
-                                Err(e) => {
-                                    error!("Failed to create periodic save state: {}", e);
+                                    Err(e) => {
+                                        error!("Failed to create periodic save state: {}", e);
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    tick += 1;
+                        tick += 1;
+                    } // end if !is_paused
 
-                    // Sleep to maintain target tick rate (subtract work time from target)
+                    // Sleep to maintain target tick rate (always, even when paused)
                     let work_time = frame_start.elapsed();
                     let target_frame_time = Duration::from_secs_f32(1.0 / TARGET_SIMULATION_HZ);
 
@@ -545,6 +554,38 @@ impl SimulationEngine {
                 )
             })?;
         Ok(())
+    }
+
+    /// Set simulation pause state
+    ///
+    /// # Arguments
+    /// * `paused` - true to pause, false to resume
+    ///
+    /// # Errors
+    /// * Simulation not started
+    /// * Command queue full
+    #[napi]
+    pub fn set_paused(&self, paused: bool) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(
+                Status::GenericFailure,
+                "Simulation not started",
+            ))?
+            .try_send(SimCommand::SetPaused(paused))
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("Command queue full: {}", e),
+                )
+            })?;
+        Ok(())
+    }
+
+    /// Get current pause state
+    #[napi]
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::SeqCst)
     }
 
     /// Load trial configuration

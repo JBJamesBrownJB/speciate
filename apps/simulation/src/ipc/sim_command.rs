@@ -6,4 +6,5 @@ pub enum SimCommand {
     KillAll,
     LoadTrial { trial_name: String },
     SelectCreatureDebug(Option<u32>),
+    SetPaused(bool),
 }

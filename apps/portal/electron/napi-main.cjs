@@ -441,6 +441,23 @@ ipcMain.on('select-creature-debug', (event, creatureId) => {
 });
 
 /**
+ * IPC handler: Set pause state (portal)
+ */
+ipcMain.on('set-paused', (event, paused) => {
+  if (!simulationEngine) {
+    console.error('[Electron NAPI] Cannot set paused: simulation not running');
+    return;
+  }
+
+  try {
+    simulationEngine.setPaused(paused);
+    console.log(`[Electron NAPI] Simulation ${paused ? 'PAUSED' : 'RESUMED'}`);
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to set paused:', error);
+  }
+});
+
+/**
  * IPC handler: Save metrics snapshot (dev-ui)
  */
 ipcMain.handle('save-metrics-snapshot', async (event, snapshot) => {

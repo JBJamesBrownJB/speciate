@@ -146,6 +146,19 @@ export declare class SimulationEngine {
    */
   killAll(): void
   /**
+   * Set simulation pause state
+   *
+   * # Arguments
+   * * `paused` - true to pause, false to resume
+   *
+   * # Errors
+   * * Simulation not started
+   * * Command queue full
+   */
+  setPaused(paused: boolean): void
+  /** Get current pause state */
+  isPaused(): boolean
+  /**
    * Load trial configuration
    *
    * # Arguments

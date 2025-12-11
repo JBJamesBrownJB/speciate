@@ -206,6 +206,8 @@ pub struct PerceptionDebugSnapshot {
     pub perception_range: f32,
     pub fov_angle: f32,  // Field of view in radians
     pub rotation: f32,   // Creature facing direction in radians
+    pub ax: f32,         // Acceleration x component (for force visualization)
+    pub ay: f32,         // Acceleration y component (for force visualization)
     pub neighbors: Vec<NeighborDebugInfo>,
     pub queried_cells: Vec<QueriedCell>,  // Grid cells actually checked (green in overlay)
     pub checked_cells: Vec<QueriedCell>,  // Grid cells skipped due to early break (orange in overlay)
@@ -222,6 +224,8 @@ impl PerceptionDebugSnapshot {
         self.perception_range = 0.0;
         self.fov_angle = 0.0;
         self.rotation = 0.0;
+        self.ax = 0.0;
+        self.ay = 0.0;
         self.neighbors.clear();
         self.queried_cells.clear();
         self.checked_cells.clear();
@@ -237,6 +241,8 @@ impl PerceptionDebugSnapshot {
         perception_range: f32,
         fov_angle: f32,
         rotation: f32,
+        ax: f32,
+        ay: f32,
         neighbors: impl IntoIterator<Item = NeighborDebugInfo>,
         queried_cells: impl IntoIterator<Item = QueriedCell>,
         checked_cells: impl IntoIterator<Item = QueriedCell>,
@@ -248,6 +254,8 @@ impl PerceptionDebugSnapshot {
         self.perception_range = perception_range;
         self.fov_angle = fov_angle;
         self.rotation = rotation;
+        self.ax = ax;
+        self.ay = ay;
         self.neighbors.clear();
         self.neighbors.extend(neighbors);
         self.queried_cells.clear();

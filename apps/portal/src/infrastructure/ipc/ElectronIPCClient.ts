@@ -2,9 +2,9 @@ import type { IPCClient } from './IPCClient';
 import type { GameState, CreatureData, PerceptionDebugData, NeighborDebugInfo, QueriedCell } from '../../types/GameState';
 import type { TelemetryFrame } from '../../types/TelemetryFrame';
 
-const HEADER_SIZE = 8;
+const HEADER_SIZE = 10;
 const MAX_DEBUG_NEIGHBORS = 64;
-const CELL_SECTION_OFFSET = HEADER_SIZE + MAX_DEBUG_NEIGHBORS * 3; // 200
+const CELL_SECTION_OFFSET = HEADER_SIZE + MAX_DEBUG_NEIGHBORS * 3; // 202
 const CELL_HEADER_SIZE = 4;
 const MAX_QUERIED_CELLS = 100;
 const CHECKED_CELL_SECTION_OFFSET = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 404
@@ -106,12 +106,25 @@ export class ElectronIPCClient implements IPCClient {
     // Listen for perception debug buffer updates (every tick)
     const unsubPerception = window.electron.onPerceptionDebugUpdate((buffer: Float32Array) => {
       try {
+        // Check has_data flag first (buffer[0] = 1.0 means valid data, 0.0 means no selection)
+        if (buffer[0] < 0.5) {
+          // No selection - call callbacks with null
+          this.perceptionDebugCallbacks.forEach(callback => {
+            try {
+              callback(null);
+            } catch (error) {
+              console.error('[ElectronIPCClient] Error in perception debug callback:', error);
+            }
+          });
+          return;
+        }
+
         // Parse buffer layout:
-        // [0]: has_data, [1]: target_id, [2]: x, [3]: y, [4]: range, [5]: fov_angle, [6]: rotation, [7]: neighbor_count
-        // [8..72]: neighbor_ids, [72..136]: neighbor_xs, [136..200]: neighbor_ys
-        // [200]: cell_size, [201]: num_cells, [202]: creature_cell_x, [203]: creature_cell_y
-        // [204..]: queried cells as (x, y) pairs
-        const neighborCount = Math.min(buffer[7], MAX_DEBUG_NEIGHBORS);
+        // [0]: has_data, [1]: target_id, [2]: x, [3]: y, [4]: range, [5]: fov_angle, [6]: rotation, [7]: ax, [8]: ay, [9]: neighbor_count
+        // [10..74]: neighbor_ids, [74..138]: neighbor_xs, [138..202]: neighbor_ys
+        // [202]: cell_size, [203]: num_cells, [204]: creature_cell_x, [205]: creature_cell_y
+        // [206..]: queried cells as (x, y) pairs
+        const neighborCount = Math.min(buffer[9], MAX_DEBUG_NEIGHBORS);
 
         const neighbors: NeighborDebugInfo[] = [];
         const idOffset = HEADER_SIZE;
@@ -161,6 +174,8 @@ export class ElectronIPCClient implements IPCClient {
           perceptionRange: buffer[4],
           fovAngle: buffer[5],
           rotation: buffer[6],
+          ax: buffer[7],
+          ay: buffer[8],
           neighbors,
           cellSize,
           creatureCell,
@@ -244,8 +259,6 @@ export class ElectronIPCClient implements IPCClient {
   }
 
   selectCreatureDebug(creatureId: number | null): void {
-    if (window.electron?.selectCreatureDebug) {
-      window.electron.selectCreatureDebug(creatureId);
-    }
+    window.electron?.selectCreatureDebug?.(creatureId);
   }
 }

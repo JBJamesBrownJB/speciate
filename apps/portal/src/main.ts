@@ -11,9 +11,13 @@ import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
 import { ChangeDetector } from "@/core/ChangeDetection";
 import { SelectionManager } from "@/systems/SelectionManager";
-import { SelectionHighlight } from "@/rendering/SelectionHighlight";
-import { PerceptionOverlay } from "@/rendering/PerceptionOverlay";
-import { SpatialGridOverlay } from "@/rendering/SpatialGridOverlay";
+import {
+  OverlayManager,
+  SelectionHighlight,
+  PerceptionOverlay,
+  SpatialGridOverlay,
+  ForceOverlay,
+} from "@/rendering/overlays";
 import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
 import type { CreatureData } from "@/types/GameState";
 
@@ -114,23 +118,26 @@ async function main(): Promise<void> {
 
     // Selection system
     const selectionManager = new SelectionManager();
-    const selectionHighlight = new SelectionHighlight(worldContainer);
-    const perceptionOverlay = new PerceptionOverlay(worldContainer);
-    const spatialGridOverlay = new SpatialGridOverlay(worldContainer);
     const creatureInfoPanel = new CreatureInfoPanel(document.body);
     let latestCreatures: CreatureData[] = [];
 
-    // Keyboard shortcuts
-    window.addEventListener('keydown', (event: KeyboardEvent) => {
-      if (event.key === 'g' || event.key === 'G') {
-        spatialGridOverlay.toggle();
-      }
-    });
+    // Overlay system
+    const overlayManager = new OverlayManager();
+    const selectionHighlight = new SelectionHighlight(worldContainer);
+    const perceptionOverlay = new PerceptionOverlay(worldContainer);
+    const spatialGridOverlay = new SpatialGridOverlay(worldContainer);
+    const forceOverlay = new ForceOverlay(worldContainer);
+
+    overlayManager.register(selectionHighlight);
+    overlayManager.register(perceptionOverlay);
+    overlayManager.register(spatialGridOverlay);
+    overlayManager.register(forceOverlay);
+    overlayManager.enableKeyboardShortcuts();
 
     // Wire up selection events
     selectionManager.on('creature-selected', (creature) => {
       if (creature) {
-        selectionHighlight.show(creature.x, creature.y, creature.size / 2);
+        selectionHighlight.showAt(creature.x, creature.y, creature.size / 2);
         creatureInfoPanel.show(creature);
       }
     });
@@ -166,10 +173,14 @@ async function main(): Promise<void> {
 
       if (nearest) {
         selectionManager.selectCreature(nearest);
-        ipcClient?.selectCreatureDebug(nearest.id);
+        if (ipcClient) {
+          ipcClient.selectCreatureDebug(nearest.id);
+        }
       } else {
         selectionManager.deselect();
-        ipcClient?.selectCreatureDebug(null);
+        if (ipcClient) {
+          ipcClient.selectCreatureDebug(null);
+        }
       }
     });
 
@@ -240,6 +251,7 @@ async function main(): Promise<void> {
         // Only update overlay if a creature is selected (prevents stale data race)
         if (debugData && selectionManager.hasSelection()) {
           perceptionOverlay.update(debugData);
+          creatureInfoPanel.updateDebugData(debugData);
           // Update spatial grid overlay with queried + checked cells
           if (debugData.queriedCells && debugData.checkedCells && debugData.creatureCell) {
             spatialGridOverlay.updateQueriedCells(
@@ -248,9 +260,22 @@ async function main(): Promise<void> {
               debugData.creatureCell
             );
           }
+          // Update force overlay with acceleration from perception debug data
+          const selected = selectionManager.getSelected();
+          if (selected) {
+            forceOverlay.update({
+              x: debugData.x,
+              y: debugData.y,
+              radius: selected.size / 2,
+              ax: debugData.ax,
+              ay: debugData.ay,
+            });
+          }
         } else {
           perceptionOverlay.clear();
+          creatureInfoPanel.updateDebugData(null);
           spatialGridOverlay.clearQueriedCells();
+          forceOverlay.update(undefined);
         }
       });
 
@@ -321,6 +346,7 @@ async function main(): Promise<void> {
         selectionHighlight.updatePosition(selected.x, selected.y);
         selectionHighlight.update(deltaMs);
         creatureInfoPanel.update(selected);
+        // Force overlay is updated in onPerceptionDebugUpdate callback
       }
 
       hudManager.updateFPS(fps);

@@ -1,5 +1,6 @@
 import { Graphics, Container } from 'pixi.js';
 import type { QueriedCell } from '@/types/GameState';
+import type { IOverlay, OverlayConfig } from './IOverlay';
 
 const GRID_LINE_COLOR = 0x444444;
 const GRID_LINE_ALPHA = 0.6;
@@ -10,7 +11,13 @@ const SKIPPED_CELL_ALPHA = 0.25;
 const CREATURE_CELL_COLOR = 0xdddd22;
 const CREATURE_CELL_ALPHA = 0.35;
 
-export class SpatialGridOverlay {
+export class SpatialGridOverlay implements IOverlay {
+  readonly config: OverlayConfig = {
+    name: 'spatialGrid',
+    devToolsOnly: true,
+    keyboardShortcut: 'g',
+  };
+
   private graphics: Graphics;
   private cellGraphics: Graphics;
   private visible: boolean = false;
@@ -38,7 +45,6 @@ export class SpatialGridOverlay {
   }
 
   setBounds(minX: number, maxX: number, minY: number, maxY: number): void {
-    // Validate bounds are finite and in correct order
     if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) {
       return;
     }
@@ -52,9 +58,11 @@ export class SpatialGridOverlay {
   }
 
   toggle(): void {
-    this.visible = !this.visible;
-    this.graphics.visible = this.visible;
-    this.cellGraphics.visible = this.visible;
+    if (this.visible) {
+      this.hide();
+    } else {
+      this.show();
+    }
   }
 
   show(): void {
@@ -74,10 +82,8 @@ export class SpatialGridOverlay {
     skippedCells: QueriedCell[],
     creatureCell: QueriedCell
   ): void {
-    // queriedCells = cells we actually checked (from REAL perception execution)
-    // skippedCells = cells we skipped due to early break (from REAL perception execution)
-    this.checkedCells = queriedCells;   // Green: cells we checked
-    this.skippedCells = skippedCells;   // Orange: cells we skipped
+    this.checkedCells = queriedCells;
+    this.skippedCells = skippedCells;
     this.creatureCell = creatureCell;
   }
 
@@ -99,7 +105,6 @@ export class SpatialGridOverlay {
     viewportHeight: number
   ): void {
     if (!this.visible) return;
-
     this.render(cameraX, cameraY, zoom, viewportWidth, viewportHeight);
   }
 
@@ -118,27 +123,23 @@ export class SpatialGridOverlay {
     this.graphics.clear();
     this.cellGraphics.clear();
 
-    const halfViewW = (viewportWidth / 2) / zoom;
-    const halfViewH = (viewportHeight / 2) / zoom;
+    const halfViewW = viewportWidth / 2 / zoom;
+    const halfViewH = viewportHeight / 2 / zoom;
 
-    // Viewport bounds in world coordinates
     const viewLeft = cameraX - halfViewW;
     const viewRight = cameraX + halfViewW;
     const viewTop = cameraY - halfViewH;
     const viewBottom = cameraY + halfViewH;
 
-    // Clamp to actual spatial grid bounds
     const worldLeft = Math.max(viewLeft, this.gridMinX);
     const worldRight = Math.min(viewRight, this.gridMaxX);
     const worldTop = Math.max(viewTop, this.gridMinY);
     const worldBottom = Math.min(viewBottom, this.gridMaxY);
 
-    // If grid is completely outside viewport, nothing to render
     if (worldLeft >= worldRight || worldTop >= worldBottom) {
       return;
     }
 
-    // Guard against invalid cell size
     if (this.cellSize <= 0 || !isFinite(this.cellSize)) {
       return;
     }
@@ -148,13 +149,11 @@ export class SpatialGridOverlay {
     const startCellY = Math.floor(worldTop / this.cellSize);
     const endCellY = Math.ceil(worldBottom / this.cellSize);
 
-    // Guard against too many cells (prevent infinite loops)
     const maxCells = 10000;
     if ((endCellX - startCellX) * (endCellY - startCellY) > maxCells) {
       return;
     }
 
-    // Render skipped cells (orange/red fill) - cells in range but skipped due to early break
     if (this.skippedCells.length > 0) {
       for (const cell of this.skippedCells) {
         const worldX = cell.x * this.cellSize;
@@ -164,7 +163,6 @@ export class SpatialGridOverlay {
       this.cellGraphics.fill({ color: SKIPPED_CELL_COLOR, alpha: SKIPPED_CELL_ALPHA });
     }
 
-    // Render checked cells (green fill) - cells actually examined
     if (this.checkedCells.length > 0) {
       for (const cell of this.checkedCells) {
         const worldX = cell.x * this.cellSize;
@@ -174,7 +172,6 @@ export class SpatialGridOverlay {
       this.cellGraphics.fill({ color: CHECKED_CELL_COLOR, alpha: CHECKED_CELL_ALPHA });
     }
 
-    // Render creature's cell (yellow fill) on top
     if (this.creatureCell) {
       const worldX = this.creatureCell.x * this.cellSize;
       const worldY = this.creatureCell.y * this.cellSize;
@@ -182,7 +179,6 @@ export class SpatialGridOverlay {
       this.cellGraphics.fill({ color: CREATURE_CELL_COLOR, alpha: CREATURE_CELL_ALPHA });
     }
 
-    // Render grid lines
     const lineWidth = 1.0 / zoom;
 
     this.graphics.setStrokeStyle({

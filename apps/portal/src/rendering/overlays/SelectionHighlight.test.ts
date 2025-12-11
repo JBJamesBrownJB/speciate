@@ -19,31 +19,47 @@ describe('SelectionHighlight', () => {
     it('should not be visible initially', () => {
       expect(highlight.isVisible()).toBe(false);
     });
+
+    it('should have correct config', () => {
+      expect(highlight.config.name).toBe('selection');
+      expect(highlight.config.devToolsOnly).toBe(false);
+    });
   });
 
-  describe('show', () => {
+  describe('showAt', () => {
     it('should set visible state to true', () => {
-      highlight.show(100, 200, 15);
+      highlight.showAt(100, 200, 15);
       expect(highlight.isVisible()).toBe(true);
     });
 
     it('should add graphics to container', () => {
-      highlight.show(100, 200, 15);
+      highlight.showAt(100, 200, 15);
       expect(container.children.length).toBe(1);
     });
   });
 
   describe('hide', () => {
     it('should set visible state to false', () => {
-      highlight.show(100, 200, 15);
+      highlight.showAt(100, 200, 15);
       highlight.hide();
       expect(highlight.isVisible()).toBe(false);
     });
   });
 
+  describe('toggle', () => {
+    it('should toggle visibility', () => {
+      highlight.showAt(100, 200, 15);
+      expect(highlight.isVisible()).toBe(true);
+      highlight.toggle();
+      expect(highlight.isVisible()).toBe(false);
+      highlight.toggle();
+      expect(highlight.isVisible()).toBe(true);
+    });
+  });
+
   describe('updatePosition', () => {
     it('should not throw when visible', () => {
-      highlight.show(100, 200, 15);
+      highlight.showAt(100, 200, 15);
       expect(() => highlight.updatePosition(150, 250)).not.toThrow();
     });
 
@@ -54,7 +70,7 @@ describe('SelectionHighlight', () => {
 
   describe('update (animation)', () => {
     it('should not throw when visible', () => {
-      highlight.show(100, 200, 15);
+      highlight.showAt(100, 200, 15);
       expect(() => highlight.update(16)).not.toThrow();
     });
 
@@ -65,7 +81,7 @@ describe('SelectionHighlight', () => {
 
   describe('destroy', () => {
     it('should not throw', () => {
-      highlight.show(100, 200, 15);
+      highlight.showAt(100, 200, 15);
       expect(() => highlight.destroy()).not.toThrow();
     });
   });

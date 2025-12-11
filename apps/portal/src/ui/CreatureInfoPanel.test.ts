@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CreatureInfoPanel } from './CreatureInfoPanel';
-import type { CreatureData } from '../types/GameState';
+import type { CreatureData, PerceptionDebugData } from '../types/GameState';
 
 describe('CreatureInfoPanel', () => {
   let panel: CreatureInfoPanel;
@@ -113,6 +113,102 @@ describe('CreatureInfoPanel', () => {
 
       const panelEl = parentElement.querySelector('.creature-info-panel');
       expect(panelEl).toBeNull();
+    });
+  });
+
+  describe('updateDebugData', () => {
+    it('should display acceleration from debug data', () => {
+      const creature: CreatureData = {
+        id: 12345,
+        x: 100,
+        y: 200,
+        rotation: 0,
+        size: 2.5,
+      };
+
+      const debugData: PerceptionDebugData = {
+        entityId: 12345,
+        x: 100,
+        y: 200,
+        perceptionRange: 50,
+        fovAngle: Math.PI,
+        rotation: 0,
+        ax: 1.5,
+        ay: 2.5,
+        neighbors: [],
+        cellSize: 50,
+        creatureCell: { x: 2, y: 4 },
+        queriedCells: [],
+        checkedCells: [],
+      };
+
+      panel.show(creature);
+      panel.updateDebugData(debugData);
+      panel.update(creature);
+
+      const panelEl = parentElement.querySelector('.creature-info-panel');
+      expect(panelEl?.textContent).toContain('Accel');
+      expect(panelEl?.textContent).toContain('1.50');
+      expect(panelEl?.textContent).toContain('2.50');
+    });
+
+    it('should clear acceleration when debug data is null', () => {
+      const creature: CreatureData = {
+        id: 12345,
+        x: 100,
+        y: 200,
+        rotation: 0,
+        size: 2.5,
+      };
+
+      const debugData: PerceptionDebugData = {
+        entityId: 12345,
+        x: 100,
+        y: 200,
+        perceptionRange: 50,
+        fovAngle: Math.PI,
+        rotation: 0,
+        ax: 1.5,
+        ay: 2.5,
+        neighbors: [],
+        cellSize: 50,
+        creatureCell: { x: 2, y: 4 },
+        queriedCells: [],
+        checkedCells: [],
+      };
+
+      panel.show(creature);
+      panel.updateDebugData(debugData);
+      panel.update(creature);
+
+      // Now clear the debug data
+      panel.updateDebugData(null);
+      panel.update(creature);
+
+      const panelEl = parentElement.querySelector('.creature-info-panel');
+      expect(panelEl?.textContent).not.toContain('1.50');
+    });
+  });
+
+  describe('keyboard legend', () => {
+    it('should display keyboard shortcuts', () => {
+      const creature: CreatureData = {
+        id: 12345,
+        x: 100,
+        y: 200,
+        rotation: 0,
+        size: 2.5,
+      };
+
+      panel.show(creature);
+
+      const panelEl = parentElement.querySelector('.creature-info-panel');
+      expect(panelEl?.textContent).toContain('[G]');
+      expect(panelEl?.textContent).toContain('Grid');
+      expect(panelEl?.textContent).toContain('[F]');
+      expect(panelEl?.textContent).toContain('Force');
+      expect(panelEl?.textContent).toContain('[P]');
+      expect(panelEl?.textContent).toContain('Perception');
     });
   });
 });

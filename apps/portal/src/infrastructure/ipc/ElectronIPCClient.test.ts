@@ -27,6 +27,7 @@ describe('ElectronIPCClient', () => {
     onTelemetryUpdate: ReturnType<typeof vi.fn>;
     onPerceptionDebugUpdate: ReturnType<typeof vi.fn>;
     removeStateUpdateListener: ReturnType<typeof vi.fn>;
+    selectCreatureDebug: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -35,6 +36,7 @@ describe('ElectronIPCClient', () => {
       onTelemetryUpdate: vi.fn(),
       onPerceptionDebugUpdate: vi.fn(),
       removeStateUpdateListener: vi.fn(),
+      selectCreatureDebug: vi.fn(),
     };
 
     (global as any).window = {
@@ -241,6 +243,28 @@ describe('ElectronIPCClient', () => {
 
       expect(client.getLatestState()).toBeNull();
       expect(mockElectronAPI.removeStateUpdateListener).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('selectCreatureDebug', () => {
+    it('should call window.electron.selectCreatureDebug with creature id', () => {
+      client.selectCreatureDebug(42);
+
+      expect(mockElectronAPI.selectCreatureDebug).toHaveBeenCalledOnce();
+      expect(mockElectronAPI.selectCreatureDebug).toHaveBeenCalledWith(42);
+    });
+
+    it('should call window.electron.selectCreatureDebug with null to clear selection', () => {
+      client.selectCreatureDebug(null);
+
+      expect(mockElectronAPI.selectCreatureDebug).toHaveBeenCalledOnce();
+      expect(mockElectronAPI.selectCreatureDebug).toHaveBeenCalledWith(null);
+    });
+
+    it('should not throw if window.electron.selectCreatureDebug is undefined', () => {
+      delete (mockElectronAPI as any).selectCreatureDebug;
+
+      expect(() => client.selectCreatureDebug(42)).not.toThrow();
     });
   });
 });

@@ -1,5 +1,6 @@
 import { Graphics, Container } from 'pixi.js';
-import type { PerceptionDebugData } from '../types/GameState';
+import type { PerceptionDebugData } from '@/types/GameState';
+import type { IOverlay, OverlayConfig } from './IOverlay';
 
 const PERCEPTION_WEDGE_COLOR = 0x00ffff;
 const PERCEPTION_FILL_ALPHA = 0.15;
@@ -8,9 +9,16 @@ const NEIGHBOR_LINE_COLOR = 0xffffff;
 const NEIGHBOR_LINE_WIDTH = 0.1;
 const NEIGHBOR_LINE_ALPHA = 0.89;
 
-export class PerceptionOverlay {
+export class PerceptionOverlay implements IOverlay {
+  readonly config: OverlayConfig = {
+    name: 'perception',
+    devToolsOnly: true,
+    keyboardShortcut: 'p',
+  };
+
   private graphics: Graphics;
   private visible: boolean = false;
+  private hasData: boolean = false;
 
   constructor(container: Container) {
     this.graphics = new Graphics();
@@ -23,17 +31,36 @@ export class PerceptionOverlay {
       return;
     }
 
-    this.visible = true;
-    this.render(debugData);
+    this.hasData = true;
+    if (this.visible) {
+      this.render(debugData);
+    }
   }
 
   clear(): void {
+    this.hasData = false;
+    this.graphics.clear();
+  }
+
+  show(): void {
+    this.visible = true;
+  }
+
+  hide(): void {
     this.visible = false;
     this.graphics.clear();
   }
 
+  toggle(): void {
+    if (this.visible) {
+      this.hide();
+    } else {
+      this.show();
+    }
+  }
+
   isVisible(): boolean {
-    return this.visible;
+    return this.visible && this.hasData;
   }
 
   destroy(): void {

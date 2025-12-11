@@ -165,10 +165,12 @@ contextBridge.exposeInMainWorld('electron', {
    * - [4]: perception_range
    * - [5]: fov_angle (radians)
    * - [6]: rotation (radians)
-   * - [7]: neighbor_count
-   * - [8..72]: neighbor_ids (max 64)
-   * - [72..136]: neighbor_xs
-   * - [136..200]: neighbor_ys
+   * - [7]: ax (acceleration x)
+   * - [8]: ay (acceleration y)
+   * - [9]: neighbor_count
+   * - [10..74]: neighbor_ids (max 64)
+   * - [74..138]: neighbor_xs
+   * - [138..202]: neighbor_ys
    *
    * @param {Function} callback - Function to call with perception debug buffer
    * @returns {Function} Unsubscribe function

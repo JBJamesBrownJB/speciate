@@ -94,8 +94,9 @@ function startSimulation() {
     // Create persistent buffers for zero-allocation polling (memory leak fix)
     // 250K creatures * 4 floats (ID, X, Y, Rotation) = 1M floats = 4MB
     creatureBuffer = new Float32Array(250000 * 4);
-    // Perception debug buffer: 605 floats (from perception_debug_buffer.rs BUFFER_SIZE)
-    perceptionBuffer = new Float32Array(605);
+    // Perception debug buffer: 607 floats (from perception_debug_buffer.rs BUFFER_SIZE)
+    // BUFFER_SIZE = CHECKED_CELL_SECTION_OFFSET(406) + CHECKED_CELL_HEADER_SIZE(1) + MAX_CHECKED_CELLS(100)*2 = 607
+    perceptionBuffer = new Float32Array(607);
     console.log('[Electron NAPI] ✅ Persistent buffers created (creature: 4MB, perception: 2.4KB)');
 
     // Find most recent save state (by timestamp in filename)
@@ -174,7 +175,7 @@ function startSimulation() {
           // Fill perception debug buffer (zero-allocation, dev-tools only)
           if (simulationEngine.fillPerceptionDebug) {
             const hasData = simulationEngine.fillPerceptionDebug(perceptionBuffer);
-            // Only send if has_data flag is set
+            // Only send if has_data flag is set (creature selected)
             if (hasData && mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('perception-debug-update', perceptionBuffer);
             }
@@ -424,19 +425,16 @@ ipcMain.on('send-command', (event, command) => {
  * IPC handler: Select creature for perception debug (portal)
  */
 ipcMain.on('select-creature-debug', (event, creatureId) => {
+  console.log(`[Electron NAPI] select-creature-debug received: ${creatureId}`);
+
   if (!simulationEngine) {
     console.error('[Electron NAPI] Cannot select creature: simulation not running');
     return;
   }
 
   try {
-    // creatureId is null to clear, or a number to select
     simulationEngine.selectCreatureDebug(creatureId);
-    if (creatureId !== null) {
-      console.log(`[Electron NAPI] Selected creature ${creatureId} for debug`);
-    } else {
-      console.log('[Electron NAPI] Cleared creature debug selection');
-    }
+    console.log(`[Electron NAPI] selectCreatureDebug(${creatureId}) called successfully`);
   } catch (error) {
     console.error('[Electron NAPI] Failed to select creature:', error);
   }

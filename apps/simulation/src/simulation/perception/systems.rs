@@ -1,6 +1,8 @@
 use super::components::*;
 use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
 use crate::simulation::core::components::{BodySize, Position, Rotation};
+#[cfg(feature = "dev-tools")]
+use crate::simulation::core::components::Acceleration;
 use crate::simulation::creatures::components::CreatureState;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
@@ -32,6 +34,7 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
     #[cfg(feature = "dev-tools")] mut debug_snapshot: ResMut<PerceptionDebugSnapshot>,
     #[cfg(feature = "dev-tools")] crit_ids: Query<&CritId>,
+    #[cfg(feature = "dev-tools")] accel_query: Query<&Acceleration>,
 ) {
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "perception");
@@ -139,6 +142,12 @@ pub fn update_perception_system(
             {
                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
 
+                // Query acceleration for force visualization
+                let (ax, ay) = accel_query
+                    .get(target_entity)
+                    .map(|a| (a.ax, a.ay))
+                    .unwrap_or((0.0, 0.0));
+
                 if state.behavior.is_active() {
                     let x = pos.x;
                     let y = pos.y;
@@ -170,6 +179,8 @@ pub fn update_perception_system(
                         range,
                         perception.fov_angle,
                         rot.radians,
+                        ax,
+                        ay,
                         neighbor_debug,
                         queried_cells,
                         skipped_cells,
@@ -183,6 +194,8 @@ pub fn update_perception_system(
                         perception.range,
                         perception.fov_angle,
                         rot.radians,
+                        ax,
+                        ay,
                         std::iter::empty(),
                         std::iter::empty(),
                         std::iter::empty(),
@@ -193,6 +206,7 @@ pub fn update_perception_system(
                 debug_snapshot.clear();
             }
         } else {
+            // No debug target set - this is normal
             debug_snapshot.clear();
         }
     }
@@ -690,6 +704,50 @@ mod tests {
             Entity::from_raw(101),
             "Second closest should be entity 101"
         );
+    }
+
+    #[cfg(feature = "dev-tools")]
+    #[test]
+    fn test_perception_debug_target_populates_snapshot() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::components::CritId;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(100.0, 100.0);
+
+        // Spawn a creature and get its CritId
+        let crit_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(50.0, 50.0)
+                .with_all_capabilities()
+                .with_wandering(),
+        );
+
+        // Find the entity with this CritId
+        let world = sim.world_mut();
+        let entity = world
+            .query::<(bevy_ecs::entity::Entity, &CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == crit_id)
+            .map(|(e, _)| e)
+            .expect("Should find entity by CritId");
+
+        // Set the debug target
+        {
+            let mut target = world.get_resource_mut::<PerceptionDebugTarget>().expect("PerceptionDebugTarget resource should exist");
+            target.0 = Some(entity);
+        }
+
+        // Run simulation to trigger perception system
+        sim.update(0.016);
+
+        // Check that snapshot was populated
+        let world = sim.world();
+        let snapshot = world.get_resource::<PerceptionDebugSnapshot>().expect("PerceptionDebugSnapshot resource should exist");
+
+        assert_eq!(snapshot.entity_id, crit_id, "Snapshot should have the selected creature's ID");
+        assert!(snapshot.x > 0.0 || snapshot.y > 0.0, "Snapshot should have position data");
     }
 
     #[test]

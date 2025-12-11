@@ -4,6 +4,8 @@ export interface CreatureData {
   y: number;
   rotation: number;
   size: number;
+  ax?: number;
+  ay?: number;
 }
 
 export interface HardwareMetrics {
@@ -62,6 +64,8 @@ export interface PerceptionDebugData {
   perceptionRange: number;
   fovAngle: number;
   rotation: number;
+  ax: number;
+  ay: number;
   neighbors: NeighborDebugInfo[];
   cellSize: number;
   creatureCell: QueriedCell;

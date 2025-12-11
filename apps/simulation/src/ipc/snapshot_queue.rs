@@ -27,6 +27,10 @@ pub struct CreatureSnapshot {
     pub y: f32,
     pub rotation: f32,
     pub size: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ax: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ay: Option<f32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

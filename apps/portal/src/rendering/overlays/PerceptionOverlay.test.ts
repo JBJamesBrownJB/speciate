@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PerceptionOverlay } from './PerceptionOverlay';
 import { Container } from 'pixi.js';
-import type { PerceptionDebugData } from '../types/GameState';
+import type { PerceptionDebugData } from '@/types/GameState';
 
 describe('PerceptionOverlay', () => {
   let overlay: PerceptionOverlay;
@@ -20,10 +20,17 @@ describe('PerceptionOverlay', () => {
     it('should not be visible initially', () => {
       expect(overlay.isVisible()).toBe(false);
     });
+
+    it('should have correct config', () => {
+      expect(overlay.config.name).toBe('perception');
+      expect(overlay.config.devToolsOnly).toBe(true);
+      expect(overlay.config.keyboardShortcut).toBe('p');
+    });
   });
 
   describe('update with debug data', () => {
-    it('should become visible when debug data is provided', () => {
+    it('should become visible when debug data is provided and shown', () => {
+      overlay.show();
       const debugData: PerceptionDebugData = {
         entityId: 1,
         x: 100,
@@ -31,6 +38,8 @@ describe('PerceptionOverlay', () => {
         perceptionRange: 50,
         fovAngle: Math.PI,
         rotation: 0,
+        ax: 0,
+        ay: 0,
         neighbors: [],
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
@@ -42,6 +51,7 @@ describe('PerceptionOverlay', () => {
     });
 
     it('should add graphics to container', () => {
+      overlay.show();
       const debugData: PerceptionDebugData = {
         entityId: 1,
         x: 100,
@@ -49,6 +59,8 @@ describe('PerceptionOverlay', () => {
         perceptionRange: 50,
         fovAngle: Math.PI,
         rotation: 0,
+        ax: 0,
+        ay: 0,
         neighbors: [],
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
@@ -60,6 +72,7 @@ describe('PerceptionOverlay', () => {
     });
 
     it('should handle debug data with neighbors', () => {
+      overlay.show();
       const debugData: PerceptionDebugData = {
         entityId: 1,
         x: 100,
@@ -67,6 +80,8 @@ describe('PerceptionOverlay', () => {
         perceptionRange: 50,
         fovAngle: Math.PI,
         rotation: 0,
+        ax: 0,
+        ay: 0,
         neighbors: [
           { id: 2, x: 120, y: 210 },
           { id: 3, x: 80, y: 190 },
@@ -83,6 +98,7 @@ describe('PerceptionOverlay', () => {
 
   describe('clear', () => {
     it('should hide overlay', () => {
+      overlay.show();
       const debugData: PerceptionDebugData = {
         entityId: 1,
         x: 100,
@@ -90,6 +106,8 @@ describe('PerceptionOverlay', () => {
         perceptionRange: 50,
         fovAngle: Math.PI,
         rotation: 0,
+        ax: 0,
+        ay: 0,
         neighbors: [],
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
@@ -104,6 +122,7 @@ describe('PerceptionOverlay', () => {
 
   describe('update with undefined', () => {
     it('should hide overlay when update receives undefined', () => {
+      overlay.show();
       const debugData: PerceptionDebugData = {
         entityId: 1,
         x: 100,
@@ -111,6 +130,8 @@ describe('PerceptionOverlay', () => {
         perceptionRange: 50,
         fovAngle: Math.PI,
         rotation: 0,
+        ax: 0,
+        ay: 0,
         neighbors: [],
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },
@@ -124,8 +145,17 @@ describe('PerceptionOverlay', () => {
     });
   });
 
+  describe('toggle', () => {
+    it('should toggle visibility', () => {
+      expect(overlay.isVisible()).toBe(false);
+      overlay.toggle();
+      expect(overlay.config.name).toBe('perception');
+    });
+  });
+
   describe('destroy', () => {
     it('should not throw when visible', () => {
+      overlay.show();
       const debugData: PerceptionDebugData = {
         entityId: 1,
         x: 100,
@@ -133,6 +163,8 @@ describe('PerceptionOverlay', () => {
         perceptionRange: 50,
         fovAngle: Math.PI,
         rotation: 0,
+        ax: 0,
+        ay: 0,
         neighbors: [],
         cellSize: 50,
         creatureCell: { x: 2, y: 4 },

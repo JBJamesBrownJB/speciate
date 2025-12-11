@@ -1,11 +1,17 @@
 import { Graphics, Container } from 'pixi.js';
+import type { IOverlay, OverlayConfig } from './IOverlay';
 
 const HIGHLIGHT_COLOR = 0xffff00;
 const HIGHLIGHT_LINE_WIDTH = 1;
 const HIGHLIGHT_ALPHA = 0.3;
 const RADIUS_PADDING = 0.07;
 
-export class SelectionHighlight {
+export class SelectionHighlight implements IOverlay {
+  readonly config: OverlayConfig = {
+    name: 'selection',
+    devToolsOnly: false,
+  };
+
   private graphics: Graphics;
   private visible: boolean = false;
   private positionX: number = 0;
@@ -17,7 +23,7 @@ export class SelectionHighlight {
     container.addChild(this.graphics);
   }
 
-  show(worldX: number, worldY: number, radius: number): void {
+  showAt(worldX: number, worldY: number, radius: number): void {
     this.positionX = worldX;
     this.positionY = worldY;
     this.baseRadius = radius;
@@ -25,9 +31,22 @@ export class SelectionHighlight {
     this.render();
   }
 
+  show(): void {
+    this.visible = true;
+    this.render();
+  }
+
   hide(): void {
     this.visible = false;
     this.graphics.clear();
+  }
+
+  toggle(): void {
+    if (this.visible) {
+      this.hide();
+    } else {
+      this.show();
+    }
   }
 
   isVisible(): boolean {

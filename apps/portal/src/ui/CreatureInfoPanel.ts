@@ -1,4 +1,4 @@
-import type { CreatureData } from '../types/GameState';
+import type { CreatureData, PerceptionDebugData } from '../types/GameState';
 
 export interface ExtendedCreatureData {
   energy?: number;
@@ -8,6 +8,7 @@ export interface ExtendedCreatureData {
 export class CreatureInfoPanel {
   private container: HTMLDivElement;
   private visible: boolean = false;
+  private lastDebugData: PerceptionDebugData | null = null;
 
   constructor(parentElement: HTMLElement) {
     this.container = document.createElement('div');
@@ -40,6 +41,7 @@ export class CreatureInfoPanel {
 
   hide(): void {
     this.visible = false;
+    this.lastDebugData = null;
     this.container.style.display = 'none';
   }
 
@@ -50,6 +52,10 @@ export class CreatureInfoPanel {
   update(creature: CreatureData, extended?: ExtendedCreatureData): void {
     if (!this.visible) return;
     this.render(creature, extended);
+  }
+
+  updateDebugData(debugData: PerceptionDebugData | null): void {
+    this.lastDebugData = debugData;
   }
 
   destroy(): void {
@@ -70,6 +76,20 @@ export class CreatureInfoPanel {
     if (extended?.behavior) {
       lines.push(`<div><span style="color: #888;">Behavior:</span> ${extended.behavior}</div>`);
     }
+
+    // Show acceleration from debug data
+    if (this.lastDebugData) {
+      const ax = this.lastDebugData.ax;
+      const ay = this.lastDebugData.ay;
+      const magnitude = Math.sqrt(ax * ax + ay * ay);
+      lines.push(`<div><span style="color: #888;">Accel:</span> (${ax.toFixed(2)}, ${ay.toFixed(2)}) |${magnitude.toFixed(2)}|</div>`);
+    }
+
+    // Keyboard legend
+    lines.push(`<div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2);">`);
+    lines.push(`<div style="color: #666; font-size: 11px; margin-bottom: 4px;">Overlays:</div>`);
+    lines.push(`<div style="color: #888; font-size: 11px;"><span style="color: #4a9eff;">[G]</span> Grid &nbsp; <span style="color: #4a9eff;">[F]</span> Force &nbsp; <span style="color: #4a9eff;">[P]</span> Perception</div>`);
+    lines.push(`</div>`);
 
     this.container.innerHTML = lines.join('');
   }

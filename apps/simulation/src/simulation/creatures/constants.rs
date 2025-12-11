@@ -163,7 +163,7 @@ pub const CRUISE_FORCE_MULT: UnitInterval = UnitInterval::new(0.4);
 /// [ACTIVE] Wander force for exploration/foraging.
 /// VALIDATED: Animals graze/forage at 15-25% to allow vigilance.
 /// Used by: wander/systems.rs
-pub const WANDER_FORCE_MULT: UnitInterval = UnitInterval::new(0.2);
+pub const WANDER_FORCE_MULT: UnitInterval = UnitInterval::new(0.1);
 
 /// [ACTIVE] Force multiplier for seek behavior (currently uses PURSUIT level).
 /// Used by: seek/systems.rs
@@ -386,7 +386,7 @@ pub const WANDER_RADIUS: f32 = 10.0;
 /// WARNING: 50m for 1m creature = 50 body lengths (ok), but for 10cm = 500 (absurd).
 /// Used by: creatures/builder.rs (WanderState default)
 /// TODO: Replace with WANDER_DISTANCE_BODY_LENGTHS = 50.0
-pub const WANDER_DISTANCE: f32 = 50.0;
+pub const WANDER_DISTANCE: f32 = 20.0;
 
 /// [ACTIVE] Max angle change per tick (degrees).
 /// VALIDATED: At 20 Hz, allows 90°/s maximum turn rate during wander.

@@ -238,10 +238,10 @@ impl NapiApp {
         let world = &self.simulation.world;
 
         // Check if there's an active debug target
-        let has_target = world
+        let target_entity = world
             .get_resource::<PerceptionDebugTarget>()
-            .map(|t| t.get().is_some())
-            .unwrap_or(false);
+            .and_then(|t| t.get());
+        let has_target = target_entity.is_some();
 
         let mut buffer_guard = buffer.lock();
 
@@ -261,6 +261,8 @@ impl NapiApp {
                     snapshot.perception_range,
                     snapshot.fov_angle,
                     snapshot.rotation,
+                    snapshot.ax,
+                    snapshot.ay,
                     snapshot.neighbors.iter(),
                 );
 

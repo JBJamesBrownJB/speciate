@@ -20,10 +20,12 @@ export class CreatureRenderer {
   render(creatures: CreatureData[]): void {
     const textureWidth = this.texture.width;
 
-    const currentIds = new Set<number>();
+    // Mark frame start - clears active Set (reused, zero allocation)
+    this.particlePool.beginFrame();
+
     for (let i = 0; i < creatures.length; i++) {
       const c = creatures[i];
-      currentIds.add(c.id);
+      // acquire() adds to active Set internally - no external Set needed!
       const isNew = !this.particlePool.hasEntity(c.id);
       const particle = this.particlePool.acquire(c.id, this.texture);
 
@@ -40,7 +42,8 @@ export class CreatureRenderer {
       }
     }
 
-    const staleIds = this.particlePool.getStaleEntities(currentIds);
+    // Uses internal active Set + reused staleBuffer (zero allocation)
+    const staleIds = this.particlePool.getStaleEntities();
     for (const id of staleIds) {
       const particle = this.particlePool.removeEntity(id);
       if (particle) {

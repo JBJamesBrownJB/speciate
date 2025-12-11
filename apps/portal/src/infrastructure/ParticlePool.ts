@@ -42,18 +42,20 @@ export class ParticlePool {
     return this.pool.has(entityId);
   }
 
+  private staleBuffer: number[] = [];
+
   beginFrame(): void {
     this.active.clear();
   }
 
-  getStaleEntities(currentIds: Set<number>): number[] {
-    const stale: number[] = [];
+  getStaleEntities(): number[] {
+    this.staleBuffer.length = 0;
     for (const id of this.pool.keys()) {
-      if (!currentIds.has(id)) {
-        stale.push(id);
+      if (!this.active.has(id)) {
+        this.staleBuffer.push(id);
       }
     }
-    return stale;
+    return this.staleBuffer;
   }
 
   removeEntity(entityId: number): Particle | undefined {

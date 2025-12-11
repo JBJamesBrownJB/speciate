@@ -99,6 +99,7 @@ impl SimulationEngine {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
+            save_dir: std::path::PathBuf::from("save-states"),
         };
 
         // Initialize SaveStateWorker if enabled (Arc<Mutex<>> for thread sharing)
@@ -399,20 +400,48 @@ impl SimulationEngine {
 
         // Get actual creature count (updated by Bevy thread)
         let creature_count = self.buffer_creature_count.load(Ordering::Relaxed) as usize;
-        
+
         // Calculate actual data size (4 f32s per creature: ID, X, Y, Rotation)
         let active_size = creature_count * 4;
-        
-        // Only copy the active portion of the buffer
-        // This reduces allocations from 3.2MB (full buffer) to actual data size
-        // Example: 50k creatures = 800KB instead of 3.2MB (4x reduction)
-        let active_data = if active_size > 0 && active_size <= read_slice.len() {
-            &read_slice[0..active_size]
+
+        // Simple allocation pattern - let NAPI handle memory management
+        // Complex Vec reuse patterns can interfere with NAPI's GC integration
+        if active_size > 0 && active_size <= read_slice.len() {
+            Float32Array::new(read_slice[0..active_size].to_vec())
         } else {
-            &read_slice[0..0] // Empty slice if no creatures or invalid size
-        };
-        
-        Float32Array::new(active_data.to_vec())
+            Float32Array::new(vec![])
+        }
+    }
+
+    /// Fill a JS-owned buffer with creature data (zero-allocation)
+    ///
+    /// **MEMORY FIX:** JS creates buffer once, Rust fills it every poll.
+    /// This avoids the per-call Float32Array allocation that V8 doesn't GC properly.
+    ///
+    /// # Arguments
+    /// * `buffer` - JS-owned Float32Array to fill (must be large enough)
+    ///
+    /// # Returns
+    /// Number of creatures written (buffer layout: [IDs, Xs, Ys, Rotations])
+    ///
+    /// # Safety
+    /// Uses as_mut() which is safe because JS polling is single-threaded and
+    /// we only access the buffer during this synchronous call.
+    #[napi]
+    pub fn fill_buffer(&self, mut buffer: Float32Array) -> i32 {
+        let src_buffer = self.buffer.lock();
+        let read_slice = src_buffer.get_read_slice();
+
+        let creature_count = self.buffer_creature_count.load(Ordering::Relaxed) as usize;
+        let active_size = creature_count * 4;
+
+        let dest = buffer.as_mut();
+        if active_size == 0 || active_size > read_slice.len() || active_size > dest.len() {
+            return 0;
+        }
+
+        dest[..active_size].copy_from_slice(&read_slice[..active_size]);
+        creature_count as i32
     }
 
     /// Get target simulation tick rate (Hz)
@@ -784,7 +813,37 @@ impl SimulationEngine {
     pub fn get_perception_debug(&self) -> Float32Array {
         let buffer = self.perception_debug_buffer.lock();
         let read_slice = buffer.get_read_slice();
+
+        // Simple allocation pattern - let NAPI handle memory management
         Float32Array::new(read_slice.to_vec())
+    }
+
+    /// Fill a JS-owned buffer with perception debug data (zero-allocation)
+    ///
+    /// **MEMORY FIX:** JS creates buffer once, Rust fills it every poll.
+    /// This avoids the per-call Float32Array allocation that V8 doesn't GC properly.
+    ///
+    /// # Arguments
+    /// * `buffer` - JS-owned Float32Array to fill (must be 605+ elements)
+    ///
+    /// # Returns
+    /// true if has_data flag is set (creature selected), false otherwise
+    ///
+    /// # Safety
+    /// Uses as_mut() which is safe because JS polling is single-threaded and
+    /// we only access the buffer during this synchronous call.
+    #[napi]
+    pub fn fill_perception_debug(&self, mut buffer: Float32Array) -> bool {
+        let src_buffer = self.perception_debug_buffer.lock();
+        let read_slice = src_buffer.get_read_slice();
+
+        let dest = buffer.as_mut();
+        if dest.len() < read_slice.len() {
+            return false;
+        }
+
+        dest[..read_slice.len()].copy_from_slice(read_slice);
+        dest[0] > 0.5 // has_data flag
     }
 }
 

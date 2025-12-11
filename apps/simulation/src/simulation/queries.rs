@@ -7,7 +7,7 @@ use crate::simulation::perception::{AvoidanceBehavior, Perception};
 
 // Wander behavior query. Used by: territory_wandering_system
 // MUTATES: Acceleration (force), WanderState (angle)
-// READS: Entity, Velocity, Position, HomePosition, CreatureState
+// READS: Entity, Velocity, Position, HomePosition, CreatureState, BodySize
 pub type WanderQuery<'w, 's> = Query<
     'w,
     's,
@@ -19,6 +19,7 @@ pub type WanderQuery<'w, 's> = Query<
         &'static Position,
         &'static HomePosition,
         &'static CreatureState,
+        &'static BodySize,
     ),
     With<CanWander>,
 >;
@@ -42,13 +43,14 @@ pub type SeekQuery<'w, 's> = Query<
 
 // Avoidance behavior query. Used by: avoidance_system
 // MUTATES: Acceleration (force)
-// READS: Entity, Position, BodySize, Perception, AvoidanceBehavior, CreatureState
+// READS: Entity, Position, Velocity, BodySize, Perception, AvoidanceBehavior, CreatureState
 pub type AvoidanceQuery<'w, 's> = Query<
     'w,
     's,
     (
         Entity,
         &'static Position,
+        &'static Velocity,
         &'static BodySize,
         &'static mut Acceleration,
         &'static Perception,

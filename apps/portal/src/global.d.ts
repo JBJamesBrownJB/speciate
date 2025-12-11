@@ -4,11 +4,11 @@ declare global {
   interface Window {
     electron?: {
       /** @deprecated Use onNAPIBufferUpdate instead */
-      onStateUpdateBinary: (callback: (binaryData: Uint8Array) => void) => void;
+      onStateUpdateBinary: (callback: (binaryData: Uint8Array) => void) => () => void;
 
-      onNAPIBufferUpdate: (callback: (data: { buffer: number[], creatureCount: number }) => void) => void;
+      onNAPIBufferUpdate: (callback: (data: { buffer: number[], creatureCount: number }) => void) => () => void;
 
-      onTelemetryUpdate: (callback: (telemetry: TelemetryFrame) => void) => void;
+      onTelemetryUpdate: (callback: (telemetry: TelemetryFrame) => void) => () => void;
 
       removeStateUpdateListener: () => void;
 
@@ -18,7 +18,7 @@ declare global {
 
       selectCreatureDebug: (creatureId: number | null) => void;
 
-      onPerceptionDebugUpdate: (callback: (buffer: Float32Array) => void) => void;
+      onPerceptionDebugUpdate: (callback: (buffer: Float32Array) => void) => () => void;
     };
   }
 }

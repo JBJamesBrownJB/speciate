@@ -208,11 +208,11 @@ fn test_trial_seeker_starting_position() {
 
     assert_eq!(seekers.len(), 1, "Should have exactly 1 seeker");
 
-    // Verify seeker starts at (-30, 0)
+    // Verify seeker starts at (-12, -0.5) as defined in crowd-navigation.toml
     let (pos, _) = seekers[0];
     assert!(
-        (pos.x - (-30.0)).abs() < 0.1 && pos.y.abs() < 0.1,
-        "Seeker should start at (-30, 0), got ({}, {})",
+        (pos.x - (-12.0)).abs() < 0.1 && (pos.y - (-0.5)).abs() < 0.1,
+        "Seeker should start at (-12, -0.5), got ({}, {})",
         pos.x,
         pos.y
     );

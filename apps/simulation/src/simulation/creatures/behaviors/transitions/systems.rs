@@ -1,4 +1,4 @@
-use super::constants::{
+use crate::simulation::creatures::constants::{
     AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING, RANDOM_TARGET_MAX_DISTANCE,
     RANDOM_TARGET_MIN_DISTANCE, TICK_INTERVAL_SECONDS,
 };

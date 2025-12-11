@@ -3,11 +3,9 @@ use crate::simulation::creatures::components::{
     BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
     CreatureState, CritId, HomePosition, Target, WanderState,
 };
-use crate::simulation::creatures::behaviors::wander::constants::{
-    ANGLE_CHANGE, WANDER_DISTANCE, WANDER_RADIUS,
+use crate::simulation::creatures::constants::{
+    ANGLE_CHANGE, DEFAULT_FOV_DEGREES, MAX_SPEED, WANDER_DISTANCE, WANDER_RADIUS,
 };
-use crate::simulation::movement::constants::MAX_SPEED;
-use crate::simulation::perception::constants::DEFAULT_FOV_DEGREES;
 use crate::simulation::perception::*;
 use bevy_ecs::prelude::*;
 use rand::Rng;

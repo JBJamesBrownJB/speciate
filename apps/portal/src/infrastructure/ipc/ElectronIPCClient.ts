@@ -12,11 +12,27 @@ const CHECKED_CELL_HEADER_SIZE = 1;
 const MAX_CHECKED_CELLS = 100;
 
 export class ElectronIPCClient implements IPCClient {
+  private static readonly MAX_CREATURES = 250_000;
+
   private latestState: GameState | null = null;
   private stateCallbacks: Set<(state: GameState) => void> = new Set();
   private telemetryCallbacks: Set<(telemetry: TelemetryFrame) => void> = new Set();
   private perceptionDebugCallbacks: Set<(data: PerceptionDebugData | null) => void> = new Set();
   private _cachedTickRateHz = NaN;
+  private unsubscribers: Array<() => void> = [];
+
+  private creatures: CreatureData[] = [];
+  private creaturesInitialized = false;
+
+  private ensureCreatureCapacity(count: number): void {
+    if (this.creaturesInitialized && this.creatures.length >= count) return;
+
+    const targetSize = Math.max(count, ElectronIPCClient.MAX_CREATURES);
+    for (let i = this.creatures.length; i < targetSize; i++) {
+      this.creatures.push({ id: 0, x: 0, y: 0, rotation: 0, size: 1.0 });
+    }
+    this.creaturesInitialized = true;
+  }
 
   async connect(): Promise<void> {
     if (!window.electron) {
@@ -24,7 +40,7 @@ export class ElectronIPCClient implements IPCClient {
     }
 
     // Listen for telemetry updates (tick rate, perception debug, etc.)
-    window.electron.onTelemetryUpdate((telemetry) => {
+    const unsubTelemetry = window.electron.onTelemetryUpdate((telemetry) => {
       if (telemetry.tickRateHz !== undefined) {
         this._cachedTickRateHz = telemetry.tickRateHz;
       }
@@ -37,27 +53,32 @@ export class ElectronIPCClient implements IPCClient {
         }
       });
     });
+    this.unsubscribers.push(unsubTelemetry);
 
     // Use new NAPI buffer updates
-    window.electron.onNAPIBufferUpdate((data: { buffer: number[], creatureCount: number }) => {
+    const unsubBuffer = window.electron.onNAPIBufferUpdate((data: { buffer: number[], creatureCount: number }) => {
       try {
         const { buffer, creatureCount } = data;
 
+        // Ensure pre-allocated array has capacity (one-time allocation)
+        this.ensureCreatureCapacity(creatureCount);
+
         // Parse SoA layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
-        const creatures: CreatureData[] = [];
+        // Update objects IN-PLACE (zero allocations per tick)
         const xOffset = creatureCount;
         const yOffset = creatureCount * 2;
         const rotOffset = creatureCount * 3;
 
         for (let i = 0; i < creatureCount; i++) {
-          creatures.push({
-            id: buffer[i],
-            x: buffer[xOffset + i],
-            y: buffer[yOffset + i],
-            rotation: buffer[rotOffset + i],
-            size: 1.0, // Match BodySize::default() (NAPI doesn't provide this yet)
-          });
+          const creature = this.creatures[i];
+          creature.id = buffer[i];
+          creature.x = buffer[xOffset + i];
+          creature.y = buffer[yOffset + i];
+          creature.rotation = buffer[rotOffset + i];
         }
+
+        // Return view of active creatures (slice creates new array ref, but objects are reused)
+        const creatures = this.creatures.slice(0, creatureCount);
 
         const state: GameState = {
           protocolVersion: 2, // NAPI protocol version
@@ -80,9 +101,10 @@ export class ElectronIPCClient implements IPCClient {
         console.error('[ElectronIPCClient] Failed to parse NAPI buffer:', error);
       }
     });
+    this.unsubscribers.push(unsubBuffer);
 
     // Listen for perception debug buffer updates (every tick)
-    window.electron.onPerceptionDebugUpdate((buffer: Float32Array) => {
+    const unsubPerception = window.electron.onPerceptionDebugUpdate((buffer: Float32Array) => {
       try {
         // Parse buffer layout:
         // [0]: has_data, [1]: target_id, [2]: x, [3]: y, [4]: range, [5]: fov_angle, [6]: rotation, [7]: neighbor_count
@@ -157,6 +179,7 @@ export class ElectronIPCClient implements IPCClient {
         console.error('[ElectronIPCClient] Failed to parse perception debug buffer:', error);
       }
     });
+    this.unsubscribers.push(unsubPerception);
   }
 
   onStateUpdate(callback: (state: GameState) => void): () => void {
@@ -200,6 +223,17 @@ export class ElectronIPCClient implements IPCClient {
   }
 
   async disconnect(): Promise<void> {
+    // Call all unsubscribe functions from connect()
+    for (const unsub of this.unsubscribers) {
+      try {
+        unsub();
+      } catch (error) {
+        console.error('[ElectronIPCClient] Error in unsubscriber:', error);
+      }
+    }
+    this.unsubscribers = [];
+
+    // Also use legacy cleanup
     if (window.electron) {
       window.electron.removeStateUpdateListener();
     }

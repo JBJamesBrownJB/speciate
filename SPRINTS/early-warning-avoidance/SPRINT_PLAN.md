@@ -28,10 +28,11 @@
 **Key Decisions:**
 - Formula: `base_warning + (speed_ratio × personal_space × factor)`
 - Slow creatures (2 m/s): 8.0m early warning
-- Fast creatures (8 m/s): 8.75m early warning
+- Fast creatures (8 m/s): 9.5m early warning
 - Provides stopping distance safety margin
 
 ### Phase 3: Add Early Warning Force Application
+**REF:** /SPRINTS/early-warning-avoidance/SPRINT_PLAN.md
 **Outcome:** New force zone applied before existing personal_space logic
 
 **Key Decisions:**

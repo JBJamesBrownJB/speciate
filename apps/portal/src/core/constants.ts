@@ -9,13 +9,13 @@ export const RENDERING_CONFIG = {
 export const getTickIntervalMs = (tickRateHz: number): number => 1000 / tickRateHz;
 
 export const WORLD_CONFIG = {
-  SIZE: 2000000, // World is 2000km × 2000km (-1,000,000 to +1,000,000 meters)
+  SIZE: 10000, // World is 2000km × 2000km (-1,000,000 to +1,000,000 meters)
 } as const;
 
 export const CAMERA_CONFIG = {
-  MIN_ZOOM: 0.0005, // Minimum zoom (px/m) - view full 2000km world
-  MAX_ZOOM: 400, // Maximum zoom (px/m) - 1 meter = 200 pixels
-  ZOOM_SENSITIVITY: 0.001, // Mouse wheel zoom sensitivity
+  MIN_ZOOM: 0.3, 
+  MAX_ZOOM: 100,
+  ZOOM_SENSITIVITY: 0.0007, // Mouse wheel zoom sensitivity
 } as const;
 
 export const SCALE_BAR_CONFIG = {

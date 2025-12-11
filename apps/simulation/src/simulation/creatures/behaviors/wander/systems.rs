@@ -1,13 +1,19 @@
-use super::constants::{
-    BLEND_CENTER, COMFORT_RADIUS, HOMEWARD_FORCE, MAX_WANDER_DISTANCE, SIGMOID_STEEPNESS,
-    WANDER_FORCE,
-};
+use crate::simulation::creatures::constants::WANDER_FORCE_MULT;
 use crate::simulation::creatures::components::BehaviorMode;
 use crate::simulation::math::{clamp_force, magnitude_sq, normalize};
 use crate::simulation::queries::WanderQuery;
 use rand::Rng;
 use rayon::prelude::*;
 
+/// Pure Reynolds wander steering behavior.
+///
+/// Wander creates smooth, organic-looking exploration by projecting a "wander circle"
+/// ahead of the creature and picking a random point on it as the steering target.
+/// The wander angle changes gradually, creating continuous curved paths.
+///
+/// NOTE: No "homeward force" - this was biologically incorrect. Animals don't feel
+/// pulled home; they DECIDE to return based on internal state (hunger, fatigue).
+/// Territory bounds are enforced through navigation decisions, not invisible forces.
 pub fn territory_wandering_system(
     mut query: WanderQuery,
     #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
@@ -19,7 +25,7 @@ pub fn territory_wandering_system(
 
     let mut entities: Vec<_> = query.iter_mut().collect();
 
-    entities.par_iter_mut().for_each(|(_entity, acceleration, wander_state, velocity, position, home, creature_state)| {
+    entities.par_iter_mut().for_each(|(_entity, acceleration, wander_state, velocity, _position, _home, creature_state, size)| {
         if creature_state.behavior != BehaviorMode::Wandering {
             return;
         }
@@ -28,6 +34,7 @@ pub fn territory_wandering_system(
 
         let speed_sq = magnitude_sq(velocity.vx, velocity.vy);
 
+        // Use current heading, or wander angle if stationary
         let (heading_x, heading_y) = if speed_sq < 0.0001 {
             let (sin_a, cos_a) = wander_state.wander_angle.sin_cos();
             (cos_a, sin_a)
@@ -35,22 +42,22 @@ pub fn territory_wandering_system(
             normalize(velocity.vx, velocity.vy)
         };
 
+        // Project wander circle ahead of creature
         let circle_center_x = heading_x * wander_state.wander_distance;
         let circle_center_y = heading_y * wander_state.wander_distance;
 
+        // Randomly adjust wander angle (creates smooth direction changes)
         let angle_change = rng.gen_range(-wander_state.angle_change..wander_state.angle_change);
         wander_state.wander_angle += angle_change.to_radians();
         wander_state.wander_angle = wander_state.wander_angle.rem_euclid(std::f32::consts::TAU);
 
+        // Pick target point on wander circle
         let (sin_wander, cos_wander) = wander_state.wander_angle.sin_cos();
         let target_x = circle_center_x + wander_state.wander_radius * cos_wander;
         let target_y = circle_center_y + wander_state.wander_radius * sin_wander;
 
-        let desired_vx = target_x;
-        let desired_vy = target_y;
-
-        let (norm_desired_x, norm_desired_y) = normalize(desired_vx, desired_vy);
-
+        // Calculate steering toward target
+        let (norm_desired_x, norm_desired_y) = normalize(target_x, target_y);
         let max_speed = creature_state.max_speed;
         let scaled_desired_x = norm_desired_x * max_speed;
         let scaled_desired_y = norm_desired_y * max_speed;
@@ -58,29 +65,13 @@ pub fn territory_wandering_system(
         let steer_x = scaled_desired_x - velocity.vx;
         let steer_y = scaled_desired_y - velocity.vy;
 
-        let wander_force = clamp_force(steer_x, steer_y, WANDER_FORCE);
+        // Apply wander force (low effort exploration)
+        let wander_force_limit = size.max_force() * WANDER_FORCE_MULT.get();
+        let (force_x, force_y) = clamp_force(steer_x, steer_y, wander_force_limit);
 
-        let distance_from_home = home.distance_from(position.x, position.y);
-
-        let to_home_x = home.x - position.x;
-        let to_home_y = home.y - position.y;
-
-        let (norm_to_home_x, norm_to_home_y) = normalize(to_home_x, to_home_y);
-
-        let urgency = (distance_from_home / MAX_WANDER_DISTANCE).min(1.0);
-
-        let homeward_force_magnitude = HOMEWARD_FORCE * urgency;
-        let homeward_force = (
-            norm_to_home_x * homeward_force_magnitude,
-            norm_to_home_y * homeward_force_magnitude,
-        );
-
-        let blend = calculate_territory_blend(distance_from_home, COMFORT_RADIUS, BLEND_CENTER);
-        let final_force = blend_forces(wander_force, homeward_force, blend);
-
-        if final_force.0.is_finite() && final_force.1.is_finite() {
-            acceleration.ax += final_force.0;
-            acceleration.ay += final_force.1;
+        if force_x.is_finite() && force_y.is_finite() {
+            acceleration.ax += force_x;
+            acceleration.ay += force_y;
         }
     });
 }
@@ -88,92 +79,115 @@ pub fn territory_wandering_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
+    use crate::simulation::creatures::components::{CreatureState, HomePosition, WanderState, CanWander};
+    use bevy_ecs::prelude::*;
 
-    #[test]
-    fn test_territory_blend_near_home() {
-        let blend = calculate_territory_blend(5.0, 10.0, 20.0);
-        assert!(blend < 0.2, "Near home should favor wandering, got blend={}", blend);
+    fn run_wander_system(world: &mut World) {
+        // Use proper Bevy system invocation for tests
+        use bevy_ecs::system::{IntoSystem, System};
+
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut system = IntoSystem::into_system(territory_wandering_system);
+        system.initialize(world);
+        system.run((), world);
+        system.apply_deferred(world);
     }
 
     #[test]
-    fn test_territory_blend_at_center() {
-        let blend = calculate_territory_blend(20.0, 10.0, 20.0);
-        assert!(blend > 0.4 && blend < 0.6, "At blend center should be ~0.5, got {}", blend);
+    fn test_wander_produces_force() {
+        let mut world = World::new();
+
+        world.spawn((
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 1.0, vy: 0.0 },
+            Acceleration::default(),
+            WanderState {
+                wander_angle: 0.0,
+                wander_radius: 10.0,
+                wander_distance: 50.0,
+                angle_change: 4.5,
+            },
+            HomePosition::new(0.0, 0.0),
+            CreatureState {
+                behavior: BehaviorMode::Wandering,
+                ..Default::default()
+            },
+            BodySize::default(),
+            CanWander,
+        ));
+
+        run_wander_system(&mut world);
+
+        let accel = world.query::<&Acceleration>().single(&world);
+        let force_mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
+
+        assert!(force_mag > 0.0, "Wander should produce some steering force");
     }
 
     #[test]
-    fn test_territory_blend_far_from_home() {
-        let blend = calculate_territory_blend(35.0, 10.0, 20.0);
-        assert!(blend > 0.8, "Far from home should favor seeking, got blend={}", blend);
+    fn test_wander_respects_force_limit() {
+        let mut world = World::new();
+
+        let size = BodySize::default();
+        let max_wander_force = size.max_force() * WANDER_FORCE_MULT.get();
+
+        world.spawn((
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 0.0, vy: 0.0 },
+            Acceleration::default(),
+            WanderState {
+                wander_angle: 0.0,
+                wander_radius: 10.0,
+                wander_distance: 50.0,
+                angle_change: 4.5,
+            },
+            HomePosition::new(0.0, 0.0),
+            CreatureState {
+                behavior: BehaviorMode::Wandering,
+                ..Default::default()
+            },
+            size,
+            CanWander,
+        ));
+
+        run_wander_system(&mut world);
+
+        let accel = world.query::<&Acceleration>().single(&world);
+        let force_mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
+
+        assert!(
+            force_mag <= max_wander_force + 0.01,
+            "Wander force ({:.2}) should not exceed limit ({:.2})",
+            force_mag,
+            max_wander_force
+        );
     }
 
     #[test]
-    fn test_territory_blend_nan_safety() {
-        assert_eq!(calculate_territory_blend(f32::NAN, 10.0, 20.0), 0.5);
-        assert_eq!(calculate_territory_blend(10.0, 0.0, 20.0), 0.5);
-        assert_eq!(calculate_territory_blend(10.0, -5.0, 20.0), 0.5);
-        assert_eq!(calculate_territory_blend(10.0, 10.0, 0.0), 0.5);
-        assert_eq!(calculate_territory_blend(10.0, 10.0, -5.0), 0.5);
+    fn test_non_wandering_creatures_ignored() {
+        let mut world = World::new();
+
+        world.spawn((
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 1.0, vy: 0.0 },
+            Acceleration::default(),
+            WanderState::default(),
+            HomePosition::new(0.0, 0.0),
+            CreatureState {
+                behavior: BehaviorMode::Seeking, // Not wandering!
+                ..Default::default()
+            },
+            BodySize::default(),
+            CanWander,
+        ));
+
+        run_wander_system(&mut world);
+
+        let accel = world.query::<&Acceleration>().single(&world);
+        assert_eq!(accel.ax, 0.0, "Non-wandering creature should have no wander force");
+        assert_eq!(accel.ay, 0.0, "Non-wandering creature should have no wander force");
     }
-
-    #[test]
-    fn test_blend_forces_zero_blend() {
-        let force_a = (10.0, 5.0);
-        let force_b = (20.0, 15.0);
-        let result = blend_forces(force_a, force_b, 0.0);
-        assert_eq!(result, force_a);
-    }
-
-    #[test]
-    fn test_blend_forces_full_blend() {
-        let force_a = (10.0, 5.0);
-        let force_b = (20.0, 15.0);
-        let result = blend_forces(force_a, force_b, 1.0);
-        assert_eq!(result, force_b);
-    }
-
-    #[test]
-    fn test_blend_forces_half_blend() {
-        let force_a = (10.0, 0.0);
-        let force_b = (20.0, 10.0);
-        let result = blend_forces(force_a, force_b, 0.5);
-        assert_eq!(result, (15.0, 5.0));
-    }
-
-    #[test]
-    fn test_blend_forces_nan_safety() {
-        let result = blend_forces((f32::NAN, 5.0), (10.0, 10.0), 0.5);
-        assert!(result.0.is_finite() && result.1.is_finite());
-    }
-}
-
-pub fn calculate_territory_blend(
-    distance_from_home: f32,
-    comfort_radius: f32,
-    blend_center: f32,
-) -> f32 {
-    if !distance_from_home.is_finite() || comfort_radius <= 0.0 || blend_center <= 0.0 {
-        return 0.5;
-    }
-
-    let normalized = (distance_from_home - blend_center) / comfort_radius;
-    let sigmoid = 1.0 / (1.0 + (-SIGMOID_STEEPNESS * normalized).exp());
-    sigmoid.clamp(0.0, 1.0)
-}
-
-pub fn blend_forces(force_a: (f32, f32), force_b: (f32, f32), blend: f32) -> (f32, f32) {
-    if !force_a.0.is_finite()
-        || !force_a.1.is_finite()
-        || !force_b.0.is_finite()
-        || !force_b.1.is_finite()
-        || !blend.is_finite()
-    {
-        return (0.0, 0.0);
-    }
-
-    let blend_clamped = blend.clamp(0.0, 1.0);
-    let x = force_a.0 * (1.0 - blend_clamped) + force_b.0 * blend_clamped;
-    let y = force_a.1 * (1.0 - blend_clamped) + force_b.1 * blend_clamped;
-
-    (x, y)
 }

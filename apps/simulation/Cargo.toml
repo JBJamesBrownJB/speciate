@@ -33,6 +33,7 @@ chrono = { version = "0.4", features = ["serde"] }  # Timestamp generation for s
 crossbeam = "0.8"  # Lock-free data structures for snapshot queue
 crossbeam-channel = "0.5"  # High-performance MPSC for background IPC writer
 rayon = "1.8"  # Data parallelism for movement systems
+mimalloc = "0.1"  # Better memory allocator (reduces fragmentation, faster memory release)
 
 # NAPI-RS (Node.js Native Addon)
 napi = { version = "2.12", features = ["napi4", "serde-json"] }
@@ -43,6 +44,7 @@ parking_lot = "0.12"  # Faster mutex for DoubleBuffer
 perf-event = { version = "0.4", optional = true }  # Hardware performance counters
 git2 = { version = "0.18", optional = true }  # Git metadata for snapshots
 sysinfo = { version = "0.31", optional = true }  # System metrics (CPU, memory)
+dhat = { version = "0.3", optional = true }  # Heap profiling (dhat-heap feature)
 
 [features]
 # Enable test helper methods for integration tests
@@ -55,6 +57,8 @@ test-helpers = []
 default = []
 dev-tools = ["dep:perf-event", "dep:git2", "dep:sysinfo"]
 napi = []
+# dhat-heap profiling (disables MiMalloc so dhat can use its own allocator)
+dhat-heap = ["dep:dhat"]
 
 [build-dependencies]
 napi-build = "2.0"
@@ -64,6 +68,7 @@ os_pipe = "1.2"  # For stdin simulation in command tests
 tempfile = "3.10"  # Temporary files for snapshot tests
 regex = "1.10"  # For system timing validation test
 criterion = { version = "0.5", features = ["html_reports"] }  # Performance regression benchmarks
+dhat = "0.3"  # Heap profiling for memory leak detection
 
 [[bench]]
 name = "simulation_bench"
@@ -106,4 +111,14 @@ required-features = ["dev-tools"]
 [[test]]
 name = "trial_integration"
 path = "tests/trial_integration.rs"
+required-features = ["dev-tools"]
+
+[[test]]
+name = "memory_leak_profile"
+path = "tests/memory_leak_profile.rs"
+required-features = ["dhat-heap"]
+
+[[test]]
+name = "spec_tests"
+path = "tests/spec_tests.rs"
 required-features = ["dev-tools"]

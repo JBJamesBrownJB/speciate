@@ -1,0 +1,32 @@
+# Crowd Navigation Trial
+#
+# Purpose: Test creature navigation through a tightly packed crowd
+# This trial creates a dense grid of stationary creatures with minimal spacing
+# and challenges a seeker to navigate through to the other side.
+
+name = "Crowd Navigation Fast approaching Seeker"
+description = """
+Dense crowd navigation scenario with a 10x10 grid of wanderers at 1m spacing.
+A seeker at (-30, 0) must navigate through the crowd to reach the origin.
+Tests obstacle avoidance, pathfinding, and collision handling in tight spaces.
+"""
+
+# Primary spawn pattern: 10×10 grid at world center
+[[spawns]]
+type = "grid"
+start_x = -10.0    # Center grid at (0, 0): starts at -25m to span [-25, 25]
+start_y = -10.0
+spacing = 2.0
+rows = 10
+cols = 10
+creature_type = "catatonic"
+grid_offset_y = 1.0  # Offset even columns by half spacing for staggered pattern
+
+# Seeker #1 - Western starting position
+[[spawns]]
+type = "single"
+x = -50.0
+y = 0.0
+creature_type = "seeker"
+target_x = 30.0
+target_y = 0.0

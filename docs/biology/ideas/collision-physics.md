@@ -127,6 +127,13 @@ let damage_to_b = total_damage × (mass_a / total_mass);
 - Small creatures evolve high agility OR high armor
 - Mid-sized creatures balance speed vs durability
 
+**Collision Force Consequences**
+- stun (send them into temporary catatonic phase)
+- death it impact high enough
+
+- Animals with teeth can 'lock on' so pray don't bounce away'
+
+- visuals, stars above head
 ---
 
 ## Future Considerations

@@ -2,9 +2,7 @@ use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_ENERGY: f32 = 100.0;
-pub const LOW_ENERGY_THRESHOLD: f32 = 30.0;
-pub const EXHAUSTED_THRESHOLD: f32 = 10.0;
+use crate::simulation::creatures::constants::{DEFAULT_ENERGY, LOW_ENERGY_THRESHOLD, EXHAUSTED_THRESHOLD};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize, Reflect)]
 #[repr(u8)]

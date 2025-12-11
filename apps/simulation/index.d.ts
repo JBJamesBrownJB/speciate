@@ -77,6 +77,23 @@ export declare class SimulationEngine {
    */
   getBuffer(): Float32Array
   /**
+   * Fill a JS-owned buffer with creature data (zero-allocation)
+   *
+   * **MEMORY FIX:** JS creates buffer once, Rust fills it every poll.
+   * This avoids the per-call Float32Array allocation that V8 doesn't GC properly.
+   *
+   * # Arguments
+   * * `buffer` - JS-owned Float32Array to fill (must be large enough)
+   *
+   * # Returns
+   * Number of creatures written (buffer layout: [IDs, Xs, Ys, Rotations])
+   *
+   * # Safety
+   * Uses as_mut() which is safe because JS polling is single-threaded and
+   * we only access the buffer during this synchronous call.
+   */
+  fillBuffer(buffer: Float32Array): number
+  /**
    * Get target simulation tick rate (Hz)
    *
    * JavaScript should query this to calculate appropriate polling rates.
@@ -294,4 +311,21 @@ export declare class SimulationEngine {
    * ```
    */
   getPerceptionDebug(): Float32Array
+  /**
+   * Fill a JS-owned buffer with perception debug data (zero-allocation)
+   *
+   * **MEMORY FIX:** JS creates buffer once, Rust fills it every poll.
+   * This avoids the per-call Float32Array allocation that V8 doesn't GC properly.
+   *
+   * # Arguments
+   * * `buffer` - JS-owned Float32Array to fill (must be 605+ elements)
+   *
+   * # Returns
+   * true if has_data flag is set (creature selected), false otherwise
+   *
+   * # Safety
+   * Uses as_mut() which is safe because JS polling is single-threaded and
+   * we only access the buffer during this synchronous call.
+   */
+  fillPerceptionDebug(buffer: Float32Array): boolean
 }

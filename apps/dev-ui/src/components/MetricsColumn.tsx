@@ -16,6 +16,7 @@ import { VectorizationTachometer } from './VectorizationTachometer';
 import { CacheFirewall } from './CacheFirewall';
 import { BranchScope } from './BranchScope';
 import { Parallelism } from './Parallelism';
+import { MemoryMetrics } from './MemoryMetrics';
 import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics } from '../types';
 
 export interface MetricsColumnProps {
@@ -61,9 +62,14 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
               <BranchScope branchMissRate={hardwareMetrics.branchMissRate} />
             </div>
             {parallelizationMetrics && systemTimings && (
-              <div className="cockpit-container cockpit-row-2">
-                <Parallelism metrics={parallelizationMetrics} systemTimings={systemTimings} />
-              </div>
+              <>
+                <div className="cockpit-container cockpit-row-2">
+                  <Parallelism metrics={parallelizationMetrics} systemTimings={systemTimings} />
+                </div>
+                <div className="cockpit-container cockpit-row-3">
+                  <MemoryMetrics processMemoryBytes={parallelizationMetrics.processMemoryBytes} />
+                </div>
+              </>
             )}
           </div>
         )}

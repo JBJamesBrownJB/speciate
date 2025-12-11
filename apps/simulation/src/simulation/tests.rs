@@ -152,7 +152,7 @@ mod behavior_tests {
 
     use crate::simulation::core::components::{Position, Velocity};
     use crate::simulation::creatures::components::{BehaviorMode, CreatureState, CritId, Target};
-    use crate::simulation::creatures::components::state::{DEFAULT_ENERGY, LOW_ENERGY_THRESHOLD, EXHAUSTED_THRESHOLD};
+    use crate::simulation::creatures::constants::{DEFAULT_ENERGY, LOW_ENERGY_THRESHOLD, EXHAUSTED_THRESHOLD};
     use crate::simulation::creatures::builder::CritBuilder;
     use crate::simulation::SimulationBuilder;
 

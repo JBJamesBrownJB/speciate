@@ -43,6 +43,41 @@ pub const MAX_CHECKED_CELLS: usize = 100;
 
 pub const BUFFER_SIZE: usize = CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE + MAX_CHECKED_CELLS * 2;
 
+pub trait NeighborFields {
+    fn id(&self) -> u32;
+    fn x(&self) -> f32;
+    fn y(&self) -> f32;
+}
+
+impl NeighborFields for (u32, f32, f32) {
+    fn id(&self) -> u32 { self.0 }
+    fn x(&self) -> f32 { self.1 }
+    fn y(&self) -> f32 { self.2 }
+}
+
+pub trait CellFields {
+    fn x(&self) -> i32;
+    fn y(&self) -> i32;
+}
+
+impl CellFields for (i32, i32) {
+    fn x(&self) -> i32 { self.0 }
+    fn y(&self) -> i32 { self.1 }
+}
+
+use crate::simulation::perception::{NeighborDebugInfo, QueriedCell};
+
+impl NeighborFields for &NeighborDebugInfo {
+    fn id(&self) -> u32 { self.id }
+    fn x(&self) -> f32 { self.x }
+    fn y(&self) -> f32 { self.y }
+}
+
+impl CellFields for &QueriedCell {
+    fn x(&self) -> i32 { self.x }
+    fn y(&self) -> i32 { self.y }
+}
+
 pub struct PerceptionDebugBuffer {
     read: [f32; BUFFER_SIZE],
     write: [f32; BUFFER_SIZE],
@@ -74,16 +109,11 @@ impl PerceptionDebugBuffer {
         self.write[0] = 0.0; // has_data = false
     }
 
-    pub fn write_debug_data(
-        &mut self,
-        target_id: u32,
-        target_x: f32,
-        target_y: f32,
-        perception_range: f32,
-        fov_angle: f32,
-        rotation: f32,
-        neighbors: &[(u32, f32, f32)], // (id, x, y)
-    ) {
+    pub fn write_debug_data<N, F>(&mut self, target_id: u32, target_x: f32, target_y: f32, perception_range: f32, fov_angle: f32, rotation: f32, neighbors: N)
+    where
+        N: ExactSizeIterator<Item = F>,
+        F: NeighborFields,
+    {
         let neighbor_count = neighbors.len().min(MAX_DEBUG_NEIGHBORS);
 
         self.write[0] = 1.0; // has_data = true
@@ -99,20 +129,20 @@ impl PerceptionDebugBuffer {
         let x_offset = HEADER_SIZE + MAX_DEBUG_NEIGHBORS;
         let y_offset = HEADER_SIZE + MAX_DEBUG_NEIGHBORS * 2;
 
-        for (i, (id, x, y)) in neighbors.iter().take(neighbor_count).enumerate() {
-            self.write[id_offset + i] = *id as f32;
-            self.write[x_offset + i] = *x;
-            self.write[y_offset + i] = *y;
+        for (i, neighbor) in neighbors.take(neighbor_count).enumerate() {
+            self.write[id_offset + i] = neighbor.id() as f32;
+            self.write[x_offset + i] = neighbor.x();
+            self.write[y_offset + i] = neighbor.y();
         }
     }
 
-    pub fn write_cell_data(
-        &mut self,
-        cell_size: f32,
-        creature_cell: (i32, i32),
-        queried_cells: &[(i32, i32)],
-        checked_cells: &[(i32, i32)],
-    ) {
+    pub fn write_cell_data<Q, C, QF, CF>(&mut self, cell_size: f32, creature_cell: (i32, i32), queried_cells: Q, checked_cells: C)
+    where
+        Q: ExactSizeIterator<Item = QF>,
+        C: ExactSizeIterator<Item = CF>,
+        QF: CellFields,
+        CF: CellFields,
+    {
         // Write queried cells section
         let queried_count = queried_cells.len().min(MAX_QUERIED_CELLS);
 
@@ -122,9 +152,9 @@ impl PerceptionDebugBuffer {
         self.write[CELL_SECTION_OFFSET + 3] = creature_cell.1 as f32;
 
         let queried_offset = CELL_SECTION_OFFSET + CELL_HEADER_SIZE;
-        for (i, (cx, cy)) in queried_cells.iter().take(queried_count).enumerate() {
-            self.write[queried_offset + i * 2] = *cx as f32;
-            self.write[queried_offset + i * 2 + 1] = *cy as f32;
+        for (i, cell) in queried_cells.take(queried_count).enumerate() {
+            self.write[queried_offset + i * 2] = cell.x() as f32;
+            self.write[queried_offset + i * 2 + 1] = cell.y() as f32;
         }
 
         // Write checked cells section
@@ -132,9 +162,9 @@ impl PerceptionDebugBuffer {
         self.write[CHECKED_CELL_SECTION_OFFSET] = checked_count as f32;
 
         let checked_offset = CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE;
-        for (i, (cx, cy)) in checked_cells.iter().take(checked_count).enumerate() {
-            self.write[checked_offset + i * 2] = *cx as f32;
-            self.write[checked_offset + i * 2 + 1] = *cy as f32;
+        for (i, cell) in checked_cells.take(checked_count).enumerate() {
+            self.write[checked_offset + i * 2] = cell.x() as f32;
+            self.write[checked_offset + i * 2 + 1] = cell.y() as f32;
         }
     }
 
@@ -159,9 +189,9 @@ mod tests {
         let mut buffer = PerceptionDebugBuffer::new();
         let pi = std::f32::consts::PI;
 
-        let neighbors = vec![(42, 10.0, 20.0), (43, 30.0, 40.0)];
+        let neighbors: Vec<(u32, f32, f32)> = vec![(42, 10.0, 20.0), (43, 30.0, 40.0)];
 
-        buffer.write_debug_data(1, 100.0, 200.0, 50.0, pi, 0.5, &neighbors);
+        buffer.write_debug_data(1, 100.0, 200.0, 50.0, pi, 0.5, neighbors.iter().copied());
 
         assert!(!buffer.has_data());
 
@@ -185,7 +215,7 @@ mod tests {
         let mut buffer = PerceptionDebugBuffer::new();
         let pi = std::f32::consts::PI;
 
-        buffer.write_debug_data(1, 100.0, 200.0, 50.0, pi, 0.0, &[]);
+        buffer.write_debug_data(1, 100.0, 200.0, 50.0, pi, 0.0, std::iter::empty::<(u32, f32, f32)>());
         buffer.swap();
         assert!(buffer.has_data());
 
@@ -199,9 +229,9 @@ mod tests {
         let mut buffer = PerceptionDebugBuffer::new();
         let pi = std::f32::consts::PI;
 
-        let neighbors: Vec<_> = (0..100).map(|i| (i, i as f32, i as f32)).collect();
+        let neighbors: Vec<(u32, f32, f32)> = (0..100).map(|i| (i, i as f32, i as f32)).collect();
 
-        buffer.write_debug_data(1, 0.0, 0.0, 50.0, pi, 0.0, &neighbors);
+        buffer.write_debug_data(1, 0.0, 0.0, 50.0, pi, 0.0, neighbors.iter().copied());
         buffer.swap();
 
         let slice = buffer.get_read_slice();

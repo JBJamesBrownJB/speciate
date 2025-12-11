@@ -2,6 +2,8 @@ use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
+use crate::simulation::creatures::constants::{DEFAULT_MASS, MAX_ACCELERATION};
+
 #[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
 #[reflect(Component)]
 pub struct Position {
@@ -73,6 +75,14 @@ impl BodySize {
 
     pub fn radius(&self) -> f32 {
         self.length / 2.0
+    }
+
+    pub fn mass(&self) -> f32 {
+        DEFAULT_MASS * self.length.powi(3)
+    }
+
+    pub fn max_force(&self) -> f32 {
+        self.mass() * MAX_ACCELERATION
     }
 }
 
@@ -240,5 +250,44 @@ mod tests {
 
         let vel4 = Velocity { vx: 1.0, vy: -1.0 };
         assert!((vel4.angle() + std::f32::consts::FRAC_PI_4).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_body_size_mass_scales_with_length_cubed() {
+        let size_1m = BodySize::new(1.0);
+        let size_2m = BodySize::new(2.0);
+
+        let mass_1m = size_1m.mass();
+        let mass_2m = size_2m.mass();
+
+        assert_eq!(mass_1m, DEFAULT_MASS);
+        assert_eq!(mass_2m, DEFAULT_MASS * 8.0); // 2^3 = 8
+        assert_eq!(mass_2m / mass_1m, 8.0);
+    }
+
+    #[test]
+    fn test_body_size_max_force_derives_from_mass() {
+        let size = BodySize::new(1.0);
+
+        let expected_mass = DEFAULT_MASS;
+        let expected_max_force = expected_mass * MAX_ACCELERATION;
+
+        assert_eq!(size.mass(), expected_mass);
+        assert_eq!(size.max_force(), expected_max_force);
+    }
+
+    #[test]
+    fn test_larger_creatures_have_proportionally_more_force() {
+        let small = BodySize::new(0.5);
+        let medium = BodySize::new(1.0);
+        let large = BodySize::new(2.0);
+
+        assert!(small.max_force() < medium.max_force());
+        assert!(medium.max_force() < large.max_force());
+
+        // Force scales with mass (length^3)
+        let force_ratio = large.max_force() / small.max_force();
+        let length_ratio_cubed = (2.0_f32 / 0.5).powi(3); // 4^3 = 64
+        assert!((force_ratio - length_ratio_cubed).abs() < 0.001);
     }
 }

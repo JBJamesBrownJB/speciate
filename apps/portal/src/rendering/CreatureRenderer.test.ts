@@ -17,7 +17,8 @@ describe('CreatureRenderer', () => {
     mockParticlePool = {
       acquire: vi.fn(),
       hasEntity: vi.fn(),
-      getStaleEntities: vi.fn(),
+      beginFrame: vi.fn(),
+      getStaleEntities: vi.fn().mockReturnValue([]),
       removeEntity: vi.fn(),
     } as unknown as ParticlePool;
 
@@ -216,9 +217,8 @@ describe('CreatureRenderer', () => {
 
         renderer.render(creatures);
 
-        expect(mockParticlePool.getStaleEntities).toHaveBeenCalledWith(
-          new Set([1, 2])
-        );
+        expect(mockParticlePool.beginFrame).toHaveBeenCalled();
+        expect(mockParticlePool.getStaleEntities).toHaveBeenCalled();
       });
 
       it('should remove stale entities from pool', () => {

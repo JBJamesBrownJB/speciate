@@ -78,6 +78,7 @@ pub struct ParallelizationSnapshotStub {
     pub cpu_utilization_pct: f32,
     pub estimated_parallelism_factor: f32,
     pub concurrent_systems_estimate: usize,
+    pub process_memory_bytes: u64,
 }
 
 impl TelemetrySnapshot {

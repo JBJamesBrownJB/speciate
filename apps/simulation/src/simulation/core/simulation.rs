@@ -234,6 +234,15 @@ impl Simulation {
     pub fn despawn_all(&mut self) {
         use crate::simulation::creatures::components::CritId;
 
+        // Clear debug target before despawning to prevent use-after-free
+        #[cfg(feature = "dev-tools")]
+        {
+            use crate::simulation::perception::PerceptionDebugTarget;
+            if let Some(mut debug_target) = self.world.get_resource_mut::<PerceptionDebugTarget>() {
+                debug_target.clear();
+            }
+        }
+
         let entities: Vec<Entity> = self.world
             .query::<(Entity, &CritId)>()
             .iter(&self.world)

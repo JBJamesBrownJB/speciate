@@ -67,6 +67,14 @@ function loadNAPIModule() {
   }
 }
 
+// Persistent buffers for zero-allocation polling (memory leak fix)
+let creatureBuffer = null;       // Float32Array for creature data
+let perceptionBuffer = null;     // Float32Array for perception debug
+
+// DEBUG: Set to true to isolate memory leak sources
+const DISABLE_BUFFER_CALLS = false;
+const DISABLE_TELEMETRY_CALLS = false;
+
 /**
  * Start simulation using NAPI SimulationEngine
  */
@@ -82,6 +90,13 @@ function startSimulation() {
     // Create SimulationEngine instance
     simulationEngine = new addon.SimulationEngine();
     console.log('[Electron NAPI] ✅ SimulationEngine created');
+
+    // Create persistent buffers for zero-allocation polling (memory leak fix)
+    // 250K creatures * 4 floats (ID, X, Y, Rotation) = 1M floats = 4MB
+    creatureBuffer = new Float32Array(250000 * 4);
+    // Perception debug buffer: 605 floats (from perception_debug_buffer.rs BUFFER_SIZE)
+    perceptionBuffer = new Float32Array(605);
+    console.log('[Electron NAPI] ✅ Persistent buffers created (creature: 4MB, perception: 2.4KB)');
 
     // Find most recent save state (by timestamp in filename)
     const assetsPath = path.join(__dirname, '../../simulation');
@@ -119,6 +134,9 @@ function startSimulation() {
 
     console.log(`[Electron NAPI] ✅ Simulation started: ${targetSimHz}Hz, polling at ${pollHz}Hz`);
 
+    // Memory logging counter
+    let pollCount = 0;
+
     // Set up polling loop
     pollingInterval = setInterval(() => {
       if (!simulationEngine || shuttingDown) {
@@ -126,55 +144,66 @@ function startSimulation() {
         return;
       }
 
+      pollCount++;
+
+      // Log memory usage every 10 seconds (~200-400 polls)
+      if (pollCount % 200 === 0) {
+        const mem = process.memoryUsage();
+        console.log(`[Memory] RSS: ${(mem.rss / 1024 / 1024).toFixed(1)}MB, Heap: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}/${(mem.heapTotal / 1024 / 1024).toFixed(1)}MB, External: ${(mem.external / 1024 / 1024).toFixed(1)}MB, ArrayBuffers: ${(mem.arrayBuffers / 1024 / 1024).toFixed(1)}MB`);
+      }
+
       try {
-        // Get the exact number of creatures in the buffer (updated every tick)
-        // NOTE: getCreatureCount() reads from telemetry (updated every 30 ticks)
-        //       getBufferCreatureCount() reads the actual export count (updated every tick)
-        const bufferCreatureCount = simulationEngine.getBufferCreatureCount();
+        // DEBUG: Skip buffer calls to isolate memory leak
+        if (!DISABLE_BUFFER_CALLS) {
+          // Fill persistent buffer with creature data (zero-allocation)
+          // fillBuffer() copies data into our JS-owned buffer and returns creature count
+          const bufferCreatureCount = simulationEngine.fillBuffer(creatureBuffer);
 
-        // Get buffer and slice to actual creature count (SoA layout: ID, X, Y, Rotation)
-        const fullBuffer = simulationEngine.getBuffer();
-        const usedSize = bufferCreatureCount * 4;  // 4 f32s per creature
-        const buffer = fullBuffer.subarray(0, usedSize);
+          // Slice to actual creature count (SoA layout: ID, X, Y, Rotation)
+          const usedSize = bufferCreatureCount * 4;  // 4 f32s per creature
+          const buffer = creatureBuffer.subarray(0, usedSize);
 
-        // Send buffer to portal (Float32Array - Electron IPC handles typed arrays efficiently)
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('napi-buffer-update', {
-            buffer: buffer, // Pass Float32Array directly (structured clone algorithm)
-            creatureCount: bufferCreatureCount,
-          });
-        }
+          // Send buffer to portal (Float32Array - Electron IPC handles typed arrays efficiently)
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('napi-buffer-update', {
+              buffer: buffer, // Pass Float32Array directly (structured clone algorithm)
+              creatureCount: bufferCreatureCount,
+            });
+          }
 
-        // Get perception debug buffer (dev-tools, every tick for smooth visualization)
-        if (simulationEngine.getPerceptionDebug) {
-          const debugBuffer = simulationEngine.getPerceptionDebug();
-          // Only send if has_data flag is set (debugBuffer[0] > 0.5)
-          if (debugBuffer[0] > 0.5 && mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('perception-debug-update', debugBuffer);
+          // Fill perception debug buffer (zero-allocation, dev-tools only)
+          if (simulationEngine.fillPerceptionDebug) {
+            const hasData = simulationEngine.fillPerceptionDebug(perceptionBuffer);
+            // Only send if has_data flag is set
+            if (hasData && mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('perception-debug-update', perceptionBuffer);
+            }
           }
         }
 
         // Get telemetry (poll every 30 frames = ~500ms at 60Hz)
-        const tick = simulationEngine.getTick();
-        if (tick % 30 === 0) {
-          const telemetryJson = simulationEngine.getTelemetry();
-          const telemetry = JSON.parse(telemetryJson);
+        if (!DISABLE_TELEMETRY_CALLS) {
+          const tick = simulationEngine.getTick();
+          if (tick % 30 === 0) {
+            const telemetryJson = simulationEngine.getTelemetry();
+            const telemetry = JSON.parse(telemetryJson);
 
-          // Get buffer stats and add to telemetry
-          const bufferStatsJson = simulationEngine.getBufferStats();
-          const bufferStats = JSON.parse(bufferStatsJson);
-          telemetry.napiBufferCapacityPct = bufferStats.utilizationPct;
-          telemetry.napiBufferUsed = bufferStats.used;
-          telemetry.napiBufferCapacity = bufferStats.capacity;
+            // Get buffer stats and add to telemetry
+            const bufferStatsJson = simulationEngine.getBufferStats();
+            const bufferStats = JSON.parse(bufferStatsJson);
+            telemetry.napiBufferCapacityPct = bufferStats.utilizationPct;
+            telemetry.napiBufferUsed = bufferStats.used;
+            telemetry.napiBufferCapacity = bufferStats.capacity;
 
-          // Send to portal (for tick rate display)
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('telemetry-update', telemetry);
-          }
+            // Send to portal (for tick rate display)
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('telemetry-update', telemetry);
+            }
 
-          // Send to dev-ui
-          if (devToolsWindow && !devToolsWindow.isDestroyed()) {
-            devToolsWindow.webContents.send('telemetry-update', telemetry);
+            // Send to dev-ui
+            if (devToolsWindow && !devToolsWindow.isDestroyed()) {
+              devToolsWindow.webContents.send('telemetry-update', telemetry);
+            }
           }
         }
       } catch (error) {

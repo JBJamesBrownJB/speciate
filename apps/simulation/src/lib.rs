@@ -18,6 +18,11 @@
 //! This module re-exports commonly used types for convenience. All exports are explicit
 //! (no glob re-exports) to provide a clear, discoverable API surface.
 
+// Use MiMalloc as global allocator (except when dhat-heap profiling is enabled)
+#[cfg(not(feature = "dhat-heap"))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub mod config;
 pub mod simulation;
 pub mod persistence;

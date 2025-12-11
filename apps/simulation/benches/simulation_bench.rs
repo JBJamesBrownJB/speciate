@@ -120,5 +120,98 @@ fn bench_vector_ops(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_tick_scaling, bench_spawn, bench_vector_ops);
+// Perception neighbor selection benchmark (pseudo-random: first-k neighbors found)
+// Sprint 16: Chose pseudo-random over topological (~10% faster, acceptable accuracy)
+fn bench_perception(c: &mut Criterion) {
+    use bevy_ecs::prelude::*;
+    use speciate::simulation::spatial::SpatialGrid;
+
+    let mut group = c.benchmark_group("perception");
+
+    for count in [5_000, 10_000, 20_000] {
+        let mut grid = SpatialGrid::with_default_bounds();
+        let mut rng = rand::thread_rng();
+        use rand::Rng;
+
+        let mut entities_data: Vec<(Entity, f32, f32, f32, f32, f32, f32, f32)> = Vec::new();
+
+        for i in 0..count {
+            let x = (rng.gen::<f32>() - 0.5) * 1000.0;
+            let y = (rng.gen::<f32>() - 0.5) * 1000.0;
+            let radius = 1.0 + rng.gen::<f32>() * 2.0;
+            let rotation = rng.gen::<f32>() * std::f32::consts::TAU;
+            let range = 50.0 + rng.gen::<f32>() * 50.0;
+            let fov = 120.0_f32.to_radians();
+            let cos_half_fov = (fov / 2.0).cos();
+            let cos_half_fov_sq = cos_half_fov * cos_half_fov;
+
+            entities_data.push((
+                Entity::from_raw(i as u32),
+                x, y, radius,
+                rotation.cos(), rotation.sin(),
+                range, cos_half_fov_sq
+            ));
+        }
+
+        grid.rebuild(entities_data.iter().map(|(e, x, y, r, _, _, _, _)| (*e, *x, *y, *r)));
+
+        const CAPACITY: usize = 8;
+        const MAX_OTHER_RADIUS: f32 = 5.0;
+
+        group.bench_with_input(
+            BenchmarkId::new("first_k_neighbors", count),
+            &(&grid, &entities_data),
+            |b, (grid, entities)| {
+                b.iter(|| {
+                    let mut total_neighbors = 0usize;
+                    let mut cells: Vec<(f32, usize)> = Vec::with_capacity(64);
+
+                    for (entity, x, y, self_radius, facing_x, facing_y, range, cos_half_fov_sq) in entities.iter() {
+                        let query_radius = range + self_radius + MAX_OTHER_RADIUS;
+                        let mut neighbors: [Entity; CAPACITY] = [Entity::PLACEHOLDER; CAPACITY];
+                        let mut count = 0usize;
+
+                        grid.collect_cells_sorted(*x, *y, query_radius, *facing_x, *facing_y, &mut cells);
+
+                        'cell_loop: for &(_, cell_idx) in cells.iter() {
+                            for proxy in grid.get_cell_proxies(cell_idx) {
+                                if *entity == proxy.entity {
+                                    continue;
+                                }
+
+                                let dx = proxy.x - x;
+                                let dy = proxy.y - y;
+                                let center_dist_sq = dx * dx + dy * dy;
+
+                                let max_dist = range + self_radius + proxy.radius;
+                                if center_dist_sq > max_dist * max_dist {
+                                    continue;
+                                }
+
+                                let rough_dot = dx * facing_x + dy * facing_y;
+                                if rough_dot <= 0.0 {
+                                    continue;
+                                }
+
+                                if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
+                                    neighbors[count] = proxy.entity;
+                                    count += 1;
+                                    if count == CAPACITY {
+                                        break 'cell_loop;
+                                    }
+                                }
+                            }
+                        }
+                        total_neighbors += count;
+                    }
+                    black_box(total_neighbors)
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_tick_scaling, bench_spawn, bench_vector_ops, bench_perception);
 criterion_main!(benches);

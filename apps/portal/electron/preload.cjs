@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electron', {
    * Callback receives Uint8Array of raw MessagePack data
    *
    * @param {Function} callback - Function to call with binary state updates
+   * @returns {Function} Unsubscribe function
    * @deprecated Use onNAPIBufferUpdate instead
    */
   onStateUpdateBinary: (callback) => {
@@ -25,29 +26,28 @@ contextBridge.exposeInMainWorld('electron', {
       throw new Error('onStateUpdateBinary: callback must be a function');
     }
 
-    ipcRenderer.on('state-update-binary', (event, binaryData) => {
-      callback(binaryData);
-    });
+    const handler = (_event, binaryData) => callback(binaryData);
+    ipcRenderer.on('state-update-binary', handler);
+    return () => ipcRenderer.removeListener('state-update-binary', handler);
   },
 
   /**
-   * Subscribe to NAPI buffer updates (NEW - zero-copy direct buffer access)
+   * Subscribe to NAPI buffer updates
    * Callback receives { buffer: number[], creatureCount: number }
    *
    * Buffer layout (SoA): [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
    *
    * @param {Function} callback - Function to call with NAPI buffer updates
+   * @returns {Function} Unsubscribe function
    */
   onNAPIBufferUpdate: (callback) => {
     if (typeof callback !== 'function') {
       throw new Error('onNAPIBufferUpdate: callback must be a function');
     }
 
-    console.log('[Preload] onNAPIBufferUpdate registered');
-
-    ipcRenderer.on('napi-buffer-update', (event, data) => {
-      callback(data);
-    });
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('napi-buffer-update', handler);
+    return () => ipcRenderer.removeListener('napi-buffer-update', handler);
   },
 
   /**
@@ -55,15 +55,16 @@ contextBridge.exposeInMainWorld('electron', {
    * Callback receives plain JavaScript object with metrics
    *
    * @param {Function} callback - Function to call with telemetry updates
+   * @returns {Function} Unsubscribe function
    */
   onTelemetryUpdate: (callback) => {
     if (typeof callback !== 'function') {
       throw new Error('onTelemetryUpdate: callback must be a function');
     }
 
-    ipcRenderer.on('telemetry-update', (event, telemetry) => {
-      callback(telemetry);
-    });
+    const handler = (_event, telemetry) => callback(telemetry);
+    ipcRenderer.on('telemetry-update', handler);
+    return () => ipcRenderer.removeListener('telemetry-update', handler);
   },
 
   /**
@@ -72,6 +73,8 @@ contextBridge.exposeInMainWorld('electron', {
   removeStateUpdateListener: () => {
     ipcRenderer.removeAllListeners('state-update-binary');
     ipcRenderer.removeAllListeners('telemetry-update');
+    ipcRenderer.removeAllListeners('napi-buffer-update');
+    ipcRenderer.removeAllListeners('perception-debug-update');
   },
 
   /**
@@ -151,7 +154,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   /**
-   * Subscribe to perception debug buffer updates (NEW - zero-copy direct buffer access)
+   * Subscribe to perception debug buffer updates
    * Callback receives Float32Array with perception debug data
    *
    * Buffer layout:
@@ -168,14 +171,15 @@ contextBridge.exposeInMainWorld('electron', {
    * - [136..200]: neighbor_ys
    *
    * @param {Function} callback - Function to call with perception debug buffer
+   * @returns {Function} Unsubscribe function
    */
   onPerceptionDebugUpdate: (callback) => {
     if (typeof callback !== 'function') {
       throw new Error('onPerceptionDebugUpdate: callback must be a function');
     }
 
-    ipcRenderer.on('perception-debug-update', (event, buffer) => {
-      callback(buffer);
-    });
+    const handler = (_event, buffer) => callback(buffer);
+    ipcRenderer.on('perception-debug-update', handler);
+    return () => ipcRenderer.removeListener('perception-debug-update', handler);
   },
 });

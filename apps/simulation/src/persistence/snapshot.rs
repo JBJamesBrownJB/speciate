@@ -408,7 +408,6 @@ mod tests {
 
         let (perception, avoidance) = components[0];
         assert!(perception.range > 0.0, "Perception range should be restored");
-        assert!(avoidance.personal_space > 0.0, "Avoidance personal_space should be restored");
-        assert!(avoidance.max_force > 0.0, "Avoidance max_force should be restored");
+        assert!(avoidance.personal_space() > 0.0, "Avoidance personal_space should be restored");
     }
 }

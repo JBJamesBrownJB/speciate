@@ -48,6 +48,7 @@ fn benchmark_telemetry_json_serialization() {
         cpu_utilization_pct: 65.4,
         estimated_parallelism_factor: 2.3,
         concurrent_systems_estimate: 4,
+        process_memory_bytes: 200_000_000,
     };
 
     #[derive(serde::Serialize)]

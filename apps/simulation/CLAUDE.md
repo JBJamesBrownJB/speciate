@@ -9,6 +9,62 @@ This document defines the **Bevy ECS patterns and architectural decisions** for 
 3. **Force Accumulation**: Systems ADD to acceleration, physics integrates
 4. **DNA-Driven Parameters**: Behavior constants → DNA gene expression migration path
 5. **System Instrumentation**: All ECS systems MUST have timing instrumentation
+6. **Dev-Tools Adds, Never Forks**: Feature flags must NOT create behavior differences
+
+---
+
+## Dev-Tools Feature Flag (CRITICAL)
+
+**The `dev-tools` feature flag must ONLY add instrumentation/visualization code. It must NEVER change core behavior.**
+
+### ✅ CORRECT: Dev-tools ADDS on top of production code
+
+```rust
+pub fn perception_system(...) {
+    // ONE code path - runs identically in prod and dev
+    for creature in creatures {
+        run_perception(creature, &mut perception);
+    }
+
+    // Dev-tools ADDS visualization on top (doesn't change behavior above)
+    #[cfg(feature = "dev-tools")]
+    if let Some(debug_target) = debug_target.get() {
+        capture_debug_snapshot(debug_target, &perception);
+    }
+}
+```
+
+### ❌ WRONG: Dev-tools creates FORKED behavior
+
+```rust
+pub fn perception_system(...) {
+    #[cfg(feature = "dev-tools")]
+    {
+        // DIFFERENT code path in dev - BUG RISK!
+        run_perception_with_tracking(...);
+    }
+
+    // Production code path - might behave differently!
+    for creature in creatures {
+        run_perception(creature, &mut perception);
+    }
+}
+```
+
+### Why This Matters
+
+- **Bugs hide in forks**: A bug fixed in one path may not be fixed in the other
+- **Testing gaps**: Tests may pass in dev but fail in prod (or vice versa)
+- **Maintenance nightmare**: Two code paths to maintain, debug, and keep in sync
+- **False confidence**: Dev visualization might show correct behavior while prod is broken
+
+### Rule
+
+When adding dev-tools functionality:
+1. Write the core behavior ONCE (no `#[cfg]` in the core logic)
+2. Dev-tools code only OBSERVES or AUGMENTS the results
+3. If you need tracking data, pass a callback or collect it AFTER the core logic runs
+4. Never have `#[cfg(feature = "dev-tools")]` around behavior-changing code
 
 ---
 
@@ -548,6 +604,34 @@ fn test_seek_behavior() {
     assert!(pos.x > 0.0, "Should move toward target");
 }
 ```
+
+### Test Anti-Patterns (NEVER DO)
+
+**❌ NEVER hardcode expected values derived from constants:**
+
+```rust
+// BAD: Hardcodes 1.25, breaks when PANIC_THRESHOLD_RATIO changes
+assert_eq!(panic, 1.25);
+
+// GOOD: Uses the actual constant, tests the relationship
+assert_eq!(panic, personal_space * PANIC_THRESHOLD_RATIO);
+```
+
+**Why this matters:**
+- Constants are tuning parameters that WILL change during development
+- Hardcoded values create false test failures when constants are adjusted
+- Tests should verify *behavior and relationships*, not specific numeric outputs
+
+**✅ DO test:**
+- Relationships between values (`panic < personal_space`)
+- Behavior over time (`pos.x > initial_x` after seeking)
+- Invariants (`neighbor_count <= MAX_NEIGHBORS`)
+- Edge cases (empty input, boundary conditions)
+
+**❌ DON'T test:**
+- Exact values derived from tunable constants
+- Implementation details that may change
+- Specific numeric outputs that depend on arbitrary parameters
 
 ---
 

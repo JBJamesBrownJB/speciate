@@ -187,37 +187,38 @@ impl NapiApp {
     pub fn export_positions(&mut self, buffer: &Arc<Mutex<DoubleBuffer>>) -> usize {
         let world = &mut self.simulation.world;
 
-        // Query all living creatures
-        let mut query = world.query::<(&CritId, &Position, &Rotation)>();
+        // Lock buffer first to get capacity
+        let mut buffer_guard = buffer.lock();
+        let buffer_size = buffer_guard.size();
+        let buffer_capacity = buffer_size / 4; // Creatures, not f32s
 
-        let creatures: Vec<_> = query.iter(world).collect();
-        let creature_count = creatures.len();
-
-        if creature_count == 0 {
+        if buffer_capacity == 0 {
             return 0;
         }
 
-        // Lock buffer and get write slice
-        let mut buffer_guard = buffer.lock();
-        let buffer_size = buffer_guard.size();
-
-        // Check if buffer capacity (in creatures, not f32s)
-        let buffer_capacity = buffer_size / 4;
-
-        // Only export what fits in the buffer
-        let export_count = creature_count.min(buffer_capacity);
-
         let write_slice = buffer_guard.get_write_slice();
 
-        // SoA offsets
-        let id_offset = 0;
+        // Use two-pass approach to avoid Vec allocation while maintaining SoA layout:
+        // Pass 1: Count entities (cheap iteration, no data copy)
+        // Pass 2: Write directly to SoA positions
+        let mut query = world.query::<(&CritId, &Position, &Rotation)>();
+
+        // Pass 1: Count (no allocation)
+        let entity_count = query.iter(world).count();
+        let export_count = entity_count.min(buffer_capacity);
+
+        if export_count == 0 {
+            return 0;
+        }
+
+        // Pass 2: Write directly to SoA layout
+        // Layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
         let x_offset = export_count;
         let y_offset = export_count * 2;
         let rot_offset = export_count * 3;
 
-        // Write data in SoA layout (only up to export_count)
-        for (i, (id, pos, rot)) in creatures.iter().take(export_count).enumerate() {
-            write_slice[id_offset + i] = id.0 as f32;
+        for (i, (id, pos, rot)) in query.iter(world).take(export_count).enumerate() {
+            write_slice[i] = id.0 as f32;
             write_slice[x_offset + i] = pos.x;
             write_slice[y_offset + i] = pos.y;
             write_slice[rot_offset + i] = rot.radians;
@@ -252,12 +253,7 @@ impl NapiApp {
         // Get the snapshot data
         if let Some(snapshot) = world.get_resource::<PerceptionDebugSnapshot>() {
             if snapshot.entity_id > 0 {
-                // Convert neighbors to tuple format
-                let neighbors: Vec<(u32, f32, f32)> = snapshot.neighbors
-                    .iter()
-                    .map(|n| (n.id, n.x, n.y))
-                    .collect();
-
+                // Pass iterators directly - no intermediate Vec allocations
                 buffer_guard.write_debug_data(
                     snapshot.entity_id,
                     snapshot.x,
@@ -265,25 +261,17 @@ impl NapiApp {
                     snapshot.perception_range,
                     snapshot.fov_angle,
                     snapshot.rotation,
-                    &neighbors,
+                    snapshot.neighbors.iter(),
                 );
 
                 // Write cell data for grid visualization
                 let grid = world.get_resource::<crate::simulation::spatial::SpatialGrid>();
                 let cell_size = grid.map(|g| g.cell_size()).unwrap_or(10.0);
-                let queried_cells: Vec<(i32, i32)> = snapshot.queried_cells
-                    .iter()
-                    .map(|c| (c.x, c.y))
-                    .collect();
-                let checked_cells: Vec<(i32, i32)> = snapshot.checked_cells
-                    .iter()
-                    .map(|c| (c.x, c.y))
-                    .collect();
                 buffer_guard.write_cell_data(
                     cell_size,
                     (snapshot.creature_cell.x, snapshot.creature_cell.y),
-                    &queried_cells,
-                    &checked_cells,
+                    snapshot.queried_cells.iter(),
+                    snapshot.checked_cells.iter(),
                 );
             } else {
                 buffer_guard.clear_write();

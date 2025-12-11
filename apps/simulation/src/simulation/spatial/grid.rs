@@ -2,7 +2,7 @@ use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use super::constants::CELL_SIZE;
+use super::constants::{CELL_SIZE, NON_ADJACENT_OFFSET};
 use crate::simulation::core::MAX_WORLD_SIZE;
 
 /// Wrapper to allow raw pointer in parallel iteration.
@@ -494,8 +494,10 @@ impl SpatialGrid {
         })
     }
 
-    /// Collect cell indices sorted by distance from creature (closest first).
-    /// Output: Vec of (distance_sq, cell_index) pairs, sorted by distance.
+    /// Collect cell indices sorted with adjacent cells FIRST, then by distance.
+    /// Output: Vec of (sort_key, cell_index) pairs.
+    /// Adjacent cells (3x3 around creature) are always examined first, never FOV-culled.
+    /// Non-adjacent cells behind creature are FOV-culled.
     /// Use `get_cell_proxies` to retrieve the actual proxies for each cell.
     #[inline(always)]
     pub fn collect_cells_sorted(
@@ -524,10 +526,15 @@ impl SpatialGrid {
                 let cell_center_x = (cx as f32 * cell_size) + half_cell;
                 let cell_center_y = (cy as f32 * cell_size) + half_cell;
 
-                // Check if cell is behind creature
-                let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
-                if cell_dir_dot < -cell_size {
-                    continue;
+                // Adjacent cells (3x3 grid) - skip FOV check, always include, examine FIRST
+                let is_adjacent = (cx - center_cx).abs() <= 1 && (cy - center_cy).abs() <= 1;
+
+                if !is_adjacent {
+                    // Only apply FOV culling for distant cells
+                    let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
+                    if cell_dir_dot < -cell_size {
+                        continue;
+                    }
                 }
 
                 let idx = ((cy - self.min_cell_y) as usize) * self.width
@@ -537,12 +544,15 @@ impl SpatialGrid {
                     let dx = cell_center_x - x;
                     let dy = cell_center_y - y;
                     let dist_sq = dx * dx + dy * dy;
-                    out.push((dist_sq, idx));
+
+                    // Adjacent cells get raw distance, non-adjacent get offset so they sort after
+                    let sort_key = if is_adjacent { dist_sq } else { dist_sq + NON_ADJACENT_OFFSET };
+                    out.push((sort_key, idx));
                 }
             }
         }
 
-        // Sort by distance (closest cells first)
+        // Sort by sort_key: adjacent cells first (by distance), then non-adjacent (by distance)
         out.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     }
 
@@ -1061,5 +1071,93 @@ mod tests {
         let found_ids: Vec<u32> = fov_results.iter().map(|p| p.entity.index()).collect();
         assert!(found_ids.contains(&1), "Should find front-right entity");
         assert!(found_ids.contains(&3), "Should find front-right entity");
+    }
+
+    #[test]
+    fn test_collect_cells_sorted_includes_adjacent_cells_behind() {
+        // Regression test: Adjacent cells should NOT be culled even when behind creature
+        // This tests the fix for cell-center FOV approximation breaking at cell boundaries
+        let mut grid = SpatialGrid::new(50.0);
+
+        // Creature at (25, 25) - center of cell (0, 0) facing right (+X)
+        // Entity directly behind at (-25, 25) - center of cell (-1, 0) - ADJACENT cell
+        // Entity far behind at (-125, 25) - center of cell (-3, 0) - NOT adjacent
+        let entities = vec![
+            (Entity::from_raw(1), -25.0, 25.0, 1.0),  // Adjacent cell behind (-1, 0)
+            (Entity::from_raw(2), -125.0, 25.0, 1.0), // Far cell behind (-3, 0)
+        ];
+
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        grid.collect_cells_sorted(25.0, 25.0, 200.0, 1.0, 0.0, &mut cells);
+
+        // Convert cell indices back to coords
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        // Adjacent cell (-1, 0) should be included despite being behind
+        assert!(
+            cell_coords.contains(&(-1, 0)),
+            "Adjacent cell behind creature should NOT be culled. Found: {:?}",
+            cell_coords
+        );
+
+        // Far cell (-3, 0) should be culled (it's behind and not adjacent)
+        assert!(
+            !cell_coords.contains(&(-3, 0)),
+            "Far cell behind creature SHOULD be culled. Found: {:?}",
+            cell_coords
+        );
+    }
+
+    #[test]
+    fn test_collect_cells_sorted_adjacent_cells_examined_first() {
+        // Adjacent cells (3x3) should ALWAYS be examined before non-adjacent cells
+        // This ensures creatures are always aware of immediate surroundings
+        let mut grid = SpatialGrid::new(50.0);
+
+        // Creature at (48, 25) - near right edge of cell (0, 0) facing right (+X)
+        // This position makes cell (2, 0) closer than cell (-1, 0) by raw distance
+        // But (-1, 0) is adjacent and should still be examined FIRST
+        let entities = vec![
+            (Entity::from_raw(1), -25.0, 25.0, 1.0),  // Adjacent behind (-1, 0), dist ~73
+            (Entity::from_raw(2), 125.0, 25.0, 1.0),  // Non-adjacent in front (2, 0), dist ~77
+            (Entity::from_raw(3), 75.0, 25.0, 1.0),   // Adjacent in front (1, 0), dist ~27
+        ];
+
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        grid.collect_cells_sorted(48.0, 25.0, 200.0, 1.0, 0.0, &mut cells);
+
+        // Convert to coords preserving order
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        // Find positions in the sorted order
+        let adjacent_behind_pos = cell_coords.iter().position(|&c| c == (-1, 0));
+        let adjacent_front_pos = cell_coords.iter().position(|&c| c == (1, 0));
+        let non_adjacent_pos = cell_coords.iter().position(|&c| c == (2, 0));
+
+        assert!(adjacent_behind_pos.is_some(), "Adjacent cell behind should be included");
+        assert!(adjacent_front_pos.is_some(), "Adjacent cell in front should be included");
+        assert!(non_adjacent_pos.is_some(), "Non-adjacent cell in front should be included");
+
+        // Adjacent cells should come BEFORE non-adjacent cells
+        assert!(
+            adjacent_behind_pos.unwrap() < non_adjacent_pos.unwrap(),
+            "Adjacent cell behind ({:?}) should be examined BEFORE non-adjacent cell ({:?}). Order: {:?}",
+            adjacent_behind_pos, non_adjacent_pos, cell_coords
+        );
+        assert!(
+            adjacent_front_pos.unwrap() < non_adjacent_pos.unwrap(),
+            "Adjacent cell in front ({:?}) should be examined BEFORE non-adjacent cell ({:?}). Order: {:?}",
+            adjacent_front_pos, non_adjacent_pos, cell_coords
+        );
     }
 }

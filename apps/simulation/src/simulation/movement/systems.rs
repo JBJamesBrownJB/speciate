@@ -4,8 +4,8 @@ use crate::config::MovementConfig;
 use crate::instrumentation::SystemTimings;
 use crate::simulation::core::components::{Acceleration, BodySize, DeltaTime, PhysicsTick, Position, Velocity};
 use crate::simulation::creatures::components::{BehaviorMode, CreatureState};
+use crate::simulation::creatures::constants::{DRAG_COEFFICIENT, MAX_SPEED, MAX_TURN_RATE_RAD, NOISE_SPEED_THRESHOLD_SQ, STOPPED_THRESHOLD};
 use crate::simulation::math::normalize_angle;
-use crate::simulation::movement::constants::{MAX_SPEED, MAX_TURN_RATE_RAD, NOISE_SPEED_THRESHOLD_SQ, STOPPED_THRESHOLD, VELOCITY_DAMPING};
 use crate::simulation::movement::noise::NoiseTable;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
@@ -31,6 +31,9 @@ pub fn integrate_motion_system(
     let dt = delta_time.0;
     let max_speed_sq = MAX_SPEED * MAX_SPEED;
     let tick = physics_tick.get();
+
+    // Time-based drag: v *= exp(-drag * dt) is frame-rate independent
+    let drag_factor = (-DRAG_COEFFICIENT * dt).exp();
     let noise_base = movement_config.locomotion_noise_base;
     let noise_time_scale = movement_config.noise_time_scale;
 
@@ -64,8 +67,8 @@ pub fn integrate_motion_system(
                 return;
             }
 
-            velocity.vx *= VELOCITY_DAMPING;
-            velocity.vy *= VELOCITY_DAMPING;
+            velocity.vx *= drag_factor;
+            velocity.vy *= drag_factor;
 
             position.x += velocity.vx * dt;
             position.y += velocity.vy * dt;
@@ -99,8 +102,8 @@ pub fn integrate_motion_system(
 
         velocity.vx += acceleration.ax * dt;
         velocity.vy += acceleration.ay * dt;
-        velocity.vx *= VELOCITY_DAMPING;
-        velocity.vy *= VELOCITY_DAMPING;
+        velocity.vx *= drag_factor;
+        velocity.vy *= drag_factor;
         let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
         if speed_sq > NOISE_SPEED_THRESHOLD_SQ {
             let speed = speed_sq.sqrt();
@@ -227,7 +230,8 @@ mod tests {
         world.insert_resource(DeltaTime(0.016));
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
-        world.insert_resource(MovementConfig::default());
+        // Disable noise for determinism test - noise is entity-index dependent
+        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -265,7 +269,8 @@ mod tests {
         world2.insert_resource(DeltaTime(0.016));
         world2.insert_resource(PhysicsTick(0));
         world2.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
-        world2.insert_resource(MovementConfig::default());
+        // Disable noise for determinism test - noise is entity-index dependent
+        world2.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
         world2.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world2.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -462,7 +467,7 @@ mod tests {
         let final_angle = vel.vy.atan2(vel.vx);
         let delta_degrees = (final_angle - initial_angle).to_degrees().abs();
 
-        let max_expected = crate::simulation::movement::constants::MAX_TURN_RATE * 0.05 + 0.1;
+        let max_expected = crate::simulation::creatures::constants::MAX_TURN_RATE * 0.05 + 0.1;
         assert!(
             delta_degrees <= max_expected,
             "Turn rate should be limited to ~0.9 deg, got {} deg",
@@ -509,7 +514,8 @@ mod tests {
         world.insert_resource(DeltaTime(0.05));
         world.insert_resource(PhysicsTick(0));
         world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
-        world.insert_resource(MovementConfig::default());
+        // Disable noise so it doesn't interfere with turn test
+        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());

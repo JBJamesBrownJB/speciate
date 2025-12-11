@@ -36,6 +36,7 @@ export interface ParallelizationMetrics {
   cpuUtilizationPct: number;
   estimatedParallelismFactor: number;
   concurrentSystemsEstimate: number;
+  processMemoryBytes: number;
 }
 
 export interface SystemTimingsSnapshot {

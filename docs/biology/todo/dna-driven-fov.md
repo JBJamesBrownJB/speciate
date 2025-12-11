@@ -168,8 +168,9 @@ Over generations, lineages should specialize:
 
 ### ✅ Currently Implemented
 - Basic Perception component with configurable range
-- Neighbor tracking (up to 40 neighbors)
+- Neighbor tracking (up to 7 neighbors)
 - Perception range scales by body size: `body_length × 10.0`
+- Spatial grid for efficient neighbor queries
 
 ### ❌ Not Implemented (Planned)
 - DNA vision genes (visual_range_multiplier, visual_arc, neural_speed)
@@ -182,6 +183,76 @@ Over generations, lineages should specialize:
 **Current values:** Hardcoded 10× multiplier, 360° awareness, every-tick updates
 
 **Location:** `apps/simulation/src/simulation/perception/`
+
+---
+
+## Implementation Phases
+
+### Phase 1: DNA Vision Genes
+
+**Outcome:** Three genes replace hardcoded values
+
+**Tasks:**
+- Add `visual_range_multiplier` gene (4.0-25.0, default 10.0)
+- Add `visual_arc` gene (π/3 to 2π radians, default π)
+- Add `neural_speed` gene (0.5-2.0, default 1.0)
+- Wide FOV (>π) applies 0.7× range penalty
+- Large creatures capped at lower max range
+
+### Phase 2: VisionTiming Component
+
+**Outcome:** Size-based reaction times determine update frequency per creature
+
+**Tasks:**
+- Create `VisionTiming` component with cooldown tracking
+- Small creatures (0.5m): 68ms reaction time (~15 updates/sec)
+- Large creatures (5m): 500ms reaction time (~2 updates/sec)
+- Modified by `neural_speed` gene
+- Uses manual cooldown pattern (like brain system)
+
+### Phase 3: Field of View (FOV)
+
+**Outcome:** Directional perception with blind spots
+
+**Tasks:**
+- Stationary creatures see 360° (no facing direction)
+- Moving creatures use velocity vector as facing direction
+- Dot product check filters entities outside FOV cone
+- Simple implementation (complex blind spots deferred)
+
+### Phase 4: Stochastic Vision Integration
+
+**Outcome:** Only ~10% of creatures update perception per tick
+
+**Tasks:**
+- No round-robin scheduling - natural stagger from spawn time variation
+- Brain reads potentially stale perception (biologically realistic)
+- Automatic Poisson distribution from individual reaction times
+- Compatible with spatial grid queries
+
+---
+
+## Performance Target
+
+**Combined optimization:**
+- Spatial grid: 833× fewer comparisons (algorithmic win)
+- Stochastic vision: 10× fewer updates (frequency win)
+- Combined: ~8,000× reduction from baseline O(N²) all-creatures-every-tick
+
+**Target:** 200K creatures @ <45ms tick (with spatial grid)
+
+---
+
+## Success Criteria
+
+- [ ] VisionTiming component with size-based reaction times (68ms-500ms)
+- [ ] FOV filters blind spots correctly (stationary = 360°, moving = FOV cone)
+- [ ] DNA genes (visual_range_multiplier, visual_arc, neural_speed) functional
+- [ ] ~10% creatures update per tick at steady state
+- [ ] Four archetypes (hawk, rabbit, owl, bison) spawn with correct phenotypes
+- [ ] Wide FOV (>180°) applies 0.7× range penalty
+- [ ] 200K creatures @ <45ms tick (with spatial grid)
+- [ ] All existing tests pass (zero behavioral regression)
 
 ---
 

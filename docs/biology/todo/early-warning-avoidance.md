@@ -1,8 +1,7 @@
 # Early Warning Avoidance - Biological Concept
 
 **Status:** ⏳ PLANNED
-
-**Sprint Plan:** `SPRINTS/early-warning-avoidance/SPRINT_PLAN.md`
+**Expected Duration:** 3-4 hours
 
 ---
 
@@ -328,13 +327,82 @@ Distance ≤ 1.25m:  90N force (panic)
 
 ---
 
+## Implementation Phases
+
+### Phase 1: Add Perception Constants
+
+**Outcome:** Three new constants in `perception/constants.rs`
+
+**Tasks:**
+- Add `EARLY_WARNING_MULTIPLIER`: 3.0 (base zone is 3× personal_space)
+- Add `SPEED_WARNING_FACTOR`: 0.5 (fast creatures get extra lead time)
+- Add `EARLY_WARNING_FORCE_RATIO`: 0.15 (gentle nudge, 15% of AVOIDANCE_FORCE)
+
+### Phase 2: Implement Speed-Adaptive Warning Distance
+
+**Outcome:** Avoidance system calculates dynamic early warning zone based on current speed
+
+**Tasks:**
+- Formula: `base_warning + (speed_ratio × personal_space × factor)`
+- Slow creatures (2 m/s): 8.0m early warning
+- Fast creatures (8 m/s): 9.5m early warning
+- Provides stopping distance safety margin
+
+### Phase 3: Add Early Warning Force Application
+
+**Outcome:** New force zone applied before existing personal_space logic
+
+**Tasks:**
+- Mutually exclusive zones (early OR personal OR panic, not multiple)
+- Weak force (5.25N for 35N avoidance base) for gentle nudging
+- Energy modulation applies to early warning (hungry creatures still push through)
+
+### Phase 4: Testing & Validation
+
+**Outcome:** Four test scenarios validating smooth navigation
+
+**Tasks:**
+- Static crowd: Gentle spacing emerges over time
+- High-speed approach: Fast creatures react earlier than slow
+- Dense navigation: Smooth weaving vs jerky swerves
+- Energy variation: Hungry creatures tolerate closer early encounters
+
+---
+
+## Implementation Files
+
+**Constants:**
+- `apps/simulation/src/simulation/perception/constants.rs`
+
+**Logic:**
+- `apps/simulation/src/simulation/creatures/behaviors/avoidance.rs`
+
+**Documentation:**
+- `docs/biology/done/avoidance-behavior.md` - Add "Early Warning Zone" section
+- `docs/biology/done/perception-system.md` - Update constants table
+
+---
+
+## Success Criteria
+
+- [ ] Constants added to `perception/constants.rs` with tests
+- [ ] Speed-adaptive warning distance calculation implemented
+- [ ] Early warning force applied correctly (before personal_space check)
+- [ ] Static crowd test: Gentle spacing emerges (no jerky movements)
+- [ ] High-speed test: Fast creatures react earlier than slow creatures
+- [ ] Dense navigation test: Smooth weaving through crowds
+- [ ] Energy test: Hungry creatures tolerate closer early proximity
+- [ ] All existing avoidance tests still pass (no behavioral regression)
+- [ ] Documentation updated
+
+---
+
 ## See Also
 
-- `SPRINTS/early-warning-avoidance/SPRINT_PLAN.md` - Implementation plan
 - `docs/biology/done/avoidance-behavior.md` - Current avoidance system
 - `docs/biology/done/perception-system.md` - Perception and personal space
 - `docs/biology/done/movement-physics.md` - Force accumulation architecture
 
 ---
 
-**Last Updated:** 2025-11-29
+**Last Updated:** 2025-12-11

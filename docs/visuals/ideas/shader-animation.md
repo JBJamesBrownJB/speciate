@@ -1,20 +1,23 @@
-# Sprint 17: Organic Shader Animation
+# Organic Shader Animation
 
-**Theme:** GPU-accelerated procedural creature animation for visual lifelike motion
+**Status:** Idea (Sprint 17 proposal)
+**Category:** GPU-accelerated procedural creature animation
 
-**Goal:** Replace static sprites with shader-driven organic movement (breathing, undulation, micro-movements) to make creatures feel alive without animator intervention.
+---
 
-**Prerequisites:** Sprint 14 complete (GPU interpolation working)
+## Goal
 
-**Expected Duration:** 3-4 days
+Replace static sprites with shader-driven organic movement (breathing, undulation, micro-movements) to make creatures feel alive without animator intervention.
 
-**Target Visual:** 200K creatures with unique organic motion @ 165 FPS
+**Prerequisites:** GPU interpolation working (Sprint 14)
+**Target:** 200K creatures with unique organic motion @ 165 FPS
 
 ---
 
 ## High-Level Phases
 
 ### Phase 1: Breathing Shader
+
 **Outcome:** Procedural expansion/contraction based on creature state (resting = slow breath, fleeing = rapid panting)
 
 **Key Decisions:**
@@ -23,6 +26,7 @@
 - Link to energy level (low energy = shallow breathing)
 
 ### Phase 2: Undulation/Gait Shader
+
 **Outcome:** Movement-synchronized body wave (walk cycle, slither, swim depending on locomotion)
 
 **Key Decisions:**
@@ -31,6 +35,7 @@
 - Directional wave orientation (head-to-tail for quadrupeds)
 
 ### Phase 3: Micro-Movement Noise
+
 **Outcome:** Subtle Perlin noise overlay for natural jitter (never perfectly still like robots)
 
 **Key Decisions:**
@@ -40,9 +45,7 @@
 
 ---
 
-## Guidance Notes
-
-### Biological Context
+## Biological Context
 
 Real creatures are NEVER static:
 - Breathing: 12-60 cycles/minute depending on size/activity
@@ -51,7 +54,9 @@ Real creatures are NEVER static:
 
 Shaders enable this at zero CPU cost - all computation on GPU in parallel.
 
-### Technical Context
+---
+
+## Technical Context
 
 **Why Shaders?** Animating 200K creatures with skeletal rigs is CPU/memory prohibitive. Procedural shaders scale infinitely with zero overhead.
 
@@ -59,7 +64,9 @@ Shaders enable this at zero CPU cost - all computation on GPU in parallel.
 
 **Performance:** Expect <1ms GPU overhead @ 200K creatures (trivial fragment shader math).
 
-### Gameplay Impact
+---
+
+## Gameplay Impact
 
 **Player Perception:** Motion is life - organic animation makes creatures feel like living beings instead of moving icons.
 

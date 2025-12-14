@@ -1,0 +1,31 @@
+# Catatonic Crowd Spec
+#
+# Purpose: Large population of catatonic crits
+# This spec tests huge population size whilst avoiding heavy computation systems
+
+[meta]
+name = "Catatonic Crowd"
+description = """
+2500 catatonic creatures in a 50x50 grid.
+Tests population scaling with minimal computation overhead.
+"""
+timeout_seconds = 5
+
+# Assertions for headless testing
+[[assertions]]
+type = "ticks_completed"
+count = 500
+
+[[assertions]]
+type = "creature_count"
+min = 2500
+max = 2500
+
+[[spawns]]
+type = "grid"
+start_x = -30.0
+start_y = -30.0
+spacing = 1.2245
+rows = 50
+cols = 50
+creature_type = "catatonic"

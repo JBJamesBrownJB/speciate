@@ -1,12 +1,12 @@
 use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
 use crate::simulation::creatures::components::{
     BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
-    CreatureState, CritId, HomePosition, Target, WanderState,
+    CreatureState, CritId, EntityTag, HomePosition, Target, WanderState,
 };
 use crate::simulation::creatures::constants::{
     ANGLE_CHANGE, DEFAULT_FOV_DEGREES, MAX_SPEED, WANDER_DISTANCE, WANDER_RADIUS,
 };
-use crate::simulation::perception::*;
+use crate::simulation::perception::{AvoidanceBehavior, NeighborCache, Perception};
 use bevy_ecs::prelude::*;
 use rand::Rng;
 
@@ -27,36 +27,15 @@ pub struct CritBundle {
     pub can_wander: CanWander,
     pub can_avoid_obstacles: CanAvoidObstacles,
     pub perception: Perception,
+    pub neighbor_cache: NeighborCache,
     pub avoidance_behavior: AvoidanceBehavior,
     pub target: Target,
-}
-
-#[derive(Clone, Copy, Debug)]
-#[derive(Default)]
-pub struct CritCapabilities {
-    pub can_seek: bool,
-    pub can_flee: bool,
-    pub can_wander: bool,
-    pub can_avoid: bool,
-}
-
-
-impl CritCapabilities {
-    pub fn all() -> Self {
-        Self {
-            can_seek: true,
-            can_flee: true,
-            can_wander: true,
-            can_avoid: true,
-        }
-    }
 }
 
 #[derive(Clone)]
 pub struct CritBuilder {
     position: (f32, f32),
     velocity: (f32, f32),
-    capabilities: CritCapabilities,
     behavior: BehaviorMode,
     brain_mode: BrainMode,
     energy: f32,
@@ -65,6 +44,7 @@ pub struct CritBuilder {
     target: Option<Target>,
     size: f32,
     fov_degrees: f32,
+    tag: Option<String>,
 }
 
 impl Default for CritBuilder {
@@ -78,7 +58,6 @@ impl CritBuilder {
         Self {
             position: (0.0, 0.0),
             velocity: (0.0, 0.0),
-            capabilities: CritCapabilities::default(),
             behavior: BehaviorMode::Wandering,
             brain_mode: BrainMode::Normal,
             energy: 100.0,
@@ -87,6 +66,7 @@ impl CritBuilder {
             target: None,
             size: 1.0,
             fov_degrees: DEFAULT_FOV_DEGREES,
+            tag: None,
         }
     }
 
@@ -100,28 +80,32 @@ impl CritBuilder {
         self
     }
 
-    pub fn with_seeking(mut self) -> Self {
-        self.capabilities.can_seek = true;
+    /// No-op for backward compatibility. All creatures have all capabilities.
+    #[deprecated(note = "All creatures now have all capabilities by default")]
+    pub fn with_seeking(self) -> Self {
         self
     }
 
-    pub fn with_fleeing(mut self) -> Self {
-        self.capabilities.can_flee = true;
+    /// No-op for backward compatibility. All creatures have all capabilities.
+    #[deprecated(note = "All creatures now have all capabilities by default")]
+    pub fn with_fleeing(self) -> Self {
         self
     }
 
-    pub fn with_wandering(mut self) -> Self {
-        self.capabilities.can_wander = true;
+    /// No-op for backward compatibility. All creatures have all capabilities.
+    #[deprecated(note = "All creatures now have all capabilities by default")]
+    pub fn with_wandering(self) -> Self {
         self
     }
 
-    pub fn with_avoidance(mut self) -> Self {
-        self.capabilities.can_avoid = true;
+    /// No-op for backward compatibility. All creatures have all capabilities.
+    #[deprecated(note = "All creatures now have all capabilities by default")]
+    pub fn with_avoidance(self) -> Self {
         self
     }
 
-    pub fn with_all_capabilities(mut self) -> Self {
-        self.capabilities = CritCapabilities::all();
+    /// No-op for backward compatibility. All creatures have all capabilities.
+    pub fn with_all_capabilities(self) -> Self {
         self
     }
 
@@ -132,11 +116,6 @@ impl CritBuilder {
 
     pub fn with_brain_mode(mut self, mode: BrainMode) -> Self {
         self.brain_mode = mode;
-        self
-    }
-
-    pub fn with_cycling_brain(mut self) -> Self {
-        self.brain_mode = BrainMode::Cycling;
         self
     }
 
@@ -175,15 +154,24 @@ impl CritBuilder {
         self
     }
 
+    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+        self.tag = Some(tag.into());
+        self
+    }
+
+    /// Returns the tag if set, consuming it from the builder.
+    /// Call this after build() to get the tag for separate insertion.
+    pub fn take_tag(&mut self) -> Option<EntityTag> {
+        self.tag.take().map(EntityTag)
+    }
+
     pub fn as_seeker(mut self, target_x: f32, target_y: f32) -> Self {
-        self.capabilities.can_seek = true;
         self.behavior = BehaviorMode::Seeking;
         self.target = Some(Target::at_point(target_x, target_y));
         self
     }
 
     pub fn as_wanderer(mut self, world_bounds: &crate::simulation::core::WorldBounds) -> Self {
-        self.capabilities.can_wander = true;
         self.behavior = BehaviorMode::Wandering;
 
         let mut rng = rand::thread_rng();
@@ -214,9 +202,7 @@ impl CritBuilder {
             },
             acceleration: Acceleration { ax: 0.0, ay: 0.0 },
             body_size: BodySize::new(self.size),
-            rotation: Rotation {
-                radians: rng.gen_range(0.0..std::f32::consts::TAU),
-            },
+            rotation: Rotation::new(rng.gen_range(0.0..std::f32::consts::TAU)),
             creature_state: CreatureState {
                 behavior: self.behavior,
                 energy: self.energy,
@@ -236,6 +222,7 @@ impl CritBuilder {
             can_wander: CanWander,
             can_avoid_obstacles: CanAvoidObstacles,
             perception: Perception::from_body_size_with_fov(self.size, self.fov_degrees),
+            neighbor_cache: NeighborCache::new(),
             avoidance_behavior: AvoidanceBehavior::from_body_size(self.size),
             target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
         }
@@ -256,6 +243,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_builder_fluent_api() {
         let builder = CritBuilder::new()
             .at(10.0, 20.0)
@@ -265,7 +253,6 @@ mod tests {
 
         assert_eq!(builder.position, (10.0, 20.0));
         assert_eq!(builder.energy, 50.0);
-        assert!(builder.capabilities.can_seek);
         assert_eq!(builder.behavior, BehaviorMode::Seeking);
     }
 
@@ -273,7 +260,6 @@ mod tests {
     fn test_builder_as_seeker() {
         let builder = CritBuilder::new().as_seeker(100.0, 50.0);
 
-        assert!(builder.capabilities.can_seek);
         assert_eq!(builder.behavior, BehaviorMode::Seeking);
         assert!(builder.target.is_some());
 
@@ -284,12 +270,9 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_all_capabilities() {
+    fn test_builder_all_capabilities_is_noop() {
+        // with_all_capabilities is now a no-op since all creatures have all capabilities
         let builder = CritBuilder::new().with_all_capabilities();
-
-        assert!(builder.capabilities.can_seek);
-        assert!(builder.capabilities.can_flee);
-        assert!(builder.capabilities.can_wander);
-        assert!(builder.capabilities.can_avoid);
+        assert_eq!(builder.position, (0.0, 0.0)); // Just verify it doesn't break the chain
     }
 }

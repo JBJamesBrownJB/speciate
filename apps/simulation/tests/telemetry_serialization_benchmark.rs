@@ -35,8 +35,10 @@ fn benchmark_telemetry_json_serialization() {
         seek_us: 178,
         flee_us: 123,
         avoidance_us: 345,
+        steering_cap_us: 10,
         rotation_us: 456,
         spatial_grid_rebuild_us: 789,
+        capture_debug_accel_us: 5,
 
         archetype_count: 42,
         entity_count: 150_000,

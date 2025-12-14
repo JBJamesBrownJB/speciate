@@ -38,7 +38,9 @@ fn test_performance_snapshot_schema_completeness() {
         seek_us: 25,
         flee_us: 20,
         avoidance_us: 40,
+        steering_cap_us: 5,
         rotation_us: 10,
+        capture_debug_accel_us: 2,
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -216,7 +218,9 @@ fn test_system_timings_snapshot_all_fields_present() {
         seek_us: 25,
         flee_us: 20,
         avoidance_us: 40,
+        steering_cap_us: 5,
         rotation_us: 10,
+        capture_debug_accel_us: 2,
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -236,6 +240,7 @@ fn test_system_timings_snapshot_all_fields_present() {
         "fleeUs",
         "avoidanceUs",
         "rotationUs",
+        "captureDebugAccelUs",
         "archetypeCount",
         "entityCount",
     ];
@@ -289,7 +294,9 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
         seek_us: 25,
         flee_us: 20,
         avoidance_us: 40,
+        steering_cap_us: 5,
         rotation_us: 10,
+        capture_debug_accel_us: 2,
         archetype_count: 5,
         entity_count: 27500,
     };

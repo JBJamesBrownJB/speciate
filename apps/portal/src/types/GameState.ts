@@ -35,7 +35,9 @@ export interface SystemTimingsSnapshot {
   seekUs: number;
   fleeUs: number;
   avoidanceUs: number;
+  steeringCapUs: number;
   rotationUs: number;
+  captureDebugAccelUs: number;
   ipcQueryUs: number;
   ipcSerializeUs: number;
   ipcWriteUs: number;

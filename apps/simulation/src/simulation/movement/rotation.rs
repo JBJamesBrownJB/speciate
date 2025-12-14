@@ -13,7 +13,8 @@ pub fn rotation_system(
 
     for (mut rotation, velocity) in query.iter_mut() {
         if velocity.vx != 0.0 || velocity.vy != 0.0 {
-            rotation.radians = velocity.vy.atan2(velocity.vx);
+            // Computes cos/sin directly from velocity direction + radians from atan2
+            rotation.set_from_velocity(velocity.vx, velocity.vy);
         }
     }
 }
@@ -28,7 +29,7 @@ mod tests {
 
         let entity = world
             .spawn((
-                Rotation { radians: 0.0 },
+                Rotation::default(),
                 Velocity { vx: 1.0, vy: 1.0 },
             ))
             .id();
@@ -37,12 +38,17 @@ mod tests {
         let mut query = world.query::<(&mut Rotation, &Velocity)>();
         for (mut rot, vel) in query.iter_mut(&mut world) {
             if vel.vx != 0.0 || vel.vy != 0.0 {
-                rot.radians = vel.vy.atan2(vel.vx);
+                rot.set_from_velocity(vel.vx, vel.vy);
             }
         }
 
         let rotation = world.get::<Rotation>(entity).unwrap();
         let expected = 1.0f32.atan2(1.0);
         assert!((rotation.radians - expected).abs() < 0.001);
+        // Also verify cos/sin are cached correctly
+        let expected_cos = 1.0 / 2.0_f32.sqrt();
+        let expected_sin = 1.0 / 2.0_f32.sqrt();
+        assert!((rotation.cos_radians - expected_cos).abs() < 0.001);
+        assert!((rotation.sin_radians - expected_sin).abs() < 0.001);
     }
 }

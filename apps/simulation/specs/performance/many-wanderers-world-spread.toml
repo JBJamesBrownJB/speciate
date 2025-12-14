@@ -1,0 +1,36 @@
+# Many Wanderers - World Spread (200K Performance Test)
+#
+# Purpose: Performance regression test with 200k wanderers spread across the world
+# Asserts tick latency stays under 35ms - run with --release for accurate timings
+# World bounds: 10km × 10km (-5000 to 5000 in each axis)
+
+[meta]
+name = "200K World Spread Performance"
+description = """
+200,000 wanderers in a 400x500 grid with 20m spacing.
+Evenly distributed across 10km × 10km world.
+Performance regression test - tick latency must stay under 35ms.
+"""
+timeout_seconds = 8
+
+[[assertions]]
+type = "creature_count"
+min = 200000
+max = 200000
+
+[[assertions]]
+type = "max_avg_tick_latency"
+microseconds = 35000
+
+# Primary spawn pattern: 400x500 grid = 200,000 creatures
+# 500 cols × 20m = 10,000m (full width)
+# 400 rows × 20m = 8,000m (centered vertically)
+[[spawns]]
+type = "grid"
+start_x = -5000.0
+start_y = -4000.0
+spacing = 20.0
+rows = 400
+cols = 500
+creature_type = "wanderer"
+grid_offset_y = 1.0

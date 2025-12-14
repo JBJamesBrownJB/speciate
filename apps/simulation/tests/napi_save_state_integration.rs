@@ -24,7 +24,7 @@ fn test_napi_periodic_saves_with_2_second_interval() {
         keep_last_n: 10,
         save_dir: save_dir.clone(),
     };
-    let worker = SaveStateWorker::start(config.clone());
+    let mut worker = SaveStateWorker::start(config.clone());
 
     // Create NapiApp (no save state to load)
     let (_tx, rx) = crossbeam_channel::bounded(128);
@@ -81,7 +81,7 @@ fn test_napi_shutdown_save_creates_latest() {
         keep_last_n: 10,
         save_dir: save_dir.clone(),
     };
-    let worker = SaveStateWorker::start(config.clone());
+    let mut worker = SaveStateWorker::start(config.clone());
 
     // Create NapiApp and run briefly
     let (_tx, rx) = crossbeam_channel::bounded(128);
@@ -176,7 +176,7 @@ fn test_napi_cleanup_keeps_last_n() {
         keep_last_n: 3,
         save_dir: save_dir.clone(),
     };
-    let worker = SaveStateWorker::start(config.clone());
+    let mut worker = SaveStateWorker::start(config.clone());
 
     // Create NapiApp (no save state to load)
     let (_tx, rx) = crossbeam_channel::bounded(128);

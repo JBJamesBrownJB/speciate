@@ -13,8 +13,7 @@ const PANIC_THRESHOLD: f32 = 2.0; // body_size multiplier
 pub enum BrainMode {
     #[default]
     Normal = 0,
-    Cycling = 1,
-    Dormant = 2,
+    Dormant = 1,
 }
 
 impl BrainMode {
@@ -47,10 +46,6 @@ impl Brain {
             mode,
             ..Default::default()
         }
-    }
-
-    pub fn cycling() -> Self {
-        Self::with_mode(BrainMode::Cycling)
     }
 
     pub fn dormant() -> Self {
@@ -104,13 +99,6 @@ mod tests {
         let brain = Brain::dormant();
         assert_eq!(brain.mode, BrainMode::Dormant);
         assert!(!brain.mode.makes_decisions());
-    }
-
-    #[test]
-    fn test_brain_cycling_makes_decisions() {
-        let brain = Brain::cycling();
-        assert_eq!(brain.mode, BrainMode::Cycling);
-        assert!(brain.mode.makes_decisions());
     }
 
     #[test]
@@ -175,7 +163,7 @@ mod tests {
     fn test_last_decision_time_not_serialized() {
         use serde_json;
 
-        let mut brain = Brain::cycling();
+        let mut brain = Brain::default();
         brain.last_decision_time = 100.0; // Simulate brain that has been running
 
         // Serialize
@@ -186,13 +174,13 @@ mod tests {
 
         // last_decision_time should be reset to 0.0 (default)
         assert_eq!(loaded_brain.last_decision_time, 0.0,
-            "last_decision_time should not be serialized - it must reset on reload to prevent cycling bugs");
-        assert_eq!(loaded_brain.mode, BrainMode::Cycling, "mode should be preserved");
+            "last_decision_time should not be serialized - it must reset on reload");
+        assert_eq!(loaded_brain.mode, BrainMode::Normal, "mode should be preserved");
     }
 
     #[test]
-    fn test_cycling_brain_works_after_simulated_reload() {
-        let mut brain = Brain::cycling();
+    fn test_brain_works_after_simulated_reload() {
+        let mut brain = Brain::default();
         brain.last_decision_time = 100.0; // Simulate old saved state
 
         // Simulate serialize/deserialize (last_decision_time should reset)

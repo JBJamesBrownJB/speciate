@@ -7,6 +7,8 @@ use crate::simulation::creatures::constants::{
     PERCEPTION_MULTIPLIER, PERSONAL_SPACE_MULTIPLIER,
 };
 
+// Debug types are in perception/debug.rs (dev-tools only)
+
 /// Neighbor data cached during perception (avoids re-querying positions in avoidance)
 #[derive(Debug, Clone, Copy)]
 pub struct NeighborData {
@@ -31,11 +33,19 @@ impl Default for NeighborData {
     }
 }
 
+/// Hot perception data (~16 bytes) - read every tick for range/FOV checks
+/// Split from NeighborCache for cache locality optimization
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
     pub fov_angle: f32,        // Field of view in radians (stored internally as radians for efficient checks)
     pub range: f32,            // Derived from FOV and body size
     pub cos_half_fov_sq: f32,  // Cached cos²(fov_angle/2) for sqrt-free FOV checks
+}
+
+/// Cold neighbor cache (~168 bytes) - written by perception, read by avoidance
+/// Separated from Perception for cache locality (only loaded when iterating neighbors)
+#[derive(Component, Debug, Clone)]
+pub struct NeighborCache {
     neighbor_count: u8,
     neighbors: [NeighborData; MAX_PERCEIVED_NEIGHBORS],
 }
@@ -51,8 +61,6 @@ impl Perception {
             fov_angle: fov_rad,
             range,
             cos_half_fov_sq: cos_half_fov * cos_half_fov,
-            neighbor_count: 0,
-            neighbors: [NeighborData::EMPTY; MAX_PERCEIVED_NEIGHBORS],
         }
     }
 
@@ -78,6 +86,15 @@ impl Perception {
     /// Get half FOV in radians (for cone check: angle must be within ±half_fov)
     pub fn half_fov(&self) -> f32 {
         self.fov_angle / 2.0
+    }
+}
+
+impl NeighborCache {
+    pub fn new() -> Self {
+        Self {
+            neighbor_count: 0,
+            neighbors: [NeighborData::EMPTY; MAX_PERCEIVED_NEIGHBORS],
+        }
     }
 
     pub fn has_neighbors(&self) -> bool {
@@ -111,6 +128,12 @@ impl Perception {
 
     pub fn is_full(&self) -> bool {
         self.neighbor_count as usize >= MAX_PERCEIVED_NEIGHBORS
+    }
+}
+
+impl Default for NeighborCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -157,112 +180,6 @@ impl AvoidanceBehavior {
 impl Default for AvoidanceBehavior {
     fn default() -> Self {
         Self::new(0.5) // Default 1m creature = 0.5m radius
-    }
-}
-
-#[cfg(feature = "dev-tools")]
-#[derive(Resource, Default)]
-pub struct PerceptionDebugTarget(pub Option<Entity>);
-
-#[cfg(feature = "dev-tools")]
-impl PerceptionDebugTarget {
-    pub fn set_by_crit_id(&mut self, crit_id: Option<u32>, lookup: impl Fn(u32) -> Option<Entity>) {
-        self.0 = crit_id.and_then(lookup);
-    }
-
-    pub fn clear(&mut self) {
-        self.0 = None;
-    }
-
-    pub fn get(&self) -> Option<Entity> {
-        self.0
-    }
-}
-
-#[cfg(feature = "dev-tools")]
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct NeighborDebugInfo {
-    pub id: u32,
-    pub x: f32,
-    pub y: f32,
-}
-
-#[cfg(feature = "dev-tools")]
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct QueriedCell {
-    pub x: i32,
-    pub y: i32,
-}
-
-#[cfg(feature = "dev-tools")]
-#[derive(Resource, Default, Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PerceptionDebugSnapshot {
-    pub entity_id: u32,
-    pub x: f32,
-    pub y: f32,
-    pub perception_range: f32,
-    pub fov_angle: f32,  // Field of view in radians
-    pub rotation: f32,   // Creature facing direction in radians
-    pub ax: f32,         // Acceleration x component (for force visualization)
-    pub ay: f32,         // Acceleration y component (for force visualization)
-    pub neighbors: Vec<NeighborDebugInfo>,
-    pub queried_cells: Vec<QueriedCell>,  // Grid cells actually checked (green in overlay)
-    pub checked_cells: Vec<QueriedCell>,  // Grid cells skipped due to early break (orange in overlay)
-    pub creature_cell: QueriedCell,       // The cell the creature is in
-}
-
-#[cfg(feature = "dev-tools")]
-impl PerceptionDebugSnapshot {
-    /// Clear all data without deallocating Vec capacity (prevents allocation churn)
-    pub fn clear(&mut self) {
-        self.entity_id = 0;
-        self.x = 0.0;
-        self.y = 0.0;
-        self.perception_range = 0.0;
-        self.fov_angle = 0.0;
-        self.rotation = 0.0;
-        self.ax = 0.0;
-        self.ay = 0.0;
-        self.neighbors.clear();
-        self.queried_cells.clear();
-        self.checked_cells.clear();
-        self.creature_cell = QueriedCell::default();
-    }
-
-    /// Update snapshot data, reusing Vec capacity where possible
-    pub fn update(
-        &mut self,
-        entity_id: u32,
-        x: f32,
-        y: f32,
-        perception_range: f32,
-        fov_angle: f32,
-        rotation: f32,
-        ax: f32,
-        ay: f32,
-        neighbors: impl IntoIterator<Item = NeighborDebugInfo>,
-        queried_cells: impl IntoIterator<Item = QueriedCell>,
-        checked_cells: impl IntoIterator<Item = QueriedCell>,
-        creature_cell: QueriedCell,
-    ) {
-        self.entity_id = entity_id;
-        self.x = x;
-        self.y = y;
-        self.perception_range = perception_range;
-        self.fov_angle = fov_angle;
-        self.rotation = rotation;
-        self.ax = ax;
-        self.ay = ay;
-        self.neighbors.clear();
-        self.neighbors.extend(neighbors);
-        self.queried_cells.clear();
-        self.queried_cells.extend(queried_cells);
-        self.checked_cells.clear();
-        self.checked_cells.extend(checked_cells);
-        self.creature_cell = creature_cell;
     }
 }
 
@@ -348,21 +265,21 @@ mod tests {
     }
 
     #[test]
-    fn test_perception_neighbor_tracking() {
-        let mut perception = Perception::from_body_size(1.0);
+    fn test_neighbor_cache_tracking() {
+        let mut cache = NeighborCache::new();
 
-        assert!(!perception.has_neighbors());
-        assert_eq!(perception.neighbor_count(), 0);
+        assert!(!cache.has_neighbors());
+        assert_eq!(cache.neighbor_count(), 0);
 
-        perception.add_neighbor(NeighborData { entity: Entity::PLACEHOLDER, x: 1.0, y: 2.0, radius: 0.5 });
-        perception.add_neighbor(NeighborData { entity: Entity::PLACEHOLDER, x: 3.0, y: 4.0, radius: 0.5 });
+        cache.add_neighbor(NeighborData { entity: Entity::PLACEHOLDER, x: 1.0, y: 2.0, radius: 0.5 });
+        cache.add_neighbor(NeighborData { entity: Entity::PLACEHOLDER, x: 3.0, y: 4.0, radius: 0.5 });
 
-        assert!(perception.has_neighbors());
-        assert_eq!(perception.neighbor_count(), 2);
+        assert!(cache.has_neighbors());
+        assert_eq!(cache.neighbor_count(), 2);
 
-        perception.clear();
-        assert!(!perception.has_neighbors());
-        assert_eq!(perception.neighbor_count(), 0);
+        cache.clear();
+        assert!(!cache.has_neighbors());
+        assert_eq!(cache.neighbor_count(), 0);
     }
 
     #[test]

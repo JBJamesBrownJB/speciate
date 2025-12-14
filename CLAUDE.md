@@ -273,3 +273,4 @@ entities.par_iter_mut().for_each(|(position, velocity, ...)| {
 ## Remember
 
 **Run tests. Always. Every time. Before and after changes.**
+- The human in charge must approve any alterations to specification tests in apps/simulation/specs/

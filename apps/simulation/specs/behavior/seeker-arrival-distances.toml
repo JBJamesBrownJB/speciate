@@ -1,0 +1,50 @@
+# Tests arrival from different starting distances
+# Short approach: immediate braking
+# Long approach: high-speed braking
+
+[meta]
+name = "Seeker Arrival Multiple Distances"
+description = "Seekers from near, medium, and far distances all reach target"
+timeout_seconds = 30
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "near-seeker"
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "medium-seeker"
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "far-seeker"
+
+# Near approach (20m)
+[[spawns]]
+type = "single"
+tag = "near-seeker"
+x = -20.0
+y = 5.0
+creature_type = "seeker"
+target_x = 0.0
+target_y = 5.0
+
+# Medium approach (60m)
+[[spawns]]
+type = "single"
+tag = "medium-seeker"
+x = -60.0
+y = 0.0
+creature_type = "seeker"
+target_x = 0.0
+target_y = 0.0
+
+# Far approach (150m - builds significant speed)
+[[spawns]]
+type = "single"
+tag = "far-seeker"
+x = -150.0
+y = -5.0
+creature_type = "seeker"
+target_x = 0.0
+target_y = -5.0

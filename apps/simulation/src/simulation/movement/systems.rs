@@ -5,7 +5,7 @@ use crate::instrumentation::SystemTimings;
 use crate::simulation::core::components::{Acceleration, BodySize, DeltaTime, PhysicsTick, Position, Velocity};
 use crate::simulation::creatures::components::{BehaviorMode, CreatureState};
 use crate::simulation::creatures::constants::{DRAG_COEFFICIENT, MAX_SPEED, MAX_TURN_RATE_RAD, NOISE_SPEED_THRESHOLD_SQ, STOPPED_THRESHOLD};
-use crate::simulation::math::normalize_angle;
+use crate::simulation::math::{fast_atan2, normalize_angle};
 use crate::simulation::movement::noise::NoiseTable;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
@@ -92,10 +92,10 @@ pub fn integrate_motion_system(
             return;
         }
 
-        // Capture old heading before velocity changes
+        // Capture old heading before velocity changes (fast_atan2: ~5x faster)
         let old_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
         let old_angle = if old_speed_sq > stopped_threshold_sq {
-            velocity.vy.atan2(velocity.vx)
+            fast_atan2(velocity.vy, velocity.vx)
         } else {
             f32::NAN
         };
@@ -104,40 +104,59 @@ pub fn integrate_motion_system(
         velocity.vy += acceleration.ay * dt;
         velocity.vx *= drag_factor;
         velocity.vy *= drag_factor;
-        let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+
+        // Track speed for reuse (avoid redundant sqrt)
+        let mut speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+        let mut current_speed = 0.0_f32;
+        let mut speed_computed = false;
+
         if speed_sq > NOISE_SPEED_THRESHOLD_SQ {
-            let speed = speed_sq.sqrt();
-            let speed_ratio = speed / MAX_SPEED;
+            current_speed = speed_sq.sqrt();
+            speed_computed = true;
+            let speed_ratio = current_speed / MAX_SPEED;
             let size_factor = size.inv_sqrt_length;
             let noise_magnitude = noise_base * speed_ratio * speed_ratio * size_factor;
 
             let noise_x = noise_ref.get(entity.index(), tick, 0, noise_time_scale);
             let noise_y = noise_ref.get(entity.index(), tick, 1, noise_time_scale);
 
-            let perpendicular_x = -velocity.vy / speed;
-            let perpendicular_y = velocity.vx / speed;
+            let inv_speed = 1.0 / current_speed;
+            let perpendicular_x = -velocity.vy * inv_speed;
+            let perpendicular_y = velocity.vx * inv_speed;
 
             velocity.vx += perpendicular_x * noise_x * noise_magnitude * dt;
             velocity.vy += perpendicular_y * noise_y * noise_magnitude * dt;
+
+            // Recalculate after noise modification
+            speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+            speed_computed = false; // Speed changed, need fresh sqrt if used
         }
-        let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-        if speed_sq > max_speed_sq {
-            let scale = (max_speed_sq / speed_sq).sqrt();
+
+        // Speed clamping
+        let was_clamped = speed_sq > max_speed_sq;
+        if was_clamped {
+            if !speed_computed {
+                current_speed = speed_sq.sqrt();
+            }
+            let scale = MAX_SPEED / current_speed;
             velocity.vx *= scale;
             velocity.vy *= scale;
+            current_speed = MAX_SPEED; // After clamping, speed is exactly MAX_SPEED
+            speed_sq = max_speed_sq;
+            speed_computed = true;
         }
 
         // Turn rate limiting: clamp velocity direction change per frame
-        let new_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-        if old_angle.is_finite() && new_speed_sq > stopped_threshold_sq {
-            let new_angle = velocity.vy.atan2(velocity.vx);
+        if old_angle.is_finite() && speed_sq > stopped_threshold_sq {
+            let new_angle = fast_atan2(velocity.vy, velocity.vx);
             let delta = normalize_angle(new_angle - old_angle);
             let max_delta = max_turn_rate_rad * dt;
 
             if delta.abs() > max_delta {
                 let clamped_delta = delta.clamp(-max_delta, max_delta);
                 let final_angle = old_angle + clamped_delta;
-                let new_speed = new_speed_sq.sqrt();
+                // Reuse speed if we have it, otherwise compute
+                let new_speed = if speed_computed { current_speed } else { speed_sq.sqrt() };
                 velocity.vx = new_speed * final_angle.cos();
                 velocity.vy = new_speed * final_angle.sin();
             }

@@ -1,7 +1,8 @@
 use crate::simulation::creatures::constants::WANDER_FORCE_MULT;
 use crate::simulation::creatures::components::BehaviorMode;
-use crate::simulation::math::{clamp_force, magnitude_sq, normalize};
+use crate::simulation::math::SteeringContext;
 use crate::simulation::queries::WanderQuery;
+use super::steering::{calculate_wander, WanderParams};
 use rand::Rng;
 use rayon::prelude::*;
 
@@ -14,6 +15,9 @@ use rayon::prelude::*;
 /// NOTE: No "homeward force" - this was biologically incorrect. Animals don't feel
 /// pulled home; they DECIDE to return based on internal state (hunger, fatigue).
 /// Territory bounds are enforced through navigation decisions, not invisible forces.
+///
+/// FIXED: Now uses proper F=ma physics via `calculate_wander()` pure function.
+/// Previously, steering (m/s) was incorrectly treated as force (N).
 pub fn territory_wandering_system(
     mut query: WanderQuery,
     #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
@@ -32,46 +36,37 @@ pub fn territory_wandering_system(
 
         let mut rng = rand::thread_rng();
 
-        let speed_sq = magnitude_sq(velocity.vx, velocity.vy);
-
-        // Use current heading, or wander angle if stationary
-        let (heading_x, heading_y) = if speed_sq < 0.0001 {
-            let (sin_a, cos_a) = wander_state.wander_angle.sin_cos();
-            (cos_a, sin_a)
-        } else {
-            normalize(velocity.vx, velocity.vy)
+        // Build steering context for pure function
+        let ctx = SteeringContext {
+            velocity: (velocity.vx, velocity.vy),
+            max_speed: creature_state.max_speed,
+            max_force: size.max_force(),
+            mass: size.mass(),
         };
 
-        // Project wander circle ahead of creature
-        let circle_center_x = heading_x * wander_state.wander_distance;
-        let circle_center_y = heading_y * wander_state.wander_distance;
+        // Build wander parameters
+        let wander_params = WanderParams {
+            wander_angle: wander_state.wander_angle,
+            wander_radius: wander_state.wander_radius,
+            wander_distance: wander_state.wander_distance,
+            force_multiplier: WANDER_FORCE_MULT.get(),
+        };
 
-        // Randomly adjust wander angle (creates smooth direction changes)
-        let angle_change = rng.gen_range(-wander_state.angle_change..wander_state.angle_change);
-        wander_state.wander_angle += angle_change.to_radians();
-        wander_state.wander_angle = wander_state.wander_angle.rem_euclid(std::f32::consts::TAU);
+        // Generate random angle change (in radians)
+        let angle_change_deg = rng.gen_range(-wander_state.angle_change..wander_state.angle_change);
+        let angle_change_rad = angle_change_deg.to_radians();
 
-        // Pick target point on wander circle
-        let (sin_wander, cos_wander) = wander_state.wander_angle.sin_cos();
-        let target_x = circle_center_x + wander_state.wander_radius * cos_wander;
-        let target_y = circle_center_y + wander_state.wander_radius * sin_wander;
+        // Calculate wander steering using pure function (correct F=ma physics)
+        let result = calculate_wander(&ctx, &wander_params, angle_change_rad);
 
-        // Calculate steering toward target
-        let (norm_desired_x, norm_desired_y) = normalize(target_x, target_y);
-        let max_speed = creature_state.max_speed;
-        let scaled_desired_x = norm_desired_x * max_speed;
-        let scaled_desired_y = norm_desired_y * max_speed;
+        // Update wander state
+        wander_state.wander_angle = result.new_wander_angle;
 
-        let steer_x = scaled_desired_x - velocity.vx;
-        let steer_y = scaled_desired_y - velocity.vy;
-
-        // Apply wander force (low effort exploration)
-        let wander_force_limit = size.max_force() * WANDER_FORCE_MULT.get();
-        let (force_x, force_y) = clamp_force(steer_x, steer_y, wander_force_limit);
-
-        if force_x.is_finite() && force_y.is_finite() {
-            acceleration.ax += force_x;
-            acceleration.ay += force_y;
+        // Apply acceleration (already in m/s², not force!)
+        let (ax, ay) = result.acceleration;
+        if ax.is_finite() && ay.is_finite() {
+            acceleration.ax += ax;
+            acceleration.ay += ay;
         }
     });
 }
@@ -128,11 +123,14 @@ mod tests {
     }
 
     #[test]
-    fn test_wander_respects_force_limit() {
+    fn test_wander_respects_acceleration_limit() {
+        // FIXED: Now tests acceleration limit (m/s²), not force limit (N)
+        // The F=ma conversion is: max_accel = (max_force × multiplier) / mass
         let mut world = World::new();
 
         let size = BodySize::default();
-        let max_wander_force = size.max_force() * WANDER_FORCE_MULT.get();
+        // Correct physics: max_accel = (max_force × WANDER_FORCE_MULT) / mass
+        let max_wander_accel = (size.max_force() * WANDER_FORCE_MULT.get()) / size.mass();
 
         world.spawn((
             Position { x: 0.0, y: 0.0 },
@@ -156,13 +154,16 @@ mod tests {
         run_wander_system(&mut world);
 
         let accel = world.query::<&Acceleration>().single(&world);
-        let force_mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
+        let accel_mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
 
+        // For default creature: max_force=390N, mass=65kg, mult=0.1
+        // max_wander_accel = (390 × 0.1) / 65 = 39 / 65 = 0.6 m/s²
         assert!(
-            force_mag <= max_wander_force + 0.01,
-            "Wander force ({:.2}) should not exceed limit ({:.2})",
-            force_mag,
-            max_wander_force
+            accel_mag <= max_wander_accel + 0.01,
+            "Wander acceleration ({:.2} m/s²) should not exceed limit ({:.2} m/s²). \
+             If this is ~39 m/s², the F=ma bug is still present!",
+            accel_mag,
+            max_wander_accel
         );
     }
 

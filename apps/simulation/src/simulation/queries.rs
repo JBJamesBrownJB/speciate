@@ -3,7 +3,7 @@ use crate::simulation::core::components::{Acceleration, BodySize, Position, Velo
 use crate::simulation::creatures::components::{
     CanAvoidObstacles, CanSeek, CanWander, CreatureState, HomePosition, Target, WanderState,
 };
-use crate::simulation::perception::{AvoidanceBehavior, Perception};
+use crate::simulation::perception::{AvoidanceBehavior, NeighborCache, Perception};
 
 // Wander behavior query. Used by: territory_wandering_system
 // MUTATES: Acceleration (force), WanderState (angle)
@@ -43,7 +43,7 @@ pub type SeekQuery<'w, 's> = Query<
 
 // Avoidance behavior query. Used by: avoidance_system
 // MUTATES: Acceleration (force)
-// READS: Entity, Position, Velocity, BodySize, Perception, AvoidanceBehavior, CreatureState
+// READS: Entity, Position, Velocity, BodySize, Perception, NeighborCache, AvoidanceBehavior, CreatureState
 pub type AvoidanceQuery<'w, 's> = Query<
     'w,
     's,
@@ -54,6 +54,7 @@ pub type AvoidanceQuery<'w, 's> = Query<
         &'static BodySize,
         &'static mut Acceleration,
         &'static Perception,
+        &'static NeighborCache,
         &'static AvoidanceBehavior,
         &'static CreatureState,
     ),

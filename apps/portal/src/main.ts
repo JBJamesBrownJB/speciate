@@ -20,6 +20,7 @@ import {
 } from "@/rendering/overlays";
 import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
 import { PauseControl } from "@/ui/PauseControl";
+import { TimeScaleControl } from "@/ui/TimeScaleControl";
 import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
@@ -215,6 +216,14 @@ async function main(): Promise<void> {
       },
     });
     pauseControl.enableKeyboardShortcut();
+
+    // Time scale control
+    new TimeScaleControl({
+      containerId: 'time-scale-controls',
+      onTimeScaleChange: (scale) => {
+        window.electron?.setTimeScale?.(scale);
+      },
+    });
 
     const ipcClient: IPCClient | null = createIPCClient();
 

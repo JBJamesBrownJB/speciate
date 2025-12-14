@@ -1,0 +1,53 @@
+# Competing Friends Spec
+#
+# Purpose: Two seekers starting from opposite positions, racing toward the same target
+# Tests seeking behavior with multiple creatures converging on a single point.
+
+[meta]
+name = "Competing Friends"
+description = """
+Two seekers race toward a shared central target from opposite sides.
+Tests seeking behavior with path convergence and potential collision dynamics.
+
+Layout:
+- Seeker #1 at (-30, 0) seeking origin (0, 0) - starts from west
+- Seeker #2 at (30, 0) seeking origin (0, 0) - starts from east
+
+Both creatures have the same target, creating a symmetric convergence pattern.
+Useful for testing collision avoidance, arrival behavior, and multi-agent seeking.
+"""
+timeout_seconds = 10
+
+# Assertions for headless testing
+[[assertions]]
+type = "ticks_completed"
+count = 500
+
+# TODO: Enable when tag tracking is implemented
+# [[assertions]]
+# type = "creature_reached_target"
+# tag = "west-seeker"
+
+# [[assertions]]
+# type = "creature_reached_target"
+# tag = "east-seeker"
+
+# Seeker #1 - Western starting position
+[[spawns]]
+type = "single"
+tag = "west-seeker"
+x = -30.0
+y = 0.0
+creature_type = "seeker"
+target_x = 0.0
+target_y = 0.0
+
+# Seeker #2 - Eastern starting position
+[[spawns]]
+type = "single"
+tag = "east-seeker"
+x = 30.0
+y = 0.0
+creature_type = "seeker"
+target_x = 0.0
+target_y = 0.0

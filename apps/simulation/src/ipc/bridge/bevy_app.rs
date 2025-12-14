@@ -18,13 +18,14 @@ use bevy_ecs::prelude::Entity;
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 
 /// NAPI-specific Bevy app wrapper
 pub struct NapiApp {
     simulation: Simulation,
     command_rx: Receiver<SimCommand>,
     paused: Option<Arc<AtomicBool>>,
+    time_scale: Option<Arc<AtomicU32>>,
 }
 
 impl NapiApp {
@@ -103,11 +104,16 @@ impl NapiApp {
             simulation,
             command_rx,
             paused: None,
+            time_scale: None,
         }
     }
 
     pub fn set_paused_flag(&mut self, paused: Arc<AtomicBool>) {
         self.paused = Some(paused);
+    }
+
+    pub fn set_time_scale_flag(&mut self, time_scale: Arc<AtomicU32>) {
+        self.time_scale = Some(time_scale);
     }
 
     #[cfg(feature = "test-helpers")]
@@ -176,6 +182,12 @@ impl NapiApp {
                     if let Some(paused_ref) = &self.paused {
                         paused_ref.store(is_paused, std::sync::atomic::Ordering::SeqCst);
                         eprintln!("[NAPI] Simulation {}", if is_paused { "PAUSED" } else { "RESUMED" });
+                    }
+                }
+                SimCommand::SetTimeScale(scale) => {
+                    if let Some(time_scale_ref) = &self.time_scale {
+                        time_scale_ref.store(scale.to_bits(), std::sync::atomic::Ordering::SeqCst);
+                        eprintln!("[NAPI] Time scale set to {}x", scale);
                     }
                 }
             }

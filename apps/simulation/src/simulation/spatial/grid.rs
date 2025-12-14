@@ -62,6 +62,9 @@ pub struct SpatialGrid {
     // Pre-allocated atomic counters for scatter phase (reused each tick)
     atomic_counters: Vec<AtomicU32>,
 
+    // Track non-empty cells from previous tick for efficient clearing
+    prev_non_empty: Vec<usize>,
+
     // Fixed grid bounds (derived from world bounds + cell size)
     min_cell_x: i32,
     min_cell_y: i32,
@@ -86,6 +89,7 @@ impl SpatialGrid {
             cells: Vec::new(),
             entity_scratch: Vec::new(),
             atomic_counters: Vec::new(),
+            prev_non_empty: Vec::new(),
             min_cell_x: 0,
             min_cell_y: 0,
             width: 0,
@@ -284,44 +288,73 @@ impl SpatialGrid {
     }
 
     /// Fast path: Fixed bounds, no allocations per tick.
-    /// Uses two-pass algorithm: count then scatter.
+    /// Uses two-pass algorithm: parallel count then parallel scatter.
+    /// Optimized: Tracks populated cells during counting (avoids 1M atomic scan).
     fn rebuild_parallel_fixed_bounds(&mut self, n: usize) {
         let inv_cell_size = self.inv_cell_size;
         let min_cell_x = self.min_cell_x;
         let min_cell_y = self.min_cell_y;
         let width = self.width;
+        let height = self.height;
 
         // Resize proxies buffer (no realloc if capacity sufficient)
         self.proxies.resize(n, PerceptionProxy::default());
 
-        // Reset cell counts to zero (reuse existing allocation)
-        for cell in &mut self.cells {
-            *cell = (0, 0);
-        }
-
-        // Phase 1: Count entities per cell (sequential, simple)
-        for &(_, x, y, _) in &self.entity_scratch {
-            let cx = (x * inv_cell_size).floor() as i32;
-            let cy = (y * inv_cell_size).floor() as i32;
-            let lx = (cx - min_cell_x) as usize;
-            let ly = (cy - min_cell_y) as usize;
-            if lx < width && ly < self.height {
-                let idx = ly * width + lx;
-                self.cells[idx].1 += 1;
+        // Clear cells that were non-empty last tick (parallel, O(N) instead of O(cells))
+        let cells_ptr = SyncPtr(self.cells.as_mut_ptr());
+        let atomic_counters = &self.atomic_counters;
+        self.prev_non_empty.par_iter().for_each(|&idx| {
+            // SAFETY: Each index is unique (deduped), so no data races
+            unsafe {
+                cells_ptr.write_at(idx, (0, 0));
             }
-        }
+            atomic_counters[idx].store(0, Ordering::Relaxed);
+        });
 
-        // Phase 2: Prefix sum (compute offsets)
+        // Phase 1: PARALLEL count entities per cell using atomics
+        // Track newly populated cells during counting (avoids scanning all 1M atomics)
+        let atomic_counters = &self.atomic_counters;
+        let newly_populated: Vec<usize> = self.entity_scratch
+            .par_chunks(4096)
+            .flat_map(|chunk| {
+                // Thread-local buffer for newly populated cell indices
+                let mut local_new: Vec<usize> = Vec::with_capacity(chunk.len() / 4);
+                for &(_, x, y, _) in chunk {
+                    let cx = (x * inv_cell_size).floor() as i32;
+                    let cy = (y * inv_cell_size).floor() as i32;
+                    let lx = ((cx - min_cell_x) as usize).min(width - 1);
+                    let ly = ((cy - min_cell_y) as usize).min(height - 1);
+                    let idx = ly * width + lx;
+                    // fetch_add returns OLD value - if 0, this cell just became populated
+                    let old_count = atomic_counters[idx].fetch_add(1, Ordering::Relaxed);
+                    if old_count == 0 {
+                        local_new.push(idx);
+                    }
+                }
+                local_new
+            })
+            .collect();
+
+        // Merge newly populated indices (already collected, no 1M scan needed!)
+        let mut non_empty = std::mem::take(&mut self.prev_non_empty);
+        non_empty.clear();
+        non_empty.extend(newly_populated);
+
+        // Prefix sum ONLY on non-empty cells (200K instead of 1M iterations!)
         let mut offset = 0u32;
-        for cell in &mut self.cells {
-            cell.0 = offset;
-            offset += cell.1;
+        for &idx in &non_empty {
+            let count = self.atomic_counters[idx].load(Ordering::Relaxed);
+            self.cells[idx] = (offset, count);
+            offset += count;
         }
 
-        // Reset atomic counters (reuse existing allocation)
-        for counter in &self.atomic_counters {
-            counter.store(0, Ordering::Relaxed);
-        }
+        // Reset atomics for scatter phase (parallel, only non-empty cells)
+        non_empty.par_iter().for_each(|&idx| {
+            atomic_counters[idx].store(0, Ordering::Relaxed);
+        });
+
+        // Save non-empty list for next tick's clearing
+        self.prev_non_empty = non_empty;
 
         // Phase 3: Parallel atomic scatter
         let proxies_ptr = SyncPtr(self.proxies.as_mut_ptr());
@@ -553,7 +586,10 @@ impl SpatialGrid {
         }
 
         // Sort by sort_key: adjacent cells first (by distance), then non-adjacent (by distance)
-        out.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        // Skip sort if 9 or fewer cells (all adjacent) - order doesn't matter for small sets
+        if out.len() > 9 {
+            out.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        }
     }
 
     /// Get proxies for a cell by index. Use after collect_cells_sorted.
@@ -721,6 +757,17 @@ impl SpatialGrid {
 
     pub fn bounds(&self) -> (i32, i32) {
         (self.min_cell_x, self.min_cell_y)
+    }
+
+    /// Check if a cell has any entities (non-empty)
+    #[inline]
+    pub fn cell_has_entities(&self, cell_idx: usize) -> bool {
+        if cell_idx < self.cells.len() {
+            let (_, count) = self.cells[cell_idx];
+            count > 0
+        } else {
+            false
+        }
     }
 
     pub fn clear(&mut self) {

@@ -21,6 +21,8 @@ declare global {
       onPerceptionDebugUpdate: (callback: (buffer: Float32Array) => void) => () => void;
 
       setPaused: (paused: boolean) => void;
+
+      setTimeScale: (scale: number) => void;
     };
   }
 }

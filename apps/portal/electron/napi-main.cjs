@@ -458,6 +458,23 @@ ipcMain.on('set-paused', (event, paused) => {
 });
 
 /**
+ * IPC handler: Set time scale (portal)
+ */
+ipcMain.on('set-time-scale', (event, scale) => {
+  if (!simulationEngine) {
+    console.error('[Electron NAPI] Cannot set time scale: simulation not running');
+    return;
+  }
+
+  try {
+    simulationEngine.setTimeScale(scale);
+    console.log(`[Electron NAPI] Time scale set to ${scale}x`);
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to set time scale:', error);
+  }
+});
+
+/**
  * IPC handler: Save metrics snapshot (dev-ui)
  */
 ipcMain.handle('save-metrics-snapshot', async (event, snapshot) => {

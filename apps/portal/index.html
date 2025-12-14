@@ -411,6 +411,70 @@
       outline: 2px solid var(--text-accent);
       outline-offset: 3px;
     }
+
+    /* Time Scale Controls - Bottom Center (next to pause) */
+    #playback-controls {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #time-scale-controls {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      box-shadow: 0 4px 16px var(--glass-shadow);
+    }
+
+    .time-scale-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .time-scale-btn:hover {
+      color: var(--text-accent);
+      background: rgba(111, 184, 63, 0.1);
+    }
+
+    .time-scale-btn.active {
+      color: var(--text-accent);
+      background: rgba(111, 184, 63, 0.2);
+      border-color: rgba(111, 184, 63, 0.4);
+      text-shadow: 0 0 10px rgba(111, 184, 63, 0.4);
+    }
+
+    .time-scale-btn:focus-visible {
+      outline: 2px solid var(--text-accent);
+      outline-offset: 2px;
+    }
+
+    /* Override pause button position (now inside playback-controls) */
+    #playback-controls #pause-button {
+      position: static;
+      transform: none;
+    }
   </style>
 </head>
 <body>
@@ -522,8 +586,16 @@
     <div class="scale-label" id="scale-label">10m</div>
   </div>
 
-  <!-- Pause/Play Button (bottom center) -->
-  <button id="pause-button" aria-label="Pause simulation">&#x23F8;</button>
+  <!-- Playback Controls (bottom center) -->
+  <div id="playback-controls">
+    <div id="time-scale-controls">
+      <button class="time-scale-btn" data-scale="0.5" aria-label="Half speed" aria-pressed="false">½x</button>
+      <button class="time-scale-btn active" data-scale="1" aria-label="Normal speed" aria-pressed="true">1x</button>
+      <button class="time-scale-btn" data-scale="2" aria-label="Double speed" aria-pressed="false">2x</button>
+      <button class="time-scale-btn" data-scale="4" aria-label="Quadruple speed" aria-pressed="false">4x</button>
+    </div>
+    <button id="pause-button" aria-label="Pause simulation">&#x23F8;</button>
+  </div>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

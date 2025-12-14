@@ -7,4 +7,5 @@ pub enum SimCommand {
     LoadTrial { trial_name: String },
     SelectCreatureDebug(Option<u32>),
     SetPaused(bool),
+    SetTimeScale(f32),
 }

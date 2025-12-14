@@ -200,9 +200,10 @@ impl Simulation {
         let mut entity_map = bevy_ecs::entity::EntityHashMap::default();
         scene.write_to_world(&mut simulation.world, &mut entity_map)?;
 
-        // Perception is not serialized (fixed-array optimization). Reconstruct from BodySize.
+        // Perception and NeighborCache are not serialized (fixed-array optimization).
+        // Reconstruct from BodySize.
         use crate::simulation::core::components::BodySize;
-        use crate::simulation::perception::Perception;
+        use crate::simulation::perception::{NeighborCache, Perception};
         let entities_needing_perception: Vec<(Entity, f32)> = simulation
             .world
             .query_filtered::<(Entity, &BodySize), Without<Perception>>()
@@ -215,6 +216,21 @@ impl Simulation {
                 .world
                 .entity_mut(entity)
                 .insert(Perception::from_body_size(body_length));
+        }
+
+        // NeighborCache must also be reconstructed (contains Entity references + fixed arrays)
+        let entities_needing_neighbor_cache: Vec<Entity> = simulation
+            .world
+            .query_filtered::<Entity, Without<NeighborCache>>()
+            .iter(&simulation.world)
+            .filter(|e| simulation.world.get::<CritId>(*e).is_some())
+            .collect();
+
+        for entity in entities_needing_neighbor_cache {
+            simulation
+                .world
+                .entity_mut(entity)
+                .insert(NeighborCache::new());
         }
 
         Ok(simulation)
@@ -409,5 +425,26 @@ mod tests {
         let (perception, avoidance) = components[0];
         assert!(perception.range > 0.0, "Perception range should be restored");
         assert!(avoidance.personal_space() > 0.0, "Avoidance personal_space should be restored");
+    }
+
+    #[test]
+    fn test_save_state_reconstructs_neighbor_cache() {
+        let mut sim = SimulationBuilder::new().build();
+
+        let builder = CritBuilder::new().at(0.0, 0.0);
+        sim.spawn_crit(builder);
+
+        let save_state = sim.to_save_state().expect("Failed to create save state");
+
+        let mut restored_sim = Simulation::from_save_state(save_state).expect("Failed to restore from save state");
+
+        use bevy_ecs::query::QueryState;
+        use crate::simulation::perception::NeighborCache;
+
+        let mut query: QueryState<&NeighborCache> = restored_sim.world_mut().query();
+        let neighbor_caches: Vec<_> = query.iter(restored_sim.world()).collect();
+
+        assert_eq!(neighbor_caches.len(), 1, "Restored creature should have NeighborCache");
+        assert!(!neighbor_caches[0].has_neighbors(), "Fresh NeighborCache should have no neighbors");
     }
 }

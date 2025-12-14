@@ -2,33 +2,58 @@
 use bevy_ecs::world::World;
 use std::fs;
 
-use super::{CreatureType, SpawnPattern, TrialConfig};
+use super::{CreatureType, SpawnPattern, SpecConfig, TrialConfig};
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::components::state::BehaviorMode;
+use crate::simulation::creatures::components::EntityTag;
 use crate::simulation::creatures::systems::NextCreatureId;
 
 #[cfg(feature = "dev-tools")]
 pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig, String> {
-
-
     let cwd = std::env::current_dir()
         .map_err(|e| format!("Failed to get current directory: {}", e))?;
+
+    // Try specs/ first (new format: "category/name"), then fall back to trials/ (legacy)
+    let spec_path = cwd
+        .join("specs")
+        .join(format!("{}.toml", template_name));
 
     let trial_path = cwd
         .join("trials")
         .join(format!("{}.toml", template_name));
 
-    let path = trial_path.canonicalize()
-        .map_err(|e| format!("Trial file not found at {}: {}", trial_path.display(), e))?;
-
+    let path = spec_path
+        .canonicalize()
+        .or_else(|_| trial_path.canonicalize())
+        .map_err(|e| {
+            format!(
+                "Spec/trial file not found at {} or {}: {}",
+                spec_path.display(),
+                trial_path.display(),
+                e
+            )
+        })?;
 
     let toml_content = fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read trial file '{}': {}", path.display(), e))?;
 
+    // Try parsing as new SpecConfig format first (has [meta] section)
+    let config = if toml_content.contains("[meta]") {
+        let spec: SpecConfig = toml::from_str(&toml_content)
+            .map_err(|e| format!("Failed to parse spec TOML '{}': {}", path.display(), e))?;
 
-    let config: TrialConfig = toml::from_str(&toml_content)
-        .map_err(|e| format!("Failed to parse trial TOML '{}': {}", path.display(), e))?;
-
+        // Convert SpecConfig to TrialConfig for spawning
+        TrialConfig {
+            name: spec.meta.name,
+            description: spec.meta.description,
+            spawns: spec.spawns,
+            world: None, // Specs don't use world config
+        }
+    } else {
+        // Legacy TrialConfig format
+        toml::from_str(&toml_content)
+            .map_err(|e| format!("Failed to parse trial TOML '{}': {}", path.display(), e))?
+    };
 
     if let Some(world_config) = &config.world {
         if let Some(dt) = world_config.delta_time {
@@ -47,7 +72,6 @@ pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig,
         }
     }
 
-
     for pattern in &config.spawns {
         spawn_pattern(world, pattern);
     }
@@ -58,16 +82,18 @@ pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig,
 fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
     match pattern {
         SpawnPattern::Single {
+            tag,
             x,
             y,
             creature_type,
             target_x,
             target_y,
         } => {
-            spawn_creature(world, *x, *y, *creature_type, *target_x, *target_y);
+            spawn_creature(world, *x, *y, *creature_type, *target_x, *target_y, tag.clone());
         }
 
         SpawnPattern::Grid {
+            tag,
             start_x,
             start_y,
             spacing,
@@ -75,6 +101,8 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
             cols,
             creature_type,
             grid_offset_y,
+            target_x,
+            target_y,
         } => {
             for row in 0..*rows {
                 for col in 0..*cols {
@@ -85,12 +113,13 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
                         0.0
                     };
                     let y = start_y + (row as f32 * spacing) + offset;
-                    spawn_creature(world, x, y, *creature_type, None, None);
+                    spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone());
                 }
             }
         }
 
         SpawnPattern::Circle {
+            tag,
             center_x,
             center_y,
             radius,
@@ -103,7 +132,7 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
                 let angle = (i as f32 / *count as f32) * 2.0 * std::f32::consts::PI;
                 let x = center_x + radius * angle.cos();
                 let y = center_y + radius * angle.sin();
-                spawn_creature(world, x, y, *creature_type, *target_x, *target_y);
+                spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone());
             }
         }
     }
@@ -116,60 +145,39 @@ fn spawn_creature(
     creature_type: CreatureType,
     target_x: Option<f32>,
     target_y: Option<f32>,
+    tag: Option<String>,
 ) {
-
     let mut next_id = world.resource_mut::<NextCreatureId>();
     let creature_id = next_id.generate();
 
-    match creature_type {
-        CreatureType::Catatonic => {
-
-            let builder = CritBuilder::new()
-                .at(x, y)
-                .in_behavior(BehaviorMode::Catatonic);
-            let bundle = builder.build(creature_id);
-
-
-            world.spawn(bundle);
-        }
+    let mut builder = match creature_type {
+        CreatureType::Catatonic => CritBuilder::new()
+            .at(x, y)
+            .in_behavior(BehaviorMode::Catatonic),
 
         CreatureType::Seeker => {
-
             let target_x = target_x.unwrap_or(0.0);
             let target_y = target_y.unwrap_or(0.0);
-
-
-            let builder = CritBuilder::new()
-                .at(x, y)
-                .as_seeker(target_x, target_y);
-            let bundle = builder.build(creature_id);
-
-            world.spawn(bundle);
+            CritBuilder::new().at(x, y).as_seeker(target_x, target_y)
         }
 
-        CreatureType::Wanderer => {
+        CreatureType::Wanderer => CritBuilder::new()
+            .at(x, y)
+            .with_wandering()
+            .in_behavior(BehaviorMode::Wandering),
+    };
 
+    // Apply tag if present
+    if let Some(tag_str) = &tag {
+        builder = builder.with_tag(tag_str.clone());
+    }
 
+    let bundle = builder.build(creature_id);
+    let entity = world.spawn(bundle).id();
 
-            let builder = CritBuilder::new()
-                .at(x, y)
-                .with_wandering()
-                .in_behavior(BehaviorMode::Wandering);
-            let bundle = builder.build(creature_id);
-
-            world.spawn(bundle);
-        }
-
-        CreatureType::Cycling => {
-            let builder = CritBuilder::new()
-                .at(x, y)
-                .with_wandering()
-                .with_cycling_brain()
-                .in_behavior(BehaviorMode::Catatonic);
-            let bundle = builder.build(creature_id);
-
-            world.spawn(bundle);
-        }
+    // Insert EntityTag component separately (not part of CritBundle)
+    if let Some(tag_str) = tag {
+        world.entity_mut(entity).insert(EntityTag(tag_str));
     }
 }
 
@@ -190,6 +198,7 @@ mod tests {
             creature_type: CreatureType::Catatonic,
             target_x: None,
             target_y: None,
+            tag: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -217,6 +226,7 @@ mod tests {
             creature_type: CreatureType::Seeker,
             target_x: None,
             target_y: None,
+            tag: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -247,6 +257,7 @@ mod tests {
             creature_type: CreatureType::Seeker,
             target_x: Some(-10.0),
             target_y: Some(5.0),
+            tag: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -279,6 +290,9 @@ mod tests {
             cols: 4,
             creature_type: CreatureType::Wanderer,
             grid_offset_y: None,
+            tag: None,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -310,6 +324,7 @@ mod tests {
             creature_type: CreatureType::Wanderer,
             target_x: None,
             target_y: None,
+            tag: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -341,6 +356,9 @@ mod tests {
             cols: 3,
             creature_type: CreatureType::Wanderer,
             grid_offset_y: None,
+            tag: None,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -372,6 +390,7 @@ mod tests {
             creature_type: CreatureType::Wanderer,
             target_x: None,
             target_y: None,
+            tag: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -394,9 +413,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(NextCreatureId::default());
 
-        spawn_creature(&mut world, 0.0, 0.0, CreatureType::Catatonic, None, None);
-        spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker, None, None);
-        spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer, None, None);
+        spawn_creature(&mut world, 0.0, 0.0, CreatureType::Catatonic, None, None, None);
+        spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker, None, None, None);
+        spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer, None, None, None);
 
 
 
@@ -437,6 +456,9 @@ mod tests {
             cols: 2,
             creature_type: CreatureType::Wanderer,
             grid_offset_y: None,
+            tag: None,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -466,6 +488,7 @@ mod tests {
             creature_type: CreatureType::Wanderer,
             target_x: None,
             target_y: None,
+            tag: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -498,6 +521,7 @@ mod tests {
             creature_type: CreatureType::Seeker,
             target_x: Some(0.0),
             target_y: Some(0.0),
+            tag: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -527,6 +551,9 @@ mod tests {
             cols: 4,
             creature_type: CreatureType::Catatonic,
             grid_offset_y: Some(5.0),
+            tag: None,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -558,6 +585,9 @@ mod tests {
             cols: 3,
             creature_type: CreatureType::Wanderer,
             grid_offset_y: None,
+            tag: None,
+            target_x: None,
+            target_y: None,
         };
 
         spawn_pattern(&mut world, &pattern);
@@ -571,5 +601,36 @@ mod tests {
         assert!(positions.iter().any(|p| p.x == 0.0 && p.y == 10.0));
         assert!(positions.iter().any(|p| p.x == 10.0 && p.y == 10.0));
         assert!(positions.iter().any(|p| p.x == 20.0 && p.y == 10.0));
+    }
+
+    #[test]
+    fn test_grid_seekers_with_shared_target() {
+        let mut world = World::new();
+        world.insert_resource(NextCreatureId::default());
+
+        let pattern = SpawnPattern::Grid {
+            start_x: -50.0,
+            start_y: -50.0,
+            spacing: 25.0,
+            rows: 2,
+            cols: 2,
+            creature_type: CreatureType::Seeker,
+            grid_offset_y: None,
+            tag: Some("grid-seekers".to_string()),
+            target_x: Some(100.0),
+            target_y: Some(100.0),
+        };
+
+        spawn_pattern(&mut world, &pattern);
+
+        let mut query = world.query::<(&Target, &CreatureState)>();
+        let results: Vec<_> = query.iter(&world).collect();
+
+        assert_eq!(results.len(), 4);
+        for (target, state) in results {
+            assert_eq!(target.x, 100.0);
+            assert_eq!(target.y, 100.0);
+            assert!(matches!(state.behavior, BehaviorMode::Seeking));
+        }
     }
 }

@@ -1,0 +1,32 @@
+# Many Wanderers - Dense
+#
+# Purpose: 50k wanderers with 1m spacing
+# Tests wandering behavior with high population density
+
+[meta]
+name = "Many Wanderers Dense"
+description = """
+50,000 wanderers in a 250x200 grid with 1m spacing.
+Tests wandering behavior at high population density with frequent interactions.
+"""
+timeout_seconds = 8
+
+[[assertions]]
+type = "creature_count"
+min = 50000
+max = 50000
+
+[[assertions]]
+type = "max_avg_tick_latency"
+microseconds = 35000
+
+# Primary spawn pattern: 250x200 grid = 50,000 creatures
+[[spawns]]
+type = "grid"
+start_x = -125.0
+start_y = -100.0
+spacing = 1.0
+rows = 200
+cols = 250
+creature_type = "wanderer"
+grid_offset_y = 0.5

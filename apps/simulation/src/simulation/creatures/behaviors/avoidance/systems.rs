@@ -1,5 +1,5 @@
 use crate::simulation::creatures::constants::{EMERGENCY_BRAKE_DISTANCE, SEEKING_SPACE_REDUCTION};
-use crate::simulation::math::{clamp_force, magnitude_sq};
+use crate::simulation::math::magnitude_sq;
 use crate::simulation::queries::AvoidanceQuery;
 use rayon::prelude::*;
 
@@ -18,8 +18,8 @@ pub fn avoidance_system(
     // Collect entities for parallel processing
     let mut entities: Vec<_> = query.iter_mut().collect();
 
-    entities.par_iter_mut().for_each(|(entity, position, velocity, size, acceleration, perception, avoidance, state)| {
-        if !perception.has_neighbors() {
+    entities.par_iter_mut().for_each(|(entity, position, velocity, size, acceleration, _perception, neighbor_cache, avoidance, state)| {
+        if !neighbor_cache.has_neighbors() {
             return;
         }
 
@@ -35,12 +35,20 @@ pub fn avoidance_system(
         // Emergency brake: apply max force when very close (simple fixed threshold)
         let self_radius = size.radius();
         let max_force = size.max_force();
+        let mass = size.mass();
+
+        // CRITICAL: F=ma conversion - max_accel = max_force / mass
+        // Without this, a 65kg creature would experience 390 m/s² instead of 6 m/s²!
+        let max_accel = max_force / mass;
 
         let mut total_repulsion_x = 0.0;
         let mut total_repulsion_y = 0.0;
 
-        // Read neighbor positions directly from Perception (cached during perception phase)
-        for neighbor in perception.iter_neighbors() {
+        // Pre-compute self_radius contribution (constant across all neighbors)
+        let base_interaction = effective_space + self_radius;
+
+        // Read neighbor positions directly from NeighborCache (cached during perception phase)
+        for neighbor in neighbor_cache.iter_neighbors() {
             if neighbor.entity == *entity {
                 continue;
             }
@@ -49,41 +57,47 @@ pub fn avoidance_system(
             let away_y = position.y - neighbor.y;
             let center_distance_sq = magnitude_sq(away_x, away_y);
 
-            let max_combined_radius = self_radius + neighbor.radius;
-            let max_interaction_distance = effective_space + max_combined_radius;
+            // Early exit: degenerate case (squared space - avoid sqrt)
+            if center_distance_sq < 0.000001 {
+                continue;
+            }
+
+            let max_interaction_distance = base_interaction + neighbor.radius;
             let max_interaction_distance_sq = max_interaction_distance * max_interaction_distance;
 
+            // Early exit: outside interaction range (squared space)
             if center_distance_sq > max_interaction_distance_sq {
                 continue;
             }
 
+            // Compute distance and inverse for direction normalization
             let center_distance = center_distance_sq.sqrt();
-
-            if center_distance < 0.001 {
-                continue;
-            }
+            let inv_distance = 1.0 / center_distance;
 
             let edge_distance = center_distance - self_radius - neighbor.radius;
             let safe_distance = edge_distance.max(0.01);
 
-            if safe_distance < effective_space {
-                // Urgency scales with inverse square of distance
-                let ratio = effective_space / safe_distance;
-                let urgency = ratio * ratio;
+            // Note: Removed redundant `if safe_distance < effective_space` check
+            // because max_interaction_distance filter already guarantees this condition
 
-                // Emergency brake: max force when very close, otherwise scale by urgency
-                let force_magnitude = if safe_distance < EMERGENCY_BRAKE_DISTANCE {
-                    max_force
-                } else {
-                    (max_force * urgency).min(max_force)
-                };
+            // Urgency scales with inverse square of distance
+            let ratio = effective_space / safe_distance;
+            let urgency = ratio * ratio;
 
-                let force_x = (away_x / center_distance) * force_magnitude;
-                let force_y = (away_y / center_distance) * force_magnitude;
+            // Emergency brake: max ACCELERATION when very close, otherwise scale by urgency
+            // Note: We use max_accel (m/s²), NOT max_force (Newtons)!
+            let accel_magnitude = if safe_distance < EMERGENCY_BRAKE_DISTANCE {
+                max_accel
+            } else {
+                (max_accel * urgency).min(max_accel)
+            };
 
-                total_repulsion_x += force_x;
-                total_repulsion_y += force_y;
-            }
+            // Use pre-computed inv_distance for direction (avoids division)
+            let accel_x = away_x * inv_distance * accel_magnitude;
+            let accel_y = away_y * inv_distance * accel_magnitude;
+
+            total_repulsion_x += accel_x;
+            total_repulsion_y += accel_y;
         }
 
         // Avoidance = BRAKING + STEERING, never forward acceleration
@@ -112,9 +126,10 @@ pub fn avoidance_system(
             (total_repulsion_x, total_repulsion_y)
         };
 
-        let (clamped_x, clamped_y) = clamp_force(steer_x, steer_y, max_force);
-        acceleration.ax += clamped_x;
-        acceleration.ay += clamped_y;
+        // Add avoidance force to accumulated acceleration
+        // Final capping is done by cap_accumulated_steering_system after all behaviors
+        acceleration.ax += steer_x;
+        acceleration.ay += steer_y;
     });
 }
 
@@ -125,7 +140,7 @@ mod tests {
     use bevy_ecs::system::{IntoSystem, System};
     use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
     use crate::simulation::creatures::components::{BehaviorMode, CanAvoidObstacles, CreatureState};
-    use crate::simulation::perception::{AvoidanceBehavior, NeighborData, Perception};
+    use crate::simulation::perception::{AvoidanceBehavior, NeighborCache, NeighborData, Perception};
 
     fn run_system(world: &mut World) {
         #[cfg(feature = "dev-tools")]
@@ -147,6 +162,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState::default(),
@@ -171,6 +187,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState::default(),
@@ -182,8 +199,8 @@ mod tests {
             .spawn((Position { x: 1.0, y: 0.0 }, BodySize::default()))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit1) {
-            p.add_neighbor(NeighborData { entity: crit2, x: 1.0, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit1) {
+            c.add_neighbor(NeighborData { entity: crit2, x: 1.0, y: 0.0, radius: 0.5 });
         }
 
         run_system(&mut world);
@@ -204,6 +221,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState::default(),
@@ -215,8 +233,8 @@ mod tests {
             .spawn((Position { x: 5.0, y: 0.0 }, BodySize::default()))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit1) {
-            p.add_neighbor(NeighborData { entity: crit2, x: 5.0, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit1) {
+            c.add_neighbor(NeighborData { entity: crit2, x: 5.0, y: 0.0, radius: 0.5 });
         }
 
         run_system(&mut world);
@@ -227,11 +245,13 @@ mod tests {
     }
 
     #[test]
-    fn test_force_capped_at_max_force() {
+    fn test_acceleration_capped_at_max_accel() {
         let mut world = World::new();
 
         let size = BodySize::default();
         let max_force = size.max_force();
+        let mass = size.mass();
+        let max_accel = max_force / mass; // F=ma → a=F/m
 
         let crit1 = world
             .spawn((
@@ -239,6 +259,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 size,
                 CreatureState::default(),
@@ -250,22 +271,25 @@ mod tests {
             .spawn((Position { x: 0.5, y: 0.0 }, BodySize::default()))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit1) {
-            p.add_neighbor(NeighborData { entity: crit2, x: 0.5, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit1) {
+            c.add_neighbor(NeighborData { entity: crit2, x: 0.5, y: 0.0, radius: 0.5 });
         }
 
         run_system(&mut world);
 
         let accel = world.get::<Acceleration>(crit1).unwrap();
-        let force_mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
+        let accel_mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
 
+        // Should be capped at max_accel (F/m), NOT max_force
         assert!(
-            force_mag <= max_force * 1.01, // 1% tolerance for float rounding
-            "Force should be capped at max_force ({:.0}N), got: {:.2}N",
+            accel_mag <= max_accel * 1.01, // 1% tolerance for float rounding
+            "Acceleration should be capped at max_accel ({:.2} m/s² = {:.0}N / {:.0}kg), got: {:.2} m/s²",
+            max_accel,
             max_force,
-            force_mag
+            mass,
+            accel_mag
         );
-        assert!(force_mag > 0.0);
+        assert!(accel_mag > 0.0);
     }
 
     #[test]
@@ -276,6 +300,8 @@ mod tests {
         let personal_space = avoidance.personal_space();
         let size = BodySize::default();
         let max_force = size.max_force();
+        let mass = size.mass();
+        let max_accel = max_force / mass; // F=ma conversion!
 
         // Test urgency calculation at various distances
         let test_cases = vec![
@@ -288,16 +314,16 @@ mod tests {
             let ratio = personal_space / distance;
             let urgency = ratio * ratio;
 
-            // Force = min(max_force * urgency, max_force) - capped at max_force
-            let expected_force = (max_force * expected_urgency).min(max_force);
-            let calculated_force = (max_force * urgency).min(max_force);
+            // Acceleration = min(max_accel * urgency, max_accel) - capped at max_accel
+            let expected_accel = (max_accel * expected_urgency).min(max_accel);
+            let calculated_accel = (max_accel * urgency).min(max_accel);
 
             assert!(
-                (calculated_force - expected_force).abs() < 0.01,
-                "Force at {:.1}m: expected {:.2}N, got {:.2}N (urgency={:.2})",
+                (calculated_accel - expected_accel).abs() < 0.01,
+                "Accel at {:.1}m: expected {:.2} m/s², got {:.2} m/s² (urgency={:.2})",
                 distance,
-                expected_force,
-                calculated_force,
+                expected_accel,
+                calculated_accel,
                 urgency
             );
         }
@@ -313,6 +339,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState::default(),
@@ -327,9 +354,9 @@ mod tests {
             .spawn((Position { x: 0.0, y: 1.0 }, BodySize::default()))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit1) {
-            p.add_neighbor(NeighborData { entity: crit2, x: 1.0, y: 0.0, radius: 0.5 });
-            p.add_neighbor(NeighborData { entity: crit3, x: 0.0, y: 1.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit1) {
+            c.add_neighbor(NeighborData { entity: crit2, x: 1.0, y: 0.0, radius: 0.5 });
+            c.add_neighbor(NeighborData { entity: crit3, x: 0.0, y: 1.0, radius: 0.5 });
         }
 
         run_system(&mut world);
@@ -375,6 +402,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState { energy: 100.0, ..Default::default() },
@@ -388,6 +416,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState { energy: 10.0, ..Default::default() },
@@ -399,11 +428,11 @@ mod tests {
             .spawn((Position { x: 1.0, y: 0.0 }, BodySize::default()))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(high_energy_crit) {
-            p.add_neighbor(NeighborData { entity: obstacle, x: 1.0, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(high_energy_crit) {
+            c.add_neighbor(NeighborData { entity: obstacle, x: 1.0, y: 0.0, radius: 0.5 });
         }
-        if let Some(mut p) = world.get_mut::<Perception>(low_energy_crit) {
-            p.add_neighbor(NeighborData { entity: obstacle, x: 1.0, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(low_energy_crit) {
+            c.add_neighbor(NeighborData { entity: obstacle, x: 1.0, y: 0.0, radius: 0.5 });
         }
 
         run_system(&mut world);
@@ -433,6 +462,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::new(1.0),  // radius = 0.5
                 CreatureState {
@@ -451,6 +481,7 @@ mod tests {
                 Velocity::default(),
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::new(1.0),
                 CreatureState {
@@ -473,12 +504,12 @@ mod tests {
             .spawn((Position { x: 12.5, y: 0.0 }, BodySize::new(1.0))) // edge_dist = 2.5 - 1.0 = 1.5m < 2.5m
             .id();
 
-        // Add obstacles to respective perceptions
-        if let Some(mut p) = world.get_mut::<Perception>(seeker) {
-            p.add_neighbor(NeighborData { entity: seeker_obstacle, x: 3.0, y: 0.0, radius: 0.5 });
+        // Add obstacles to respective neighbor caches
+        if let Some(mut c) = world.get_mut::<NeighborCache>(seeker) {
+            c.add_neighbor(NeighborData { entity: seeker_obstacle, x: 3.0, y: 0.0, radius: 0.5 });
         }
-        if let Some(mut p) = world.get_mut::<Perception>(wanderer) {
-            p.add_neighbor(NeighborData { entity: wanderer_obstacle, x: 12.5, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(wanderer) {
+            c.add_neighbor(NeighborData { entity: wanderer_obstacle, x: 12.5, y: 0.0, radius: 0.5 });
         }
 
         run_system(&mut world);
@@ -516,6 +547,7 @@ mod tests {
                 Velocity { vx: 10.0, vy: 0.0 },  // Moving right
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState::default(),
@@ -528,8 +560,8 @@ mod tests {
             .spawn((Position { x: -1.5, y: 0.0 }, BodySize::default()))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit) {
-            p.add_neighbor(NeighborData { entity: obstacle, x: -1.5, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit) {
+            c.add_neighbor(NeighborData { entity: obstacle, x: -1.5, y: 0.0, radius: 0.5 });
         }
 
         run_system(&mut world);
@@ -559,6 +591,7 @@ mod tests {
                 Velocity { vx: 10.0, vy: 0.0 },  // Moving right
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState::default(),
@@ -571,8 +604,8 @@ mod tests {
             .spawn((Position { x: 1.5, y: 0.0 }, BodySize::default()))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit) {
-            p.add_neighbor(NeighborData { entity: obstacle, x: 1.5, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit) {
+            c.add_neighbor(NeighborData { entity: obstacle, x: 1.5, y: 0.0, radius: 0.5 });
         }
 
         run_system(&mut world);
@@ -606,6 +639,7 @@ mod tests {
                 Velocity { vx: 10.0, vy: 0.0 },  // Moving right
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 BodySize::default(),
                 CreatureState::default(),
@@ -618,8 +652,8 @@ mod tests {
             .spawn((Position { x: 0.0, y: 1.5 }, BodySize::default()))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit) {
-            p.add_neighbor(NeighborData { entity: obstacle, x: 0.0, y: 1.5, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit) {
+            c.add_neighbor(NeighborData { entity: obstacle, x: 0.0, y: 1.5, radius: 0.5 });
         }
 
         run_system(&mut world);
@@ -641,13 +675,15 @@ mod tests {
     }
 
     #[test]
-    fn test_panic_zone_uses_max_force_when_stationary() {
-        // When stationary (no velocity), panic zone uses full max_force
+    fn test_panic_zone_uses_max_accel_when_stationary() {
+        // When stationary (no velocity), panic zone uses full max_accel (F/m)
         // (can't project perpendicular without velocity)
         let mut world = World::new();
 
         let size = BodySize::new(1.0);
         let max_force = size.max_force();
+        let mass = size.mass();
+        let max_accel = max_force / mass; // F=ma conversion!
 
         // STATIONARY creature at origin with personal_space = 2.5
         let crit = world
@@ -656,6 +692,7 @@ mod tests {
                 Velocity::default(),  // Stationary!
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 size,
                 CreatureState::default(),
@@ -668,21 +705,21 @@ mod tests {
             .spawn((Position { x: 1.1, y: 0.0 }, BodySize::new(1.0)))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit) {
-            p.add_neighbor(NeighborData { entity: neighbor, x: 1.1, y: 0.0, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit) {
+            c.add_neighbor(NeighborData { entity: neighbor, x: 1.1, y: 0.0, radius: 0.5 });
         }
 
         run_system(&mut world);
 
         let accel = world.get::<Acceleration>(crit).unwrap();
-        let force_mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
+        let accel_mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
 
-        // Stationary creature in panic zone gets full avoidance
+        // Stationary creature in panic zone gets full avoidance acceleration
         assert!(
-            force_mag >= max_force * 0.9,
-            "Stationary creature in panic zone should get full force. Expected ~{:.0}N, got {:.2}N",
-            max_force,
-            force_mag
+            accel_mag >= max_accel * 0.9,
+            "Stationary creature in panic zone should get full accel. Expected ~{:.2} m/s², got {:.2} m/s²",
+            max_accel,
+            accel_mag
         );
     }
 
@@ -700,6 +737,7 @@ mod tests {
                 Velocity { vx: 10.0, vy: 0.0 },  // Moving right
                 Acceleration::default(),
                 Perception::from_body_size(1.0),
+                NeighborCache::new(),
                 AvoidanceBehavior::new(1.25),
                 size,
                 CreatureState::default(),
@@ -712,8 +750,8 @@ mod tests {
             .spawn((Position { x: -0.5, y: 1.1 }, BodySize::new(1.0)))
             .id();
 
-        if let Some(mut p) = world.get_mut::<Perception>(crit) {
-            p.add_neighbor(NeighborData { entity: neighbor, x: -0.5, y: 1.1, radius: 0.5 });
+        if let Some(mut c) = world.get_mut::<NeighborCache>(crit) {
+            c.add_neighbor(NeighborData { entity: neighbor, x: -0.5, y: 1.1, radius: 0.5 });
         }
 
         run_system(&mut world);

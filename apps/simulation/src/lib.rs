@@ -64,7 +64,7 @@ pub use simulation::core::components::{
 // Creature components and capabilities
 pub use simulation::creatures::components::{
     BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
-    CreatureState, CritId, FleeState, HomePosition, Target, WanderState,
+    CreatureState, CritId, EntityTag, FleeState, HomePosition, Target, WanderState,
 };
 pub use simulation::core::components::Rotation;
 

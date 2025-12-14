@@ -122,7 +122,9 @@ pub struct SystemTimings {
     pub seek_us: AtomicU64,
     pub flee_us: AtomicU64,
     pub avoidance_us: AtomicU64,
+    pub steering_cap_us: AtomicU64,
     pub rotation_us: AtomicU64,
+    pub capture_debug_accel_us: AtomicU64,
 }
 
 impl SystemTimings {
@@ -138,7 +140,9 @@ impl SystemTimings {
             seek_us: AtomicU64::new(0),
             flee_us: AtomicU64::new(0),
             avoidance_us: AtomicU64::new(0),
+            steering_cap_us: AtomicU64::new(0),
             rotation_us: AtomicU64::new(0),
+            capture_debug_accel_us: AtomicU64::new(0),
         }
     }
 
@@ -154,7 +158,9 @@ impl SystemTimings {
             "seek" => &self.seek_us,
             "flee" => &self.flee_us,
             "avoidance" => &self.avoidance_us,
+            "steering_cap" => &self.steering_cap_us,
             "rotation" => &self.rotation_us,
+            "capture_debug_accel" => &self.capture_debug_accel_us,
             _ => panic!("Unknown system: {}", name),
         };
         TimingGuard::new(target)
@@ -172,7 +178,9 @@ impl SystemTimings {
             seek_us: self.seek_us.load(Ordering::Relaxed),
             flee_us: self.flee_us.load(Ordering::Relaxed),
             avoidance_us: self.avoidance_us.load(Ordering::Relaxed),
+            steering_cap_us: self.steering_cap_us.load(Ordering::Relaxed),
             rotation_us: self.rotation_us.load(Ordering::Relaxed),
+            capture_debug_accel_us: self.capture_debug_accel_us.load(Ordering::Relaxed),
             archetype_count: 0,
             entity_count: 0,
         }
@@ -219,7 +227,9 @@ pub struct SystemTimingsSnapshot {
     pub seek_us: u64,
     pub flee_us: u64,
     pub avoidance_us: u64,
+    pub steering_cap_us: u64,
     pub rotation_us: u64,
+    pub capture_debug_accel_us: u64,
 
     pub archetype_count: u64,
     pub entity_count: u64,

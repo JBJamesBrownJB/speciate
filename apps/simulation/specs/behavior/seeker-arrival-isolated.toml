@@ -1,0 +1,26 @@
+# Single seeker -> single target (isolates arrival from collision avoidance)
+# Tests smooth stopping without other variables
+
+[meta]
+name = "Seeker Arrival Isolated"
+description = "Single seeker approaches stationary target - tests arrival without collision avoidance"
+timeout_seconds = 15
+
+# Core assertion: seeker must reach target
+[[assertions]]
+type = "creature_reached_target"
+tag = "seeker"
+
+[[assertions]]
+type = "ticks_completed"
+count = 200
+
+# Long approach (builds speed, tests braking)
+[[spawns]]
+type = "single"
+tag = "seeker"
+x = -100.0
+y = 0.0
+creature_type = "seeker"
+target_x = 100.0
+target_y = 0.0

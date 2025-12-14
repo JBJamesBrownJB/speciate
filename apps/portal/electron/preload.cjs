@@ -196,4 +196,16 @@ contextBridge.exposeInMainWorld('electron', {
     }
     ipcRenderer.send('set-paused', paused);
   },
+
+  /**
+   * Set simulation time scale
+   *
+   * @param {number} scale - time scale (1.0 = normal, 2.0 = 2x speed, 0.5 = half speed)
+   */
+  setTimeScale: (scale) => {
+    if (typeof scale !== 'number') {
+      throw new Error('setTimeScale: scale must be a number');
+    }
+    ipcRenderer.send('set-time-scale', scale);
+  },
 });

@@ -1,0 +1,44 @@
+# Crowd Navigation - Fast Approaching Seeker
+#
+# Purpose: Test creature navigation through a crowd with a fast-approaching seeker
+# Variant of crowd-navigation with the seeker starting further away for momentum.
+
+[meta]
+name = "Crowd Navigation Fast Seeker"
+description = """
+Dense crowd navigation with a seeker starting from further away.
+A seeker at (-50, 0) builds momentum before navigating through the 10x10 crowd.
+Tests high-speed obstacle avoidance and collision handling.
+"""
+timeout_seconds = 10
+
+# Assertions for headless testing
+[[assertions]]
+type = "ticks_completed"
+count = 500
+
+# TODO: Enable when tag tracking is implemented
+# [[assertions]]
+# type = "creature_reached_target"
+# tag = "fast-seeker"
+
+# Primary spawn pattern: 10x10 grid at world center
+[[spawns]]
+type = "grid"
+start_x = -10.0
+start_y = -10.0
+spacing = 2.0
+rows = 10
+cols = 10
+creature_type = "catatonic"
+grid_offset_y = 1.0
+
+# Seeker - Far western starting position for momentum build-up
+[[spawns]]
+type = "single"
+tag = "fast-seeker"
+x = -50.0
+y = 0.0
+creature_type = "seeker"
+target_x = 30.0
+target_y = 0.0

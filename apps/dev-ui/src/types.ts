@@ -50,7 +50,9 @@ export interface SystemTimingsSnapshot {
   seekUs: number;
   fleeUs: number;
   avoidanceUs: number;
+  steeringCapUs: number;
   rotationUs: number;
+  captureDebugAccelUs: number;
   archetypeCount: number;
   entityCount: number;
 }

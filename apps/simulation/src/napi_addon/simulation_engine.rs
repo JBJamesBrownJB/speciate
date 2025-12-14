@@ -16,11 +16,10 @@ use napi_derive::napi;
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::thread::{self, JoinHandle};
 use std::path::Path;
-use std::time::{Duration, Instant};
-use std::collections::VecDeque;
+use std::time::Duration;
 use std::panic::AssertUnwindSafe;
 use crossbeam_channel;
 use parking_lot::{Mutex, RwLock};
@@ -31,6 +30,7 @@ use crate::ipc::bridge::{DoubleBuffer, NapiApp, TelemetrySnapshot};
 use crate::ipc::bridge::PerceptionDebugBuffer;
 use crate::config::SaveStateConfig;
 use crate::persistence::{SaveStateWorker, SaveType};
+use crate::simulation::TickController;
 
 /// Target simulation tick rate (Hz)
 ///
@@ -70,6 +70,7 @@ pub struct SimulationEngine {
     buffer: Arc<Mutex<DoubleBuffer>>,
     running: Arc<AtomicBool>,
     paused: Arc<AtomicBool>,
+    time_scale: Arc<AtomicU32>,
     command_sender: Option<crossbeam_channel::Sender<SimCommand>>,
     telemetry_cb: Option<ThreadsafeFunction<String>>,
     thread_handle: Option<JoinHandle<()>>,
@@ -114,6 +115,7 @@ impl SimulationEngine {
             buffer: Arc::new(Mutex::new(DoubleBuffer::new(0))),
             running: Arc::new(AtomicBool::new(false)),
             paused: Arc::new(AtomicBool::new(false)),
+            time_scale: Arc::new(AtomicU32::new(1.0_f32.to_bits())),
             command_sender: None,
             telemetry_cb: None,
             thread_handle: None,
@@ -196,6 +198,7 @@ impl SimulationEngine {
         let buffer_ref = Arc::clone(&self.buffer);
         let running_ref = Arc::clone(&self.running);
         let paused_ref = Arc::clone(&self.paused);
+        let time_scale_ref = Arc::clone(&self.time_scale);
         let telemetry_cb = self.telemetry_cb.clone();
         let telemetry_ref = Arc::clone(&self.telemetry);
         let buffer_count_ref = Arc::clone(&self.buffer_creature_count);
@@ -218,76 +221,79 @@ impl SimulationEngine {
                 // Initialize Bevy App (with optional save state path)
                 let mut app = NapiApp::new(rx, count, assets_path_owned.clone(), save_state_path);
                 app.set_paused_flag(Arc::clone(&paused_ref));
-                let delta_time = 1.0 / TARGET_SIMULATION_HZ;
+                app.set_time_scale_flag(Arc::clone(&time_scale_ref));
 
-                // Frame timing tracking for tick rate measurement
-                let mut frame_times: VecDeque<Instant> = VecDeque::with_capacity(30);
+                // Initialize tick controller (accumulator pattern for timing)
+                let mut tick_controller = TickController::new();
 
                 // Save state timing tracking
-                let mut last_save = Instant::now();
+                let mut last_save = std::time::Instant::now();
 
-                // Custom run loop (NOT App::run() which blocks forever)
+                // Custom run loop using accumulator pattern (industry standard)
+                // See: "Fix Your Timestep" by Glenn Fiedler
                 let mut tick = 0u64;
                 while running_ref.load(Ordering::SeqCst) {
-                    let frame_start = Instant::now();
                     // 1. Process commands from queue (non-blocking)
-                    // ALWAYS process commands even when paused (to receive unpause)
+                    // ALWAYS process commands even when paused (to receive unpause/time scale)
                     app.process_commands();
 
-                    // 2. Check if paused - skip simulation update when paused
-                    let is_paused = paused_ref.load(Ordering::SeqCst);
-                    if !is_paused {
-                        // 2a. Update Bevy ECS (one frame) - ONLY when not paused
-                        app.update(delta_time);
+                    // 2. Update time scale from atomic (set by SetTimeScale command)
+                    let scale = f32::from_bits(time_scale_ref.load(Ordering::SeqCst));
+                    tick_controller.set_time_scale(scale);
 
-                        // 3. Export positions to write buffer (SoA layout)
+                    // 3. Check if paused - reset accumulator and sleep
+                    let is_paused = paused_ref.load(Ordering::SeqCst);
+                    if is_paused {
+                        tick_controller.reset(); // Prevent catch-up burst when unpausing
+                        thread::sleep(Duration::from_millis(50)); // Don't spin while paused
+                        continue;
+                    }
+
+                    // 4. Run simulation tick(s) via accumulator pattern
+                    // May run 0, 1, or multiple ticks depending on accumulated time
+                    let frame_start = std::time::Instant::now();
+                    let metrics = tick_controller.tick(|dt| {
+                        app.update(dt);
+                    });
+
+                    // 5. Only export/swap if we ran at least one tick
+                    if metrics.ticks_this_frame > 0 {
+                        // Export positions to write buffer (SoA layout)
                         let exported_count = app.export_positions(&buffer_ref);
                         buffer_count_ref.store(exported_count as u64, Ordering::Relaxed);
 
-                        // 4. Read hardware counters (dev-tools only)
+                        // Read hardware counters (dev-tools only)
                         #[cfg(feature = "dev-tools")]
                         app.read_hardware_counters();
 
-                        // 4b. Export perception debug to buffer (dev-tools only)
+                        // Export perception debug to buffer (dev-tools only)
                         #[cfg(feature = "dev-tools")]
                         app.export_perception_debug(&perception_debug_buffer_ref);
 
-                        // 5. Record total tick timing (always enabled - negligible overhead ~1μs)
+                        // Record total tick timing
                         app.record_total_tick_timing(frame_start.elapsed().as_micros() as u64);
 
-                        // 5b. Swap perception debug buffer (dev-tools only)
+                        // Swap perception debug buffer (dev-tools only)
                         #[cfg(feature = "dev-tools")]
                         perception_debug_buffer_ref.lock().swap();
 
-                        // 6. Swap position buffers after frame completes (lock-free)
+                        // Swap position buffers after frame completes (lock-free)
                         buffer_ref.lock().swap();
 
-                        // 7. Update frame timing history (only when not paused)
-                        frame_times.push_back(frame_start);
-                        if frame_times.len() > 30 {
-                            frame_times.pop_front();
-                        }
+                        tick += metrics.ticks_this_frame as u64;
 
-                        // 8. Calculate actual tick rate from last 30 frames
-                        let tick_rate_hz = if frame_times.len() >= 2 {
-                            // Safe to unwrap: len() >= 2 guarantees both front() and back() exist
-                            let elapsed = frame_times.back()
-                                .expect("frame_times.back() exists (len >= 2)")
-                                .duration_since(*frame_times.front()
-                                    .expect("frame_times.front() exists (len >= 2)"));
-                            (frame_times.len() - 1) as f32 / elapsed.as_secs_f32()
-                        } else {
-                            30.0 // Default until enough samples
-                        };
+                        // Calculate tick rate based on time scale
+                        // At 1x: 20Hz, at 2x: 40Hz effective, etc.
+                        let tick_rate_hz = TARGET_SIMULATION_HZ * scale;
 
-                        // 9. Update telemetry (once per second)
-                        if tick % 30 == 0 {
+                        // Update telemetry periodically (roughly once per second)
+                        if tick % 20 == 0 {
                             let telemetry = app.get_telemetry(tick, tick_rate_hz);
 
                             // Write to shared state (for NAPI polling)
                             *telemetry_ref.write() = telemetry.clone();
 
-                            // Also send via callback if registered (send FULL telemetry)
+                            // Also send via callback if registered
                             if let Some(ref tsfn) = telemetry_cb {
                                 let telemetry_json = telemetry.to_json().unwrap_or_else(|e| {
                                     eprintln!("⚠️  Failed to serialize telemetry: {}", e);
@@ -298,7 +304,7 @@ impl SimulationEngine {
                             }
                         }
 
-                        // 10. Periodic save state (if enabled and interval elapsed)
+                        // Periodic save state (if enabled and interval elapsed)
                         if save_state_config.enabled {
                             let save_interval = Duration::from_secs(save_state_config.interval_secs);
                             if last_save.elapsed() >= save_interval {
@@ -307,7 +313,7 @@ impl SimulationEngine {
                                         if let Some(ref worker_ref) = save_state_worker_ref {
                                             worker_ref.lock().save_world_state(save_state, SaveType::Periodic);
                                         }
-                                        last_save = Instant::now();
+                                        last_save = std::time::Instant::now();
                                     }
                                     Err(e) => {
                                         error!("Failed to create periodic save state: {}", e);
@@ -315,18 +321,12 @@ impl SimulationEngine {
                                 }
                             }
                         }
-
-                        tick += 1;
-                    } // end if !is_paused
-
-                    // Sleep to maintain target tick rate (always, even when paused)
-                    let work_time = frame_start.elapsed();
-                    let target_frame_time = Duration::from_secs_f32(1.0 / TARGET_SIMULATION_HZ);
-
-                    if let Some(sleep_time) = target_frame_time.checked_sub(work_time) {
-                        thread::sleep(sleep_time);
                     }
-                    // If work took longer than target, skip sleep (running slow)
+
+                    // Log if we dropped time (for debugging performance issues)
+                    if metrics.time_dropped > 0.01 {
+                        eprintln!("⚠️  Dropped {:.1}ms of simulation time (overrun)", metrics.time_dropped * 1000.0);
+                    }
                 }
 
                 // Shutdown save (if enabled)
@@ -588,6 +588,38 @@ impl SimulationEngine {
         self.paused.load(Ordering::SeqCst)
     }
 
+    /// Set simulation time scale
+    ///
+    /// # Arguments
+    /// * `scale` - Time multiplier (1.0 = normal, 2.0 = 2x speed, 0.5 = half speed)
+    ///
+    /// # Errors
+    /// * Simulation not started
+    /// * Command queue full
+    #[napi]
+    pub fn set_time_scale(&self, scale: f64) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(
+                Status::GenericFailure,
+                "Simulation not started",
+            ))?
+            .try_send(SimCommand::SetTimeScale(scale as f32))
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("Command queue full: {}", e),
+                )
+            })?;
+        Ok(())
+    }
+
+    /// Get current time scale
+    #[napi]
+    pub fn get_time_scale(&self) -> f64 {
+        f32::from_bits(self.time_scale.load(Ordering::SeqCst)) as f64
+    }
+
     /// Load trial configuration
     ///
     /// # Arguments
@@ -784,8 +816,9 @@ impl SimulationEngine {
     pub fn stop(&mut self) -> Result<()> {
         self.running.store(false, Ordering::SeqCst);
 
+        // Wait for Bevy thread FIRST - it creates the shutdown save before exiting
         if let Some(handle) = self.thread_handle.take() {
-            eprintln!("🛑 Waiting for Bevy thread to exit...");
+            eprintln!("🛑 Waiting for Bevy thread to exit (includes shutdown save)...");
             handle
                 .join()
                 .map_err(|e| {
@@ -795,6 +828,13 @@ impl SimulationEngine {
                     )
                 })?;
             eprintln!("✅ Bevy thread stopped cleanly");
+        }
+
+        // THEN shutdown save state worker (after Bevy thread has queued its shutdown save)
+        if let Some(ref worker) = self.save_state_worker {
+            eprintln!("🛑 Shutting down SaveStateWorker...");
+            worker.lock().shutdown();
+            eprintln!("✅ SaveStateWorker stopped");
         }
 
         Ok(())
@@ -900,13 +940,20 @@ impl Drop for SimulationEngine {
     fn drop(&mut self) {
         self.running.store(false, Ordering::SeqCst);
 
+        // Wait for Bevy thread FIRST - it creates the shutdown save before exiting
         if let Some(handle) = self.thread_handle.take() {
-            eprintln!("🧹 Drop: Waiting for Bevy thread to exit...");
+            eprintln!("🧹 Drop: Waiting for Bevy thread to exit (includes shutdown save)...");
             if let Err(e) = handle.join() {
                 eprintln!("❌ Bevy thread panicked during shutdown: {:?}", e);
             } else {
                 eprintln!("✅ Bevy thread stopped cleanly (Drop)");
             }
+        }
+
+        // THEN shutdown save state worker (after Bevy thread has queued its shutdown save)
+        if let Some(ref worker) = self.save_state_worker {
+            eprintln!("🧹 Drop: Shutting down SaveStateWorker...");
+            worker.lock().shutdown();
         }
     }
 }

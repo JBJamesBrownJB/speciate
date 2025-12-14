@@ -118,7 +118,3 @@ name = "memory_leak_profile"
 path = "tests/memory_leak_profile.rs"
 required-features = ["dhat-heap"]
 
-[[test]]
-name = "spec_tests"
-path = "tests/spec_tests.rs"
-required-features = ["dev-tools"]

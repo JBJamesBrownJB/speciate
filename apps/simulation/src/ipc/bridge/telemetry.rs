@@ -203,7 +203,9 @@ mod tests {
             seek_us: 45,
             flee_us: 75,
             avoidance_us: 60,
+            steering_cap_us: 10,
             rotation_us: 40,
+            capture_debug_accel_us: 5,
             archetype_count: 10,
             entity_count: 1000,
         };

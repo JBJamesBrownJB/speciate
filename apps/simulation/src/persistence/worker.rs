@@ -46,7 +46,7 @@ impl SaveStateWorker {
         }
     }
 
-    pub fn shutdown(mut self) {
+    pub fn shutdown(&mut self) {
         if let Err(e) = self.sender.send(WorkerMessage::Shutdown) {
             warn!("Failed to send shutdown message to worker: {}", e);
         }

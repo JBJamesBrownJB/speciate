@@ -135,6 +135,90 @@ fn test_select_creature_debug_null_clears_selection() {
 
 #[test]
 #[cfg(feature = "dev-tools")]
+fn test_acceleration_is_captured_for_active_creature() {
+    // This test verifies that the capture_debug_acceleration_system
+    // correctly captures non-zero acceleration for wandering creatures.
+
+    // 1. Create NapiApp with creatures in Wandering mode
+    let (tx, rx) = crossbeam_channel::bounded(128);
+    let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
+
+    // Run initial tick
+    app.update(0.045);
+
+    // 2. Get first creature's CritId
+    let crit_id = {
+        let save_state = app.to_save_state().expect("Failed to get save state");
+        eprintln!("Entity map has {} entries", save_state.entity_id_map.len());
+        save_state.entity_id_map[0].1
+    };
+
+    // 3. Select the creature
+    tx.send(SimCommand::SelectCreatureDebug(Some(crit_id)))
+        .expect("Failed to send command");
+    app.process_commands();
+
+    // 4. Run multiple ticks and collect acceleration values
+    let perception_buffer = Arc::new(Mutex::new(PerceptionDebugBuffer::new()));
+    let mut found_nonzero_accel = false;
+    let mut debug_info = String::new();
+
+    for tick in 0..20 {
+        app.update(0.045);
+
+        // Check system timings to see if capture_debug_accel ran
+        let telemetry = app.get_telemetry(tick as u64, 22.2);
+        if tick < 3 {
+            eprintln!(
+                "Tick {} timings: wander={}us, capture_debug_accel={}us",
+                tick,
+                telemetry.system_timings.wander_us,
+                telemetry.system_timings.capture_debug_accel_us
+            );
+        }
+
+        app.export_perception_debug(&perception_buffer);
+        perception_buffer.lock().swap();
+
+        let guard = perception_buffer.lock();
+        let read_slice = guard.get_read_slice();
+
+        // Check if we have valid data
+        let has_data = read_slice[0] > 0.5;
+        let entity_id = read_slice[1] as u32;
+        let x = read_slice[2];
+        let y = read_slice[3];
+        let ax = read_slice[7];
+        let ay = read_slice[8];
+        let accel_magnitude = (ax * ax + ay * ay).sqrt();
+
+        if tick < 5 {
+            debug_info.push_str(&format!(
+                "Tick {}: has_data={}, entity_id={}, pos=({:.1},{:.1}), accel=({:.4},{:.4}), mag={:.4}\n",
+                tick, has_data, entity_id, x, y, ax, ay, accel_magnitude
+            ));
+        }
+
+        if has_data && accel_magnitude > 0.001 {
+            found_nonzero_accel = true;
+            eprintln!("Tick {} found non-zero acceleration: ax={:.4}, ay={:.4}, mag={:.4}", tick, ax, ay, accel_magnitude);
+            break;
+        }
+    }
+
+    if !found_nonzero_accel {
+        eprintln!("Debug info for first 5 ticks:\n{}", debug_info);
+    }
+
+    assert!(
+        found_nonzero_accel,
+        "Expected non-zero acceleration for wandering creature within 20 ticks. \
+         Check that capture_debug_acceleration_system runs after behavior systems."
+    );
+}
+
+#[test]
+#[cfg(feature = "dev-tools")]
 fn test_select_nonexistent_creature_returns_empty() {
     // 1. Create NapiApp with creatures
     let (tx, rx) = crossbeam_channel::bounded(128);

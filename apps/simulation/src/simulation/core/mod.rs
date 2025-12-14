@@ -1,4 +1,6 @@
 pub mod components;
+#[cfg(feature = "dev-tools")]
+pub mod dev_tools;
 pub mod simulation;
 pub mod timing;
 pub mod world_bounds;

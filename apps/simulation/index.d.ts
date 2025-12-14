@@ -159,6 +159,19 @@ export declare class SimulationEngine {
   /** Get current pause state */
   isPaused(): boolean
   /**
+   * Set simulation time scale
+   *
+   * # Arguments
+   * * `scale` - Time multiplier (1.0 = normal, 2.0 = 2x speed, 0.5 = half speed)
+   *
+   * # Errors
+   * * Simulation not started
+   * * Command queue full
+   */
+  setTimeScale(scale: number): void
+  /** Get current time scale */
+  getTimeScale(): number
+  /**
    * Load trial configuration
    *
    * # Arguments

@@ -160,10 +160,72 @@ impl BoundaryConfig {
     }
 }
 
-#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+#[derive(Component, Clone, Copy, Debug, Serialize, Deserialize, Reflect)]
 #[reflect(Component)]
 pub struct Rotation {
     pub radians: f32,
+    #[serde(skip, default = "default_cos")]
+    #[reflect(ignore)]
+    pub cos_radians: f32,
+    #[serde(skip, default)]
+    #[reflect(ignore)]
+    pub sin_radians: f32,
+}
+
+fn default_cos() -> f32 {
+    1.0
+}
+
+impl Default for Rotation {
+    fn default() -> Self {
+        Self {
+            radians: 0.0,
+            cos_radians: 1.0, // cos(0) = 1
+            sin_radians: 0.0, // sin(0) = 0
+        }
+    }
+}
+
+impl Rotation {
+    pub fn new(radians: f32) -> Self {
+        Self {
+            radians,
+            cos_radians: radians.cos(),
+            sin_radians: radians.sin(),
+        }
+    }
+
+    /// Set rotation from normalized velocity direction.
+    /// Avoids trig entirely - just uses the direction components directly.
+    #[inline(always)]
+    pub fn set_from_velocity(&mut self, vx: f32, vy: f32) {
+        let mag_sq = vx * vx + vy * vy;
+        if mag_sq > 0.0 {
+            let inv_mag = 1.0 / mag_sq.sqrt();
+            self.cos_radians = vx * inv_mag;
+            self.sin_radians = vy * inv_mag;
+            // Only compute radians when needed (rarely used after perception reads cached)
+            self.radians = vy.atan2(vx);
+        }
+    }
+
+    /// Fast path: set cos/sin directly without computing radians (for high-frequency updates)
+    #[inline(always)]
+    pub fn set_direction(&mut self, vx: f32, vy: f32) {
+        let mag_sq = vx * vx + vy * vy;
+        if mag_sq > 0.0 {
+            let inv_mag = 1.0 / mag_sq.sqrt();
+            self.cos_radians = vx * inv_mag;
+            self.sin_radians = vy * inv_mag;
+            // Defer radians computation - only set when explicitly requested
+        }
+    }
+
+    /// Update radians from cached cos/sin (call after set_direction if radians needed)
+    #[inline(always)]
+    pub fn sync_radians(&mut self) {
+        self.radians = self.sin_radians.atan2(self.cos_radians);
+    }
 }
 
 #[cfg(test)]

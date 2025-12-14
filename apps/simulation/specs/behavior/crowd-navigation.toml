@@ -1,0 +1,39 @@
+# Crowd Navigation Spec
+#
+# Purpose: Test creature navigation through a tightly packed crowd
+# This spec creates a dense grid of stationary creatures with minimal spacing
+# and challenges a seeker to navigate through to the other side.
+
+[meta]
+name = "Crowd Navigation"
+description = """
+Dense crowd navigation scenario with a 10x10 grid of catatonics at 2m spacing.
+A seeker at (-12, -0.5) must navigate through the crowd to reach (30, 0).
+Tests obstacle avoidance, pathfinding, and collision handling in tight spaces.
+"""
+timeout_seconds = 10
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "navigator"
+
+# Primary spawn pattern: 10x10 grid at world center
+[[spawns]]
+type = "grid"
+start_x = -10.0
+start_y = -10.0
+spacing = 2.0
+rows = 10
+cols = 10
+creature_type = "catatonic"
+grid_offset_y = 1.0
+
+# Seeker - Western starting position
+[[spawns]]
+type = "single"
+tag = "navigator"
+x = -12.0
+y = -0.5
+creature_type = "seeker"
+target_x = 30.0
+target_y = 0.0

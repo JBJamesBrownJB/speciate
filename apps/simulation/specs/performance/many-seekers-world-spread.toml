@@ -1,0 +1,35 @@
+# Many Seekers - World Spread (200K Performance Test)
+#
+# Purpose: Performance regression test with 200k seekers spread across the world
+# All seekers target origin (0,0) creating convergent stress test
+# World bounds: 10km × 10km (-5000 to 5000 in each axis)
+
+[meta]
+name = "200K Seekers Performance"
+description = """
+200,000 seekers in a 400x500 grid with 20m spacing.
+All seekers target origin (0,0) - converging traffic pattern.
+Performance regression test - tick latency must stay under 35ms.
+"""
+timeout_seconds = 8
+
+[[assertions]]
+type = "creature_count"
+min = 200000
+max = 200000
+
+[[assertions]]
+type = "max_avg_tick_latency"
+microseconds = 35000
+
+# Primary spawn pattern: 400x500 grid = 200,000 creatures
+# Seekers default to target (0,0) when target_x/target_y not specified
+[[spawns]]
+type = "grid"
+start_x = -5000.0
+start_y = -4000.0
+spacing = 20.0
+rows = 400
+cols = 500
+creature_type = "seeker"
+grid_offset_y = 1.0

@@ -22,7 +22,7 @@ fn test_snapshot_worker_creation_and_shutdown() {
     cleanup_test_save_states();
 
     let config = test_save_state_config(60, 5);
-    let worker = SaveStateWorker::start(config);
+    let mut worker = SaveStateWorker::start(config);
 
     // Worker should start successfully
     worker.shutdown();
@@ -36,7 +36,7 @@ fn test_snapshot_cleanup_keeps_last_n() {
 
     // Config: 1 second intervals, keep last 5
     let config = test_save_state_config(1, 5);
-    let worker = SaveStateWorker::start(config.clone());
+    let mut worker = SaveStateWorker::start(config.clone());
 
     let mut simulation = setup_test_simulation(10);
 
@@ -93,7 +93,7 @@ fn test_periodic_and_shutdown_both_create_timestamped_files() {
     let save_dir = temp_dir.path().to_path_buf();
 
     let config = test_save_state_config_with_dir(60, 5, save_dir.clone());
-    let worker = SaveStateWorker::start(config);
+    let mut worker = SaveStateWorker::start(config);
 
     let mut simulation = setup_test_simulation(25);
 
@@ -133,7 +133,7 @@ fn test_snapshot_preserves_creature_count() {
     cleanup_test_save_states();
 
     let config = test_save_state_config(60, 5);
-    let worker = SaveStateWorker::start(config);
+    let mut worker = SaveStateWorker::start(config);
 
     let simulation = setup_test_simulation(75);
     let original_count = simulation.creature_count();
@@ -172,7 +172,7 @@ fn test_graceful_shutdown_flag() {
     let running_clone = running.clone();
 
     let config = test_save_state_config(60, 5);
-    let worker = SaveStateWorker::start(config);
+    let mut worker = SaveStateWorker::start(config);
 
     let mut simulation = setup_test_simulation(10);
 
@@ -236,7 +236,7 @@ fn test_disabled_snapshots_creates_no_files() {
         save_dir: save_dir.clone(),
     };
 
-    let worker = SaveStateWorker::start(config.clone());
+    let mut worker = SaveStateWorker::start(config.clone());
     let mut simulation = setup_test_simulation(10);
 
     // Simulate periodic check (but snapshots are disabled)
@@ -274,7 +274,7 @@ fn test_most_recent_save_state_can_be_retrieved() {
     cleanup_test_save_states();
 
     let config = test_save_state_config(1, 5);
-    let worker = SaveStateWorker::start(config.clone());
+    let mut worker = SaveStateWorker::start(config.clone());
 
     let mut simulation = setup_test_simulation(20);
 

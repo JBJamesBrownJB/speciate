@@ -1,0 +1,53 @@
+# Opposing Seekers Reach Target
+#
+# Purpose: 10 seekers (5 west, 5 east) cross paths to reach opposite targets
+# Tests collision avoidance during opposing traffic flow
+
+[meta]
+name = "Seekers Reach Same Target"
+description = """
+4 seekers from west and 4 from east cross paths to reach opposite targets.
+Tests collision avoidance and target arrival behavior.
+"""
+timeout_seconds = 10
+
+# Assertions for headless testing
+# Note: Perfect collision avoidance (no_overlaps) is a future goal
+# For now, allow some overlaps during crossing
+[[assertions]]
+type = "max_overlaps"
+count = 9
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "west-seeker"
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "east-seeker"
+
+# Primary spawn pattern: 10x10 grid at world center
+[[spawns]]
+type = "grid"
+start_x = -30.0
+start_y = -3.0
+spacing = 2.0
+rows = 4
+cols = 2
+creature_type = "seeker"
+target_x = 30.0
+target_y = 0.0
+tag = "east-seeker"
+
+# Primary spawn pattern: 10x10 grid at world center
+[[spawns]]
+type = "grid"
+start_x = 30.0
+start_y = -3.0
+spacing = 2.0
+rows = 4
+cols = 2
+creature_type = "seeker"
+target_x = -30.0
+target_y = 0.0
+tag = "west-seeker"

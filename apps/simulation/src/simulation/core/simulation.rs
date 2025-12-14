@@ -4,6 +4,7 @@ use crate::config::MovementConfig;
 use crate::simulation::creatures::behaviors::{
     self, behavior_transition_system, flee_system, seek_system, territory_wandering_system,
 };
+use crate::simulation::steering_cap::cap_accumulated_steering_system;
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
 use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
@@ -75,18 +76,38 @@ impl SimulationBuilder {
 
         schedule.add_systems((
             rebuild_spatial_grid_system,
+            // Perception MUST run early (after grid rebuild) so neighbors are available for behaviors
             perception::update_perception_system.after(rebuild_spatial_grid_system),
-            behavior_transition_system,
-            territory_wandering_system,
-            flee_system,
-            seek_system,
-            behaviors::avoidance_system,
+            // Behavior transition runs after perception (may use perception data in future)
+            behavior_transition_system.after(perception::update_perception_system),
+            // All behavior systems run after transition, accumulating forces into Acceleration
+            territory_wandering_system.after(behavior_transition_system),
+            flee_system.after(behavior_transition_system),
+            seek_system.after(behavior_transition_system),
+            behaviors::avoidance_system.after(behavior_transition_system),
             update_body_size_cache,
-            integrate_motion_system,
-            rotation_system,
+            // Cap accumulated steering forces to physical maximum (100% = creature's muscular limit)
+            // MUST run AFTER all behavior systems, BEFORE physics integration
+            cap_accumulated_steering_system
+                .after(behaviors::avoidance_system)
+                .after(territory_wandering_system)
+                .after(flee_system)
+                .after(seek_system),
+            // integrate_motion MUST run AFTER steering cap
+            integrate_motion_system.after(cap_accumulated_steering_system),
+            rotation_system.after(integrate_motion_system),
             // Swap grid buffers at END of tick - next tick sees newly rebuilt grid
             swap_spatial_grid_buffers_system.after(rotation_system),
         ));
+
+        // Debug acceleration capture runs AFTER steering cap but BEFORE movement integration
+        // This ensures force visualization shows CAPPED acceleration values
+        #[cfg(feature = "dev-tools")]
+        schedule.add_systems(
+            perception::capture_debug_acceleration_system
+                .after(cap_accumulated_steering_system)
+                .before(integrate_motion_system),
+        );
 
         world.insert_resource(DeltaTime::default());
         world.insert_resource(BoundaryConfig::default());
@@ -97,22 +118,7 @@ impl SimulationBuilder {
         world.insert_resource(crate::simulation::movement::noise::NoiseTable::default());
 
         #[cfg(feature = "dev-tools")]
-        world.insert_resource(crate::instrumentation::SystemTimings::new());
-
-        #[cfg(feature = "dev-tools")]
-        world.insert_resource(crate::instrumentation::HardwareMetrics::new());
-
-        #[cfg(feature = "dev-tools")]
-        world.insert_resource(crate::instrumentation::HardwareSnapshotResource::default());
-
-        #[cfg(feature = "dev-tools")]
-        world.insert_resource(crate::instrumentation::ParallelizationMetrics::new());
-
-        #[cfg(feature = "dev-tools")]
-        world.insert_resource(perception::PerceptionDebugTarget::default());
-
-        #[cfg(feature = "dev-tools")]
-        world.insert_resource(perception::PerceptionDebugSnapshot::default());
+        super::dev_tools::register_dev_resources(&mut world);
 
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
@@ -221,9 +227,19 @@ impl Simulation {
         self.world.resource_mut::<PhysicsTick>().increment();
     }
 
+    /// Count creatures in the simulation.
+    ///
+    /// # Safety Note
+    /// Uses `UnsafeWorldCell` for read-only query access from `&self`.
+    /// This is safe because:
+    /// - We only read data (no mutations)
+    /// - We don't store the query or any references beyond this call
+    /// - `as_unsafe_world_cell_readonly()` is Bevy's API for exactly this pattern
     pub fn creature_count(&self) -> usize {
         use crate::simulation::creatures::components::CritId;
 
+        // SAFETY: Read-only query on immutable reference. No aliasing occurs because
+        // we consume the QueryState immediately and don't hold any references to world data.
         unsafe {
             let world_cell = self.world.as_unsafe_world_cell_readonly();
             let mut query = world_cell.world_mut().query::<&CritId>();

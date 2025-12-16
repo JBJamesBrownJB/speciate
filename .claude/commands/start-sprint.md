@@ -44,3 +44,4 @@ Once all checks pass:
 2.  **Placeholder Plan:** Create a new file, **SPRINT_DOCS/SPRINT_PLAN_$SPRINT_NAME.md**, and populate it with a header, the elicited Goal, Outcomes, and Constraints.
 3.  **Backlog Initialization:** Update **SPRINT_DOCS/SPRINT_BACKLOG.md** by adding a new section header for the sprint.
 4.  **Log:** Log the successful branch creation and folder initialization in **SPRINT_DOCS/SESSION_LOG.md**.
+5.  **Documentation Tracking:** If the sprint is based on a design doc from `docs/*/`, note in the sprint plan that the doc should be moved to `docs/*/done/` when the sprint completes.

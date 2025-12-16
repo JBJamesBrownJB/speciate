@@ -4,9 +4,7 @@ pub mod creatures;
 pub mod math;
 pub mod movement;
 pub mod perception;
-pub mod queries;
 pub mod spatial;
-pub mod steering_cap;
 pub mod tick_controller;
 
 // Re-export commonly used types from core

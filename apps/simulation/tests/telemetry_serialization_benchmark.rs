@@ -27,16 +27,10 @@ fn benchmark_telemetry_json_serialization() {
 
     let sys_timings = SystemTimingsSnapshot {
         total_tick_us: 12345,
-        movement_us: 2345,
+        movement_us: 2345, // Now includes rotation (fused)
         perception_us: 3456,
-        behavior_us: 1234,
         behavior_transition_us: 567,
-        wander_us: 234,
-        seek_us: 178,
-        flee_us: 123,
-        avoidance_us: 345,
-        steering_cap_us: 10,
-        rotation_us: 456,
+        steering_us: 880, // Fused steering (Sprint 20)
         spatial_grid_rebuild_us: 789,
         capture_debug_accel_us: 5,
 

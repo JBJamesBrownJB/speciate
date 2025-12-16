@@ -5,11 +5,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::simulation::creatures::behaviors::avoidance::{
-        calculate_avoidance_multi, AvoidanceContext, ObstacleData,
+    use crate::simulation::creatures::steering::{
+        calculate_arrival, calculate_avoidance_force, calculate_wander,
+        ArrivalParams, AvoidanceParams, NeighborObstacle, WanderParams,
     };
-    use crate::simulation::creatures::behaviors::seek::{calculate_arrival, ArrivalParams};
-    use crate::simulation::creatures::behaviors::wander::{calculate_wander, WanderParams};
     use crate::simulation::math::{
         accumulate_steering, integrate_motion, IntegrationParams, SteeringContext,
     };
@@ -67,21 +66,23 @@ mod tests {
         let wander_result = calculate_wander(&ctx, &wander_params, 0.1);
 
         // Avoidance contribution (obstacle to the side)
-        let avoidance_ctx = AvoidanceContext {
-            steering: ctx,
-            personal_space: 2.5,
+        // Position is (0, 0), obstacle at (1.0, 1.5) relative = absolute (1.0, 1.5)
+        let position = (0.0, 0.0);
+        let avoidance_params = AvoidanceParams {
+            position,
             self_radius: 0.5,
+            personal_space: 2.5,
             emergency_distance: 0.25,
         };
-        let obstacle = ObstacleData {
-            relative_position: (1.0, 1.5),
-            obstacle_radius: 0.5,
+        let obstacle = NeighborObstacle {
+            position: (position.0 + 1.0, position.1 + 1.5), // Absolute position
+            radius: 0.5,
         };
-        let avoidance_result = calculate_avoidance_multi(&avoidance_ctx, &[obstacle]);
+        let avoidance_accel = calculate_avoidance_force(&ctx, &avoidance_params, &[obstacle]);
 
         // Combine accelerations
         let combined = accumulate_steering(
-            &[wander_result.acceleration, avoidance_result.acceleration],
+            &[wander_result.acceleration, avoidance_accel],
             MAX_ACCEL,
         );
 
@@ -128,21 +129,22 @@ mod tests {
             }
 
             // Avoidance contribution
-            let avoidance_ctx = AvoidanceContext {
-                steering: default_steering_context(velocity),
-                personal_space: 2.5,
+            let ctx = default_steering_context(velocity);
+            let avoidance_params = AvoidanceParams {
+                position,
                 self_radius: 0.5,
+                personal_space: 2.5,
                 emergency_distance: 0.25,
             };
-            let obstacle = ObstacleData {
-                relative_position: (obstacle_pos.0 - position.0, obstacle_pos.1 - position.1),
-                obstacle_radius: 0.5,
+            let obstacle = NeighborObstacle {
+                position: obstacle_pos,
+                radius: 0.5,
             };
-            let avoidance_result = calculate_avoidance_multi(&avoidance_ctx, &[obstacle]);
+            let avoidance_accel = calculate_avoidance_force(&ctx, &avoidance_params, &[obstacle]);
 
             // Combine (seek is primary, avoidance modifies)
             let combined = accumulate_steering(
-                &[arrival_result.acceleration, avoidance_result.acceleration],
+                &[arrival_result.acceleration, avoidance_accel],
                 MAX_ACCEL,
             );
 
@@ -473,27 +475,27 @@ mod tests {
         for _ in 0..200 {
             let ctx = default_steering_context(velocity);
 
-            let avoidance_ctx = AvoidanceContext {
-                steering: ctx,
-                personal_space: 2.0, // Smaller personal space
+            let avoidance_params = AvoidanceParams {
+                position,
                 self_radius: 0.5,
+                personal_space: 2.0, // Smaller personal space
                 emergency_distance: 0.25,
             };
 
-            let obstacle_data: Vec<_> = obstacles
+            let neighbor_obstacles: Vec<_> = obstacles
                 .iter()
-                .map(|&(ox, oy)| ObstacleData {
-                    relative_position: (ox - position.0, oy - position.1),
-                    obstacle_radius: 0.5,
+                .map(|&(ox, oy)| NeighborObstacle {
+                    position: (ox, oy),
+                    radius: 0.5,
                 })
                 .collect();
 
-            let result = calculate_avoidance_multi(&avoidance_ctx, &obstacle_data);
+            let avoidance_accel = calculate_avoidance_force(&ctx, &avoidance_params, &neighbor_obstacles);
 
             // Add stronger forward acceleration (simulating seek behavior)
             let base_accel = (4.0, 0.0);
             let combined = accumulate_steering(
-                &[base_accel, result.acceleration],
+                &[base_accel, avoidance_accel],
                 MAX_ACCEL,
             );
 

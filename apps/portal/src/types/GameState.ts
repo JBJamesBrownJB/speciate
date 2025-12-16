@@ -27,16 +27,11 @@ export interface EcsMetrics {
 
 export interface SystemTimingsSnapshot {
   totalTickUs: number;
-  movementUs: number;
+  movementUs: number; // Now includes rotation (fused in Sprint 20)
   perceptionUs: number;
-  behaviorUs: number;
+  spatialGridRebuildUs: number;
   behaviorTransitionUs: number;
-  wanderUs: number;
-  seekUs: number;
-  fleeUs: number;
-  avoidanceUs: number;
-  steeringCapUs: number;
-  rotationUs: number;
+  steeringUs: number; // Fused steering system (Sprint 20)
   captureDebugAccelUs: number;
   ipcQueryUs: number;
   ipcSerializeUs: number;

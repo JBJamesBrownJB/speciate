@@ -11,7 +11,7 @@ fn test_system_timings_resource_creation() {
     let timings = SystemTimings::new();
     assert_eq!(timings.movement_us.load(Ordering::Relaxed), 0);
     assert_eq!(timings.perception_us.load(Ordering::Relaxed), 0);
-    assert_eq!(timings.behavior_us.load(Ordering::Relaxed), 0);
+    assert_eq!(timings.behavior_transition_us.load(Ordering::Relaxed), 0);
 }
 
 #[test]
@@ -123,13 +123,13 @@ fn test_time_system_macro_with_code_block() {
     let mut result = 0;
 
     {
-        time_system!(timings, "behavior");
+        time_system!(timings, "behavior_transition");
         for i in 0..100 {
             result += i;
         }
     }
 
-    let elapsed = timings.behavior_us.load(Ordering::Relaxed);
+    let elapsed = timings.behavior_transition_us.load(Ordering::Relaxed);
     assert!(elapsed > 0, "Macro should record non-zero timing");
     assert_eq!(result, 4950, "Code should execute normally");
 }
@@ -147,17 +147,11 @@ fn test_gamestate_includes_timing_fields() {
         entity_count: 0,
         system_timings_us: SystemTimingsSnapshot {
             total_tick_us: 600,
-            movement_us: 150,
+            movement_us: 150, // Now includes rotation (fused)
             perception_us: 250,
             spatial_grid_rebuild_us: 50,
-            behavior_us: 100,
             behavior_transition_us: 50,
-            wander_us: 30,
-            seek_us: 25,
-            flee_us: 10,
-            avoidance_us: 20,
-            steering_cap_us: 3,
-            rotation_us: 5,
+            steering_us: 85, // Fused steering (Sprint 20)
             capture_debug_accel_us: 2,
             archetype_count: 5,
             entity_count: 100,
@@ -173,5 +167,5 @@ fn test_gamestate_includes_timing_fields() {
     assert_eq!(deserialized.entity_count, 0);
     assert_eq!(deserialized.system_timings_us.movement_us, 150);
     assert_eq!(deserialized.system_timings_us.perception_us, 250);
-    assert_eq!(deserialized.system_timings_us.behavior_us, 100);
+    assert_eq!(deserialized.system_timings_us.behavior_transition_us, 50);
 }

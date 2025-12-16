@@ -18,7 +18,8 @@ max = 160000
 
 [[assertions]]
 type = "max_avg_tick_latency"
-microseconds = 45000
+# microseconds = 45000 - Pre optimisation fusing systems
+microseconds = 30000
 
 # Primary spawn pattern: 50x50 grid
 [[spawns]]

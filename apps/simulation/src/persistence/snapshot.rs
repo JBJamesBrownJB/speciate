@@ -288,8 +288,7 @@ mod tests {
         let id1 = sim.spawn_crit(builder);
 
         let builder2 = CritBuilder::new()
-            .at(-30.0, -40.0)
-            .with_wandering();
+            .at(-30.0, -40.0);
         let _id2 = sim.spawn_crit(builder2);
 
         let save_state = sim.to_save_state().expect("Failed to create save state");

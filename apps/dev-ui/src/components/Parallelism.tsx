@@ -17,10 +17,8 @@ interface SystemInfo {
 const getSystemTooltipContent = (systemName: string): { header: string; description: string } => {
   const tooltips: Record<string, { header: string; description: string }> = {
     'perception': { header: 'Perception', description: 'Detects nearby creatures' },
-    'behavior_transition': { header: 'Behavior Transition', description: 'Switches behaviors (flee/wander)' },
-    'wander': { header: 'Wander', description: 'Random movement when safe' },
-    'flee': { header: 'Flee', description: 'Escapes from threats' },
-    'avoidance': { header: 'Avoidance', description: 'Prevents collisions' },
+    'behavior_transition': { header: 'Behavior Transition', description: 'Switches behaviors' },
+    'steering': { header: 'Steering', description: 'Fused wander/seek/avoidance system' },
     'movement': { header: 'Movement', description: 'Applies velocity & physics' },
     'rotation': { header: 'Rotation', description: 'Updates facing direction' },
   };
@@ -31,11 +29,8 @@ const extractSystemsFromTimings = (timings: SystemTimingsSnapshot): SystemInfo[]
   const systems: SystemInfo[] = [
     { name: 'perception', timeUs: timings.perceptionUs, isActive: timings.perceptionUs > 0 },
     { name: 'behavior_transition', timeUs: timings.behaviorTransitionUs, isActive: timings.behaviorTransitionUs > 0 },
-    { name: 'wander', timeUs: timings.wanderUs, isActive: timings.wanderUs > 0 },
-    { name: 'flee', timeUs: timings.fleeUs, isActive: timings.fleeUs > 0 },
-    { name: 'avoidance', timeUs: timings.avoidanceUs, isActive: timings.avoidanceUs > 0 },
-    { name: 'movement', timeUs: timings.movementUs, isActive: timings.movementUs > 0 },
-    { name: 'rotation', timeUs: timings.rotationUs, isActive: timings.rotationUs > 0 },
+    { name: 'steering', timeUs: timings.steeringUs, isActive: timings.steeringUs > 0 },
+    { name: 'movement', timeUs: timings.movementUs, isActive: timings.movementUs > 0 }, // Now includes rotation (fused)
   ];
 
   return systems.sort((a, b) => a.name.localeCompare(b.name));

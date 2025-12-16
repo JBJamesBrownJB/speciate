@@ -113,17 +113,11 @@ mod parallelization_stub {
 #[derive(Resource)]
 pub struct SystemTimings {
     pub total_tick_us: AtomicU64,
-    pub movement_us: AtomicU64,
+    pub movement_us: AtomicU64, // Now includes rotation (fused in Sprint 20)
     pub perception_us: AtomicU64,
     pub spatial_grid_rebuild_us: AtomicU64,
-    pub behavior_us: AtomicU64,
     pub behavior_transition_us: AtomicU64,
-    pub wander_us: AtomicU64,
-    pub seek_us: AtomicU64,
-    pub flee_us: AtomicU64,
-    pub avoidance_us: AtomicU64,
-    pub steering_cap_us: AtomicU64,
-    pub rotation_us: AtomicU64,
+    pub steering_us: AtomicU64, // Fused steering system (Sprint 20)
     pub capture_debug_accel_us: AtomicU64,
 }
 
@@ -134,14 +128,8 @@ impl SystemTimings {
             movement_us: AtomicU64::new(0),
             perception_us: AtomicU64::new(0),
             spatial_grid_rebuild_us: AtomicU64::new(0),
-            behavior_us: AtomicU64::new(0),
             behavior_transition_us: AtomicU64::new(0),
-            wander_us: AtomicU64::new(0),
-            seek_us: AtomicU64::new(0),
-            flee_us: AtomicU64::new(0),
-            avoidance_us: AtomicU64::new(0),
-            steering_cap_us: AtomicU64::new(0),
-            rotation_us: AtomicU64::new(0),
+            steering_us: AtomicU64::new(0),
             capture_debug_accel_us: AtomicU64::new(0),
         }
     }
@@ -152,14 +140,8 @@ impl SystemTimings {
             "movement" => &self.movement_us,
             "perception" => &self.perception_us,
             "spatial_grid_rebuild" => &self.spatial_grid_rebuild_us,
-            "behavior" => &self.behavior_us,
             "behavior_transition" => &self.behavior_transition_us,
-            "wander" => &self.wander_us,
-            "seek" => &self.seek_us,
-            "flee" => &self.flee_us,
-            "avoidance" => &self.avoidance_us,
-            "steering_cap" => &self.steering_cap_us,
-            "rotation" => &self.rotation_us,
+            "steering" => &self.steering_us,
             "capture_debug_accel" => &self.capture_debug_accel_us,
             _ => panic!("Unknown system: {}", name),
         };
@@ -172,14 +154,8 @@ impl SystemTimings {
             movement_us: self.movement_us.load(Ordering::Relaxed),
             perception_us: self.perception_us.load(Ordering::Relaxed),
             spatial_grid_rebuild_us: self.spatial_grid_rebuild_us.load(Ordering::Relaxed),
-            behavior_us: self.behavior_us.load(Ordering::Relaxed),
             behavior_transition_us: self.behavior_transition_us.load(Ordering::Relaxed),
-            wander_us: self.wander_us.load(Ordering::Relaxed),
-            seek_us: self.seek_us.load(Ordering::Relaxed),
-            flee_us: self.flee_us.load(Ordering::Relaxed),
-            avoidance_us: self.avoidance_us.load(Ordering::Relaxed),
-            steering_cap_us: self.steering_cap_us.load(Ordering::Relaxed),
-            rotation_us: self.rotation_us.load(Ordering::Relaxed),
+            steering_us: self.steering_us.load(Ordering::Relaxed),
             capture_debug_accel_us: self.capture_debug_accel_us.load(Ordering::Relaxed),
             archetype_count: 0,
             entity_count: 0,
@@ -218,17 +194,11 @@ impl Drop for TimingGuard<'_> {
 #[serde(rename_all = "camelCase")]
 pub struct SystemTimingsSnapshot {
     pub total_tick_us: u64,
-    pub movement_us: u64,
+    pub movement_us: u64, // Now includes rotation (fused in Sprint 20)
     pub perception_us: u64,
     pub spatial_grid_rebuild_us: u64,
-    pub behavior_us: u64,
     pub behavior_transition_us: u64,
-    pub wander_us: u64,
-    pub seek_us: u64,
-    pub flee_us: u64,
-    pub avoidance_us: u64,
-    pub steering_cap_us: u64,
-    pub rotation_us: u64,
+    pub steering_us: u64, // Fused steering system (Sprint 20)
     pub capture_debug_accel_us: u64,
 
     pub archetype_count: u64,

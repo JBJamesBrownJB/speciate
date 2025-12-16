@@ -183,28 +183,19 @@ mod tests {
         assert!(system_timings.get("totalTickUs").is_some());
         assert!(system_timings.get("movementUs").is_some());
         assert!(system_timings.get("perceptionUs").is_some());
-        assert!(system_timings.get("behaviorUs").is_some());
-        assert!(system_timings.get("wanderUs").is_some());
-        assert!(system_timings.get("seekUs").is_some());
-        assert!(system_timings.get("fleeUs").is_some());
-        assert!(system_timings.get("avoidanceUs").is_some());
+        assert!(system_timings.get("behaviorTransitionUs").is_some());
+        assert!(system_timings.get("steeringUs").is_some());
     }
 
     #[test]
     fn test_telemetry_with_values() {
         let system_timings = SystemTimingsSnapshot {
             total_tick_us: 5000,
-            movement_us: 1000,
+            movement_us: 1000, // Now includes rotation (fused)
             perception_us: 500,
             spatial_grid_rebuild_us: 100,
-            behavior_us: 200,
             behavior_transition_us: 100,
-            wander_us: 50,
-            seek_us: 45,
-            flee_us: 75,
-            avoidance_us: 60,
-            steering_cap_us: 10,
-            rotation_us: 40,
+            steering_us: 230, // Fused steering (Sprint 20)
             capture_debug_accel_us: 5,
             archetype_count: 10,
             entity_count: 1000,

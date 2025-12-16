@@ -13,7 +13,7 @@ export const WORLD_CONFIG = {
 } as const;
 
 export const CAMERA_CONFIG = {
-  MIN_ZOOM: 0.3, 
+  MIN_ZOOM: 0.1, 
   MAX_ZOOM: 100,
   ZOOM_SENSITIVITY: 0.0007, // Mouse wheel zoom sensitivity
 } as const;

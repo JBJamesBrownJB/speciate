@@ -32,16 +32,12 @@ export interface ParallelizationMetrics {
 
 export interface SystemTimingsSnapshot {
   totalTickUs: number;
-  movementUs: number;
+  movementUs: number; // Now includes rotation (fused in Sprint 20)
   perceptionUs: number;
   spatialGridRebuildUs: number;
-  behaviorUs: number;
   behaviorTransitionUs: number;
-  wanderUs: number;
-  seekUs: number;
-  fleeUs: number;
-  avoidanceUs: number;
-  rotationUs: number;
+  steeringUs: number; // Fused steering system (Sprint 20)
+  captureDebugAccelUs: number;
   archetypeCount: number;
   entityCount: number;
 }

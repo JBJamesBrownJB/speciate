@@ -92,12 +92,12 @@ function startSimulation() {
     console.log('[Electron NAPI] ✅ SimulationEngine created');
 
     // Create persistent buffers for zero-allocation polling (memory leak fix)
-    // 250K creatures * 4 floats (ID, X, Y, Rotation) = 1M floats = 4MB
-    creatureBuffer = new Float32Array(250000 * 4);
+    // 500K creatures * 4 floats (ID, X, Y, Rotation) = 2M floats = 8MB
+    creatureBuffer = new Float32Array(500000 * 4);
     // Perception debug buffer: 607 floats (from perception_debug_buffer.rs BUFFER_SIZE)
     // BUFFER_SIZE = CHECKED_CELL_SECTION_OFFSET(406) + CHECKED_CELL_HEADER_SIZE(1) + MAX_CHECKED_CELLS(100)*2 = 607
     perceptionBuffer = new Float32Array(607);
-    console.log('[Electron NAPI] ✅ Persistent buffers created (creature: 4MB, perception: 2.4KB)');
+    console.log('[Electron NAPI] ✅ Persistent buffers created (creature: 8MB, perception: 2.4KB)');
 
     // Find most recent save state (by timestamp in filename)
     const assetsPath = path.join(__dirname, '../../simulation');
@@ -161,8 +161,10 @@ function startSimulation() {
           const bufferCreatureCount = simulationEngine.fillBuffer(creatureBuffer);
 
           // Slice to actual creature count (SoA layout: ID, X, Y, Rotation)
+          // Use slice() not subarray() - subarray creates view into full 8MB buffer
+          // which causes Electron IPC to serialize the entire backing ArrayBuffer
           const usedSize = bufferCreatureCount * 4;  // 4 f32s per creature
-          const buffer = creatureBuffer.subarray(0, usedSize);
+          const buffer = creatureBuffer.slice(0, usedSize);
 
           // Send buffer to portal (Float32Array - Electron IPC handles typed arrays efficiently)
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -182,10 +184,10 @@ function startSimulation() {
           }
         }
 
-        // Get telemetry (poll every 30 frames = ~500ms at 60Hz)
+        // Get telemetry (every ~0.5 seconds at 22Hz simulation)
         if (!DISABLE_TELEMETRY_CALLS) {
           const tick = simulationEngine.getTick();
-          if (tick % 30 === 0) {
+          if (tick % 11 === 0) {
             const telemetryJson = simulationEngine.getTelemetry();
             const telemetry = JSON.parse(telemetryJson);
 

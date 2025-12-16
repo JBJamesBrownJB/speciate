@@ -186,10 +186,10 @@ impl SimulationEngine {
         self.command_sender = Some(tx);
 
         // Allocate double buffer (SoA layout: ID, X, Y, Rotation)
-        // Pre-allocate for 200K creatures (6.4 MB, double-buffered = 12.8 MB total)
-        // Supports Sprint 11 goal (150K-200K) with reasonable headroom
-        const MAX_CREATURES: usize = 200_000;
-        let size = MAX_CREATURES * 4;  // 800K f32s (ID, X, Y, Rot)
+        // Pre-allocate for 500K creatures (16 MB, double-buffered = 32 MB total)
+        // Sprint 20 upgrade - performance allows larger populations
+        const MAX_CREATURES: usize = 500_000;
+        let size = MAX_CREATURES * 4;  // 2M f32s (ID, X, Y, Rot)
         *self.buffer.lock() = DoubleBuffer::new(size);
 
         self.running.store(true, Ordering::SeqCst);
@@ -286,8 +286,8 @@ impl SimulationEngine {
                         // At 1x: 20Hz, at 2x: 40Hz effective, etc.
                         let tick_rate_hz = TARGET_SIMULATION_HZ * scale;
 
-                        // Update telemetry periodically (roughly once per second)
-                        if tick % 20 == 0 {
+                        // Update telemetry periodically (every ~0.5 seconds at 22Hz)
+                        if tick % 11 == 0 {
                             let telemetry = app.get_telemetry(tick, tick_rate_hz);
 
                             // Write to shared state (for NAPI polling)

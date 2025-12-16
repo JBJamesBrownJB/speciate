@@ -170,9 +170,9 @@ fn test_acceleration_is_captured_for_active_creature() {
         let telemetry = app.get_telemetry(tick as u64, 22.2);
         if tick < 3 {
             eprintln!(
-                "Tick {} timings: wander={}us, capture_debug_accel={}us",
+                "Tick {} timings: steering={}us, capture_debug_accel={}us",
                 tick,
-                telemetry.system_timings.wander_us,
+                telemetry.system_timings.steering_us,
                 telemetry.system_timings.capture_debug_accel_us
             );
         }

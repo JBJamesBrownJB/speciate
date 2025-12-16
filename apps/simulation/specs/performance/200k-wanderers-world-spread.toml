@@ -20,7 +20,8 @@ max = 200000
 
 [[assertions]]
 type = "max_avg_tick_latency"
-microseconds = 35000
+# microseconds = 35000 - Pre optimisations around fusing systems
+microseconds = 20000
 
 # Primary spawn pattern: 400x500 grid = 200,000 creatures
 # 500 cols × 20m = 10,000m (full width)

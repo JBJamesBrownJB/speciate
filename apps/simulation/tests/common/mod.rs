@@ -67,33 +67,6 @@ pub fn count_save_states_in_dir(snapshots_dir: &PathBuf) -> usize {
         .count()
 }
 
-/// Count number of periodic save states (DEPRECATED - returns same as count_save_states())
-///
-/// In the new simplified system, there's no distinction between periodic and shutdown saves.
-/// This function is kept for backwards compatibility with existing tests.
-#[deprecated(note = "Use count_save_states() instead - no distinction between periodic/shutdown")]
-pub fn count_periodic_save_states() -> usize {
-    count_save_states()
-}
-
-/// Count number of shutdown save states (DEPRECATED - always returns 0)
-///
-/// In the new simplified system, shutdown saves create the same timestamped files as periodic saves.
-/// This function is kept for backwards compatibility with existing tests.
-#[deprecated(note = "No longer distinguishes shutdown saves - use count_save_states()")]
-pub fn count_shutdown_save_states() -> usize {
-    0  // No separate shutdown saves in new system
-}
-
-/// Check if latest.msgpack exists (DEPRECATED - always returns false)
-///
-/// In the new simplified system, we no longer maintain a latest.msgpack file.
-/// All saves are timestamped files. Use get_most_recent_save_state() instead.
-#[deprecated(note = "latest.msgpack no longer exists - use get_most_recent_save_state()")]
-pub fn latest_save_state_exists() -> bool {
-    false  // latest.msgpack no longer exists in new system
-}
-
 /// Get the most recent save state file path (sorted by timestamp in filename) from default directory
 pub fn get_most_recent_save_state() -> Option<PathBuf> {
     get_most_recent_save_state_in_dir(&PathBuf::from("save-states"))

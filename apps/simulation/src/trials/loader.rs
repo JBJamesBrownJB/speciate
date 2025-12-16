@@ -163,7 +163,6 @@ fn spawn_creature(
 
         CreatureType::Wanderer => CritBuilder::new()
             .at(x, y)
-            .with_wandering()
             .in_behavior(BehaviorMode::Wandering),
     };
 

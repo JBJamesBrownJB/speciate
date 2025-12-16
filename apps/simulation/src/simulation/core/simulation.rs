@@ -1,16 +1,12 @@
 use super::components::{ActualTickRate, BoundaryConfig, DeltaTime, PhysicsTick};
 use super::world_bounds::WorldBounds;
 use crate::config::MovementConfig;
-use crate::simulation::creatures::behaviors::{
-    self, behavior_transition_system, flee_system, seek_system, territory_wandering_system,
-};
-use crate::simulation::steering_cap::cap_accumulated_steering_system;
+use crate::simulation::creatures::behaviors::behavior_transition_system;
+use crate::simulation::creatures::steering::update_steering_system;
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
 use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
-use crate::simulation::movement::{
-    integrate_motion_system, rotation_system, update_body_size_cache,
-};
+use crate::simulation::movement::{integrate_motion_system, update_body_size_cache};
 use crate::simulation::perception;
 use crate::simulation::spatial::{
     rebuild_spatial_grid_system, swap_spatial_grid_buffers_system, DoubleBufferedSpatialGrid,
@@ -80,32 +76,24 @@ impl SimulationBuilder {
             perception::update_perception_system.after(rebuild_spatial_grid_system),
             // Behavior transition runs after perception (may use perception data in future)
             behavior_transition_system.after(perception::update_perception_system),
-            // All behavior systems run after transition, accumulating forces into Acceleration
-            territory_wandering_system.after(behavior_transition_system),
-            flee_system.after(behavior_transition_system),
-            seek_system.after(behavior_transition_system),
-            behaviors::avoidance_system.after(behavior_transition_system),
+            // FUSED STEERING: Single system replaces 4 separate systems (wander, seek, avoidance, flee)
+            // Sprint 20 optimization: 1 query + 1 iteration instead of 4
+            // Also includes steering cap (was separate system, now fused for performance)
+            update_steering_system.after(behavior_transition_system),
             update_body_size_cache,
-            // Cap accumulated steering forces to physical maximum (100% = creature's muscular limit)
-            // MUST run AFTER all behavior systems, BEFORE physics integration
-            cap_accumulated_steering_system
-                .after(behaviors::avoidance_system)
-                .after(territory_wandering_system)
-                .after(flee_system)
-                .after(seek_system),
-            // integrate_motion MUST run AFTER steering cap
-            integrate_motion_system.after(cap_accumulated_steering_system),
-            rotation_system.after(integrate_motion_system),
+            // integrate_motion MUST run AFTER steering (which now includes capping)
+            // Rotation is now fused into integrate_motion_system for parallelization
+            integrate_motion_system.after(update_steering_system),
             // Swap grid buffers at END of tick - next tick sees newly rebuilt grid
-            swap_spatial_grid_buffers_system.after(rotation_system),
+            swap_spatial_grid_buffers_system.after(integrate_motion_system),
         ));
 
-        // Debug acceleration capture runs AFTER steering cap but BEFORE movement integration
+        // Debug acceleration capture runs AFTER steering (which includes capping) but BEFORE movement integration
         // This ensures force visualization shows CAPPED acceleration values
         #[cfg(feature = "dev-tools")]
         schedule.add_systems(
             perception::capture_debug_acceleration_system
-                .after(cap_accumulated_steering_system)
+                .after(update_steering_system)
                 .before(integrate_motion_system),
         );
 

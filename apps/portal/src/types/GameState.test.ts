@@ -73,15 +73,11 @@ describe('GameState Types', () => {
     it('should include new ECS metrics fields', () => {
       const timings: SystemTimingsSnapshot = {
         totalTickUs: 16700,
-        movementUs: 3200,
+        movementUs: 3200, // Now includes rotation (fused)
         perceptionUs: 2500,
-        behaviorUs: 2100,
+        spatialGridRebuildUs: 100,
         behaviorTransitionUs: 800,
-        wanderUs: 1200,
-        seekUs: 600,
-        fleeUs: 500,
-        avoidanceUs: 1700,
-        rotationUs: 400,
+        steeringUs: 2300, // Fused steering (Sprint 20)
         captureDebugAccelUs: 5,
         ipcQueryUs: 200,
         ipcSerializeUs: 300,
@@ -109,15 +105,11 @@ describe('GameState Types', () => {
         entityCount: 10000,
         systemTimingsUs: {
           totalTickUs: 16700,
-          movementUs: 3200,
+          movementUs: 3200, // Now includes rotation (fused)
           perceptionUs: 2500,
-          behaviorUs: 2100,
+          spatialGridRebuildUs: 100,
           behaviorTransitionUs: 800,
-          wanderUs: 1200,
-          seekUs: 600,
-          fleeUs: 500,
-          avoidanceUs: 1700,
-          rotationUs: 400,
+          steeringUs: 2300, // Fused steering (Sprint 20)
           captureDebugAccelUs: 5,
           ipcQueryUs: 200,
           ipcSerializeUs: 300,
@@ -207,15 +199,11 @@ describe('GameState Types', () => {
     it('should match Rust serialization format (camelCase)', () => {
       const timings: SystemTimingsSnapshot = {
         totalTickUs: 1000,
-        movementUs: 100,
+        movementUs: 100, // Now includes rotation (fused)
         perceptionUs: 200,
-        behaviorUs: 150,
+        spatialGridRebuildUs: 10,
         behaviorTransitionUs: 50,
-        wanderUs: 80,
-        seekUs: 40,
-        fleeUs: 30,
-        avoidanceUs: 70,
-        rotationUs: 20,
+        steeringUs: 150, // Fused steering (Sprint 20)
         captureDebugAccelUs: 2,
         ipcQueryUs: 40,
         ipcSerializeUs: 60,

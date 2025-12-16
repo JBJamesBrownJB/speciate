@@ -4,6 +4,7 @@ use crate::simulation::creatures::constants::{
 use crate::simulation::core::components::PhysicsTick;
 use crate::simulation::creatures::components::{BehaviorMode, Brain, BrainMode, CreatureState};
 use bevy_ecs::prelude::*;
+use rayon::prelude::*;
 
 pub fn behavior_transition_system(
     physics_tick: Res<PhysicsTick>,
@@ -17,32 +18,27 @@ pub fn behavior_transition_system(
 
     let current_time = physics_tick.get() as f64 * TICK_INTERVAL_SECONDS;
 
-    for (mut creature_state, mut brain) in query.iter_mut() {
-        creature_state.age += AGE_INCREMENT_PER_TICK;
+    // Collect into Vec for Rayon parallelization (same pattern as steering system)
+    let mut entities: Vec<_> = query.iter_mut().collect();
 
-        match creature_state.behavior {
-            BehaviorMode::Catatonic => {}
-            BehaviorMode::Seeking => {}
-            BehaviorMode::Wandering => {
+    // Parallel processing - each creature's updates are independent
+    entities
+        .par_iter_mut()
+        .for_each(|(creature_state, brain)| {
+            creature_state.age += AGE_INCREMENT_PER_TICK;
+
+            if creature_state.behavior == BehaviorMode::Wandering {
                 creature_state.consume_energy(ENERGY_COST_WANDERING);
             }
-            BehaviorMode::Waiting => {}
-        }
 
-        let age = creature_state.age;
-        let energy = creature_state.energy;
-
-        match brain.mode {
-            BrainMode::Normal => {
+            if brain.mode == BrainMode::Normal {
+                let age = creature_state.age;
+                let energy = creature_state.energy;
                 if brain.can_decide(current_time, age, energy) {
                     brain.record_decision(current_time);
-                    // Future: perception-based decision logic
-                    // For now, no automatic transitions
                 }
             }
-            BrainMode::Dormant => {}
-        }
-    }
+        });
 }
 
 #[cfg(test)]

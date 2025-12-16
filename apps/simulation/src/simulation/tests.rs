@@ -61,6 +61,7 @@ mod simulation_tests {
 mod system_tests {
 
     use crate::simulation::core::components::{Acceleration, DeltaTime, Position, Rotation, Velocity};
+    use crate::simulation::math::fast_atan2;
     use bevy_ecs::prelude::*;
 
     #[test]
@@ -142,7 +143,7 @@ mod system_tests {
         }
 
         let rotation = world.get::<Rotation>(entity).unwrap();
-        let expected = 1.0f32.atan2(1.0);
+        let expected = fast_atan2(1.0, 1.0); // Use fast_atan2 to match set_from_velocity
         assert!((rotation.radians - expected).abs() < 0.001);
     }
 }

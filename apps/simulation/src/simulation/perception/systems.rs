@@ -1051,8 +1051,7 @@ mod tests {
         let crit_id = sim.spawn_crit(
             CritBuilder::new()
                 .at(50.0, 50.0)
-                .with_all_capabilities()
-                .with_wandering(),
+                .with_all_capabilities(),
         );
 
         // Find the entity with this CritId
@@ -1107,8 +1106,7 @@ mod tests {
             sim.spawn_crit(
                 CritBuilder::new()
                     .at(x, y)
-                    .with_all_capabilities()
-                    .with_wandering(),
+                    .with_all_capabilities(),
             );
         }
 

@@ -2,7 +2,7 @@
 use crate::config::MovementConfig;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
-use crate::simulation::core::components::{Acceleration, BodySize, DeltaTime, PhysicsTick, Position, Velocity};
+use crate::simulation::core::components::{Acceleration, BodySize, DeltaTime, PhysicsTick, Position, Rotation, Velocity};
 use crate::simulation::creatures::components::{BehaviorMode, CreatureState};
 use crate::simulation::creatures::constants::{DRAG_COEFFICIENT, MAX_SPEED, MAX_TURN_RATE_RAD, NOISE_SPEED_THRESHOLD_SQ, STOPPED_THRESHOLD};
 use crate::simulation::math::{fast_atan2, normalize_angle};
@@ -17,6 +17,7 @@ pub fn integrate_motion_system(
         &mut Velocity,
         &mut Acceleration,
         &CreatureState,
+        &mut Rotation,
     )>,
     delta_time: Res<DeltaTime>,
     physics_tick: Res<PhysicsTick>,
@@ -52,8 +53,8 @@ pub fn integrate_motion_system(
     let max_turn_rate_rad = MAX_TURN_RATE_RAD;
     let stopped_threshold_sq = STOPPED_THRESHOLD * STOPPED_THRESHOLD;
 
-    // Parallel physics integration + boundary enforcement (merged into single loop)
-    entities.par_iter_mut().for_each(|(entity, size, position, velocity, acceleration, creature_state)| {
+    // Parallel physics integration + boundary enforcement + rotation (merged into single loop)
+    entities.par_iter_mut().for_each(|(entity, size, position, velocity, acceleration, creature_state, rotation)| {
         if creature_state.behavior == BehaviorMode::Catatonic {
             acceleration.ax = 0.0;
             acceleration.ay = 0.0;
@@ -112,7 +113,6 @@ pub fn integrate_motion_system(
 
         if speed_sq > NOISE_SPEED_THRESHOLD_SQ {
             current_speed = speed_sq.sqrt();
-            speed_computed = true;
             let speed_ratio = current_speed / MAX_SPEED;
             let size_factor = size.inv_sqrt_length;
             let noise_magnitude = noise_base * speed_ratio * speed_ratio * size_factor;
@@ -143,7 +143,8 @@ pub fn integrate_motion_system(
             velocity.vy *= scale;
             current_speed = MAX_SPEED; // After clamping, speed is exactly MAX_SPEED
             speed_sq = max_speed_sq;
-            speed_computed = true;
+            // Note: speed_computed not set - if turn rate limiting needs speed,
+            // sqrt(max_speed_sq) = MAX_SPEED = current_speed, so result is same
         }
 
         // Turn rate limiting: clamp velocity direction change per frame
@@ -183,6 +184,9 @@ pub fn integrate_motion_system(
             position.y = max_y;
             velocity.vy = velocity.vy.min(0.0);
         }
+
+        // Rotation update (fused for parallelization - vx/vy already in cache)
+        rotation.set_from_velocity(velocity.vx, velocity.vy);
     });
 }
 
@@ -266,6 +270,7 @@ mod tests {
                 Position { x, y },
                 Velocity { vx: (i as f32 * 0.1).sin(), vy: (i as f32 * 0.1).cos() },
                 Acceleration { ax: 0.0, ay: 0.0 },
+                Rotation::default(),
                 state,
             ));
         }
@@ -304,6 +309,7 @@ mod tests {
                 Position { x, y },
                 Velocity { vx: (i as f32 * 0.1).sin(), vy: (i as f32 * 0.1).cos() },
                 Acceleration { ax: 0.0, ay: 0.0 },
+                Rotation::default(),
                 state,
             ));
         }
@@ -356,6 +362,7 @@ mod tests {
                 Position { x: 0.0, y: 0.0 },
                 Velocity { vx: 0.0, vy: 0.0 },
                 Acceleration { ax: 1.0, ay: 1.0 }, // Non-zero accel to trigger velocity change
+                Rotation::default(),
                 state,
             ));
         }
@@ -413,6 +420,7 @@ mod tests {
                 Position { x: *x, y: *y },
                 Velocity { vx: *vx, vy: *vy },
                 Acceleration { ax: 0.0, ay: 0.0 },
+                Rotation::default(),
                 state,
             ));
         }
@@ -472,6 +480,7 @@ mod tests {
             Position { x: 0.0, y: 0.0 },
             Velocity { vx: 10.0, vy: 0.0 },
             Acceleration { ax: 0.0, ay: 100.0 },
+            Rotation::default(),
             state,
         )).id();
 
@@ -515,6 +524,7 @@ mod tests {
             Position { x: 0.0, y: 0.0 },
             Velocity { vx: 10.0, vy: 0.0 },
             Acceleration { ax: 1.0, ay: 0.1 },
+            Rotation::default(),
             state,
         )).id();
 
@@ -547,6 +557,7 @@ mod tests {
             Position { x: 0.0, y: 0.0 },
             Velocity { vx: 0.0, vy: 0.0 },
             Acceleration { ax: 0.0, ay: 10.0 },
+            Rotation::default(),
             state,
         )).id();
 
@@ -579,6 +590,7 @@ mod tests {
             Position { x: 0.0, y: 0.0 },
             Velocity { vx: 10.0, vy: 0.0 },
             Acceleration { ax: -100.0, ay: 0.0 },
+            Rotation::default(),
             state,
         )).id();
 

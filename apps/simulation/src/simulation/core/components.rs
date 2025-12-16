@@ -3,6 +3,7 @@ use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 use crate::simulation::creatures::constants::{DEFAULT_MASS, MAX_ACCELERATION};
+use crate::simulation::math::fast_atan2;
 
 #[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
 #[reflect(Component)]
@@ -205,7 +206,7 @@ impl Rotation {
             self.cos_radians = vx * inv_mag;
             self.sin_radians = vy * inv_mag;
             // Only compute radians when needed (rarely used after perception reads cached)
-            self.radians = vy.atan2(vx);
+            self.radians = fast_atan2(vy, vx);
         }
     }
 

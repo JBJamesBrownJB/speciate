@@ -1,0 +1,1 @@
+When rapidly spawning trials which have a mix of seeking and catatonic crits we get a wierd ghosting affect where as you press spawn it looks like many ghost crits flash into view and quickly dissappear every time you spawn, like they 'strobe' in and out of existance.

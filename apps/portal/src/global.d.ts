@@ -23,6 +23,14 @@ declare global {
       setPaused: (paused: boolean) => void;
 
       setTimeScale: (scale: number) => void;
+
+      setViewportBounds: (bounds: {
+        minX: number;
+        minY: number;
+        maxX: number;
+        maxY: number;
+        margin: number;
+      }) => void;
     };
   }
 }

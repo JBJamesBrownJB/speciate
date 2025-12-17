@@ -153,6 +153,7 @@ fn test_gamestate_includes_timing_fields() {
             behavior_transition_us: 50,
             steering_us: 85, // Fused steering (Sprint 20)
             capture_debug_accel_us: 2,
+            export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
             archetype_count: 5,
             entity_count: 100,
         },

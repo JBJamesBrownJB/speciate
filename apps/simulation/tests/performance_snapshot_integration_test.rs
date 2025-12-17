@@ -35,6 +35,7 @@ fn test_performance_snapshot_schema_completeness() {
         behavior_transition_us: 50,
         steering_us: 115, // Fused steering (Sprint 20)
         capture_debug_accel_us: 2,
+        export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -209,6 +210,7 @@ fn test_system_timings_snapshot_all_fields_present() {
         behavior_transition_us: 50,
         steering_us: 115, // Fused steering (Sprint 20)
         capture_debug_accel_us: 2,
+        export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -274,6 +276,7 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
         behavior_transition_us: 50,
         steering_us: 115, // Fused steering (Sprint 20)
         capture_debug_accel_us: 2,
+        export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
         archetype_count: 5,
         entity_count: 27500,
     };

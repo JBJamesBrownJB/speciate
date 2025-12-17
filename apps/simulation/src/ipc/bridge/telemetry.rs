@@ -197,6 +197,7 @@ mod tests {
             behavior_transition_us: 100,
             steering_us: 230, // Fused steering (Sprint 20)
             capture_debug_accel_us: 5,
+            export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
             archetype_count: 10,
             entity_count: 1000,
         };

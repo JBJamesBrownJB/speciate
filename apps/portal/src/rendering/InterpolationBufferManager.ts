@@ -1,5 +1,12 @@
 import type { CreatureData } from "@/types/GameState";
 
+interface InterpolationState {
+  endX: number;
+  endY: number;
+  endRot: number;
+  size: number;
+}
+
 export class InterpolationBufferManager {
   private static readonly FLOATS_PER_CREATURE = 7;
   private static readonly DEFAULT_CAPACITY = 200_000;
@@ -9,6 +16,9 @@ export class InterpolationBufferManager {
   private creatureCount: number = 0;
   private dirty: boolean = false;
 
+  private stateById: Map<number, InterpolationState> = new Map();
+  private visibleLastTick: Set<number> = new Set();
+
   constructor(initialCapacity: number = InterpolationBufferManager.DEFAULT_CAPACITY) {
     this.capacity = initialCapacity;
     this.buffer = new Float32Array(this.capacity * InterpolationBufferManager.FLOATS_PER_CREATURE);
@@ -17,6 +27,8 @@ export class InterpolationBufferManager {
   initialize(creatures: CreatureData[]): void {
     this.ensureCapacity(creatures.length);
     this.creatureCount = creatures.length;
+    this.stateById.clear();
+    this.visibleLastTick.clear();
 
     for (let i = 0; i < creatures.length; i++) {
       const c = creatures[i];
@@ -29,6 +41,14 @@ export class InterpolationBufferManager {
       this.buffer[offset + 4] = c.rotation; // startRot
       this.buffer[offset + 5] = c.rotation; // endRot (same)
       this.buffer[offset + 6] = c.size; // size
+
+      this.stateById.set(c.id, {
+        endX: c.x,
+        endY: c.y,
+        endRot: c.rotation,
+        size: c.size,
+      });
+      this.visibleLastTick.add(c.id);
     }
 
     this.dirty = true;
@@ -36,31 +56,52 @@ export class InterpolationBufferManager {
 
   update(newCreatures: CreatureData[]): void {
     const newCount = newCreatures.length;
-    const oldCount = this.creatureCount;
+    this.ensureCapacity(newCount);
+    this.creatureCount = newCount;
 
-    if (newCount !== oldCount) {
-      this.resize(newCount, newCreatures);
-      return;
-    }
-
-    for (let i = 0; i < newCount; i++) {
-      const offset = i * InterpolationBufferManager.FLOATS_PER_CREATURE;
-
-      this.buffer[offset + 0] = this.buffer[offset + 2]; // endX → startX
-      this.buffer[offset + 1] = this.buffer[offset + 3]; // endY → startY
-      this.buffer[offset + 4] = this.buffer[offset + 5]; // endRot → startRot
-    }
+    const visibleThisTick = new Set<number>();
 
     for (let i = 0; i < newCount; i++) {
       const c = newCreatures[i];
       const offset = i * InterpolationBufferManager.FLOATS_PER_CREATURE;
 
+      // Only use previous state if creature was visible LAST tick (not stale cache)
+      const wasVisibleLastTick = this.visibleLastTick.has(c.id);
+      const prevState = wasVisibleLastTick ? this.stateById.get(c.id) : undefined;
+
+      if (prevState) {
+        this.buffer[offset + 0] = prevState.endX; // startX = previous endX
+        this.buffer[offset + 1] = prevState.endY; // startY = previous endY
+        this.buffer[offset + 4] = prevState.endRot; // startRot = previous endRot
+      } else {
+        this.buffer[offset + 0] = c.x; // startX = new position (no interpolation)
+        this.buffer[offset + 1] = c.y; // startY
+        this.buffer[offset + 4] = c.rotation; // startRot
+      }
+
       this.buffer[offset + 2] = c.x; // endX
       this.buffer[offset + 3] = c.y; // endY
       this.buffer[offset + 5] = c.rotation; // endRot
       this.buffer[offset + 6] = c.size; // size
+
+      this.stateById.set(c.id, {
+        endX: c.x,
+        endY: c.y,
+        endRot: c.rotation,
+        size: c.size,
+      });
+      visibleThisTick.add(c.id);
     }
 
+    // Clean up stateById to only keep current tick's creatures
+    // (prevents stale data if creature IDs are reused after death)
+    for (const id of this.stateById.keys()) {
+      if (!visibleThisTick.has(id)) {
+        this.stateById.delete(id);
+      }
+    }
+
+    this.visibleLastTick = visibleThisTick;
     this.dirty = true;
   }
 
@@ -76,58 +117,6 @@ export class InterpolationBufferManager {
 
     this.buffer = newBuffer;
     this.capacity = newCapacity;
-  }
-
-  private resize(newCount: number, newCreatures: CreatureData[]): void {
-    const oldCount = this.creatureCount;
-
-    this.ensureCapacity(newCount);
-    this.creatureCount = newCount;
-
-    if (newCount > oldCount) {
-      for (let i = 0; i < oldCount; i++) {
-        const offset = i * InterpolationBufferManager.FLOATS_PER_CREATURE;
-        const c = newCreatures[i];
-
-        this.buffer[offset + 0] = this.buffer[offset + 2]; // endX → startX
-        this.buffer[offset + 1] = this.buffer[offset + 3]; // endY → startY
-        this.buffer[offset + 4] = this.buffer[offset + 5]; // endRot → startRot
-
-        this.buffer[offset + 2] = c.x; // endX
-        this.buffer[offset + 3] = c.y; // endY
-        this.buffer[offset + 5] = c.rotation; // endRot
-        this.buffer[offset + 6] = c.size; // size
-      }
-
-      for (let i = oldCount; i < newCount; i++) {
-        const c = newCreatures[i];
-        const offset = i * InterpolationBufferManager.FLOATS_PER_CREATURE;
-
-        this.buffer[offset + 0] = c.x; // startX
-        this.buffer[offset + 1] = c.y; // startY
-        this.buffer[offset + 2] = c.x; // endX (same)
-        this.buffer[offset + 3] = c.y; // endY (same)
-        this.buffer[offset + 4] = c.rotation; // startRot
-        this.buffer[offset + 5] = c.rotation; // endRot (same)
-        this.buffer[offset + 6] = c.size; // size
-      }
-    } else {
-      for (let i = 0; i < newCount; i++) {
-        const offset = i * InterpolationBufferManager.FLOATS_PER_CREATURE;
-        const c = newCreatures[i];
-
-        this.buffer[offset + 0] = this.buffer[offset + 2]; // endX → startX
-        this.buffer[offset + 1] = this.buffer[offset + 3]; // endY → startY
-        this.buffer[offset + 4] = this.buffer[offset + 5]; // endRot → startRot
-
-        this.buffer[offset + 2] = c.x; // endX
-        this.buffer[offset + 3] = c.y; // endY
-        this.buffer[offset + 5] = c.rotation; // endRot
-        this.buffer[offset + 6] = c.size; // size
-      }
-    }
-
-    this.dirty = true;
   }
 
   getBuffer(): Float32Array {

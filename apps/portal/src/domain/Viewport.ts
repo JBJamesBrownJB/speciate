@@ -1,6 +1,4 @@
 import { Camera } from './Camera';
-import { Creature } from './Creature';
-import { SpatialQuery } from '@/utils/SpatialQuery';
 
 export interface WorldBounds {
   minX: number;
@@ -41,14 +39,5 @@ export class Viewport {
       minY: camera.y - halfHeightWorld,
       maxY: camera.y + halfHeightWorld
     };
-  }
-
-  isCreatureVisible(creature: Creature, camera: Camera): boolean {
-    const worldBounds = this.getWorldBounds(camera);
-    return SpatialQuery.isInViewport(creature, worldBounds);
-  }
-
-  cullCreatures(creatures: Creature[], camera: Camera): Creature[] {
-    return creatures.filter(creature => this.isCreatureVisible(creature, camera));
   }
 }

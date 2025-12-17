@@ -259,8 +259,9 @@ impl SimulationEngine {
                     // 5. Only export/swap if we ran at least one tick
                     if metrics.ticks_this_frame > 0 {
                         // Export positions to write buffer (SoA layout)
+                        let export_start = std::time::Instant::now();
                         let exported_count = app.export_positions(&buffer_ref);
-                        buffer_count_ref.store(exported_count as u64, Ordering::Relaxed);
+                        app.record_export_positions_timing(export_start.elapsed().as_micros() as u64);
 
                         // Read hardware counters (dev-tools only)
                         #[cfg(feature = "dev-tools")]
@@ -279,6 +280,11 @@ impl SimulationEngine {
 
                         // Swap position buffers after frame completes (lock-free)
                         buffer_ref.lock().swap();
+
+                        // Store count AFTER swap with Release ordering
+                        // This ensures JS polling sees consistent count + buffer data
+                        // (fixes race condition where poll reads new count but old buffer)
+                        buffer_count_ref.store(exported_count as u64, Ordering::Release);
 
                         tick += metrics.ticks_this_frame as u64;
 
@@ -408,7 +414,8 @@ impl SimulationEngine {
         let read_slice = buffer.get_read_slice();
 
         // Get actual creature count (updated by Bevy thread)
-        let creature_count = self.buffer_creature_count.load(Ordering::Relaxed) as usize;
+        // Use Acquire to synchronize with Release store after buffer swap
+        let creature_count = self.buffer_creature_count.load(Ordering::Acquire) as usize;
 
         // Calculate actual data size (4 f32s per creature: ID, X, Y, Rotation)
         let active_size = creature_count * 4;
@@ -441,7 +448,8 @@ impl SimulationEngine {
         let src_buffer = self.buffer.lock();
         let read_slice = src_buffer.get_read_slice();
 
-        let creature_count = self.buffer_creature_count.load(Ordering::Relaxed) as usize;
+        // Use Acquire to synchronize with Release store after buffer swap
+        let creature_count = self.buffer_creature_count.load(Ordering::Acquire) as usize;
         let active_size = creature_count * 4;
 
         let dest = buffer.as_mut();
@@ -620,6 +628,46 @@ impl SimulationEngine {
         f32::from_bits(self.time_scale.load(Ordering::SeqCst)) as f64
     }
 
+    /// Set viewport bounds for culling
+    ///
+    /// When enabled, export_positions() only sends creatures within these bounds.
+    /// The frontend uses ID-based interpolation, so creatures can enter/leave
+    /// the viewport without causing visual artifacts.
+    ///
+    /// # Arguments
+    /// * `min_x` - Left edge of viewport in world units
+    /// * `min_y` - Bottom edge of viewport in world units
+    /// * `max_x` - Right edge of viewport in world units
+    /// * `max_y` - Top edge of viewport in world units
+    /// * `margin` - Extra padding around viewport (prevents pop-in at edges)
+    ///
+    /// # Errors
+    /// * Simulation not started
+    /// * Command queue full
+    #[napi]
+    pub fn set_viewport_bounds(&self, min_x: f64, min_y: f64, max_x: f64, max_y: f64, margin: f64) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(
+                Status::GenericFailure,
+                "Simulation not started",
+            ))?
+            .try_send(SimCommand::SetViewportBounds {
+                min_x: min_x as f32,
+                min_y: min_y as f32,
+                max_x: max_x as f32,
+                max_y: max_y as f32,
+                margin: margin as f32,
+            })
+            .map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("Command queue full: {}", e),
+                )
+            })?;
+        Ok(())
+    }
+
     /// Load trial configuration
     ///
     /// # Arguments
@@ -775,7 +823,7 @@ impl SimulationEngine {
     /// ```
     #[napi]
     pub fn get_buffer_creature_count(&self) -> i64 {
-        self.buffer_creature_count.load(Ordering::Relaxed) as i64
+        self.buffer_creature_count.load(Ordering::Acquire) as i64
     }
 
     /// Get buffer capacity statistics

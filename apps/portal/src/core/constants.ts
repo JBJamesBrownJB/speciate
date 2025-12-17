@@ -13,9 +13,10 @@ export const WORLD_CONFIG = {
 } as const;
 
 export const CAMERA_CONFIG = {
-  MIN_ZOOM: 0.1, 
-  MAX_ZOOM: 100,
-  ZOOM_SENSITIVITY: 0.0007, // Mouse wheel zoom sensitivity
+  MIN_ZOOM: 2.0,
+  MAX_ZOOM: 200,
+  ZOOM_SENSITIVITY: 0.001, // Mouse wheel zoom sensitivity
+  MAX_ZOOM_SPEED: 2.0, // Max zoom change per second (logarithmic scale)
 } as const;
 
 export const SCALE_BAR_CONFIG = {
@@ -24,4 +25,8 @@ export const SCALE_BAR_CONFIG = {
     1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000,
     100000, 200000, 500000, 1000000,
   ] as readonly number[],
+} as const;
+
+export const VIEWPORT_CULLING_CONFIG = {
+  MARGIN: 40.0, // World units buffer to prevent edge flickering
 } as const;

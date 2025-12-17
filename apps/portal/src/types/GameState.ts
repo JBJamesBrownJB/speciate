@@ -33,6 +33,7 @@ export interface SystemTimingsSnapshot {
   behaviorTransitionUs: number;
   steeringUs: number; // Fused steering system (Sprint 20)
   captureDebugAccelUs: number;
+  exportPositionsUs: number; // IPC buffer export with parallel sort (Sprint 16)
   ipcQueryUs: number;
   ipcSerializeUs: number;
   ipcWriteUs: number;

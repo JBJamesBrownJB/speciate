@@ -208,4 +208,29 @@ contextBridge.exposeInMainWorld('electron', {
     }
     ipcRenderer.send('set-time-scale', scale);
   },
+
+  /**
+   * Set viewport bounds for backend culling
+   *
+   * When set, the backend only exports creatures within these bounds,
+   * reducing IPC bandwidth and GPU work when zoomed in.
+   *
+   * @param {Object} bounds - Viewport bounds in world units
+   * @param {number} bounds.minX - Left edge
+   * @param {number} bounds.minY - Bottom edge
+   * @param {number} bounds.maxX - Right edge
+   * @param {number} bounds.maxY - Top edge
+   * @param {number} bounds.margin - Extra padding (prevents pop-in at edges)
+   */
+  setViewportBounds: (bounds) => {
+    if (typeof bounds !== 'object' || bounds === null) {
+      throw new Error('setViewportBounds: bounds must be an object');
+    }
+    if (typeof bounds.minX !== 'number' || typeof bounds.minY !== 'number' ||
+        typeof bounds.maxX !== 'number' || typeof bounds.maxY !== 'number' ||
+        typeof bounds.margin !== 'number') {
+      throw new Error('setViewportBounds: all bounds properties must be numbers');
+    }
+    ipcRenderer.send('set-viewport-bounds', bounds);
+  },
 });

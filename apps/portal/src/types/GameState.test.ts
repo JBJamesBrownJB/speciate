@@ -79,6 +79,7 @@ describe('GameState Types', () => {
         behaviorTransitionUs: 800,
         steeringUs: 2300, // Fused steering (Sprint 20)
         captureDebugAccelUs: 5,
+        exportPositionsUs: 1350, // IPC buffer export with parallel sort (Sprint 16)
         ipcQueryUs: 200,
         ipcSerializeUs: 300,
         ipcWriteUs: 100,
@@ -111,6 +112,7 @@ describe('GameState Types', () => {
           behaviorTransitionUs: 800,
           steeringUs: 2300, // Fused steering (Sprint 20)
           captureDebugAccelUs: 5,
+          exportPositionsUs: 1350, // IPC buffer export with parallel sort (Sprint 16)
           ipcQueryUs: 200,
           ipcSerializeUs: 300,
           ipcWriteUs: 100,
@@ -205,6 +207,7 @@ describe('GameState Types', () => {
         behaviorTransitionUs: 50,
         steeringUs: 150, // Fused steering (Sprint 20)
         captureDebugAccelUs: 2,
+        exportPositionsUs: 135, // IPC buffer export with parallel sort (Sprint 16)
         ipcQueryUs: 40,
         ipcSerializeUs: 60,
         ipcWriteUs: 30,

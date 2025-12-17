@@ -119,6 +119,7 @@ pub struct SystemTimings {
     pub behavior_transition_us: AtomicU64,
     pub steering_us: AtomicU64, // Fused steering system (Sprint 20)
     pub capture_debug_accel_us: AtomicU64,
+    pub export_positions_us: AtomicU64, // IPC buffer export with parallel sort (Sprint 16)
 }
 
 impl SystemTimings {
@@ -131,6 +132,7 @@ impl SystemTimings {
             behavior_transition_us: AtomicU64::new(0),
             steering_us: AtomicU64::new(0),
             capture_debug_accel_us: AtomicU64::new(0),
+            export_positions_us: AtomicU64::new(0),
         }
     }
 
@@ -143,6 +145,7 @@ impl SystemTimings {
             "behavior_transition" => &self.behavior_transition_us,
             "steering" => &self.steering_us,
             "capture_debug_accel" => &self.capture_debug_accel_us,
+            "export_positions" => &self.export_positions_us,
             _ => panic!("Unknown system: {}", name),
         };
         TimingGuard::new(target)
@@ -157,6 +160,7 @@ impl SystemTimings {
             behavior_transition_us: self.behavior_transition_us.load(Ordering::Relaxed),
             steering_us: self.steering_us.load(Ordering::Relaxed),
             capture_debug_accel_us: self.capture_debug_accel_us.load(Ordering::Relaxed),
+            export_positions_us: self.export_positions_us.load(Ordering::Relaxed),
             archetype_count: 0,
             entity_count: 0,
         }
@@ -200,6 +204,7 @@ pub struct SystemTimingsSnapshot {
     pub behavior_transition_us: u64,
     pub steering_us: u64, // Fused steering system (Sprint 20)
     pub capture_debug_accel_us: u64,
+    pub export_positions_us: u64, // IPC buffer export with parallel sort (Sprint 16)
 
     pub archetype_count: u64,
     pub entity_count: u64,

@@ -213,5 +213,70 @@ fn bench_perception(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_tick_scaling, bench_spawn, bench_vector_ops, bench_perception);
+// Benchmark for sorting creature export buffer by CritId
+// This measures the cost of stable ordering for ghost-crits fix (Sprint 16)
+fn bench_export_sort(c: &mut Criterion) {
+    use rayon::prelude::*;
+
+    let mut group = c.benchmark_group("export_sort");
+
+    // Test at realistic population sizes including 400K
+    for count in [10_000, 50_000, 100_000, 200_000, 400_000] {
+        // Simulate export_positions data: (CritId, x, y, rotation)
+        // CritIds are sequential but query order is scrambled (simulating ECS reordering)
+        let mut rng = rand::thread_rng();
+        use rand::Rng;
+
+        let mut data: Vec<(u64, f32, f32, f32)> = (0..count as u64)
+            .map(|id| {
+                (
+                    id,
+                    (rng.gen::<f32>() - 0.5) * 1000.0,
+                    (rng.gen::<f32>() - 0.5) * 1000.0,
+                    rng.gen::<f32>() * std::f32::consts::TAU,
+                )
+            })
+            .collect();
+
+        // Scramble to simulate ECS query order instability
+        use rand::seq::SliceRandom;
+        data.shuffle(&mut rng);
+
+        // Sequential sort
+        group.bench_with_input(
+            BenchmarkId::new("sequential", count),
+            &data,
+            |b, data| {
+                b.iter_batched(
+                    || data.clone(),
+                    |mut d| {
+                        d.sort_unstable_by_key(|(id, _, _, _)| *id);
+                        black_box(d)
+                    },
+                    criterion::BatchSize::LargeInput,
+                );
+            },
+        );
+
+        // Parallel sort (Rayon)
+        group.bench_with_input(
+            BenchmarkId::new("parallel", count),
+            &data,
+            |b, data| {
+                b.iter_batched(
+                    || data.clone(),
+                    |mut d| {
+                        d.par_sort_unstable_by_key(|(id, _, _, _)| *id);
+                        black_box(d)
+                    },
+                    criterion::BatchSize::LargeInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_tick_scaling, bench_spawn, bench_vector_ops, bench_perception, bench_export_sort);
 criterion_main!(benches);

@@ -33,6 +33,7 @@ fn benchmark_telemetry_json_serialization() {
         steering_us: 880, // Fused steering (Sprint 20)
         spatial_grid_rebuild_us: 789,
         capture_debug_accel_us: 5,
+        export_positions_us: 1350, // IPC buffer export with parallel sort (Sprint 16)
 
         archetype_count: 42,
         entity_count: 150_000,

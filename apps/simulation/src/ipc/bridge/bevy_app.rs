@@ -14,11 +14,47 @@ use super::{DoubleBuffer, TelemetrySnapshot};
 #[cfg(feature = "dev-tools")]
 use super::PerceptionDebugBuffer;
 use crate::ipc::SimCommand;
-use bevy_ecs::prelude::Entity;
+use bevy_ecs::prelude::Resource;
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
+use rayon::prelude::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32};
+
+#[derive(Resource, Debug, Clone)]
+pub struct ViewportBounds {
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+    pub margin: f32,
+    pub enabled: bool,
+}
+
+impl Default for ViewportBounds {
+    fn default() -> Self {
+        Self {
+            min_x: -10000.0,
+            min_y: -10000.0,
+            max_x: 10000.0,
+            max_y: 10000.0,
+            margin: 50.0,
+            enabled: false,
+        }
+    }
+}
+
+impl ViewportBounds {
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        if !self.enabled {
+            return true;
+        }
+        x >= self.min_x - self.margin
+            && x <= self.max_x + self.margin
+            && y >= self.min_y - self.margin
+            && y <= self.max_y + self.margin
+    }
+}
 
 /// NAPI-specific Bevy app wrapper
 pub struct NapiApp {
@@ -100,6 +136,8 @@ impl NapiApp {
             }
         }
 
+        simulation.world.insert_resource(ViewportBounds::default());
+
         Self {
             simulation,
             command_rx,
@@ -164,9 +202,14 @@ impl NapiApp {
                     #[cfg(feature = "dev-tools")]
                     {
                         use crate::simulation::perception::PerceptionDebugTarget;
+                        use bevy_ecs::prelude::Entity;
 
-                        let entity = creature_id.and_then(|id| {
-                            self.lookup_entity_by_crit_id(id)
+                        let entity: Option<Entity> = creature_id.and_then(|id| {
+                            self.simulation.world
+                                .query::<(Entity, &CritId)>()
+                                .iter(&self.simulation.world)
+                                .find(|(_, crit_id)| crit_id.0 == id)
+                                .map(|(entity, _)| entity)
                         });
 
                         if let Some(mut target) = self.simulation.world.get_resource_mut::<PerceptionDebugTarget>() {
@@ -190,18 +233,18 @@ impl NapiApp {
                         eprintln!("[NAPI] Time scale set to {}x", scale);
                     }
                 }
+                SimCommand::SetViewportBounds { min_x, min_y, max_x, max_y, margin } => {
+                    if let Some(mut bounds) = self.simulation.world.get_resource_mut::<ViewportBounds>() {
+                        bounds.min_x = min_x;
+                        bounds.min_y = min_y;
+                        bounds.max_x = max_x;
+                        bounds.max_y = max_y;
+                        bounds.margin = margin;
+                        bounds.enabled = true;
+                    }
+                }
             }
         }
-    }
-
-    /// Lookup entity by CritId (reserved for future use)
-    #[allow(dead_code)]
-    fn lookup_entity_by_crit_id(&mut self, crit_id: u32) -> Option<Entity> {
-        self.simulation.world
-            .query::<(Entity, &CritId)>()
-            .iter(&self.simulation.world)
-            .find(|(_, id)| id.0 == crit_id)
-            .map(|(entity, _)| entity)
     }
 
     /// Update simulation one tick
@@ -213,9 +256,22 @@ impl NapiApp {
     ///
     /// Layout: [ID₁, ID₂..., X₁, X₂..., Y₁, Y₂..., Rot₁, Rot₂...]
     ///
+    /// Creatures are sorted by CritId to ensure stable ordering across ticks.
+    /// This prevents ghost-crits caused by ECS query order instability during spawn/despawn.
+    /// See: docs/testing/bugs/ghost-crits.md
+    ///
+    /// If viewport culling is enabled, only exports creatures within the viewport bounds + margin.
+    /// Frontend handles ID-based interpolation, so creatures entering/leaving viewport work correctly.
+    ///
     /// Returns: The number of creatures actually exported to the buffer
     pub fn export_positions(&mut self, buffer: &Arc<Mutex<DoubleBuffer>>) -> usize {
         let world = &mut self.simulation.world;
+
+        // Get viewport bounds for culling (clone to avoid borrow issues)
+        let viewport = world
+            .get_resource::<ViewportBounds>()
+            .cloned()
+            .unwrap_or_default();
 
         // Lock buffer first to get capacity
         let mut buffer_guard = buffer.lock();
@@ -228,26 +284,35 @@ impl NapiApp {
 
         let write_slice = buffer_guard.get_write_slice();
 
-        // Use two-pass approach to avoid Vec allocation while maintaining SoA layout:
-        // Pass 1: Count entities (cheap iteration, no data copy)
-        // Pass 2: Write directly to SoA positions
+        // Collect entities into Vec for sorting (required for stable index ordering)
+        // ECS query order is unstable across spawn/despawn - sorting by CritId fixes ghost-crits
         let mut query = world.query::<(&CritId, &Position, &Rotation)>();
+        let mut entities: Vec<_> = query.iter(world).collect();
 
-        // Pass 1: Count (no allocation)
-        let entity_count = query.iter(world).count();
-        let export_count = entity_count.min(buffer_capacity);
+        // Parallel sort by CritId for stable ordering
+        // Benchmarked: 1.35ms at 400K creatures (3% of 45ms tick budget)
+        entities.par_sort_unstable_by_key(|(id, _, _)| id.0);
+
+        // Filter by viewport bounds (after sorting to maintain stable ordering)
+        // Frontend uses ID-based interpolation, so creatures can enter/leave buffer freely
+        let visible_entities: Vec<_> = entities
+            .into_iter()
+            .filter(|(_, pos, _)| viewport.contains(pos.x, pos.y))
+            .collect();
+
+        let export_count = visible_entities.len().min(buffer_capacity);
 
         if export_count == 0 {
             return 0;
         }
 
-        // Pass 2: Write directly to SoA layout
+        // Write to SoA layout
         // Layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
         let x_offset = export_count;
         let y_offset = export_count * 2;
         let rot_offset = export_count * 3;
 
-        for (i, (id, pos, rot)) in query.iter(world).take(export_count).enumerate() {
+        for (i, (id, pos, rot)) in visible_entities.iter().take(export_count).enumerate() {
             write_slice[i] = id.0 as f32;
             write_slice[x_offset + i] = pos.x;
             write_slice[y_offset + i] = pos.y;
@@ -380,6 +445,21 @@ impl NapiApp {
     /// Record total tick timing (for NAPI run loop) - no-op without dev-tools
     #[cfg(not(feature = "dev-tools"))]
     pub fn record_total_tick_timing(&mut self, _elapsed_us: u64) {
+        // No-op: SystemTimings resource doesn't exist without dev-tools feature
+    }
+
+    /// Record export_positions timing (for NAPI run loop)
+    #[cfg(feature = "dev-tools")]
+    pub fn record_export_positions_timing(&mut self, elapsed_us: u64) {
+        self.simulation.world()
+            .resource::<crate::instrumentation::SystemTimings>()
+            .export_positions_us
+            .store(elapsed_us, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Record export_positions timing (for NAPI run loop) - no-op without dev-tools
+    #[cfg(not(feature = "dev-tools"))]
+    pub fn record_export_positions_timing(&mut self, _elapsed_us: u64) {
         // No-op: SystemTimings resource doesn't exist without dev-tools feature
     }
 

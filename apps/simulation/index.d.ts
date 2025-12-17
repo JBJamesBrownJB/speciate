@@ -172,6 +172,25 @@ export declare class SimulationEngine {
   /** Get current time scale */
   getTimeScale(): number
   /**
+   * Set viewport bounds for culling
+   *
+   * When enabled, export_positions() only sends creatures within these bounds.
+   * The frontend uses ID-based interpolation, so creatures can enter/leave
+   * the viewport without causing visual artifacts.
+   *
+   * # Arguments
+   * * `min_x` - Left edge of viewport in world units
+   * * `min_y` - Bottom edge of viewport in world units
+   * * `max_x` - Right edge of viewport in world units
+   * * `max_y` - Top edge of viewport in world units
+   * * `margin` - Extra padding around viewport (prevents pop-in at edges)
+   *
+   * # Errors
+   * * Simulation not started
+   * * Command queue full
+   */
+  setViewportBounds(minX: number, minY: number, maxX: number, maxY: number, margin: number): void
+  /**
    * Load trial configuration
    *
    * # Arguments

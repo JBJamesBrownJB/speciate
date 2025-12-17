@@ -2,7 +2,7 @@ import { Application, Container } from "pixi.js";
 import { SpriteProvider } from "@/rendering/SpriteProvider";
 import { Camera } from "@/domain/Camera";
 import { Viewport } from "@/domain/Viewport";
-import { RENDERING_CONFIG, CAMERA_CONFIG } from "@/core/constants";
+import { RENDERING_CONFIG, CAMERA_CONFIG, VIEWPORT_CULLING_CONFIG } from "@/core/constants";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
 import { PerformanceMetrics } from "@/core/PerformanceMetrics";
 import { FPSSparkline } from "@/ui/FPSSparkline";
@@ -324,6 +324,35 @@ async function main(): Promise<void> {
       });
     }
 
+    // Zoom rate limiting
+    let lastZoomTime = 0;
+
+    // Viewport culling: send bounds to backend to filter creatures
+    let lastViewportBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+
+    const sendViewportBounds = () => {
+      const halfWidth = (viewportWidth / 2) / camera.zoom;
+      const halfHeight = (viewportHeight / 2) / camera.zoom;
+      const bounds = {
+        minX: camera.x - halfWidth,
+        minY: camera.y - halfHeight,
+        maxX: camera.x + halfWidth,
+        maxY: camera.y + halfHeight,
+        margin: VIEWPORT_CULLING_CONFIG.MARGIN,
+      };
+
+      // Only send if bounds changed significantly (>1 unit)
+      if (
+        Math.abs(bounds.minX - lastViewportBounds.minX) > 1 ||
+        Math.abs(bounds.minY - lastViewportBounds.minY) > 1 ||
+        Math.abs(bounds.maxX - lastViewportBounds.maxX) > 1 ||
+        Math.abs(bounds.maxY - lastViewportBounds.maxY) > 1
+      ) {
+        window.electron?.setViewportBounds?.(bounds);
+        lastViewportBounds = bounds;
+      }
+    };
+
     // Render loop - only handles rendering, not simulation updates
     app.ticker.add(() => {
       const frameStart = performance.now();
@@ -331,6 +360,9 @@ async function main(): Promise<void> {
       const fps = Math.round(1000 / deltaMs);
 
       perfMetrics.recordFrameTime(deltaMs);
+
+      // Update viewport bounds for backend culling
+      sendViewportBounds();
 
       // Update HUD with cached values
       const state = ipcClient?.getLatestState();
@@ -395,11 +427,25 @@ async function main(): Promise<void> {
       (event: WheelEvent) => {
         event.preventDefault();
 
-        const zoomFactor = 1 - event.deltaY * CAMERA_CONFIG.ZOOM_SENSITIVITY;
+        const now = performance.now();
+        const timeSinceLastZoom = now - lastZoomTime;
 
-        camera.adjustZoom(zoomFactor);
-        camera.applyTransform(worldContainer, viewport.width, viewport.height);
-        scaleBarManager.update(camera.zoom);
+        // Calculate max allowed zoom delta based on time elapsed
+        const maxDelta = (CAMERA_CONFIG.MAX_ZOOM_SPEED * timeSinceLastZoom) / 1000;
+
+        // Calculate requested zoom delta (in log space)
+        let zoomDelta = -event.deltaY * CAMERA_CONFIG.ZOOM_SENSITIVITY;
+
+        // Clamp to max speed (discard excess)
+        const sign = Math.sign(zoomDelta);
+        zoomDelta = sign * Math.min(Math.abs(zoomDelta), maxDelta);
+
+        if (zoomDelta !== 0) {
+          camera.adjustZoom(Math.exp(zoomDelta));
+          camera.applyTransform(worldContainer, viewport.width, viewport.height);
+          scaleBarManager.update(camera.zoom);
+          lastZoomTime = now;
+        }
       },
       { passive: false }
     );

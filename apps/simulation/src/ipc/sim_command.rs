@@ -8,4 +8,11 @@ pub enum SimCommand {
     SelectCreatureDebug(Option<u32>),
     SetPaused(bool),
     SetTimeScale(f32),
+    SetViewportBounds {
+        min_x: f32,
+        min_y: f32,
+        max_x: f32,
+        max_y: f32,
+        margin: f32,
+    },
 }

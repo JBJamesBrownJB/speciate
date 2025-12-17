@@ -477,6 +477,30 @@ ipcMain.on('set-time-scale', (event, scale) => {
 });
 
 /**
+ * IPC handler: Set viewport bounds for culling (portal)
+ *
+ * When viewport bounds are set, the backend only exports creatures within
+ * these bounds (plus margin). This reduces IPC bandwidth and GPU work.
+ */
+ipcMain.on('set-viewport-bounds', (event, bounds) => {
+  if (!simulationEngine) {
+    return;
+  }
+
+  try {
+    simulationEngine.setViewportBounds(
+      bounds.minX,
+      bounds.minY,
+      bounds.maxX,
+      bounds.maxY,
+      bounds.margin
+    );
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to set viewport bounds:', error);
+  }
+});
+
+/**
  * IPC handler: Save metrics snapshot (dev-ui)
  */
 ipcMain.handle('save-metrics-snapshot', async (event, snapshot) => {

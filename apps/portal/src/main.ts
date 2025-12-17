@@ -37,10 +37,10 @@ async function main(): Promise<void> {
     const viewportSizePercent = (RENDERING_CONFIG.VIEWPORT_SIZE_RATIO * 100).toString();
     document.documentElement.style.setProperty('--viewport-size', viewportSizePercent);
 
-    const viewportWidth = Math.floor(
+    let viewportWidth = Math.floor(
       window.innerWidth * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
     );
-    const viewportHeight = Math.floor(
+    let viewportHeight = Math.floor(
       window.innerHeight * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
     );
 
@@ -376,17 +376,17 @@ async function main(): Promise<void> {
     document.title = "✅ Simulation Viewer - Live";
 
     window.addEventListener("resize", () => {
-      const newWidth = Math.floor(
+      viewportWidth = Math.floor(
         window.innerWidth * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
       );
-      const newHeight = Math.floor(
+      viewportHeight = Math.floor(
         window.innerHeight * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
       );
 
-      updateContainerSize(container, newWidth, newHeight);
-      app.renderer.resize(newWidth, newHeight);
-      viewport.resize(newWidth, newHeight);
-      camera.applyTransform(worldContainer, newWidth, newHeight);
+      updateContainerSize(container, viewportWidth, viewportHeight);
+      app.renderer.resize(viewportWidth, viewportHeight);
+      viewport.resize(viewportWidth, viewportHeight);
+      camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
       scaleBarManager.update(camera.zoom);
     });
 

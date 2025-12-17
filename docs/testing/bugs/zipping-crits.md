@@ -4,6 +4,8 @@ I suspect through testing that it is when any of the behaviours with the full 1.
 
 So below, I suspect that when the emergency force is invoked, its takes a path in code which can lead to uncapped force.
 
+The following is a snippet from constants/behaviour.rs
+
 // =============================================================================
 // FORCE BUDGET MULTIPLIERS
 // =============================================================================

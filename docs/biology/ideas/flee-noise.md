@@ -1,0 +1,1 @@
+In FLEE state, a crit can increase the noise parameters to give it some more unpredictable / erratic evasive movement.

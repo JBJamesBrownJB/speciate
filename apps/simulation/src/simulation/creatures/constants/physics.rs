@@ -71,7 +71,3 @@ pub const STOPPED_THRESHOLD: f32 = 0.05;
 
 /// [ACTIVE] Speed² threshold for locomotion noise filtering.
 pub const NOISE_SPEED_THRESHOLD_SQ: f32 = 0.01;
-
-/// [FUTURE] Simulation time step (20 Hz tick rate).
-/// NOTE: Actual dt comes from DeltaTime resource.
-pub const DT: f32 = 0.05;

@@ -10,28 +10,14 @@ use crate::simulation::math::UnitInterval;
 // max_force = mass × MAX_ACCELERATION is the PHYSICAL LIMIT.
 // These multipliers define what fraction each behavior can use.
 
-/// [FUTURE] Emergency force (flee, brake, fight) - full muscular output.
-/// VALIDATED: Fight-or-flight response triggers maximal output.
-pub const EMERGENCY_FORCE_MULT: UnitInterval = UnitInterval::new(1.0);
-
-/// [FUTURE] Pursuit force for sustained chase.
-/// VALIDATED: Matches aerobic threshold research (70-80% sustainable).
-pub const PURSUIT_FORCE_MULT: UnitInterval = UnitInterval::new(0.7);
-
-/// [FUTURE] Cruise force for directed travel (migration, commuting).
-/// VALIDATED: Energy-efficient gaits operate at 35-45% of max.
-pub const CRUISE_FORCE_MULT: UnitInterval = UnitInterval::new(0.4);
-
 /// [ACTIVE] Wander force for exploration/foraging.
 /// VALIDATED: Animals graze/forage at 15-25% to allow vigilance.
 /// Low force allows avoidance and other survival behaviors to dominate when needed.
 pub const WANDER_FORCE_MULT: UnitInterval = UnitInterval::new(0.25);
 
-/// [ACTIVE] Force multiplier for seek behavior (currently uses PURSUIT level).
-pub const SEEK_FORCE_MULT: UnitInterval = PURSUIT_FORCE_MULT;
-
-/// [LEGACY] Alias for emergency force - use EMERGENCY_FORCE_MULT instead.
-pub const BRAKE_FORCE_MULT: UnitInterval = EMERGENCY_FORCE_MULT;
+/// [ACTIVE] Force multiplier for seek behavior (pursuit level: 70%).
+/// VALIDATED: Matches aerobic threshold research (70-80% sustainable).
+pub const SEEK_FORCE_MULT: UnitInterval = UnitInterval::new(0.7);
 
 // =============================================================================
 // PERSONAL SPACE & AVOIDANCE
@@ -72,44 +58,6 @@ pub static ENERGY_MODIFIER: EnergyModifierConstants = EnergyModifierConstants {
     min_modifier: 0.1,
     max_modifier: 1.0,
 };
-
-// =============================================================================
-// TIME-TO-CONTACT (TTC) DECELERATION
-// =============================================================================
-
-/// [ACTIVE] Begin slowing when 2 seconds from target.
-/// VALIDATED: At 15 m/s, this gives 30m approach corridor for smooth deceleration.
-pub const TTC_SLOW_THRESHOLD: f32 = 2.0;
-
-/// [ACTIVE] Target zero velocity at 0.3 seconds from contact.
-/// VALIDATED: 0.3s is typical reaction time for final positioning adjustments.
-pub const TTC_STOP_THRESHOLD: f32 = 0.3;
-
-/// [ACTIVE] Pre-computed: TTC_SLOW_THRESHOLD - TTC_STOP_THRESHOLD
-/// Used in seek system for interpolation. Avoids runtime subtraction.
-pub const TTC_RANGE: f32 = TTC_SLOW_THRESHOLD - TTC_STOP_THRESHOLD;
-
-/// [ACTIVE] Pre-computed: 1.0 / TTC_RANGE
-/// Converts division to multiplication in hot path.
-pub const TTC_RANGE_INV: f32 = 1.0 / TTC_RANGE;
-
-/// [ACTIVE] Minimum slow zone when TTC undefined (e.g., starting from stationary).
-pub const MIN_SLOW_ZONE_BODY_LENGTHS: f32 = 3.0;
-
-// =============================================================================
-// SEEK BEHAVIOR
-// =============================================================================
-
-/// [ACTIVE] Distance for pounce trigger (meters).
-/// WARNING: 10cm is too small for large creatures!
-pub const POUNCE_THRESHOLD: f32 = 0.1;
-
-/// [ACTIVE] Maximum speed during pounce approach (m/s).
-/// NOTE: 2 m/s is walking pace - controlled final approach (stalking).
-pub const POUNCE_SPEED: f32 = 2.0;
-
-/// [ACTIVE] Edge distance to apply braking (meters).
-pub const ARRIVAL_THRESHOLD: f32 = 0.1;
 
 // =============================================================================
 // WANDER BEHAVIOR

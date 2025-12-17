@@ -81,6 +81,41 @@ When threat is detected, DNA and context determine the response direction:
 
 This is a separate decision from the budget allocation. The budget says "how much energy for threat response?" The sub-decision says "fight, flight, or freeze?"
 
+### Velocity-Based Threat Assessment
+
+**A charging predator is far more threatening than a stationary one.**
+
+Real prey animals don't just measure distance—they compute **time-to-contact (tau)**:
+
+```
+closing_velocity = how fast predator is approaching (not raw speed)
+tau = distance / closing_velocity
+```
+
+A predator 100m away charging at 20m/s (τ = 5s) triggers more urgent flight than one 30m away but stationary (τ = ∞).
+
+| Factor | Effect on Threat Response |
+|--------|---------------------------|
+| **Closing velocity** | Only approach matters—fast predator moving away = low threat |
+| **Time-to-contact** | Low tau = urgent response, high tau = time to assess |
+| **Sudden acceleration** | Predator starts charging → immediate threat spike |
+| **Stationary predator** | Triggers vigilance (elevated awareness), not immediate flight |
+
+**DNA modulation:**
+
+| Trait | Bold Crit | Timid Crit |
+|-------|-----------|------------|
+| Velocity sensitivity | Low (waits to assess) | High (reacts to any movement) |
+| Tau threshold | Short (flees at τ < 2s) | Long (flees at τ < 5s) |
+| Acceleration response | Dampened | Amplified |
+
+**Emergent behaviors:**
+- Timid crits flee early from slow-approaching predators
+- Bold crits hold ground until the charge begins
+- Ambush predators benefit from slow stalking (low closing velocity)
+
+**Biological basis:** Looming detection neurons (LGMD pathway) respond to rate of angular expansion, not absolute size. Fish lateral lines detect water displacement velocity.
+
 ### Layer 2: Avoidance (separate, lateral only)
 
 **Avoidance is not in the budget.** It's an orthogonal steering layer:
@@ -201,6 +236,24 @@ Crit approaching target, threat appears in front.
 
 **Key insight:** Budget answers "how urgent?" DNA answers "which response?"
 
+### Example 3: Stalking vs Charging Predator
+
+Same predator, same distance, different velocities.
+
+**Stalking (slow approach):**
+- Closing velocity low → tau high → time to assess
+- Threat Response rises gradually
+- Bold crits continue foraging with elevated vigilance
+- Timid crits begin early retreat
+
+**Charging (fast approach):**
+- Closing velocity high → tau low → urgent response
+- Threat Response spikes immediately
+- All crits shift to flight-dominant simplex
+- Acceleration detection amplifies response further
+
+**Key insight:** Distance alone doesn't determine urgency—closing velocity does.
+
 ---
 
 ## Research Summary
@@ -257,6 +310,7 @@ Before Drive Simplex can work fully, creatures need:
 - Threat detection in perception system (who is dangerous?)
 - Threat size comparison (bigger than me?)
 - Threat distance tracking (how close?)
+- Threat velocity tracking (closing speed, acceleration)
 
 Without this, Threat Response slider has no input.
 
@@ -287,5 +341,6 @@ Without this, Threat Response slider has no input.
 ## Next Steps
 
 - [ ] Define DNA genes for aggression, boldness, curiosity
-- [ ] Design threat assessment (size comparison, threat type)
+- [ ] Design threat assessment (size comparison, threat type, velocity)
+- [ ] Define tau thresholds and velocity sensitivity genes
 - [ ] Prototype slider mechanics

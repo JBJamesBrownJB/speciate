@@ -11,6 +11,13 @@
 /// VALIDATED: Fish schools 4-7, Starling murmurations 6-7, Primates 3-5.
 pub const MAX_PERCEIVED_NEIGHBORS: usize = 7;
 
+/// [ACTIVE] Number of ticks to skip perception when neighbor cache is full.
+/// Crowded creatures skip this many consecutive ticks after filling their cache.
+/// 1 = skip every other tick (50% reduction)
+/// 2 = skip 2 ticks per perception (66% reduction)
+/// Higher values = more performance, more stale neighbor data.
+pub const PERCEPTION_SKIP_TICKS: u8 = 4;
+
 /// [ACTIVE] Perception range = body_length × this multiplier.
 /// 10× gives 1m creature a 10m range - conservative, good for dense environments.
 pub const PERCEPTION_MULTIPLIER: f32 = 10.0;

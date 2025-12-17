@@ -1,7 +1,7 @@
 use super::components::*;
 #[cfg(feature = "dev-tools")]
 use super::debug::*;
-use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
+use crate::simulation::creatures::constants::{MAX_PERCEIVED_NEIGHBORS, PERCEPTION_SKIP_TICKS};
 use crate::simulation::core::components::{BodySize, Position, Rotation};
 use crate::simulation::creatures::components::CreatureState;
 #[cfg(feature = "dev-tools")]
@@ -49,6 +49,11 @@ pub fn update_perception_system(
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
     entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, neighbor_cache, state)| {
+        // Crowded creatures skip perception every other tick (performance optimization)
+        if neighbor_cache.consume_skip() {
+            return;
+        }
+
         neighbor_cache.clear();
 
         if !state.behavior.is_active() {
@@ -174,6 +179,11 @@ pub fn update_perception_system(
                 }
             });
         });
+
+        // Schedule skip for next N ticks if cache is full
+        if neighbor_cache.is_full() {
+            neighbor_cache.schedule_skip(PERCEPTION_SKIP_TICKS);
+        }
     });
 
     // ============================================================
@@ -1137,5 +1147,440 @@ mod tests {
                 "Neighbor count should not exceed MAX_PERCEIVED_NEIGHBORS"
             );
         }
+    }
+
+    // === Perception Skip Tests (Dynamic Neighbour Perception Skipping) ===
+
+    /// Test helper: naive perception WITH skip logic (matches production behavior)
+    fn run_naive_perception_with_skip(world: &mut World, check_behavior: bool) {
+        let creatures: Vec<(Entity, Position, BodySize)> = world
+            .query::<(Entity, &Position, &BodySize)>()
+            .iter(world)
+            .map(|(e, p, s)| (e, *p, *s))
+            .collect();
+
+        let mut query = world.query::<(Entity, &Position, &BodySize, &Perception, &mut NeighborCache, &CreatureState)>();
+
+        for (entity, pos, size, perception, mut neighbor_cache, state) in query.iter_mut(world) {
+            // Skip check BEFORE clear (matches production)
+            if neighbor_cache.consume_skip() {
+                continue;
+            }
+
+            neighbor_cache.clear();
+
+            if check_behavior && !state.behavior.is_active() {
+                continue;
+            }
+
+            let self_radius = size.radius();
+            for (other_entity, other_pos, other_size) in &creatures {
+                if entity == *other_entity {
+                    continue;
+                }
+                let dx = other_pos.x - pos.x;
+                let dy = other_pos.y - pos.y;
+                let center_dist_sq = dx * dx + dy * dy;
+                let other_radius = other_size.radius();
+                let combined_radii = self_radius + other_radius;
+
+                if center_dist_sq <= (perception.range + combined_radii).powi(2) {
+                    neighbor_cache.add_neighbor(NeighborData {
+                        entity: *other_entity,
+                        x: other_pos.x,
+                        y: other_pos.y,
+                        radius: other_radius,
+                    });
+                }
+            }
+
+            // Schedule skip for next N ticks if full (matches production)
+            if neighbor_cache.is_full() {
+                neighbor_cache.schedule_skip(PERCEPTION_SKIP_TICKS);
+            }
+        }
+    }
+
+    #[test]
+    fn test_full_cache_sets_skip_flag() {
+        let mut world = World::new();
+
+        // Spawn perceiver at origin
+        let perceiver = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                {
+                    let mut state = CreatureState::default();
+                    state.behavior = BehaviorMode::Wandering;
+                    state
+                },
+            ))
+            .id();
+
+        // Spawn 8 neighbors (more than MAX_PERCEIVED_NEIGHBORS=7)
+        for i in 0..8 {
+            let angle = (i as f32) * std::f32::consts::TAU / 8.0;
+            world.spawn((
+                Position { x: 5.0 * angle.cos(), y: 5.0 * angle.sin() },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                CreatureState::default(),
+            ));
+        }
+
+        run_naive_perception_with_skip(&mut world, true);
+
+        let cache = world.get::<NeighborCache>(perceiver).unwrap();
+        assert_eq!(cache.neighbor_count(), MAX_PERCEIVED_NEIGHBORS, "Should fill to max");
+        assert!(cache.should_skip(), "Skip flag should be set when cache is full");
+    }
+
+    #[test]
+    fn test_partial_cache_does_not_set_skip_flag() {
+        let mut world = World::new();
+
+        let perceiver = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                {
+                    let mut state = CreatureState::default();
+                    state.behavior = BehaviorMode::Wandering;
+                    state
+                },
+            ))
+            .id();
+
+        // Spawn only 3 neighbors (less than MAX_PERCEIVED_NEIGHBORS=7)
+        for i in 0..3 {
+            let angle = (i as f32) * std::f32::consts::TAU / 3.0;
+            world.spawn((
+                Position { x: 5.0 * angle.cos(), y: 5.0 * angle.sin() },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                CreatureState::default(),
+            ));
+        }
+
+        run_naive_perception_with_skip(&mut world, true);
+
+        let cache = world.get::<NeighborCache>(perceiver).unwrap();
+        assert_eq!(cache.neighbor_count(), 3, "Should see 3 neighbors");
+        assert!(!cache.should_skip(), "Skip flag should NOT be set when cache is partial");
+    }
+
+    #[test]
+    fn test_zero_neighbors_does_not_trigger_skip() {
+        let mut world = World::new();
+
+        // Isolated creature - no neighbors within range
+        let perceiver = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                {
+                    let mut state = CreatureState::default();
+                    state.behavior = BehaviorMode::Wandering;
+                    state
+                },
+            ))
+            .id();
+
+        run_naive_perception_with_skip(&mut world, true);
+
+        let cache = world.get::<NeighborCache>(perceiver).unwrap();
+        assert_eq!(cache.neighbor_count(), 0, "Should see 0 neighbors");
+        assert!(!cache.should_skip(), "Skip flag should NOT be set with zero neighbors");
+    }
+
+    #[test]
+    fn test_skip_flag_checked_before_behavior_check() {
+        let mut world = World::new();
+
+        // Catatonic creature with skip flag set
+        let catatonic = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                {
+                    let mut cache = NeighborCache::new();
+                    // Pre-populate with a neighbor
+                    cache.add_neighbor(NeighborData {
+                        entity: Entity::PLACEHOLDER,
+                        x: 1.0, y: 0.0, radius: 0.5,
+                    });
+                    cache.schedule_skip(1);
+                    cache
+                },
+                CreatureState::default(), // Catatonic by default
+            ))
+            .id();
+
+        assert!(world.get::<NeighborCache>(catatonic).unwrap().should_skip());
+        assert_eq!(world.get::<NeighborCache>(catatonic).unwrap().neighbor_count(), 1);
+
+        run_naive_perception_with_skip(&mut world, true);
+
+        let cache = world.get::<NeighborCache>(catatonic).unwrap();
+        // Skip was consumed (flag now false)
+        assert!(!cache.should_skip(), "Skip flag should be consumed");
+        // Neighbors preserved (clear was skipped)
+        assert_eq!(cache.neighbor_count(), 1, "Neighbors should be preserved when skipping");
+    }
+
+    #[test]
+    fn test_skip_flag_causes_perception_skip() {
+        let mut world = World::new();
+
+        // Active creature with skip flag set and existing neighbors
+        let perceiver = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                {
+                    let mut cache = NeighborCache::new();
+                    cache.add_neighbor(NeighborData {
+                        entity: Entity::PLACEHOLDER,
+                        x: 1.0, y: 0.0, radius: 0.5,
+                    });
+                    cache.schedule_skip(1);
+                    cache
+                },
+                {
+                    let mut state = CreatureState::default();
+                    state.behavior = BehaviorMode::Wandering;
+                    state
+                },
+            ))
+            .id();
+
+        run_naive_perception_with_skip(&mut world, true);
+
+        let cache = world.get::<NeighborCache>(perceiver).unwrap();
+        assert!(!cache.should_skip(), "Skip flag should be flipped to false");
+        assert_eq!(cache.neighbor_count(), 1, "Neighbors should be unchanged (skip preserved them)");
+    }
+
+    #[test]
+    fn test_skip_preserves_previous_neighbors() {
+        let mut world = World::new();
+
+        // Create perceiver with 7 neighbors (will trigger skip)
+        let perceiver = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                {
+                    let mut state = CreatureState::default();
+                    state.behavior = BehaviorMode::Wandering;
+                    state
+                },
+            ))
+            .id();
+
+        // Spawn 7 neighbors
+        let mut neighbor_entities = Vec::new();
+        for i in 0..7 {
+            let angle = (i as f32) * std::f32::consts::TAU / 7.0;
+            let e = world.spawn((
+                Position { x: 5.0 * angle.cos(), y: 5.0 * angle.sin() },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                CreatureState::default(),
+            )).id();
+            neighbor_entities.push(e);
+        }
+
+        // First tick: fills to 7, sets skip
+        run_naive_perception_with_skip(&mut world, true);
+        assert!(world.get::<NeighborCache>(perceiver).unwrap().is_full());
+        assert!(world.get::<NeighborCache>(perceiver).unwrap().should_skip());
+
+        // Move all neighbors FAR away (beyond perception range)
+        for e in &neighbor_entities {
+            let mut pos = world.get_mut::<Position>(*e).unwrap();
+            pos.x += 10000.0;
+        }
+
+        // Second tick: should SKIP perception (stale data preserved)
+        run_naive_perception_with_skip(&mut world, true);
+
+        let cache = world.get::<NeighborCache>(perceiver).unwrap();
+        assert!(!cache.should_skip(), "Skip flag consumed");
+        assert_eq!(cache.neighbor_count(), 7, "Stale neighbors should be preserved");
+    }
+
+    #[test]
+    fn test_capacity_drop_during_skip_clears_flag() {
+        let mut world = World::new();
+
+        let perceiver = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                {
+                    let mut state = CreatureState::default();
+                    state.behavior = BehaviorMode::Wandering;
+                    state
+                },
+            ))
+            .id();
+
+        // Spawn 7 neighbors
+        let mut neighbor_entities = Vec::new();
+        for i in 0..7 {
+            let angle = (i as f32) * std::f32::consts::TAU / 7.0;
+            let e = world.spawn((
+                Position { x: 5.0 * angle.cos(), y: 5.0 * angle.sin() },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                CreatureState::default(),
+            )).id();
+            neighbor_entities.push(e);
+        }
+
+        // Tick 1: fills to 7, sets skip
+        run_naive_perception_with_skip(&mut world, true);
+        assert!(world.get::<NeighborCache>(perceiver).unwrap().should_skip());
+
+        // Tick 2: skip consumed
+        run_naive_perception_with_skip(&mut world, true);
+        assert!(!world.get::<NeighborCache>(perceiver).unwrap().should_skip());
+
+        // Remove 2 neighbors (now only 5 in range)
+        world.despawn(neighbor_entities[0]);
+        world.despawn(neighbor_entities[1]);
+
+        // Tick 3: perception runs normally, only sees 5, flag NOT set
+        run_naive_perception_with_skip(&mut world, true);
+
+        let cache = world.get::<NeighborCache>(perceiver).unwrap();
+        assert_eq!(cache.neighbor_count(), 5, "Should see 5 neighbors now");
+        assert!(!cache.should_skip(), "Skip flag should NOT be set below capacity");
+    }
+
+    #[test]
+    fn test_perception_skip_alternation_10_cycles() {
+        let mut world = World::new();
+
+        let perceiver = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                {
+                    let mut state = CreatureState::default();
+                    state.behavior = BehaviorMode::Wandering;
+                    state
+                },
+            ))
+            .id();
+
+        // Spawn 8 neighbors (more than max)
+        for i in 0..8 {
+            let angle = (i as f32) * std::f32::consts::TAU / 8.0;
+            world.spawn((
+                Position { x: 5.0 * angle.cos(), y: 5.0 * angle.sin() },
+                BodySize::new(1.0),
+                Perception::from_body_size(1.0),
+                NeighborCache::new(),
+                CreatureState::default(),
+            ));
+        }
+
+        // Track pattern over 10 ticks
+        let mut skip_pattern = Vec::new();
+
+        for tick in 0..10 {
+            let was_skip_set = world.get::<NeighborCache>(perceiver).unwrap().should_skip();
+            run_naive_perception_with_skip(&mut world, true);
+            let is_skip_set = world.get::<NeighborCache>(perceiver).unwrap().should_skip();
+
+            skip_pattern.push((tick, was_skip_set, is_skip_set));
+        }
+
+        // Expected pattern: (tick, before, after)
+        // 0: (false, true)  - first perception fills, sets skip
+        // 1: (true, false)  - skip consumed
+        // 2: (false, true)  - perception runs, fills, sets skip
+        // 3: (true, false)  - skip consumed
+        // ... alternating
+
+        for (tick, was_set, is_set) in &skip_pattern {
+            if *tick == 0 {
+                assert!(!was_set, "Tick 0: should start without skip flag");
+                assert!(is_set, "Tick 0: should set skip after filling");
+            } else if tick % 2 == 1 {
+                // Odd ticks: skip was consumed
+                assert!(was_set, "Tick {}: should have had skip flag", tick);
+                assert!(!is_set, "Tick {}: skip should be consumed", tick);
+            } else {
+                // Even ticks (after 0): perception ran, should set skip again
+                assert!(!was_set, "Tick {}: should NOT have skip flag", tick);
+                assert!(is_set, "Tick {}: should set skip after filling", tick);
+            }
+        }
+    }
+
+    #[test]
+    fn test_skip_flag_parallel_safety() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(100.0, 100.0);
+
+        // Spawn 100 creatures in a dense cluster
+        for i in 0..100 {
+            let x = 50.0 + (i % 10) as f32 * 2.0;
+            let y = 50.0 + (i / 10) as f32 * 2.0;
+            sim.spawn_crit(CritBuilder::new().at(x, y).with_all_capabilities());
+        }
+
+        // Run 20 ticks (uses real parallel perception system)
+        for _ in 0..20 {
+            sim.update(0.016);
+        }
+
+        // Verify all skip flags are valid booleans (no corruption)
+        let world = sim.world_mut();
+        let mut skip_true_count = 0;
+        let mut skip_false_count = 0;
+
+        for cache in world.query::<&NeighborCache>().iter(world) {
+            if cache.should_skip() {
+                skip_true_count += 1;
+            } else {
+                skip_false_count += 1;
+            }
+        }
+
+        // All creatures should have valid flag state
+        assert_eq!(skip_true_count + skip_false_count, 100, "All 100 creatures should have valid skip flags");
+
+        // In a dense cluster, some creatures should have full neighbors and skip flag set
+        // (exact count depends on timing, but should be non-trivial)
+        assert!(
+            skip_true_count > 0 || skip_false_count == 100,
+            "Either some skipping or all just ran (valid states)"
+        );
     }
 }

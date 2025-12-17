@@ -65,6 +65,18 @@ You operate under a strict **"Trust but Verify"** model. No code is merged until
 
 5.  **Style and Idiom:** Ensure the code is idiomatic for its language (Rust best practices, clean TypeScript) and is properly linted/formatted.
 
+6.  **Serialization Compliance (Save State):** All new ECS components and entities MUST be serialization-ready for save/load functionality:
+    * **Required Derives:** Every `Component` struct/enum needs:
+      ```rust
+      #[derive(Component, Serialize, Deserialize, Reflect)]
+      #[reflect(Component)]
+      pub struct MyComponent { ... }
+      ```
+    * **Serde Imports:** Ensure `use serde::{Deserialize, Serialize};` and `use bevy_reflect::Reflect;` are present
+    * **Exceptions:** Components containing `Entity` references or fixed-size arrays optimized for cache locality (e.g., `Perception`, `NeighborCache`) may be excluded if they are reconstructed from other serialized data during load (see `persistence/snapshot.rs:203-234` for reconstruction pattern)
+    * **Test Verification:** If a new component is added, check that `save_state_round_trip_preserves_all_components` test in `persistence/snapshot.rs` would catch missing components
+    * **REJECT if:** A new component is added without `Serialize, Deserialize, Reflect, #[reflect(Component)]` AND no explicit reconstruction logic exists in `Simulation::from_save_state()`
+
 ## Output and Action
 
 Your output must be a concise, structured review report that either grants approval or lists required fixes.
@@ -76,5 +88,6 @@ Your output must be a concise, structured review report that either grants appro
   - Architectural violations
   - Security issues
   - Style issues
+  - Serialization issues (missing `Serialize, Deserialize, Reflect, #[reflect(Component)]` on components)
 
   Then explicitly state: "**REJECTED.** Requires fix(es) before re-submission."

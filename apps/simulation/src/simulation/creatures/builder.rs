@@ -1,10 +1,11 @@
 use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
 use crate::simulation::creatures::components::{
     BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
-    CreatureState, CritId, EntityTag, HomePosition, Target, WanderState,
+    CreatureState, CritId, EntityTag, HomePosition, Target, UpdateSlice, WanderState,
 };
 use crate::simulation::creatures::constants::{
-    ANGLE_CHANGE, DEFAULT_FOV_DEGREES, MAX_SPEED, WANDER_DISTANCE, WANDER_RADIUS,
+    ANGLE_CHANGE, DEFAULT_FOV_DEGREES, MAX_SPEED, UPDATE_SLICE_COUNT, WANDER_DISTANCE,
+    WANDER_RADIUS,
 };
 use crate::simulation::perception::{AvoidanceBehavior, NeighborCache, Perception};
 use bevy_ecs::prelude::*;
@@ -30,6 +31,7 @@ pub struct CritBundle {
     pub neighbor_cache: NeighborCache,
     pub avoidance_behavior: AvoidanceBehavior,
     pub target: Target,
+    pub update_slice: UpdateSlice,
 }
 
 #[derive(Clone)]
@@ -225,6 +227,7 @@ impl CritBuilder {
             neighbor_cache: NeighborCache::new(),
             avoidance_behavior: AvoidanceBehavior::from_body_size(self.size),
             target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
+            update_slice: UpdateSlice::new((id % UPDATE_SLICE_COUNT as u32) as u8),
         }
     }
 }
@@ -274,5 +277,26 @@ mod tests {
         // with_all_capabilities is now a no-op since all creatures have all capabilities
         let builder = CritBuilder::new().with_all_capabilities();
         assert_eq!(builder.position, (0.0, 0.0)); // Just verify it doesn't break the chain
+    }
+
+    #[test]
+    fn test_update_slice_deterministic_assignment() {
+        // Verify slice assignment cycles through UPDATE_SLICE_COUNT
+        let bundle0 = CritBuilder::new().build(0);
+        let bundle1 = CritBuilder::new().build(1);
+        let bundle2 = CritBuilder::new().build(2);
+        let bundle3 = CritBuilder::new().build(3);
+
+        // With UPDATE_SLICE_COUNT = 2:
+        // id 0 -> slice 0, id 1 -> slice 1, id 2 -> slice 0, id 3 -> slice 1
+        assert_eq!(bundle0.update_slice.id, 0 % UPDATE_SLICE_COUNT);
+        assert_eq!(bundle1.update_slice.id, 1 % UPDATE_SLICE_COUNT);
+        assert_eq!(bundle2.update_slice.id, 2 % UPDATE_SLICE_COUNT);
+        assert_eq!(bundle3.update_slice.id, 3 % UPDATE_SLICE_COUNT);
+
+        // Verify even distribution (0 and 1 should appear equally)
+        assert_eq!(bundle0.update_slice.id, bundle2.update_slice.id);
+        assert_eq!(bundle1.update_slice.id, bundle3.update_slice.id);
+        assert_ne!(bundle0.update_slice.id, bundle1.update_slice.id);
     }
 }

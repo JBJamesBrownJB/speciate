@@ -1,14 +1,16 @@
 use crate::simulation::creatures::constants::{
-    AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING, TICK_INTERVAL_SECONDS,
+    AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING, TICK_INTERVAL_SECONDS, UPDATE_SLICE_COUNT,
 };
 use crate::simulation::core::components::PhysicsTick;
-use crate::simulation::creatures::components::{BehaviorMode, Brain, BrainMode, CreatureState};
+use crate::simulation::creatures::components::{
+    BehaviorMode, Brain, BrainMode, CreatureState, UpdateSlice,
+};
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 
 pub fn behavior_transition_system(
     physics_tick: Res<PhysicsTick>,
-    mut query: Query<(&mut CreatureState, &mut Brain)>,
+    mut query: Query<(&mut CreatureState, &mut Brain, &UpdateSlice)>,
     #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
         crate::instrumentation::SystemTimings,
     >,
@@ -18,13 +20,21 @@ pub fn behavior_transition_system(
 
     let current_time = physics_tick.get() as f64 * TICK_INTERVAL_SECONDS;
 
+    // Current update slice (cycles 0..UPDATE_SLICE_COUNT each tick)
+    let current_slice = (physics_tick.get() % UPDATE_SLICE_COUNT as u64) as u8;
+
     // Collect into Vec for Rayon parallelization (same pattern as steering system)
     let mut entities: Vec<_> = query.iter_mut().collect();
 
     // Parallel processing - each creature's updates are independent
     entities
         .par_iter_mut()
-        .for_each(|(creature_state, brain)| {
+        .for_each(|(creature_state, brain, update_slice)| {
+            // Slice-based system skipping: only process creatures in current slice
+            if update_slice.id != current_slice {
+                return;
+            }
+
             creature_state.age += AGE_INCREMENT_PER_TICK;
 
             if creature_state.behavior == BehaviorMode::Wandering {

@@ -1,5 +1,7 @@
 # Modulus Perception Spreading
 
+**Status:** Implemented
+
 ## Goal
 
 Reduce CPU load by having each creature skip expensive systems on alternating ticks, while avoiding "hot frames" where all creatures update simultaneously.
@@ -47,6 +49,8 @@ Slice-based spreading is camera-independent and treats all creatures equally.
 
 ## Implementation Location
 
-- Constant: `apps/simulation/src/simulation/creatures/constants/performance.rs`
-- Component: `UpdateSlice { id: u8 }`
-- Frame counter: Resource cycling each tick
+- Constant: `apps/simulation/src/simulation/creatures/constants/performance.rs` (`UPDATE_SLICE_COUNT = 2`)
+- Component: `apps/simulation/src/simulation/creatures/components/update_slice.rs` (`UpdateSlice { id: u8 }`)
+- Frame counter: Uses existing `PhysicsTick` resource
+- Early-out: `apps/simulation/src/simulation/perception/systems.rs` (line ~58)
+- Early-out: `apps/simulation/src/simulation/creatures/behaviors/transitions/systems.rs` (line ~33)

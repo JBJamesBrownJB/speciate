@@ -1,9 +1,11 @@
 use super::components::*;
 #[cfg(feature = "dev-tools")]
 use super::debug::*;
-use crate::simulation::creatures::constants::{MAX_PERCEIVED_NEIGHBORS, PERCEPTION_SKIP_TICKS};
-use crate::simulation::core::components::{BodySize, Position, Rotation};
-use crate::simulation::creatures::components::CreatureState;
+use crate::simulation::core::components::{BodySize, PhysicsTick, Position, Rotation};
+use crate::simulation::creatures::components::{CreatureState, UpdateSlice};
+use crate::simulation::creatures::constants::{
+    MAX_PERCEIVED_NEIGHBORS, PERCEPTION_SKIP_TICKS, UPDATE_SLICE_COUNT,
+};
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
 use crate::simulation::spatial::DoubleBufferedSpatialGrid;
@@ -26,8 +28,9 @@ thread_local! {
 }
 
 pub fn update_perception_system(
+    physics_tick: Res<PhysicsTick>,
     grid: Res<DoubleBufferedSpatialGrid>,
-    mut query: Query<(Entity, &Position, &Rotation, &BodySize, &Perception, &mut NeighborCache, &CreatureState)>,
+    mut query: Query<(Entity, &Position, &Rotation, &BodySize, &Perception, &mut NeighborCache, &CreatureState, &UpdateSlice)>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
     #[cfg(feature = "dev-tools")] mut debug_snapshot: ResMut<PerceptionDebugSnapshot>,
@@ -42,13 +45,21 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     let debug_target_entity = debug_target.get();
 
+    // Current update slice (cycles 0..UPDATE_SLICE_COUNT each tick)
+    let current_slice = (physics_tick.get() % UPDATE_SLICE_COUNT as u64) as u8;
+
     // Collect ALL entities for parallel processing
     let mut entities: Vec<_> = query.iter_mut().collect();
 
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
-    entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, neighbor_cache, state)| {
+    entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, neighbor_cache, state, update_slice)| {
+        // Slice-based system skipping: only process creatures in current slice
+        if update_slice.id != current_slice {
+            return;
+        }
+
         // Crowded creatures skip perception every other tick (performance optimization)
         if neighbor_cache.consume_skip() {
             return;
@@ -194,9 +205,9 @@ pub fn update_perception_system(
     {
         if let Some(target_entity) = debug_target_entity {
             // Find the debug target in our entities list and capture its state
-            if let Some((_, pos, rot, size, perception, neighbor_cache, state)) = entities
+            if let Some((_, pos, rot, size, perception, neighbor_cache, state, _)) = entities
                 .iter()
-                .find(|(e, _, _, _, _, _, _)| *e == target_entity)
+                .find(|(e, _, _, _, _, _, _, _)| *e == target_entity)
             {
                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
 
@@ -1416,11 +1427,16 @@ mod tests {
             pos.x += 10000.0;
         }
 
-        // Second tick: should SKIP perception (stale data preserved)
-        run_naive_perception_with_skip(&mut world, true);
+        // Run PERCEPTION_SKIP_TICKS to consume all skips (stale data preserved)
+        for tick in 0..PERCEPTION_SKIP_TICKS {
+            let cache = world.get::<NeighborCache>(perceiver).unwrap();
+            assert!(cache.should_skip(), "Tick {}: should still have skip flag", tick);
+            assert_eq!(cache.neighbor_count(), 7, "Tick {}: stale neighbors should be preserved", tick);
+            run_naive_perception_with_skip(&mut world, true);
+        }
 
         let cache = world.get::<NeighborCache>(perceiver).unwrap();
-        assert!(!cache.should_skip(), "Skip flag consumed");
+        assert!(!cache.should_skip(), "Skip flag should be consumed after PERCEPTION_SKIP_TICKS");
         assert_eq!(cache.neighbor_count(), 7, "Stale neighbors should be preserved");
     }
 
@@ -1456,19 +1472,21 @@ mod tests {
             neighbor_entities.push(e);
         }
 
-        // Tick 1: fills to 7, sets skip
+        // Tick 1: fills to 7, sets skip for PERCEPTION_SKIP_TICKS
         run_naive_perception_with_skip(&mut world, true);
         assert!(world.get::<NeighborCache>(perceiver).unwrap().should_skip());
 
-        // Tick 2: skip consumed
-        run_naive_perception_with_skip(&mut world, true);
+        // Consume all skip ticks
+        for _ in 0..PERCEPTION_SKIP_TICKS {
+            run_naive_perception_with_skip(&mut world, true);
+        }
         assert!(!world.get::<NeighborCache>(perceiver).unwrap().should_skip());
 
         // Remove 2 neighbors (now only 5 in range)
         world.despawn(neighbor_entities[0]);
         world.despawn(neighbor_entities[1]);
 
-        // Tick 3: perception runs normally, only sees 5, flag NOT set
+        // Next tick: perception runs normally, only sees 5, flag NOT set
         run_naive_perception_with_skip(&mut world, true);
 
         let cache = world.get::<NeighborCache>(perceiver).unwrap();
@@ -1477,7 +1495,7 @@ mod tests {
     }
 
     #[test]
-    fn test_perception_skip_alternation_10_cycles() {
+    fn test_perception_skip_pattern_with_skip_ticks() {
         let mut world = World::new();
 
         let perceiver = world
@@ -1506,10 +1524,14 @@ mod tests {
             ));
         }
 
-        // Track pattern over 10 ticks
+        // Cycle length = 1 (perception runs) + PERCEPTION_SKIP_TICKS (skips)
+        let cycle_length = 1 + PERCEPTION_SKIP_TICKS as usize;
+        let total_ticks = cycle_length * 2 + 2; // 2 full cycles plus extra
+
+        // Track pattern
         let mut skip_pattern = Vec::new();
 
-        for tick in 0..10 {
+        for tick in 0..total_ticks {
             let was_skip_set = world.get::<NeighborCache>(perceiver).unwrap().should_skip();
             run_naive_perception_with_skip(&mut world, true);
             let is_skip_set = world.get::<NeighborCache>(perceiver).unwrap().should_skip();
@@ -1517,25 +1539,30 @@ mod tests {
             skip_pattern.push((tick, was_skip_set, is_skip_set));
         }
 
-        // Expected pattern: (tick, before, after)
-        // 0: (false, true)  - first perception fills, sets skip
-        // 1: (true, false)  - skip consumed
-        // 2: (false, true)  - perception runs, fills, sets skip
-        // 3: (true, false)  - skip consumed
-        // ... alternating
+        // Expected pattern with PERCEPTION_SKIP_TICKS = 4:
+        // Tick 0: (false, true)  - perception runs, fills, sets skip = 4
+        // Tick 1: (true, true)   - skip consumed (4 → 3)
+        // Tick 2: (true, true)   - skip consumed (3 → 2)
+        // Tick 3: (true, true)   - skip consumed (2 → 1)
+        // Tick 4: (true, false)  - skip consumed (1 → 0)
+        // Tick 5: (false, true)  - perception runs, fills, sets skip = 4
+        // ... repeating
 
         for (tick, was_set, is_set) in &skip_pattern {
-            if *tick == 0 {
-                assert!(!was_set, "Tick 0: should start without skip flag");
-                assert!(is_set, "Tick 0: should set skip after filling");
-            } else if tick % 2 == 1 {
-                // Odd ticks: skip was consumed
-                assert!(was_set, "Tick {}: should have had skip flag", tick);
-                assert!(!is_set, "Tick {}: skip should be consumed", tick);
+            let position_in_cycle = *tick % cycle_length;
+
+            if position_in_cycle == 0 {
+                // Perception runs: was NOT skipping, now IS skipping
+                assert!(!was_set, "Tick {}: perception runs, should NOT have been skipping before", tick);
+                assert!(is_set, "Tick {}: perception runs and fills, should set skip", tick);
+            } else if position_in_cycle == cycle_length - 1 {
+                // Last skip tick: was skipping, now NOT skipping (counter reaches 0)
+                assert!(was_set, "Tick {}: should have been skipping", tick);
+                assert!(!is_set, "Tick {}: last skip consumed, should NOT be skipping now", tick);
             } else {
-                // Even ticks (after 0): perception ran, should set skip again
-                assert!(!was_set, "Tick {}: should NOT have skip flag", tick);
-                assert!(is_set, "Tick {}: should set skip after filling", tick);
+                // Middle skip ticks: was skipping, still skipping
+                assert!(was_set, "Tick {}: should have been skipping", tick);
+                assert!(is_set, "Tick {}: skip consumed but counter > 0, should still be skipping", tick);
             }
         }
     }

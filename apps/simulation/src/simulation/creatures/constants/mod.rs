@@ -9,13 +9,15 @@
 //!   [LEGACY]  - Alias for backwards compatibility, migrate away from these
 //!
 //! Organization:
-//! - physics.rs    - Movement, drag, speed, turn rate
-//! - perception.rs - FOV, range, neighbor tracking
-//! - behavior.rs   - Force budgets, avoidance, seek, wander
-//! - state.rs      - Energy, age, transitions
+//! - physics.rs     - Movement, drag, speed, turn rate
+//! - perception.rs  - FOV, range, neighbor tracking
+//! - behavior.rs    - Force budgets, avoidance, seek, wander
+//! - state.rs       - Energy, age, transitions
+//! - performance.rs - System skipping, load distribution
 
 mod behavior;
 mod perception;
+mod performance;
 mod physics;
 mod state;
 
@@ -23,5 +25,6 @@ mod state;
 // (modules are private to avoid name collision with creatures/components submodules)
 pub use behavior::*;
 pub use perception::*;
+pub use performance::*;
 pub use physics::*;
 pub use state::*;

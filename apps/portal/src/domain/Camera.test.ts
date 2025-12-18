@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Camera } from './Camera';
+import { createWorldBounds } from './WorldBounds';
 import { CAMERA_CONFIG } from '../core/constants';
 
 describe('Camera', () => {
@@ -270,6 +271,158 @@ describe('Camera', () => {
 
       // Should center in larger screen
       expect(container.position.set).toHaveBeenCalledWith(960, 540);
+    });
+  });
+
+  describe('World Bounds Clamping', () => {
+    it('should not clamp when no bounds are set', () => {
+      camera.move(100000, 100000);
+      expect(camera.x).toBe(100000);
+      expect(camera.y).toBe(100000);
+    });
+
+    it('should clamp position to world bounds when set', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // Try to move beyond right edge (max X is 500)
+      camera.move(2000, 0);
+      expect(camera.x).toBeLessThanOrEqual(500);
+    });
+
+    it('should clamp to minimum bound (left edge)', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // Min X is -500
+      camera.move(-1000, 0);
+      expect(camera.x).toBeGreaterThanOrEqual(-500);
+    });
+
+    it('should clamp to minimum bound (top edge)', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // Min Y is -500
+      camera.move(0, -1000);
+      expect(camera.y).toBeGreaterThanOrEqual(-500);
+    });
+
+    it('should clamp to maximum bound (bottom edge)', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // Max Y is 500
+      camera.move(0, 2000);
+      expect(camera.y).toBeLessThanOrEqual(500);
+    });
+
+    it('should account for viewport size when clamping', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // At zoom 10, viewport covers 80x60 world units
+      // Half viewport is 40x30 units
+      // Min camera X = -500 + 40 = -460
+      // Min camera Y = -500 + 30 = -470
+      camera.move(-1000, -1000);
+      expect(camera.x).toBe(-460);
+      expect(camera.y).toBe(-470);
+    });
+
+    it('should account for zoom level when clamping', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(20);
+
+      // At zoom 20, viewport covers 40x30 world units
+      // Half viewport is 20x15 units
+      // Min camera X = -500 + 20 = -480
+      // Min camera Y = -500 + 15 = -485
+      camera.move(-1000, -1000);
+      expect(camera.x).toBe(-480);
+      expect(camera.y).toBe(-485);
+    });
+
+    it('should clamp deltaMove to world bounds', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      camera.move(0, 0);
+      camera.deltaMove(1000, 1000);
+      expect(camera.x).toBeLessThanOrEqual(500);
+      expect(camera.y).toBeLessThanOrEqual(500);
+    });
+
+    it('should re-clamp position after zoom change', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // At zoom 10, half viewport is 40, so max X is 500 - 40 = 460
+      camera.move(460, 0);
+      expect(camera.x).toBe(460);
+
+      // When zoom decreases, viewport gets larger, so max X decreases
+      camera.setZoom(5);
+      // At zoom 5, viewport covers 160x120 units, half is 80x60
+      // Max X should be 500 - 80 = 420
+      expect(camera.x).toBeLessThanOrEqual(420);
+    });
+
+    it('should center camera when world is smaller than viewport', () => {
+      camera.setWorldBounds(createWorldBounds(-25, 25, -25, 25));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // At zoom 10, viewport is 80x60 units, but world is only 50x50
+      // Camera should be centered at 0, 0 (center of -25 to 25)
+      camera.move(-100, -100);
+      expect(camera.x).toBe(0);
+      expect(camera.y).toBe(0);
+
+      camera.move(100, 100);
+      expect(camera.x).toBe(0);
+      expect(camera.y).toBe(0);
+    });
+
+    it('should allow camera at origin with centered world bounds', () => {
+      camera.setWorldBounds(createWorldBounds(-5000, 5000, -5000, 5000));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // Camera starts at origin (0, 0) - should stay there
+      expect(camera.x).toBe(0);
+      expect(camera.y).toBe(0);
+    });
+
+    it('should allow panning in all four directions from origin', () => {
+      camera.setWorldBounds(createWorldBounds(-5000, 5000, -5000, 5000));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      // Pan left (negative X)
+      camera.deltaMove(-100, 0);
+      expect(camera.x).toBe(-100);
+
+      // Pan up (negative Y)
+      camera.deltaMove(0, -100);
+      expect(camera.y).toBe(-100);
+
+      // Reset and pan right
+      camera.move(0, 0);
+      camera.deltaMove(100, 0);
+      expect(camera.x).toBe(100);
+
+      // Pan down
+      camera.deltaMove(0, 100);
+      expect(camera.y).toBe(100);
     });
   });
 });

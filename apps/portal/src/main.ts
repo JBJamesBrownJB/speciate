@@ -1,8 +1,11 @@
 import { Application, Container } from "pixi.js";
 import { SpriteProvider } from "@/rendering/SpriteProvider";
 import { Camera } from "@/domain/Camera";
+import { CameraController } from "@/domain/CameraController";
 import { Viewport } from "@/domain/Viewport";
-import { RENDERING_CONFIG, CAMERA_CONFIG, VIEWPORT_CULLING_CONFIG } from "@/core/constants";
+import { createWorldBounds } from "@/domain/WorldBounds";
+import { InputManager } from "@/input/InputManager";
+import { RENDERING_CONFIG, CAMERA_CONFIG, VIEWPORT_CULLING_CONFIG, WORLD_BOUNDS } from "@/core/constants";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
 import { PerformanceMetrics } from "@/core/PerformanceMetrics";
 import { FPSSparkline } from "@/ui/FPSSparkline";
@@ -103,7 +106,16 @@ async function main(): Promise<void> {
     updateContainerSize(container, viewportWidth, viewportHeight);
 
     const camera = new Camera(0, 0, 10);
+    camera.setWorldBounds(createWorldBounds(
+      WORLD_BOUNDS.MIN_X,
+      WORLD_BOUNDS.MAX_X,
+      WORLD_BOUNDS.MIN_Y,
+      WORLD_BOUNDS.MAX_Y
+    ));
+    camera.setViewportSize(viewportWidth, viewportHeight);
     const viewport = new Viewport(viewportWidth, viewportHeight);
+    const inputManager = new InputManager();
+    const cameraController = new CameraController(camera, inputManager);
 
     const spriteProvider = new SpriteProvider();
     await spriteProvider.init();
@@ -357,9 +369,15 @@ async function main(): Promise<void> {
     app.ticker.add(() => {
       const frameStart = performance.now();
       const deltaMs = frameStart - lastFrameTime;
+      const deltaTime = deltaMs / 1000;
       const fps = Math.round(1000 / deltaMs);
 
       perfMetrics.recordFrameTime(deltaMs);
+
+      // Update camera panning from keyboard/mouse input
+      cameraController.update(deltaTime);
+      camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
+      scaleBarManager.update(camera.zoom);
 
       // Update viewport bounds for backend culling
       sendViewportBounds();
@@ -418,8 +436,39 @@ async function main(): Promise<void> {
       updateContainerSize(container, viewportWidth, viewportHeight);
       app.renderer.resize(viewportWidth, viewportHeight);
       viewport.resize(viewportWidth, viewportHeight);
+      camera.setViewportSize(viewportWidth, viewportHeight);
       camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
       scaleBarManager.update(camera.zoom);
+    });
+
+    // Keyboard input for camera panning
+    window.addEventListener("keydown", (event: KeyboardEvent) => {
+      inputManager.handleKeyDown(event.key);
+    });
+
+    window.addEventListener("keyup", (event: KeyboardEvent) => {
+      inputManager.handleKeyUp(event.key);
+    });
+
+    window.addEventListener("blur", () => {
+      inputManager.clearAllKeys();
+    });
+
+    // Mouse drag for camera panning (right-click)
+    app.canvas.addEventListener("pointerdown", (event: PointerEvent) => {
+      inputManager.handlePointerDown(event.clientX, event.clientY, event.button);
+    });
+
+    app.canvas.addEventListener("pointermove", (event: PointerEvent) => {
+      inputManager.handlePointerMove(event.clientX, event.clientY);
+    });
+
+    app.canvas.addEventListener("pointerup", () => {
+      inputManager.handlePointerUp();
+    });
+
+    app.canvas.addEventListener("contextmenu", (event: Event) => {
+      event.preventDefault();
     });
 
     window.addEventListener(

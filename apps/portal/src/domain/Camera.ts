@@ -1,4 +1,5 @@
 import { CAMERA_CONFIG } from "../core/constants";
+import type { WorldBounds } from "./WorldBounds";
 
 export interface ITransformable {
   scale: { set(x: number, y?: number): void };
@@ -6,15 +7,28 @@ export interface ITransformable {
 }
 
 export class Camera {
-
   private _x: number;
   private _y: number;
   private _zoom: number;
+  private worldBounds: WorldBounds | null = null;
+  private viewportWidth = 0;
+  private viewportHeight = 0;
 
   constructor(x: number, y: number, zoom: number) {
     this._x = x;
     this._y = y;
     this._zoom = this.clampZoom(zoom);
+  }
+
+  setWorldBounds(bounds: WorldBounds): void {
+    this.worldBounds = bounds;
+    this.clampPosition();
+  }
+
+  setViewportSize(width: number, height: number): void {
+    this.viewportWidth = width;
+    this.viewportHeight = height;
+    this.clampPosition();
   }
 
   get x(): number {
@@ -32,15 +46,18 @@ export class Camera {
   move(x: number, y: number): void {
     this._x = x;
     this._y = y;
+    this.clampPosition();
   }
 
   deltaMove(dx: number, dy: number): void {
     this._x += dx;
     this._y += dy;
+    this.clampPosition();
   }
 
   setZoom(zoom: number): void {
     this._zoom = this.clampZoom(zoom);
+    this.clampPosition();
   }
 
   adjustZoom(factor: number): void {
@@ -82,5 +99,30 @@ export class Camera {
 
   private clampZoom(zoom: number): number {
     return Math.max(CAMERA_CONFIG.MIN_ZOOM, Math.min(CAMERA_CONFIG.MAX_ZOOM, zoom));
+  }
+
+  private clampPosition(): void {
+    if (this.worldBounds === null) {
+      return;
+    }
+
+    const halfViewportW = this.viewportWidth / this._zoom / 2;
+    const halfViewportH = this.viewportHeight / this._zoom / 2;
+
+    const { minX, maxX, minY, maxY } = this.worldBounds;
+    const worldWidth = maxX - minX;
+    const worldHeight = maxY - minY;
+
+    if (worldWidth <= halfViewportW * 2) {
+      this._x = (minX + maxX) / 2;
+    } else {
+      this._x = Math.max(minX + halfViewportW, Math.min(maxX - halfViewportW, this._x));
+    }
+
+    if (worldHeight <= halfViewportH * 2) {
+      this._y = (minY + maxY) / 2;
+    } else {
+      this._y = Math.max(minY + halfViewportH, Math.min(maxY - halfViewportH, this._y));
+    }
   }
 }

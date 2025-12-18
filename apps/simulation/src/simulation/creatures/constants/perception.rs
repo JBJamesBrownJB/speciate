@@ -16,7 +16,7 @@ pub const MAX_PERCEIVED_NEIGHBORS: usize = 7;
 /// 1 = skip every other tick (50% reduction)
 /// 2 = skip 2 ticks per perception (66% reduction)
 /// Higher values = more performance, more stale neighbor data.
-pub const PERCEPTION_SKIP_TICKS: u8 = 4;
+pub const PERCEPTION_SKIP_TICKS: u8 = 1;
 
 /// [ACTIVE] Perception range = body_length × this multiplier.
 /// 10× gives 1m creature a 10m range - conservative, good for dense environments.

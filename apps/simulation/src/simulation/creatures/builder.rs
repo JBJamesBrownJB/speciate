@@ -4,9 +4,9 @@ use crate::simulation::creatures::components::{
     CreatureState, CritId, EntityTag, HomePosition, Target, UpdateSlice, WanderState,
 };
 use crate::simulation::creatures::constants::{
-    ANGLE_CHANGE, DEFAULT_FOV_DEGREES, MAX_SPEED, UPDATE_SLICE_COUNT, WANDER_DISTANCE,
-    WANDER_RADIUS,
+    ANGLE_CHANGE, MAX_SPEED, UPDATE_SLICE_COUNT, WANDER_DISTANCE, WANDER_RADIUS,
 };
+use crate::simulation::creatures::dna::Dna;
 use crate::simulation::perception::{AvoidanceBehavior, NeighborCache, Perception};
 use bevy_ecs::prelude::*;
 use rand::Rng;
@@ -14,6 +14,7 @@ use rand::Rng;
 #[derive(Bundle)]
 pub struct CritBundle {
     pub id: CritId,
+    pub dna: Dna,
     pub position: Position,
     pub velocity: Velocity,
     pub acceleration: Acceleration,
@@ -44,8 +45,9 @@ pub struct CritBuilder {
     age: f32,
     max_speed: f32,
     target: Option<Target>,
-    size: f32,
-    fov_degrees: f32,
+    dna: Dna,
+    size_override: Option<f32>,
+    fov_override: Option<f32>,
     tag: Option<String>,
 }
 
@@ -66,8 +68,9 @@ impl CritBuilder {
             age: 0.0,
             max_speed: MAX_SPEED,
             target: None,
-            size: 1.0,
-            fov_degrees: DEFAULT_FOV_DEGREES,
+            dna: Dna::default(),
+            size_override: None,
+            fov_override: None,
             tag: None,
         }
     }
@@ -142,12 +145,17 @@ impl CritBuilder {
     }
 
     pub fn with_size(mut self, size: f32) -> Self {
-        self.size = size;
+        self.size_override = Some(size);
         self
     }
 
     pub fn with_fov(mut self, fov_degrees: f32) -> Self {
-        self.fov_degrees = fov_degrees;
+        self.fov_override = Some(fov_degrees);
+        self
+    }
+
+    pub fn with_dna(mut self, dna: Dna) -> Self {
+        self.dna = dna;
         self
     }
 
@@ -192,8 +200,12 @@ impl CritBuilder {
     pub fn build(self, id: u32) -> CritBundle {
         let mut rng = rand::thread_rng();
 
+        let size = self.size_override.unwrap_or_else(|| self.dna.expressed_size());
+        let fov_degrees = self.fov_override.unwrap_or_else(|| self.dna.expressed_fov());
+
         CritBundle {
             id: CritId(id),
+            dna: self.dna,
             position: Position {
                 x: self.position.0,
                 y: self.position.1,
@@ -203,7 +215,7 @@ impl CritBuilder {
                 vy: self.velocity.1,
             },
             acceleration: Acceleration { ax: 0.0, ay: 0.0 },
-            body_size: BodySize::new(self.size),
+            body_size: BodySize::new(size),
             rotation: Rotation::new(rng.gen_range(0.0..std::f32::consts::TAU)),
             creature_state: CreatureState {
                 behavior: self.behavior,
@@ -223,9 +235,9 @@ impl CritBuilder {
             can_flee: CanFlee,
             can_wander: CanWander,
             can_avoid_obstacles: CanAvoidObstacles,
-            perception: Perception::from_body_size_with_fov(self.size, self.fov_degrees),
+            perception: Perception::from_body_size_with_fov(size, fov_degrees),
             neighbor_cache: NeighborCache::new(),
-            avoidance_behavior: AvoidanceBehavior::from_body_size(self.size),
+            avoidance_behavior: AvoidanceBehavior::from_body_size(size),
             target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
             update_slice: UpdateSlice::new((id % UPDATE_SLICE_COUNT as u32) as u8),
         }
@@ -298,5 +310,105 @@ mod tests {
         assert_eq!(bundle0.update_slice.id, bundle2.update_slice.id);
         assert_eq!(bundle1.update_slice.id, bundle3.update_slice.id);
         assert_ne!(bundle0.update_slice.id, bundle1.update_slice.id);
+    }
+
+    #[test]
+    fn test_builder_default_uses_dna_default() {
+        let builder = CritBuilder::new();
+        assert_eq!(builder.dna, Dna::default());
+    }
+
+    #[test]
+    fn test_builder_default_produces_approximately_1m_creature() {
+        let bundle = CritBuilder::new().build(0);
+        assert!(
+            (bundle.body_size.length - 1.0).abs() < 0.05,
+            "Default creature should be ~1.0m, got {}",
+            bundle.body_size.length
+        );
+    }
+
+    #[test]
+    fn test_builder_bundle_includes_dna_component() {
+        let bundle = CritBuilder::new().build(0);
+        assert_eq!(bundle.dna, Dna::default());
+    }
+
+    #[test]
+    fn test_builder_with_dna_affects_size() {
+        use crate::simulation::creatures::dna::SIZE_MAX;
+
+        let dna = Dna::new(1.0, 0.5);
+        let bundle = CritBuilder::new().with_dna(dna).build(0);
+
+        assert_eq!(bundle.dna.size_gene, 1.0);
+        assert_eq!(bundle.body_size.length, SIZE_MAX);
+    }
+
+    #[test]
+    fn test_builder_with_dna_affects_fov() {
+        use crate::simulation::creatures::constants::MAX_FOV_DEGREES;
+
+        let dna = Dna::new(0.5, 1.0);
+        let bundle = CritBuilder::new().with_dna(dna).build(0);
+
+        assert_eq!(bundle.dna.fov_gene, 1.0);
+        let expected_fov_rad = MAX_FOV_DEGREES.to_radians();
+        assert!(
+            (bundle.perception.fov_angle - expected_fov_rad).abs() < 0.01,
+            "FOV should be {} rad, got {}",
+            expected_fov_rad,
+            bundle.perception.fov_angle
+        );
+    }
+
+    #[test]
+    fn test_builder_with_size_overrides_dna() {
+        let dna = Dna::new(1.0, 0.5);
+        let bundle = CritBuilder::new()
+            .with_dna(dna)
+            .with_size(2.0)
+            .build(0);
+
+        assert_eq!(bundle.body_size.length, 2.0);
+        assert_eq!(bundle.dna.size_gene, 1.0);
+    }
+
+    #[test]
+    fn test_builder_with_fov_overrides_dna() {
+        let dna = Dna::new(0.5, 1.0);
+        let bundle = CritBuilder::new()
+            .with_dna(dna)
+            .with_fov(90.0)
+            .build(0);
+
+        let expected_fov_rad = 90.0_f32.to_radians();
+        assert!(
+            (bundle.perception.fov_angle - expected_fov_rad).abs() < 0.01,
+            "FOV should be {} rad, got {}",
+            expected_fov_rad,
+            bundle.perception.fov_angle
+        );
+        assert_eq!(bundle.dna.fov_gene, 1.0);
+    }
+
+    #[test]
+    fn test_builder_small_creature_from_dna() {
+        use crate::simulation::creatures::dna::SIZE_MIN;
+
+        let dna = Dna::new(0.0, 0.5);
+        let bundle = CritBuilder::new().with_dna(dna).build(0);
+
+        assert_eq!(bundle.body_size.length, SIZE_MIN);
+    }
+
+    #[test]
+    fn test_builder_large_creature_from_dna() {
+        use crate::simulation::creatures::dna::SIZE_MAX;
+
+        let dna = Dna::new(1.0, 0.5);
+        let bundle = CritBuilder::new().with_dna(dna).build(0);
+
+        assert_eq!(bundle.body_size.length, SIZE_MAX);
     }
 }

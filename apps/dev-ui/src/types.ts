@@ -2,12 +2,18 @@
  * TypeScript type definitions for dev tools
  */
 
+export interface DnaData {
+  size_gene: number; // 0.0-1.0
+  fov_gene: number; // 0.0-1.0
+}
+
 export interface DevCommand {
   type: 'dev_spawn_creature' | 'dev_load_trial' | 'dev_clear_creatures';
   x?: number;
   y?: number;
-  dna?: Record<string, unknown>;
+  dna?: DnaData;
   template?: string;
+  randomizeDna?: boolean;
 }
 
 export interface HardwareMetrics {

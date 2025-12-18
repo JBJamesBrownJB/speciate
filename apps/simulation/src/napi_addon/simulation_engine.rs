@@ -185,11 +185,11 @@ impl SimulationEngine {
         let (tx, rx) = crossbeam_channel::bounded(128);
         self.command_sender = Some(tx);
 
-        // Allocate double buffer (SoA layout: ID, X, Y, Rotation)
-        // Pre-allocate for 500K creatures (16 MB, double-buffered = 32 MB total)
+        // Allocate double buffer (SoA layout: ID, X, Y, Rotation, Size)
+        // Pre-allocate for 500K creatures (20 MB, double-buffered = 40 MB total)
         // Sprint 20 upgrade - performance allows larger populations
         const MAX_CREATURES: usize = 500_000;
-        let size = MAX_CREATURES * 4;  // 2M f32s (ID, X, Y, Rot)
+        let size = MAX_CREATURES * 5;  // 2.5M f32s (ID, X, Y, Rot, Size)
         *self.buffer.lock() = DoubleBuffer::new(size);
 
         self.running.store(true, Ordering::SeqCst);
@@ -393,19 +393,22 @@ impl SimulationEngine {
     ///
     /// **Layout (SoA):**
     /// ```
-    /// [ID₁, ID₂, ..., IDₙ, X₁, X₂, ..., Xₙ, Y₁, Y₂, ..., Yₙ, Rot₁, Rot₂, ..., Rotₙ]
+    /// [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ, Size₁...Sizeₙ]
     /// ```
     ///
     /// # Example (JavaScript)
     /// ```js
     /// const buffer = sim.getBuffer();
-    /// const creatureCount = buffer.length / 4;
+    /// const creatureCount = buffer.length / 5;
     /// const xOffset = creatureCount;
     /// const yOffset = creatureCount * 2;
+    /// const rotOffset = creatureCount * 3;
+    /// const sizeOffset = creatureCount * 4;
     ///
     /// for (let i = 0; i < creatureCount; i++) {
     ///   sprite.x = buffer[xOffset + i];
     ///   sprite.y = buffer[yOffset + i];
+    ///   sprite.scale = buffer[sizeOffset + i];
     /// }
     /// ```
     #[napi]
@@ -417,8 +420,8 @@ impl SimulationEngine {
         // Use Acquire to synchronize with Release store after buffer swap
         let creature_count = self.buffer_creature_count.load(Ordering::Acquire) as usize;
 
-        // Calculate actual data size (4 f32s per creature: ID, X, Y, Rotation)
-        let active_size = creature_count * 4;
+        // Calculate actual data size (5 f32s per creature: ID, X, Y, Rotation, Size)
+        let active_size = creature_count * 5;
 
         // Simple allocation pattern - let NAPI handle memory management
         // Complex Vec reuse patterns can interfere with NAPI's GC integration
@@ -450,7 +453,7 @@ impl SimulationEngine {
 
         // Use Acquire to synchronize with Release store after buffer swap
         let creature_count = self.buffer_creature_count.load(Ordering::Acquire) as usize;
-        let active_size = creature_count * 4;
+        let active_size = creature_count * 5; // 5 f32s per creature: ID, X, Y, Rot, Size
 
         let dest = buffer.as_mut();
         if active_size == 0 || active_size > read_slice.len() || active_size > dest.len() {
@@ -514,24 +517,33 @@ impl SimulationEngine {
         Ok(())
     }
 
-    /// Spawn creature at specific position
+    /// Spawn creature at specific position with optional DNA
     ///
     /// # Arguments
     /// * `x` - X coordinate
     /// * `y` - Y coordinate
+    /// * `dna_size_gene` - Optional size gene (0.0-1.0)
+    /// * `dna_fov_gene` - Optional FOV gene (0.0-1.0)
     ///
     /// # Errors
     /// * Simulation not started
     /// * Command queue full
     #[napi]
-    pub fn spawn_creature_at(&self, x: f64, y: f64) -> Result<()> {
+    pub fn spawn_creature_at(&self, x: f64, y: f64, dna_size_gene: Option<f64>, dna_fov_gene: Option<f64>) -> Result<()> {
+        use crate::simulation::creatures::dna::Dna;
+
+        let dna = match (dna_size_gene, dna_fov_gene) {
+            (Some(size), Some(fov)) => Some(Dna::new(size as f32, fov as f32)),
+            _ => None,
+        };
+
         self.command_sender
             .as_ref()
             .ok_or(Error::new(
                 Status::GenericFailure,
                 "Simulation not started",
             ))?
-            .try_send(SimCommand::SpawnAt { x: x as f32, y: y as f32 })
+            .try_send(SimCommand::SpawnAt { x: x as f32, y: y as f32, dna })
             .map_err(|e| {
                 Error::new(
                     Status::GenericFailure,
@@ -672,15 +684,25 @@ impl SimulationEngine {
     ///
     /// # Arguments
     /// * `template` - Trial template name (e.g., "flocking_test")
+    /// * `randomize_dna` - If true, each creature gets unique random DNA
+    /// * `dna_size_gene` - Optional size gene (0.0-1.0, used when randomize_dna is false)
+    /// * `dna_fov_gene` - Optional FOV gene (0.0-1.0, used when randomize_dna is false)
     #[napi]
-    pub fn load_trial(&self, template: String) -> Result<()> {
+    pub fn load_trial(&self, template: String, randomize_dna: bool, dna_size_gene: Option<f64>, dna_fov_gene: Option<f64>) -> Result<()> {
+        use crate::simulation::creatures::dna::Dna;
+
+        let dna = match (dna_size_gene, dna_fov_gene) {
+            (Some(size), Some(fov)) => Some(Dna::new(size as f32, fov as f32)),
+            _ => None,
+        };
+
         self.command_sender
             .as_ref()
             .ok_or(Error::new(
                 Status::GenericFailure,
                 "Simulation not started",
             ))?
-            .try_send(SimCommand::LoadTrial { trial_name: template })
+            .try_send(SimCommand::LoadTrial { trial_name: template, randomize_dna, dna })
             .map_err(|e| {
                 Error::new(
                     Status::GenericFailure,
@@ -841,7 +863,7 @@ impl SimulationEngine {
     #[napi]
     pub fn get_buffer_stats(&self) -> String {
         let buffer = self.buffer.lock();
-        let capacity = buffer.size() / 4;  // 4 f32s per creature
+        let capacity = buffer.size() / 5;  // 5 f32s per creature: ID, X, Y, Rot, Size
         let used = self.get_creature_count() as usize;
         let utilization_pct = if capacity > 0 {
             (used * 100) / capacity

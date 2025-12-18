@@ -7,7 +7,8 @@
  * - View simulation state
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { DnaSettings, DEFAULT_SIZE_GENE, DEFAULT_FOV_GENE } from './DnaSettings';
 import { SpawnForm } from './SpawnForm';
 import { TrialSelector } from './TrialSelector';
 import { ControlBar } from './ControlBar';
@@ -16,7 +17,7 @@ import { useSmoothedMetrics } from '../hooks/useSmoothedMetrics';
 import { calculateStatistics } from '../utils/statistics';
 import { snapshotToTelemetry } from '../utils/snapshotConverter';
 import { MetricsColumn } from './MetricsColumn';
-import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, TelemetryFrame, MetricsSnapshot } from '../types';
+import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, TelemetryFrame, MetricsSnapshot, DnaData } from '../types';
 import '../styles/cockpit.css';
 
 const SAMPLE_DURATION_MS = 3000;
@@ -40,6 +41,16 @@ export const DevToolsApp: React.FC = () => {
   const samplingStartTimeRef = useRef<number>(0);
   const [sampleCount, setSampleCount] = useState(0);
   const [loadedSnapshot, setLoadedSnapshot] = useState<MetricsSnapshot | null>(null);
+
+  // Lifted DNA state (applies to both spawning and trials)
+  const [sizeGene, setSizeGene] = useState<number>(DEFAULT_SIZE_GENE);
+  const [fovGene, setFovGene] = useState<number>(DEFAULT_FOV_GENE);
+  const [randomizeDna, setRandomizeDna] = useState<boolean>(false);
+
+  const handleResetDna = useCallback(() => {
+    setSizeGene(DEFAULT_SIZE_GENE);
+    setFovGene(DEFAULT_FOV_GENE);
+  }, []);
 
   const processSamplesAndSave = async (collectedSamples: TelemetryFrame[], startTime: number, endTime: number) => {
     if (collectedSamples.length === 0) {
@@ -188,17 +199,37 @@ export const DevToolsApp: React.FC = () => {
   }, []);
 
   const handleSpawn = (x: number, y: number) => {
+    let dna: DnaData | undefined;
+    if (randomizeDna) {
+      dna = {
+        size_gene: Math.random(),
+        fov_gene: Math.random(),
+      };
+    } else {
+      dna = {
+        size_gene: sizeGene,
+        fov_gene: fovGene,
+      };
+    }
+
     window.electron?.sendCommand?.({
       type: 'dev_spawn_creature',
       x,
       y,
+      dna,
     });
   };
 
   const handleLoadTrial = (template: string) => {
+    const dna = randomizeDna ? undefined : {
+      size_gene: sizeGene,
+      fov_gene: fovGene,
+    };
     window.electron?.sendCommand?.({
       type: 'dev_load_trial',
       template,
+      randomizeDna,
+      dna,
     });
   };
 
@@ -262,8 +293,19 @@ export const DevToolsApp: React.FC = () => {
 
       <NAPIBufferPanel telemetry={currentTelemetry} />
 
+      <DnaSettings
+        sizeGene={sizeGene}
+        fovGene={fovGene}
+        randomize={randomizeDna}
+        onSizeChange={setSizeGene}
+        onFovChange={setFovGene}
+        onRandomizeChange={setRandomizeDna}
+        onReset={handleResetDna}
+        disabled={!isConnected}
+      />
+
       <SpawnForm onSpawn={handleSpawn} disabled={!isConnected} />
-      <TrialSelector onLoadTrial={handleLoadTrial} disabled={!isConnected} />
+      <TrialSelector onLoadTrial={handleLoadTrial} disabled={!isConnected} randomizeDna={randomizeDna} />
 
       <div className="section">
         <h2>Danger Zone</h2>

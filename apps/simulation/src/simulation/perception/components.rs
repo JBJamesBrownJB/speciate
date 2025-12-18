@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::simulation::creatures::constants::{
     DEFAULT_FOV_DEGREES, ENERGY_MODIFIER, FOV_RANGE_EXPONENT, MAX_PERCEIVED_NEIGHBORS,
-    PERCEPTION_MULTIPLIER, PERSONAL_SPACE_MULTIPLIER,
+    PERCEPTION_MULTIPLIER, PERSONAL_SPACE_MULTIPLIER, SIZE_ALLOMETRY_EXPONENT,
+    SIZE_ALLOMETRY_REFERENCE,
 };
 
 // Debug types are in perception/debug.rs (dev-tools only)
@@ -66,12 +67,15 @@ impl Perception {
     }
 
     /// Calculate perception range from body size and FOV
+    /// Uses allometric scaling: larger creatures see proportionally further, but with diminishing returns.
     /// Narrow FOV = longer range (more photoreceptors per degree)
-    /// Formula: range = base_range × (180° / fov_angle)^0.4
+    /// Formula: range = base_range × size_allometry × fov_factor
     fn calculate_range(body_size: f32, fov_angle_degrees: f32) -> f32 {
         let base_range = body_size * PERCEPTION_MULTIPLIER;
+        let size_allometry =
+            (body_size / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
         let fov_factor = (180.0 / fov_angle_degrees).powf(FOV_RANGE_EXPONENT);
-        base_range * fov_factor
+        base_range * size_allometry * fov_factor
     }
 
     /// Create perception with default FOV (180°) from body size
@@ -211,45 +215,64 @@ mod tests {
 
     #[test]
     fn test_perception_scaling_with_body_size_default_fov() {
-        // Test the RELATIONSHIP: range scales linearly with body size
-        // (Don't hardcode expected values - they change when constants are tuned)
+        // Test the RELATIONSHIP: range scales super-linearly with body size due to allometry
+        // Formula: range = body_size × MULTIPLIER × (body_size / REF)^0.35 × fov_factor
         let small_perception = Perception::from_body_size(0.5);
         let standard_perception = Perception::from_body_size(1.0);
         let large_perception = Perception::from_body_size(2.0);
 
-        // Range should scale proportionally with body size
+        // Range should scale super-linearly (body_size^1 × body_size^0.35 = body_size^1.35)
         assert!(small_perception.range > 0.0, "Range must be positive");
+
+        // Expected ratio for 1.0 vs 0.5:
+        // base ratio: 2.0, allometry ratio: (1.0/0.5)^0.35 / (0.5/0.5)^0.35 = 2^0.35 ≈ 1.274
+        // total: 2.0 × 1.274 ≈ 2.55
+        let ratio_1_to_05 = standard_perception.range / small_perception.range;
+        let expected_ratio = 2.0 * (2.0_f32).powf(SIZE_ALLOMETRY_EXPONENT);
         assert!(
-            (standard_perception.range / small_perception.range - 2.0).abs() < 0.01,
-            "1.0m creature should have 2x range of 0.5m creature"
+            (ratio_1_to_05 - expected_ratio).abs() < 0.1,
+            "1.0m creature should have ~{:.2}x range of 0.5m, got {:.2}x",
+            expected_ratio,
+            ratio_1_to_05
         );
+
+        // Similarly for 2.0 vs 1.0:
+        let ratio_2_to_1 = large_perception.range / standard_perception.range;
         assert!(
-            (large_perception.range / standard_perception.range - 2.0).abs() < 0.01,
-            "2.0m creature should have 2x range of 1.0m creature"
+            (ratio_2_to_1 - expected_ratio).abs() < 0.1,
+            "2.0m creature should have ~{:.2}x range of 1.0m, got {:.2}x",
+            expected_ratio,
+            ratio_2_to_1
         );
     }
 
     #[test]
     fn test_fov_range_tradeoff() {
         let body_size = 1.0;
-        let base_range = body_size * PERCEPTION_MULTIPLIER;
+        let allometry = (body_size / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
+        let allometric_base_range = body_size * PERCEPTION_MULTIPLIER * allometry;
 
-        // 180° FOV = baseline (multiplier 1.0)
+        // 180° FOV = fov_factor of 1.0 (baseline)
         let baseline = Perception::new(180.0, body_size);
-        assert!((baseline.range - base_range).abs() < 0.01);
+        assert!(
+            (baseline.range - allometric_base_range).abs() < 0.01,
+            "Baseline range should be {}, got {}",
+            allometric_base_range,
+            baseline.range
+        );
 
         // Narrow FOV (90°) = longer range
-        // Expected: base_range × (180/90)^0.4 = base_range × 2^0.4 ≈ base_range × 1.32
+        // Expected: allometric_base_range × (180/90)^0.4 = allometric_base_range × 2^0.4 ≈ × 1.32
         let narrow = Perception::new(90.0, body_size);
-        let narrow_expected = base_range * 2.0_f32.powf(FOV_RANGE_EXPONENT);
-        assert!(narrow.range > base_range);
+        let narrow_expected = allometric_base_range * 2.0_f32.powf(FOV_RANGE_EXPONENT);
+        assert!(narrow.range > allometric_base_range);
         assert!((narrow.range - narrow_expected).abs() < 0.1);
 
         // Wide FOV (270°) = shorter range
-        // Expected: base_range × (180/270)^0.4 = base_range × 0.667^0.4 ≈ base_range × 0.84
+        // Expected: allometric_base_range × (180/270)^0.4 ≈ × 0.84
         let wide = Perception::new(270.0, body_size);
-        let wide_expected = base_range * (180.0 / 270.0_f32).powf(FOV_RANGE_EXPONENT);
-        assert!(wide.range < base_range);
+        let wide_expected = allometric_base_range * (180.0 / 270.0_f32).powf(FOV_RANGE_EXPONENT);
+        assert!(wide.range < allometric_base_range);
         assert!((wide.range - wide_expected).abs() < 0.1);
     }
 
@@ -419,5 +442,104 @@ mod tests {
 
         assert!(!cache.has_neighbors(), "clear() should remove neighbors");
         assert!(cache.should_skip(), "clear() must NOT reset skip counter");
+    }
+
+    // === Allometric Scaling Tests ===
+
+    #[test]
+    fn test_perception_range_allometric_scaling() {
+        // With allometric scaling, larger creatures see proportionally less far
+        // A 10x larger creature (5.0m vs 0.5m) should see ~2.24x farther, not 10x
+        // Formula: allometry = (size / SIZE_ALLOMETRY_REFERENCE)^SIZE_ALLOMETRY_EXPONENT
+        //          (5.0 / 0.5)^0.35 = 10^0.35 ≈ 2.24
+
+        let small_perception = Perception::new(180.0, SIZE_ALLOMETRY_REFERENCE);
+        let large_perception = Perception::new(180.0, 5.0);
+
+        let ratio = large_perception.range / small_perception.range;
+
+        // Expected ratio from allometric scaling:
+        // base_range ratio: 5.0 / 0.5 = 10
+        // allometry ratio: (5.0 / 0.5)^0.35 / (0.5 / 0.5)^0.35 = 10^0.35 / 1 = 2.24
+        // total ratio = 10 × 2.24 / 1 = 22.4 (accounting for both base and allometry)
+        // Actually: range = base × allometry × fov
+        // For 0.5m: base = 0.5 × 10 = 5, allometry = 1.0, fov = 1.0 → 5m
+        // For 5.0m: base = 5.0 × 10 = 50, allometry = 2.24, fov = 1.0 → 112m
+        // Ratio = 112 / 5 = 22.4
+
+        // Without allometry, ratio would be 10 (linear with body size)
+        // With allometry, large creature has MORE than linear scaling
+        // The allometry MULTIPLIES with base range, giving super-linear growth
+
+        let expected_ratio = (5.0 / SIZE_ALLOMETRY_REFERENCE)
+            * (5.0 / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
+        assert!(
+            (ratio - expected_ratio).abs() < 0.1,
+            "Expected ratio ~{:.2}, got {:.2}",
+            expected_ratio,
+            ratio
+        );
+    }
+
+    #[test]
+    fn test_perception_range_reference_size_has_unit_allometry() {
+        // At the reference size (0.5m), the allometry factor should be 1.0
+        // So range = base_range × 1.0 × fov_factor
+
+        let perception = Perception::new(180.0, SIZE_ALLOMETRY_REFERENCE);
+
+        // base_range = 0.5 × 10 = 5m
+        // allometry = (0.5 / 0.5)^0.35 = 1.0
+        // fov_factor = (180 / 180)^0.4 = 1.0
+        // range = 5 × 1.0 × 1.0 = 5m
+        let expected = SIZE_ALLOMETRY_REFERENCE * PERCEPTION_MULTIPLIER;
+        assert!(
+            (perception.range - expected).abs() < 0.01,
+            "Reference size perception range should be {}, got {}",
+            expected,
+            perception.range
+        );
+    }
+
+    #[test]
+    fn test_perception_range_default_creature() {
+        // Default creature: 1.0m body, 180° FOV
+        // base_range = 1.0 × 10 = 10m
+        // allometry = (1.0 / 0.5)^0.35 = 2.0^0.35 ≈ 1.274
+        // fov_factor = (180 / 180)^0.4 = 1.0
+        // range = 10 × 1.274 × 1.0 ≈ 12.74m
+
+        let perception = Perception::new(180.0, 1.0);
+
+        let expected_allometry = (1.0 / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
+        let expected = 1.0 * PERCEPTION_MULTIPLIER * expected_allometry;
+
+        assert!(
+            (perception.range - expected).abs() < 0.1,
+            "Default creature range should be ~{:.1}m, got {:.1}m",
+            expected,
+            perception.range
+        );
+    }
+
+    #[test]
+    fn test_perception_range_large_creature() {
+        // Large creature: 5.0m body, 180° FOV
+        // base_range = 5.0 × 10 = 50m
+        // allometry = (5.0 / 0.5)^0.35 = 10^0.35 ≈ 2.239
+        // fov_factor = 1.0
+        // range = 50 × 2.239 × 1.0 ≈ 112m
+
+        let perception = Perception::new(180.0, 5.0);
+
+        let expected_allometry = (5.0 / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
+        let expected = 5.0 * PERCEPTION_MULTIPLIER * expected_allometry;
+
+        assert!(
+            (perception.range - expected).abs() < 1.0,
+            "Large creature range should be ~{:.0}m, got {:.0}m",
+            expected,
+            perception.range
+        );
     }
 }

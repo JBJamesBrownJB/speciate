@@ -228,7 +228,7 @@ mod runner {
             let world = sim.world_mut();
 
             // Try loading the spec via loader first (it handles spawns)
-            if let Err(e) = load_trial(world, name) {
+            if let Err(e) = load_trial(world, name, false, None) {
                 return Err(format!("Failed to load spec: {}", e));
             }
         }
@@ -362,7 +362,7 @@ mod runner {
 
         {
             let world = sim.world_mut();
-            load_trial(world, "behavior/catatonic-crowd").expect("Failed to load trial");
+            load_trial(world, "behavior/catatonic-crowd", false, None).expect("Failed to load trial");
         }
 
         // Count creatures
@@ -387,7 +387,7 @@ mod runner {
 
         {
             let world = sim.world_mut();
-            load_trial(world, "performance/many-wanderers-dense").expect("Failed to load trial");
+            load_trial(world, "performance/many-wanderers-dense", false, None).expect("Failed to load trial");
         }
 
         // Count creatures
@@ -420,7 +420,7 @@ mod runner {
 
         {
             let world = sim.world_mut();
-            load_trial(world, "performance/many-wanderers-world-spread").expect("Failed to load trial");
+            load_trial(world, "performance/many-wanderers-world-spread", false, None).expect("Failed to load trial");
         }
         let spawn_time = spawn_start.elapsed();
         println!("Spawn time: {:?}", spawn_time);
@@ -487,7 +487,7 @@ mod runner {
 
         {
             let world = sim.world_mut();
-            load_trial(world, "performance/many-seekers-world-spread").expect("Failed to load trial");
+            load_trial(world, "performance/many-seekers-world-spread", false, None).expect("Failed to load trial");
         }
         let spawn_time = spawn_start.elapsed();
         println!("Spawn time: {:?}", spawn_time);

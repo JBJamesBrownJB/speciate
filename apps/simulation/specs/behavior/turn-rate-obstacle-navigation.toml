@@ -1,0 +1,37 @@
+# Turn Rate Obstacle Navigation
+#
+# Purpose: Verify creature can navigate through obstacles despite turn rate limits.
+# Seeker must weave through a staggered obstacle grid to reach target.
+
+[meta]
+name = "Turn Rate Obstacle Navigation"
+description = "Seeker navigates through obstacles with turn rate limiting active"
+timeout_seconds = 60
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "navigator"
+
+[[assertions]]
+type = "max_overlaps"
+count = 20
+
+[[spawns]]
+type = "single"
+tag = "navigator"
+x = -40.0
+y = 0.0
+creature_type = "seeker"
+target_x = 40.0
+target_y = 0.0
+
+# Staggered obstacle grid
+[[spawns]]
+type = "grid"
+start_x = -20.0
+start_y = -15.0
+spacing = 4.0
+rows = 8
+cols = 10
+creature_type = "catatonic"
+grid_offset_y = 2.0

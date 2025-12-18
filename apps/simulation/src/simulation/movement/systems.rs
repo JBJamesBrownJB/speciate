@@ -4,7 +4,10 @@ use crate::config::MovementConfig;
 use crate::instrumentation::SystemTimings;
 use crate::simulation::core::components::{Acceleration, BodySize, DeltaTime, PhysicsTick, Position, Rotation, Velocity};
 use crate::simulation::creatures::components::{BehaviorMode, CreatureState};
-use crate::simulation::creatures::constants::{DRAG_COEFFICIENT, MAX_SPEED, MAX_TURN_RATE_RAD, NOISE_SPEED_THRESHOLD_SQ, STOPPED_THRESHOLD};
+use crate::simulation::creatures::constants::{
+    DRAG_COEFFICIENT, MAX_SPEED, MAX_TURN_RATE, MIN_TURN_RATE_DEG, MAX_TURN_RATE_DEG,
+    NOISE_SPEED_THRESHOLD_SQ, STOPPED_THRESHOLD, TURN_RATE_SIZE_EXPONENT, TURN_RATE_SPEED_PENALTY,
+};
 use crate::simulation::math::{fast_atan2, normalize_angle};
 use crate::simulation::movement::noise::NoiseTable;
 use bevy_ecs::prelude::*;
@@ -50,7 +53,6 @@ pub fn integrate_motion_system(
     // Collect entities into Vec for Rayon parallel processing
     let mut entities: Vec<_> = query.iter_mut().collect();
 
-    let max_turn_rate_rad = MAX_TURN_RATE_RAD;
     let stopped_threshold_sq = STOPPED_THRESHOLD * STOPPED_THRESHOLD;
 
     // Parallel physics integration + boundary enforcement + rotation (merged into single loop)
@@ -147,17 +149,35 @@ pub fn integrate_motion_system(
             // sqrt(max_speed_sq) = MAX_SPEED = current_speed, so result is same
         }
 
-        // Turn rate limiting: clamp velocity direction change per frame
+        // Size-dependent turn rate limiting
+        // Biological basis: turn_rate ∝ 1/size^1.33 (moment of inertia vs muscle torque)
         if old_angle.is_finite() && speed_sq > stopped_threshold_sq {
+            // Calculate size-dependent base turn rate (deg/s)
+            let base_turn_rate_deg = (MAX_TURN_RATE / size.length.powf(TURN_RATE_SIZE_EXPONENT))
+                .clamp(MIN_TURN_RATE_DEG, MAX_TURN_RATE_DEG);
+
+            // Apply speed penalty: faster movement = less agile turning
+            // At max speed, creatures retain (1 - PENALTY) of their turn ability
+            let current_speed_for_penalty = if speed_computed || was_clamped {
+                current_speed
+            } else {
+                speed_sq.sqrt()
+            };
+            let normalized_speed = (current_speed_for_penalty / MAX_SPEED).min(1.0);
+            let speed_factor = 1.0 - TURN_RATE_SPEED_PENALTY * normalized_speed * normalized_speed;
+            let effective_turn_rate_deg = base_turn_rate_deg * speed_factor;
+
+            // Convert to radians and apply dt
+            let max_delta = effective_turn_rate_deg.to_radians() * dt;
+
             let new_angle = fast_atan2(velocity.vy, velocity.vx);
             let delta = normalize_angle(new_angle - old_angle);
-            let max_delta = max_turn_rate_rad * dt;
 
             if delta.abs() > max_delta {
                 let clamped_delta = delta.clamp(-max_delta, max_delta);
                 let final_angle = old_angle + clamped_delta;
-                // Reuse speed if we have it, otherwise compute
-                let new_speed = if speed_computed { current_speed } else { speed_sq.sqrt() };
+                // Reuse speed from penalty calculation
+                let new_speed = current_speed_for_penalty;
                 velocity.vx = new_speed * final_angle.cos();
                 velocity.vy = new_speed * final_angle.sin();
             }
@@ -569,6 +589,220 @@ mod tests {
         let vel = world.get::<Velocity>(entity).unwrap();
         assert!(vel.vy > 0.0, "Should be moving up");
         assert!(vel.vx.abs() < 0.001, "Should not have horizontal component");
+    }
+
+    #[test]
+    fn test_large_creature_turns_slower_than_small() {
+        // TDD RED: Large creatures should turn more slowly than small ones
+        // A 5m creature should turn much slower than a 0.5m creature
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.1)); // Longer dt to see difference
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(NoiseTable::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut small_state = CreatureState::default();
+        small_state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+        let mut large_state = CreatureState::default();
+        large_state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        // Both creatures moving right at same speed, strong upward acceleration
+        let small = world.spawn((
+            BodySize::new(0.5),  // Small creature
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 10.0, vy: 0.0 },
+            Acceleration { ax: 0.0, ay: 100.0 },  // Strong turn force
+            Rotation::default(),
+            small_state,
+        )).id();
+
+        let large = world.spawn((
+            BodySize::new(5.0),  // Large creature (10x size)
+            Position { x: 100.0, y: 0.0 },
+            Velocity { vx: 10.0, vy: 0.0 },
+            Acceleration { ax: 0.0, ay: 100.0 },  // Same turn force
+            Rotation::default(),
+            large_state,
+        )).id();
+
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        let small_vel = world.get::<Velocity>(small).unwrap();
+        let large_vel = world.get::<Velocity>(large).unwrap();
+
+        // Calculate turn angles
+        let small_angle = small_vel.vy.atan2(small_vel.vx).to_degrees();
+        let large_angle = large_vel.vy.atan2(large_vel.vx).to_degrees();
+
+        // Small creature should have turned MORE than large creature
+        assert!(
+            small_angle > large_angle,
+            "Small creature (0.5m) should turn more than large creature (5.0m). Small: {}°, Large: {}°",
+            small_angle, large_angle
+        );
+
+        // The ratio should be significant (at least 2x difference for 10x size difference)
+        let turn_ratio = small_angle / large_angle.max(0.1);
+        assert!(
+            turn_ratio > 2.0,
+            "Small creature should turn at least 2x faster than large. Ratio: {}",
+            turn_ratio
+        );
+    }
+
+    #[test]
+    fn test_turn_rate_clamped_to_min_for_very_large() {
+        // TDD RED: Very large creatures shouldn't drop below MIN_TURN_RATE_DEG
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(1.0)); // 1 second to make math clear
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(NoiseTable::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut state = CreatureState::default();
+        state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        // Very large creature - would have extremely low turn rate without floor
+        let entity = world.spawn((
+            BodySize::new(100.0),  // Massive creature
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 10.0, vy: 0.0 },  // Moving right
+            Acceleration { ax: 0.0, ay: 1000.0 },  // Massive upward force
+            Rotation::default(),
+            state,
+        )).id();
+
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        let vel = world.get::<Velocity>(entity).unwrap();
+        let turn_angle = vel.vy.atan2(vel.vx).to_degrees();
+
+        // Should turn at least MIN_TURN_RATE_DEG * dt (with some tolerance for speed penalty)
+        // At 1 second dt and 15 deg/s min rate, should be at least ~5 degrees (accounting for speed penalty)
+        assert!(
+            turn_angle >= 4.0,
+            "Very large creature should turn at least ~5°/s (MIN_TURN_RATE with speed penalty), got {}°",
+            turn_angle
+        );
+    }
+
+    #[test]
+    fn test_turn_rate_clamped_to_max_for_very_small() {
+        // TDD RED: Very small creatures shouldn't exceed MAX_TURN_RATE_DEG
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(1.0)); // 1 second
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(NoiseTable::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut state = CreatureState::default();
+        state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        // Tiny creature moving slowly (minimal speed penalty)
+        let entity = world.spawn((
+            BodySize::new(0.01),  // Tiny creature
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 0.1, vy: 0.0 },  // Very slow (minimal speed penalty)
+            Acceleration { ax: 0.0, ay: 1000.0 },  // Massive force to try to turn fast
+            Rotation::default(),
+            state,
+        )).id();
+
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        let vel = world.get::<Velocity>(entity).unwrap();
+        let turn_angle = vel.vy.atan2(vel.vx).to_degrees();
+
+        // Should not exceed 360 deg/s cap (MAX_TURN_RATE_DEG)
+        // With 1 second dt and slow speed, should be limited to MAX_TURN_RATE_DEG
+        assert!(
+            turn_angle <= 360.0,
+            "Tiny creature should not exceed 360°/s turn rate, got {}°",
+            turn_angle
+        );
+    }
+
+    #[test]
+    fn test_speed_penalty_reduces_turn_rate() {
+        // TDD RED: Faster creatures should turn more slowly
+        let mut world = World::new();
+        world.insert_resource(DeltaTime(0.1));
+        world.insert_resource(PhysicsTick(0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(NoiseTable::default());
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+        let mut slow_state = CreatureState::default();
+        slow_state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+        let mut fast_state = CreatureState::default();
+        fast_state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        // Two identical creatures, one slow, one fast
+        let slow = world.spawn((
+            BodySize::new(1.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 1.0, vy: 0.0 },  // Slow
+            Acceleration { ax: 0.0, ay: 100.0 },
+            Rotation::default(),
+            slow_state,
+        )).id();
+
+        let fast = world.spawn((
+            BodySize::new(1.0),
+            Position { x: 100.0, y: 0.0 },
+            Velocity { vx: MAX_SPEED, vy: 0.0 },  // At max speed
+            Acceleration { ax: 0.0, ay: 100.0 },
+            Rotation::default(),
+            fast_state,
+        )).id();
+
+        use bevy_ecs::system::IntoSystem;
+        let mut system = IntoSystem::into_system(integrate_motion_system);
+        system.initialize(&mut world);
+        system.run((), &mut world);
+
+        let slow_vel = world.get::<Velocity>(slow).unwrap();
+        let fast_vel = world.get::<Velocity>(fast).unwrap();
+
+        // Calculate turn angles (relative to starting direction of 0°)
+        let slow_angle = slow_vel.vy.atan2(slow_vel.vx).to_degrees();
+        let fast_angle = fast_vel.vy.atan2(fast_vel.vx).to_degrees();
+
+        // Slow creature should turn MORE than fast creature
+        assert!(
+            slow_angle > fast_angle,
+            "Slow creature should turn more than fast creature. Slow: {}°, Fast: {}°",
+            slow_angle, fast_angle
+        );
+
+        // Fast creature at max speed retains 30% agility (1 - 0.7 speed penalty)
+        // So slow creature should turn at least 2x faster
+        let turn_ratio = slow_angle / fast_angle.max(0.01);
+        assert!(
+            turn_ratio > 2.0,
+            "Slow creature should turn at least 2x faster than max-speed creature. Ratio: {}",
+            turn_ratio
+        );
     }
 
     #[test]

@@ -14,11 +14,13 @@ import { TRIAL_TEMPLATES } from '../generated/trial-templates';
 interface TrialSelectorProps {
   onLoadTrial: (template: string) => void;
   disabled?: boolean;
+  randomizeDna?: boolean;
 }
 
 export const TrialSelector: React.FC<TrialSelectorProps> = ({
   onLoadTrial,
   disabled,
+  randomizeDna,
 }) => {
   const [selectedTrial, setSelectedTrial] = useState<string>(
     TRIAL_TEMPLATES[0].name
@@ -61,9 +63,15 @@ export const TrialSelector: React.FC<TrialSelectorProps> = ({
           Load Trial
         </button>
 
+        {randomizeDna && (
+          <p className="info-text" style={{ marginTop: '12px', fontWeight: 'bold' }}>
+            🎲 Randomize DNA is ON - each creature will get unique random DNA.
+          </p>
+        )}
+
         <p className="info-text" style={{ marginTop: '12px' }}>
-          Trial templates are TOML files in apps/simulation/trials/. They define
-          spawn patterns for reproducible regression tests.
+          Trial templates are TOML files in apps/simulation/trials/. DNA settings
+          above apply to loaded trials.
         </p>
       </form>
     </div>

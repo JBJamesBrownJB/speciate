@@ -1,11 +1,12 @@
 /**
  * Spawn Form Component
  *
- * Manual creature spawning interface.
+ * Manual creature spawning interface with position controls.
+ * DNA settings are managed by the DnaSettings component.
  * Sends DevSpawnCreature command to simulation via Electron IPC.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 
 interface SpawnFormProps {
   onSpawn: (x: number, y: number) => void;
@@ -16,10 +17,13 @@ export const SpawnForm: React.FC<SpawnFormProps> = ({ onSpawn, disabled }) => {
   const [x, setX] = useState<number>(0);
   const [y, setY] = useState<number>(0);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSpawn(x, y);
-  };
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      onSpawn(x, y);
+    },
+    [x, y, onSpawn]
+  );
 
   return (
     <div className="section">
@@ -52,11 +56,6 @@ export const SpawnForm: React.FC<SpawnFormProps> = ({ onSpawn, disabled }) => {
         <button type="submit" disabled={disabled}>
           Spawn Creature
         </button>
-
-        <p className="info-text">
-          Spawns a single creature at the specified coordinates. DNA is not yet
-          implemented (Phase 1A).
-        </p>
       </form>
     </div>
   );

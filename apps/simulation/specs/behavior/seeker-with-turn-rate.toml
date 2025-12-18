@@ -1,0 +1,26 @@
+# Seeker Reaches Target with Turn Rate Limiting
+#
+# Purpose: Verify that size-dependent turn rate limiting doesn't break seeking behavior.
+# A seeker starting diagonally from target must turn to reach it.
+
+[meta]
+name = "Seeker Reaches Target with Turn Rate Limiting"
+description = "Verifies seeking behavior works with size-dependent turn rate"
+timeout_seconds = 30
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "seeker"
+
+[[assertions]]
+type = "ticks_completed"
+count = 400
+
+[[spawns]]
+type = "single"
+tag = "seeker"
+x = -50.0
+y = -50.0
+creature_type = "seeker"
+target_x = 50.0
+target_y = 50.0

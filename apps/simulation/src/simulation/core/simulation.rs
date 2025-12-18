@@ -4,6 +4,7 @@ use crate::config::MovementConfig;
 use crate::simulation::creatures::behaviors::behavior_transition_system;
 use crate::simulation::creatures::steering::update_steering_system;
 use crate::simulation::creatures::builder::CritBuilder;
+use crate::simulation::creatures::dna::Dna;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
 use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
 use crate::simulation::movement::{integrate_motion_system, update_body_size_cache};
@@ -264,19 +265,27 @@ impl Simulation {
     }
 
     pub fn spawn_crit_at(&mut self, x: f32, y: f32) -> u32 {
+        self.spawn_crit_at_with_dna(x, y, None)
+    }
+
+    pub fn spawn_crit_at_with_dna(&mut self, x: f32, y: f32, dna: Option<crate::simulation::creatures::dna::Dna>) -> u32 {
         use crate::simulation::creatures::builder::CritBuilder;
         use crate::simulation::creatures::components::state::BehaviorMode;
 
-        let builder = CritBuilder::new()
+        let mut builder = CritBuilder::new()
             .at(x, y)
             .with_all_capabilities()
             .in_behavior(BehaviorMode::Wandering);
+
+        if let Some(dna) = dna {
+            builder = builder.with_dna(dna);
+        }
 
         self.spawn_crit(builder)
     }
 
     #[cfg_attr(not(feature = "dev-tools"), allow(unused_variables))]
-    pub fn load_trial<F>(&mut self, trial_name: &str, callback: F)
+    pub fn load_trial<F>(&mut self, trial_name: &str, randomize_dna: bool, dna: Option<Dna>, callback: F)
     where
         F: FnOnce(LoadTrialResult) + 'static,
     {
@@ -292,11 +301,12 @@ impl Simulation {
         #[cfg(feature = "dev-tools")]
         {
             use crate::trials;
-            match trials::loader::load_trial(&mut self.world, trial_name) {
+            match trials::loader::load_trial(&mut self.world, trial_name, randomize_dna, dna) {
                 Ok(config) => {
+                    let dna_msg = if randomize_dna { " with randomized DNA" } else { "" };
                     callback(LoadTrialResult {
                         success: true,
-                        message: format!("Loaded trial '{}' ({} spawn patterns)", config.name, config.spawns.len()),
+                        message: format!("Loaded trial '{}' ({} spawn patterns){}", config.name, config.spawns.len(), dna_msg),
                         command_type: "LoadTrial".to_string(),
                     });
                 }
@@ -312,6 +322,8 @@ impl Simulation {
 
         #[cfg(not(feature = "dev-tools"))]
         {
+            let _ = randomize_dna;
+            let _ = dna;
             callback(LoadTrialResult {
                 success: false,
                 message: "Trial loading requires dev-tools feature".to_string(),
@@ -437,7 +449,7 @@ mod tests {
         sim.set_assets_path(".");
 
         let (tx, rx) = std::sync::mpsc::channel();
-        sim.load_trial("opposing-seekers-1", move |result| {
+        sim.load_trial("opposing-seekers-1", false, None, move |result| {
             tx.send(result).unwrap();
         });
 
@@ -471,7 +483,7 @@ mod tests {
         assert_eq!(count_before, 10, "Should have 10 runtime-spawned creatures");
 
         let (tx, rx) = std::sync::mpsc::channel();
-        sim.load_trial("opposing-seekers-1", move |result| {
+        sim.load_trial("opposing-seekers-1", false, None, move |result| {
             tx.send(result).unwrap();
         });
 

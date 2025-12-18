@@ -58,6 +58,25 @@ pub const MAX_TURN_RATE: f32 = REFERENCE_TURN_RATE;
 pub const MAX_TURN_RATE_RAD: f32 = MAX_TURN_RATE * PI / 180.0;
 
 // =============================================================================
+// TURN RATE ALLOMETRY (biologically derived)
+// =============================================================================
+
+/// Allometric exponent for turn rate scaling.
+/// Biological basis: moment of inertia scales as size^5, muscle torque as size^2.
+/// Net effect: turn rate ∝ 1/size^1.33 (compromise between theoretical and empirical).
+pub const TURN_RATE_SIZE_EXPONENT: f32 = 1.33;
+
+/// Minimum turn rate floor (deg/s) - prevents very large creatures from being immobile.
+pub const MIN_TURN_RATE_DEG: f32 = 15.0;
+
+/// Maximum turn rate cap (deg/s) - prevents very small creatures from being impossibly agile.
+pub const MAX_TURN_RATE_DEG: f32 = 360.0;
+
+/// Speed penalty coefficient - at max speed, creatures retain (1 - PENALTY) of turn ability.
+/// Value 0.7 means at max speed, creatures have 30% of their stationary turn rate.
+pub const TURN_RATE_SPEED_PENALTY: f32 = 0.7;
+
+// =============================================================================
 // DRAG & DAMPING
 // =============================================================================
 

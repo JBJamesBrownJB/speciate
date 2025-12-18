@@ -1,6 +1,7 @@
 import type { IPCClient } from './IPCClient';
 import type { GameState, CreatureData, PerceptionDebugData, NeighborDebugInfo, QueriedCell } from '../../types/GameState';
 import type { TelemetryFrame } from '../../types/TelemetryFrame';
+import { getBufferOffsets } from '../../types/BufferLayout';
 
 const HEADER_SIZE = 10;
 const MAX_DEBUG_NEIGHBORS = 64;
@@ -63,18 +64,17 @@ export class ElectronIPCClient implements IPCClient {
         // Ensure pre-allocated array has capacity (one-time allocation)
         this.ensureCreatureCapacity(creatureCount);
 
-        // Parse SoA layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
+        // Parse SoA layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ, Size₁...Sizeₙ]
         // Update objects IN-PLACE (zero allocations per tick)
-        const xOffset = creatureCount;
-        const yOffset = creatureCount * 2;
-        const rotOffset = creatureCount * 3;
+        const offsets = getBufferOffsets(creatureCount);
 
         for (let i = 0; i < creatureCount; i++) {
           const creature = this.creatures[i];
-          creature.id = buffer[i];
-          creature.x = buffer[xOffset + i];
-          creature.y = buffer[yOffset + i];
-          creature.rotation = buffer[rotOffset + i];
+          creature.id = buffer[offsets.id + i];
+          creature.x = buffer[offsets.x + i];
+          creature.y = buffer[offsets.y + i];
+          creature.rotation = buffer[offsets.rot + i];
+          creature.size = buffer[offsets.size + i];
         }
 
         // Return view of active creatures (slice creates new array ref, but objects are reused)

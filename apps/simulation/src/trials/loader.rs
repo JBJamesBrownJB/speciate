@@ -6,10 +6,11 @@ use super::{CreatureType, SpawnPattern, SpecConfig, TrialConfig};
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::components::state::BehaviorMode;
 use crate::simulation::creatures::components::EntityTag;
+use crate::simulation::creatures::dna::Dna;
 use crate::simulation::creatures::systems::NextCreatureId;
 
 #[cfg(feature = "dev-tools")]
-pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig, String> {
+pub fn load_trial(world: &mut World, template_name: &str, randomize_dna: bool, override_dna: Option<Dna>) -> Result<TrialConfig, String> {
     let cwd = std::env::current_dir()
         .map_err(|e| format!("Failed to get current directory: {}", e))?;
 
@@ -73,13 +74,13 @@ pub fn load_trial(world: &mut World, template_name: &str) -> Result<TrialConfig,
     }
 
     for pattern in &config.spawns {
-        spawn_pattern(world, pattern);
+        spawn_pattern(world, pattern, randomize_dna, override_dna.as_ref());
     }
 
     Ok(config)
 }
 
-fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
+fn spawn_pattern(world: &mut World, pattern: &SpawnPattern, randomize_dna: bool, override_dna: Option<&Dna>) {
     match pattern {
         SpawnPattern::Single {
             tag,
@@ -89,7 +90,7 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
             target_x,
             target_y,
         } => {
-            spawn_creature(world, *x, *y, *creature_type, *target_x, *target_y, tag.clone());
+            spawn_creature(world, *x, *y, *creature_type, *target_x, *target_y, tag.clone(), randomize_dna, override_dna);
         }
 
         SpawnPattern::Grid {
@@ -113,7 +114,7 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
                         0.0
                     };
                     let y = start_y + (row as f32 * spacing) + offset;
-                    spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone());
+                    spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone(), randomize_dna, override_dna);
                 }
             }
         }
@@ -132,7 +133,7 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern) {
                 let angle = (i as f32 / *count as f32) * 2.0 * std::f32::consts::PI;
                 let x = center_x + radius * angle.cos();
                 let y = center_y + radius * angle.sin();
-                spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone());
+                spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone(), randomize_dna, override_dna);
             }
         }
     }
@@ -146,6 +147,8 @@ fn spawn_creature(
     target_x: Option<f32>,
     target_y: Option<f32>,
     tag: Option<String>,
+    randomize_dna: bool,
+    override_dna: Option<&Dna>,
 ) {
     let mut next_id = world.resource_mut::<NextCreatureId>();
     let creature_id = next_id.generate();
@@ -169,6 +172,13 @@ fn spawn_creature(
     // Apply tag if present
     if let Some(tag_str) = &tag {
         builder = builder.with_tag(tag_str.clone());
+    }
+
+    // Apply DNA: random if requested, override if provided, otherwise default
+    if randomize_dna {
+        builder = builder.with_dna(Dna::random());
+    } else if let Some(dna) = override_dna {
+        builder = builder.with_dna(dna.clone());
     }
 
     let bundle = builder.build(creature_id);
@@ -200,7 +210,7 @@ mod tests {
             tag: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
 
         let mut query = world.query::<(&Position, &CreatureState)>();
@@ -228,7 +238,7 @@ mod tests {
             tag: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
 
         let mut query = world.query::<(&Position, &Target, &CreatureState)>();
@@ -259,7 +269,7 @@ mod tests {
             tag: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
 
         let mut query = world.query::<(&Position, &Target, &CreatureState)>();
@@ -294,7 +304,7 @@ mod tests {
             target_y: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
 
         let mut query = world.query::<&Position>();
@@ -326,7 +336,7 @@ mod tests {
             tag: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
 
         let mut query = world.query::<&Position>();
@@ -360,7 +370,7 @@ mod tests {
             target_y: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
@@ -392,7 +402,7 @@ mod tests {
             tag: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
@@ -412,9 +422,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(NextCreatureId::default());
 
-        spawn_creature(&mut world, 0.0, 0.0, CreatureType::Catatonic, None, None, None);
-        spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker, None, None, None);
-        spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer, None, None, None);
+        spawn_creature(&mut world, 0.0, 0.0, CreatureType::Catatonic, None, None, None, false, None);
+        spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker, None, None, None, false, None);
+        spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer, None, None, None, false, None);
 
 
 
@@ -460,7 +470,7 @@ mod tests {
             target_y: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
 
         let pos_count = world.query::<&Position>().iter(&world).count();
@@ -490,7 +500,7 @@ mod tests {
             tag: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
@@ -523,7 +533,7 @@ mod tests {
             tag: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
 
         let mut query = world.query::<(&Target, &CreatureState)>();
@@ -555,7 +565,7 @@ mod tests {
             target_y: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
@@ -589,7 +599,7 @@ mod tests {
             target_y: None,
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
         let mut query = world.query::<&Position>();
         let positions: Vec<_> = query.iter(&world).collect();
@@ -620,7 +630,7 @@ mod tests {
             target_y: Some(100.0),
         };
 
-        spawn_pattern(&mut world, &pattern);
+        spawn_pattern(&mut world, &pattern, false, None);
 
         let mut query = world.query::<(&Target, &CreatureState)>();
         let results: Vec<_> = query.iter(&world).collect();

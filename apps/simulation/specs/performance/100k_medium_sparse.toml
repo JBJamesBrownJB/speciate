@@ -1,0 +1,21 @@
+# Many Wanderers - Medium Density (160K)
+#
+# Purpose: 160k wanderers with 2.5m spacing
+# Tests wandering behavior at medium population density
+
+[meta]
+name = "100k medium/sparse density"
+description = """
+"""
+timeout_seconds = 1
+
+# Primary spawn pattern: 50x50 grid
+[[spawns]]
+type = "grid"
+start_x = -2000.0
+start_y = -2000.0
+spacing = 10.0
+rows = 400
+cols = 400
+creature_type = "wanderer"
+grid_offset_y = 1.0

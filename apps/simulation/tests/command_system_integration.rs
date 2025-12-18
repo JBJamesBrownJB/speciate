@@ -88,7 +88,12 @@ fn test_end_to_end_spawn_command() {
         pos.y, 901.23,
         "Creature should spawn at correct Y position"
     );
-    assert_eq!(body.length, 1.0, "Creature should have default body size");
+    // Default DNA expresses to approximately 1.0m (within 5%)
+    assert!(
+        (body.length - 1.0).abs() < 0.05,
+        "Creature should have default body size ~1.0m, got {}",
+        body.length
+    );
 }
 
 #[test]

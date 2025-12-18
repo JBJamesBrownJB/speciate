@@ -7,7 +7,7 @@
 //! - Telemetry collection and reporting
 
 use crate::simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
-use crate::simulation::core::components::{Position, Rotation};
+use crate::simulation::core::components::{BodySize, Position, Rotation};
 use crate::simulation::creatures::components::{BehaviorMode, CritId};
 use crate::simulation::creatures::builder::CritBuilder;
 use super::{DoubleBuffer, TelemetrySnapshot};
@@ -179,8 +179,8 @@ impl NapiApp {
                     // Without this, queries in export_positions() won't see newly spawned entities
                     self.simulation.world.flush();
                 }
-                SimCommand::SpawnAt { x, y } => {
-                    self.simulation.spawn_crit_at(x, y);
+                SimCommand::SpawnAt { x, y, dna } => {
+                    self.simulation.spawn_crit_at_with_dna(x, y, dna);
                     self.simulation.world.flush();
                 }
                 SimCommand::KillAll => {
@@ -188,8 +188,8 @@ impl NapiApp {
                     // Flush to ensure entities are removed from archetypes immediately
                     self.simulation.world.flush();
                 }
-                SimCommand::LoadTrial { trial_name } => {
-                    self.simulation.load_trial(&trial_name, |result| {
+                SimCommand::LoadTrial { trial_name, randomize_dna, dna } => {
+                    self.simulation.load_trial(&trial_name, randomize_dna, dna, |result| {
                         if result.success {
                             eprintln!("[NAPI] ✅ {}", result.message);
                         } else {
@@ -276,7 +276,7 @@ impl NapiApp {
         // Lock buffer first to get capacity
         let mut buffer_guard = buffer.lock();
         let buffer_size = buffer_guard.size();
-        let buffer_capacity = buffer_size / 4; // Creatures, not f32s
+        let buffer_capacity = buffer_size / 5; // 5 f32s per creature: ID, X, Y, Rot, Size
 
         if buffer_capacity == 0 {
             return 0;
@@ -286,18 +286,18 @@ impl NapiApp {
 
         // Collect entities into Vec for sorting (required for stable index ordering)
         // ECS query order is unstable across spawn/despawn - sorting by CritId fixes ghost-crits
-        let mut query = world.query::<(&CritId, &Position, &Rotation)>();
+        let mut query = world.query::<(&CritId, &Position, &Rotation, &BodySize)>();
         let mut entities: Vec<_> = query.iter(world).collect();
 
         // Parallel sort by CritId for stable ordering
         // Benchmarked: 1.35ms at 400K creatures (3% of 45ms tick budget)
-        entities.par_sort_unstable_by_key(|(id, _, _)| id.0);
+        entities.par_sort_unstable_by_key(|(id, _, _, _)| id.0);
 
         // Filter by viewport bounds (after sorting to maintain stable ordering)
         // Frontend uses ID-based interpolation, so creatures can enter/leave buffer freely
         let visible_entities: Vec<_> = entities
             .into_iter()
-            .filter(|(_, pos, _)| viewport.contains(pos.x, pos.y))
+            .filter(|(_, pos, _, _)| viewport.contains(pos.x, pos.y))
             .collect();
 
         let export_count = visible_entities.len().min(buffer_capacity);
@@ -307,16 +307,18 @@ impl NapiApp {
         }
 
         // Write to SoA layout
-        // Layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
+        // Layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ, Size₁...Sizeₙ]
         let x_offset = export_count;
         let y_offset = export_count * 2;
         let rot_offset = export_count * 3;
+        let size_offset = export_count * 4;
 
-        for (i, (id, pos, rot)) in visible_entities.iter().take(export_count).enumerate() {
+        for (i, (id, pos, rot, size)) in visible_entities.iter().take(export_count).enumerate() {
             write_slice[i] = id.0 as f32;
             write_slice[x_offset + i] = pos.x;
             write_slice[y_offset + i] = pos.y;
             write_slice[rot_offset + i] = rot.radians;
+            write_slice[size_offset + i] = size.length;
         }
 
         export_count

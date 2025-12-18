@@ -192,7 +192,7 @@ function startSimulation() {
       try {
         const bufferCreatureCount = simulationEngine.getBufferCreatureCount();
         const fullBuffer = simulationEngine.getBuffer();
-        const usedSize = bufferCreatureCount * 4;
+        const usedSize = bufferCreatureCount * 5;  // 5 f32s per creature: ID, X, Y, Rot, Size
         const buffer = fullBuffer.subarray(0, usedSize);
 
         if (mainWindow && !mainWindow.isDestroyed()) {

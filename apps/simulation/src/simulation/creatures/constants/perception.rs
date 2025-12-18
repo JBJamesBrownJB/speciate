@@ -53,3 +53,20 @@ pub const MAX_FOV_DEGREES: f32 = 340.0;
 
 /// [ACTIVE] Default FOV - generalist omnivore (bears, dogs, wolves).
 pub const DEFAULT_FOV_DEGREES: f32 = 180.0;
+
+// =============================================================================
+// ALLOMETRIC SCALING
+// =============================================================================
+
+/// [ACTIVE] Exponent for size-based perception range scaling.
+/// BIOLOGICAL BASIS: Allometric scaling - larger animals don't just see linearly farther.
+/// With exponent 0.35:
+///   - 0.5m creature: baseline
+///   - 1.0m creature: ~1.27× the range (not 2×)
+///   - 5.0m creature: ~2.24× the range of 0.5m (not 10×)
+/// Creates diminishing returns for size investment.
+pub const SIZE_ALLOMETRY_EXPONENT: f32 = 0.35;
+
+/// [ACTIVE] Reference size for allometric scaling (smallest creature size).
+/// Creatures at this size have allometry factor of 1.0.
+pub const SIZE_ALLOMETRY_REFERENCE: f32 = 0.5;

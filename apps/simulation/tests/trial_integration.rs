@@ -60,7 +60,7 @@ fn test_load_default_spawn_baseline_trial() {
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
     // Load trial template
-    let config = load_trial(&mut world, "default-spawn-baseline")
+    let config = load_trial(&mut world, "default-spawn-baseline", false, None)
         .expect("Should load default-spawn-baseline.toml");
 
     // Verify metadata
@@ -106,7 +106,7 @@ fn test_load_crowd_navigation_trial() {
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
     // Load trial template
-    let config = load_trial(&mut world, "crowd-navigation")
+    let config = load_trial(&mut world, "crowd-navigation", false, None)
         .expect("Should load crowd-navigation.toml");
 
     // Verify metadata
@@ -142,7 +142,7 @@ fn test_trial_nonexistent_file() {
     let mut world = World::new();
 
     // Try to load nonexistent trial
-    let result = load_trial(&mut world, "nonexistent-trial");
+    let result = load_trial(&mut world, "nonexistent-trial", false, None);
 
     assert!(result.is_err(), "Should fail for nonexistent file");
     let err_msg = result.unwrap_err();
@@ -162,7 +162,7 @@ fn test_trial_world_config_override() {
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
     // Load crowd-navigation trial (this trial doesn't define boundaries)
-    load_trial(&mut world, "crowd-navigation").expect("Should load trial");
+    load_trial(&mut world, "crowd-navigation", false, None).expect("Should load trial");
 
     // Trial doesn't define boundaries, so BoundaryConfig should NOT be present
     // (only trials with explicit boundary config will have this resource)
@@ -178,7 +178,7 @@ fn test_trial_spawns_valid_components() {
     let mut world = World::new();
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
-    load_trial(&mut world, "crowd-navigation").expect("Should load trial");
+    load_trial(&mut world, "crowd-navigation", false, None).expect("Should load trial");
 
     // All creatures should have core physics components (101 total: 100 grid + 1 seeker)
     let pos_count = world.query::<&Position>().iter(&world).count();
@@ -198,7 +198,7 @@ fn test_trial_seeker_starting_position() {
     let mut world = World::new();
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
-    load_trial(&mut world, "crowd-navigation").expect("Should load trial");
+    load_trial(&mut world, "crowd-navigation", false, None).expect("Should load trial");
 
     // Get seeker positions (single seeker with Seeking behavior)
     let mut query = world.query::<(&Position, &CreatureState)>();
@@ -224,7 +224,7 @@ fn test_trial_grid_staggered_pattern() {
     let mut world = World::new();
     world.insert_resource(speciate::simulation::creatures::systems::NextCreatureId::default());
 
-    load_trial(&mut world, "crowd-navigation").expect("Should load trial");
+    load_trial(&mut world, "crowd-navigation", false, None).expect("Should load trial");
 
     // Get only the catatonic grid positions (not the seeker)
     let mut query = world.query::<(&Position, &CreatureState)>();

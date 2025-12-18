@@ -59,19 +59,22 @@ export declare class SimulationEngine {
    *
    * **Layout (SoA):**
    * ```
-   * [ID₁, ID₂, ..., IDₙ, X₁, X₂, ..., Xₙ, Y₁, Y₂, ..., Yₙ, Rot₁, Rot₂, ..., Rotₙ]
+   * [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ, Size₁...Sizeₙ]
    * ```
    *
    * # Example (JavaScript)
    * ```js
    * const buffer = sim.getBuffer();
-   * const creatureCount = buffer.length / 4;
+   * const creatureCount = buffer.length / 5;
    * const xOffset = creatureCount;
    * const yOffset = creatureCount * 2;
+   * const rotOffset = creatureCount * 3;
+   * const sizeOffset = creatureCount * 4;
    *
    * for (let i = 0; i < creatureCount; i++) {
    *   sprite.x = buffer[xOffset + i];
    *   sprite.y = buffer[yOffset + i];
+   *   sprite.scale = buffer[sizeOffset + i];
    * }
    * ```
    */
@@ -126,17 +129,19 @@ export declare class SimulationEngine {
    */
   spawnCreatures(count: number): void
   /**
-   * Spawn creature at specific position
+   * Spawn creature at specific position with optional DNA
    *
    * # Arguments
    * * `x` - X coordinate
    * * `y` - Y coordinate
+   * * `dna_size_gene` - Optional size gene (0.0-1.0)
+   * * `dna_fov_gene` - Optional FOV gene (0.0-1.0)
    *
    * # Errors
    * * Simulation not started
    * * Command queue full
    */
-  spawnCreatureAt(x: number, y: number): void
+  spawnCreatureAt(x: number, y: number, dnaSizeGene?: number | undefined | null, dnaFovGene?: number | undefined | null): void
   /**
    * Despawn all creatures
    *
@@ -195,8 +200,11 @@ export declare class SimulationEngine {
    *
    * # Arguments
    * * `template` - Trial template name (e.g., "flocking_test")
+   * * `randomize_dna` - If true, each creature gets unique random DNA
+   * * `dna_size_gene` - Optional size gene (0.0-1.0, used when randomize_dna is false)
+   * * `dna_fov_gene` - Optional FOV gene (0.0-1.0, used when randomize_dna is false)
    */
-  loadTrial(template: string): void
+  loadTrial(template: string, randomizeDna: boolean, dnaSizeGene?: number | undefined | null, dnaFovGene?: number | undefined | null): void
   /**
    * Select a creature for perception debug visualization
    *

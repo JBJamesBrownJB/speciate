@@ -1,20 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ElectronIPCClient } from './ElectronIPCClient';
 import type { GameState } from '../../types/GameState';
+import { FLOATS_PER_CREATURE, getBufferOffsets } from '../../types/BufferLayout';
 
-/**
- * Helper: Create mock NAPI buffer with SoA layout
- * Layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
- */
+// Helper: Create mock NAPI buffer with SoA layout
+// Layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ, Size₁...Sizeₙ]
 function createMockNAPIBuffer(creatureCount: number): number[] {
-  const buffer = new Array(creatureCount * 4);
+  const buffer = new Array(creatureCount * FLOATS_PER_CREATURE);
+  const offsets = getBufferOffsets(creatureCount);
 
-  // Write SoA data
   for (let i = 0; i < creatureCount; i++) {
-    buffer[i] = i + 1; // ID
-    buffer[creatureCount + i] = 100.0 + i * 10; // X
-    buffer[creatureCount * 2 + i] = 200.0 + i * 10; // Y
-    buffer[creatureCount * 3 + i] = 1.5 + i * 0.1; // Rotation
+    buffer[offsets.id + i] = i + 1; // ID
+    buffer[offsets.x + i] = 100.0 + i * 10; // X
+    buffer[offsets.y + i] = 200.0 + i * 10; // Y
+    buffer[offsets.rot + i] = 1.5 + i * 0.1; // Rotation
+    buffer[offsets.size + i] = 0.5 + i * 0.1; // Size
   }
 
   return buffer;
@@ -110,32 +110,67 @@ describe('ElectronIPCClient', () => {
       const state = client.getLatestState();
       expect(state).not.toBeNull();
 
-      // Verify first creature
+      // Verify first creature (size = 0.5 + 0*0.1 = 0.5)
       expect(state!.creatures[0]).toEqual({
         id: 1,
         x: 100.0,
         y: 200.0,
         rotation: 1.5,
-        size: 1,
+        size: 0.5,
       });
 
-      // Verify second creature
+      // Verify second creature (size = 0.5 + 1*0.1 = 0.6)
       expect(state!.creatures[1]).toEqual({
         id: 2,
         x: 110.0,
         y: 210.0,
         rotation: 1.6,
-        size: 1,
+        size: 0.6,
       });
 
-      // Verify third creature
+      // Verify third creature (size = 0.5 + 2*0.1 = 0.7)
       expect(state!.creatures[2]).toEqual({
         id: 3,
         x: 120.0,
         y: 220.0,
         rotation: 1.7,
-        size: 1,
+        size: 0.7,
       });
+    });
+
+    it('should parse size field from NAPI buffer correctly', async () => {
+      let capturedCallback: ((data: { buffer: number[], creatureCount: number }) => void) | null = null;
+
+      mockElectronAPI.onNAPIBufferUpdate.mockImplementation((callback) => {
+        capturedCallback = callback;
+      });
+
+      await client.connect();
+
+      // Create buffer with distinct size values to verify correct offset
+      const creatureCount = 5;
+      const buffer = new Array(creatureCount * FLOATS_PER_CREATURE);
+      const offsets = getBufferOffsets(creatureCount);
+
+      for (let i = 0; i < creatureCount; i++) {
+        buffer[offsets.id + i] = i + 1;
+        buffer[offsets.x + i] = 0;
+        buffer[offsets.y + i] = 0;
+        buffer[offsets.rot + i] = 0;
+        buffer[offsets.size + i] = 10.0 + i; // Distinct sizes: 10, 11, 12, 13, 14
+      }
+
+      capturedCallback!({ buffer, creatureCount });
+
+      const state = client.getLatestState();
+      expect(state).not.toBeNull();
+
+      // Verify each creature has correct size from buffer
+      expect(state!.creatures[0].size).toBe(10.0);
+      expect(state!.creatures[1].size).toBe(11.0);
+      expect(state!.creatures[2].size).toBe(12.0);
+      expect(state!.creatures[3].size).toBe(13.0);
+      expect(state!.creatures[4].size).toBe(14.0);
     });
 
     it('should handle empty buffer (zero creatures)', async () => {

@@ -1,0 +1,41 @@
+# Crowd Navigation with Turn Rate
+#
+# Purpose: Test that turn rate limiting creates realistic navigation in dense crowds.
+# Seeker navigates through dense catatonic crowd to reach target on other side.
+
+[meta]
+name = "Crowd Navigation with Turn Rate"
+description = "Tests realistic turning behavior in dense crowds"
+timeout_seconds = 45
+
+[[assertions]]
+type = "creature_reached_target"
+tag = "seeker"
+
+[[assertions]]
+type = "max_overlaps"
+count = 15
+
+[[assertions]]
+type = "ticks_completed"
+count = 800
+
+# Dense catatonic crowd
+[[spawns]]
+type = "grid"
+start_x = -15.0
+start_y = -15.0
+spacing = 3.0
+rows = 10
+cols = 10
+creature_type = "catatonic"
+
+# Seeker must navigate through crowd
+[[spawns]]
+type = "single"
+tag = "seeker"
+x = -25.0
+y = 0.0
+creature_type = "seeker"
+target_x = 25.0
+target_y = 0.0

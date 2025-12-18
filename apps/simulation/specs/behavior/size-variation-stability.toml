@@ -1,0 +1,31 @@
+# Size Variation Population Stability
+#
+# Purpose: Verify creatures with varied sizes (from DNA randomization) coexist stably.
+# Tests that DNA-driven size variation doesn't cause simulation instability.
+
+[meta]
+name = "Size Variation Population Stability"
+description = "Wanderers with varied DNA-driven sizes remain stable"
+timeout_seconds = 30
+
+[[assertions]]
+type = "ticks_completed"
+count = 600
+
+[[assertions]]
+type = "creature_count"
+min = 90
+max = 110
+
+[[assertions]]
+type = "max_overlaps"
+count = 25
+
+# Circle of wanderers with randomized DNA (default behavior)
+[[spawns]]
+type = "circle"
+center_x = 0.0
+center_y = 0.0
+radius = 50.0
+count = 100
+creature_type = "wanderer"

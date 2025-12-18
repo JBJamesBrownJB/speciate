@@ -8,6 +8,9 @@ let simulationEngine = null;
 let pollingInterval = null;
 let shuttingDown = false;
 
+// Buffer layout constant - MUST match apps/portal/src/types/BufferLayout.ts
+const FLOATS_PER_CREATURE = 5; // ID, X, Y, Rotation, Size
+
 // Environment detection
 const isDev = process.env.NODE_ENV === 'development';
 const platform = process.platform;
@@ -92,12 +95,12 @@ function startSimulation() {
     console.log('[Electron NAPI] ✅ SimulationEngine created');
 
     // Create persistent buffers for zero-allocation polling (memory leak fix)
-    // 500K creatures * 4 floats (ID, X, Y, Rotation) = 2M floats = 8MB
-    creatureBuffer = new Float32Array(500000 * 4);
+    // 500K creatures * FLOATS_PER_CREATURE = 2.5M floats = 10MB
+    creatureBuffer = new Float32Array(500000 * FLOATS_PER_CREATURE);
     // Perception debug buffer: 607 floats (from perception_debug_buffer.rs BUFFER_SIZE)
     // BUFFER_SIZE = CHECKED_CELL_SECTION_OFFSET(406) + CHECKED_CELL_HEADER_SIZE(1) + MAX_CHECKED_CELLS(100)*2 = 607
     perceptionBuffer = new Float32Array(607);
-    console.log('[Electron NAPI] ✅ Persistent buffers created (creature: 8MB, perception: 2.4KB)');
+    console.log('[Electron NAPI] ✅ Persistent buffers created (creature: 10MB, perception: 2.4KB)');
 
     // Find most recent save state (by timestamp in filename)
     const assetsPath = path.join(__dirname, '../../simulation');
@@ -160,10 +163,10 @@ function startSimulation() {
           // fillBuffer() copies data into our JS-owned buffer and returns creature count
           const bufferCreatureCount = simulationEngine.fillBuffer(creatureBuffer);
 
-          // Slice to actual creature count (SoA layout: ID, X, Y, Rotation)
-          // Use slice() not subarray() - subarray creates view into full 8MB buffer
+          // Slice to actual creature count (SoA layout: ID, X, Y, Rotation, Size)
+          // Use slice() not subarray() - subarray creates view into full 10MB buffer
           // which causes Electron IPC to serialize the entire backing ArrayBuffer
-          const usedSize = bufferCreatureCount * 4;  // 4 f32s per creature
+          const usedSize = bufferCreatureCount * FLOATS_PER_CREATURE;
           const buffer = creatureBuffer.slice(0, usedSize);
 
           // Send buffer to portal (Float32Array - Electron IPC handles typed arrays efficiently)
@@ -400,9 +403,11 @@ ipcMain.on('send-command', (event, command) => {
   try {
     switch (command.type) {
       case 'dev_spawn_creature':
-        // Spawn single creature at position (x, y)
-        simulationEngine.spawnCreatureAt(command.x, command.y);
-        console.log(`[Electron NAPI] Spawned creature at (${command.x}, ${command.y})`);
+        // Spawn single creature at position (x, y) with optional DNA
+        const sizeGene = command.dna?.size_gene ?? null;
+        const fovGene = command.dna?.fov_gene ?? null;
+        simulationEngine.spawnCreatureAt(command.x, command.y, sizeGene, fovGene);
+        console.log(`[Electron NAPI] Spawned creature at (${command.x}, ${command.y}) with DNA: size=${sizeGene}, fov=${fovGene}`);
         break;
 
       case 'dev_clear_creatures':
@@ -411,8 +416,11 @@ ipcMain.on('send-command', (event, command) => {
         break;
 
       case 'dev_load_trial':
-        simulationEngine.loadTrial(command.template);
-        console.log(`[Electron NAPI] Loading trial: ${command.template}`);
+        const randomize = command.randomizeDna || false;
+        const trialSizeGene = command.dna?.size_gene ?? null;
+        const trialFovGene = command.dna?.fov_gene ?? null;
+        simulationEngine.loadTrial(command.template, randomize, trialSizeGene, trialFovGene);
+        console.log(`[Electron NAPI] Loading trial: ${command.template} (randomizeDna: ${randomize}, dna: size=${trialSizeGene}, fov=${trialFovGene})`);
         break;
 
       default:

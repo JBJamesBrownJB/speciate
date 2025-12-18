@@ -119,7 +119,9 @@ mod tests {
     #[test]
     fn test_soa_layout_offsets() {
         const CREATURE_COUNT: usize = 100;
-        const BUFFER_SIZE: usize = CREATURE_COUNT * 4; // ID, X, Y, Rot
+        // MUST match FLOATS_PER_CREATURE in apps/portal/src/types/BufferLayout.ts
+        const FLOATS_PER_CREATURE: usize = 5; // ID, X, Y, Rot, Size
+        const BUFFER_SIZE: usize = CREATURE_COUNT * FLOATS_PER_CREATURE;
 
         let mut buffer = DoubleBuffer::new(BUFFER_SIZE);
         let write_slice = buffer.get_write_slice();
@@ -129,26 +131,31 @@ mod tests {
         let x_offset = CREATURE_COUNT;
         let y_offset = CREATURE_COUNT * 2;
         let rot_offset = CREATURE_COUNT * 3;
+        let size_offset = CREATURE_COUNT * 4;
 
         // Write creature 0
         write_slice[id_offset + 0] = 0.0;
         write_slice[x_offset + 0] = 100.0;
         write_slice[y_offset + 0] = 200.0;
         write_slice[rot_offset + 0] = 1.57;
+        write_slice[size_offset + 0] = 10.5;
 
         // Write creature 99
         write_slice[id_offset + 99] = 99.0;
         write_slice[x_offset + 99] = 500.0;
         write_slice[y_offset + 99] = 600.0;
         write_slice[rot_offset + 99] = 3.14;
+        write_slice[size_offset + 99] = 25.0;
 
         buffer.swap();
 
         let read_slice = buffer.get_read_slice();
         assert_eq!(read_slice[x_offset + 0], 100.0);
         assert_eq!(read_slice[y_offset + 0], 200.0);
+        assert_eq!(read_slice[size_offset + 0], 10.5);
         assert_eq!(read_slice[x_offset + 99], 500.0);
         assert_eq!(read_slice[rot_offset + 99], 3.14);
+        assert_eq!(read_slice[size_offset + 99], 25.0);
     }
 
     #[test]

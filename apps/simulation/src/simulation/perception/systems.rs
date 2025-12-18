@@ -860,7 +860,7 @@ mod tests {
         // Cell (3, -1): 60..80 x -20..0
         entities.push((Entity::from_raw(entity_id), 75.0, -10.0, 1.0)); entity_id += 1; // dist 60
         // Cell (4, 0): 80..100 x 0..20
-        entities.push((Entity::from_raw(entity_id), 95.0, 10.0, 1.0)); entity_id += 1; // dist 76
+        entities.push((Entity::from_raw(entity_id), 95.0, 10.0, 1.0)); // dist 76
 
         // Now we have 16 entities in 10 cells:
         // 3 adjacent cells with 9 entities (all pass FOV)

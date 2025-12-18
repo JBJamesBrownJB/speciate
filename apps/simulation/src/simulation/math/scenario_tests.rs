@@ -517,7 +517,7 @@ mod tests {
         );
 
         // Should have some lateral movement from avoidance
-        let max_y_deviation = trajectory
+        let _max_y_deviation = trajectory
             .iter()
             .map(|(_, y)| y.abs())
             .max_by(|a, b| a.partial_cmp(b).unwrap())

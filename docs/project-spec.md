@@ -42,7 +42,7 @@ A **DNA-driven artificial life simulation** where hundreds of autonomous creatur
 * **Multiplayer:** Shared world with thousands of players
 * **Player Economy:** DNA ownership, biomass trading, speciation events
 * **Conservation:** Compete to protect/exploit endangered species
-* **See:** [Archived MMO Architecture](./architecture/archived/MMO_STREAMING.md)
+* **Status:** Deferred pending Phase 1 success
 
 ---
 
@@ -54,14 +54,13 @@ A **DNA-driven artificial life simulation** where hundreds of autonomous creatur
 
 **Core Components:**
 * **Simulation Backend (Rust/Bevy ECS):** Runs AI, physics, and state logic locally on player's machine
-  - **30Hz Physics + Collision:** Smooth motion, grid updates, collision detection
-  - **20Hz AI + Perception:** Spatial queries, behavior decisions, steering forces
-  - **Lock-free snapshot system:** Non-blocking state sharing with frontend
-  - **Target:** 150,000-200,000 creatures via dual-tick architecture
-  - **See:** `docs/archive/dual-tick/` (ABANDONED - kept for reference)
+  - **22.2Hz Unified Tick:** Physics, perception, and behavior in single schedule
+  - **Rayon Parallelization:** Multi-core execution (16 cores, 6.3x speedup)
+  - **NAPI-RS Zero-Copy:** Direct buffer sharing with frontend (<1ms overhead)
+  - **Target:** 150,000-200,000 creatures via time-slicing + viewport culling
 
-* **Frontend (PixiJS):** Renders at 90 FPS with interpolation, receives state via stdio MessagePack stream
-  - **Interpolated smoothing:** 90Hz visuals from 30Hz physics snapshots
+* **Frontend (PixiJS):** Renders at 90 FPS with interpolation, receives state via NAPI buffer
+  - **Interpolated smoothing:** 90Hz visuals from 22Hz physics snapshots
   - **Full f32 precision:** No quantization (local IPC, no network limitations)
 
 * **Wrapper (Electron):** Bundles Rust + TypeScript into single `.exe`/`.app`/`.AppImage` for Steam distribution
@@ -88,9 +87,7 @@ A **DNA-driven artificial life simulation** where hundreds of autonomous creatur
 * **Economy Ledger (Node.js/PostgreSQL):** ACID-compliant asset management
 * **Player Commander:** Authentication and command validation
 
-**See:** [Archived MMO Streaming Architecture](./architecture/archived/MMO_STREAMING.md)
-
-**Status:** Archived pending Phase 1 success. Code preserved in `archive/mmo-streaming-v1` branch.
+**Status:** Deferred pending Phase 1 success.
 
 ---
 
@@ -160,11 +157,10 @@ The core food chain is implemented through DNA-defined behaviors:
 **Backend:**
 | Component | Technologies | Key Role/Purpose |
 | :--- | :--- | :--- |
-| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | Dual-tick simulation: 30Hz physics, 20Hz AI |
-| **Spatial Grid** | `FxHashMap` + 50m cells | O(N) queries for 150K-200K creatures (see `SPRINTS/spatial-grid/SPRINT_PLAN.md`) |
-| **IPC Protocol** | `stdio` + `MessagePack` | Length-prefixed binary frames at 30 Hz |
-| **Serialization** | `serde` + `rmp_serde` | GameState serialization to MessagePack |
-| **Save/Load** | `bincode` or `MessagePack` | World persistence to disk |
+| **Core Logic (ECS)** | `bevy_ecs` + `bevy_app` | 22.2Hz unified tick, Rayon parallelization |
+| **Spatial Grid** | `FxHashMap` + 50m cells | O(N) queries, viewport culling |
+| **IPC Protocol** | `NAPI-RS` | Zero-copy double-buffered position data |
+| **Serialization** | `serde` + `bincode` | Save/load persistence |
 
 **Frontend:**
 | Component | Technologies | Key Role/Purpose |

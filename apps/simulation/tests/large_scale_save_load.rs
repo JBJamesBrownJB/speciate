@@ -25,13 +25,7 @@ fn test_large_scale_save_load_10k_creatures() {
 
     println!("Spawning 10,000 creatures...");
     for i in 0..10_000 {
-        let builder = if i % 3 == 0 {
-            CritBuilder::new().with_all_capabilities()
-        } else if i % 3 == 1 {
-            CritBuilder::new().with_seeking().with_avoidance()
-        } else {
-            CritBuilder::new().with_wandering()
-        };
+        let builder = CritBuilder::new().with_all_capabilities();
 
         sim.spawn_crit(builder);
     }

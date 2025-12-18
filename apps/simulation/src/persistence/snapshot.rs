@@ -283,8 +283,7 @@ mod tests {
 
         let builder = CritBuilder::new()
             .at(50.0, 25.0)
-            .as_seeker(100.0, 75.0)
-            .with_avoidance();
+            .as_seeker(100.0, 75.0);
         let id1 = sim.spawn_crit(builder);
 
         let builder2 = CritBuilder::new()
@@ -405,8 +404,7 @@ mod tests {
         let mut sim = SimulationBuilder::new().build();
 
         let builder = CritBuilder::new()
-            .at(0.0, 0.0)
-            .with_avoidance();
+            .at(0.0, 0.0);
         sim.spawn_crit(builder);
 
         let save_state = sim.to_save_state().expect("Failed to create save state");

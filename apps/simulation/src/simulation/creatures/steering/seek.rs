@@ -136,18 +136,6 @@ pub fn calculate_arrival(params: &ArrivalParams) -> ArrivalResult {
 mod tests {
     use super::*;
 
-    fn default_params() -> ArrivalParams {
-        ArrivalParams {
-            velocity: (10.0, 0.0),
-            to_target: (5.0, 0.0),
-            self_radius: 0.5,
-            target_radius: 0.5,
-            max_speed: 15.0,
-            max_force: 390.0,
-            mass: 65.0,
-        }
-    }
-
     // Test 1: Core bug reproduction - high speed approach should NOT reverse velocity
     #[test]
     fn high_speed_approach_does_not_reverse_velocity() {

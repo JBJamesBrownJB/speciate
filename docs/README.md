@@ -5,14 +5,12 @@ Welcome to the Biosphere project documentation. This index provides quick naviga
 ## Quick Links
 
 - [Project Specification](./project-spec.md) - High-level project vision and core concepts
-- [Critical Issues](./critical-issues.md) - Active bugs and issues requiring attention
 
 ## Architecture
 
 System design, infrastructure, and technical architecture.
 
-- [Electron Architecture](./architecture/electron-architecture.md) - Standalone desktop game architecture, stdio IPC, MessagePack streaming
-- [World Coordinates](./architecture/world-coordinates.md) - Coordinate system, world size, zoom limits
+- [Electron Architecture](./architecture/electron-architecture.md) - NAPI-RS zero-copy IPC, viewport culling
 - [Architecture Diagram](./architecture/diagrams/architecture-high.png) - Visual system overview
 
 ## Biology & Simulation

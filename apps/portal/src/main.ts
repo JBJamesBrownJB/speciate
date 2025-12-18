@@ -21,6 +21,7 @@ import {
   SpatialGridOverlay,
   ForceOverlay,
 } from "@/rendering/overlays";
+import { Minimap } from "@/rendering/minimap";
 import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
 import { PauseControl } from "@/ui/PauseControl";
 import { TimeScaleControl } from "@/ui/TimeScaleControl";
@@ -147,6 +148,28 @@ async function main(): Promise<void> {
     overlayManager.register(spatialGridOverlay);
     overlayManager.register(forceOverlay);
     overlayManager.enableKeyboardShortcuts();
+
+    // Minimap
+    const minimap = new Minimap(
+      app.stage,
+      createWorldBounds(
+        WORLD_BOUNDS.MIN_X,
+        WORLD_BOUNDS.MAX_X,
+        WORLD_BOUNDS.MIN_Y,
+        WORLD_BOUNDS.MAX_Y
+      ),
+      180
+    );
+    overlayManager.register(minimap);
+
+    minimap.onMinimapClick = (worldX, worldY) => {
+      camera.centerOn(worldX, worldY);
+    };
+
+    const updateMinimapPosition = () => {
+      minimap.setPosition(viewportWidth - 180 - 20, viewportHeight - 180 - 20);
+    };
+    updateMinimapPosition();
 
     // Wire up selection events
     selectionManager.on('creature-selected', (creature) => {
@@ -409,6 +432,9 @@ async function main(): Promise<void> {
         viewportHeight
       );
 
+      // Update minimap viewport rectangle
+      minimap.update(camera, viewportWidth, viewportHeight);
+
       // Update selection highlight animation and position
       const selected = selectionManager.getSelected();
       if (selected) {
@@ -439,6 +465,7 @@ async function main(): Promise<void> {
       camera.setViewportSize(viewportWidth, viewportHeight);
       camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
       scaleBarManager.update(camera.zoom);
+      updateMinimapPosition();
     });
 
     // Keyboard input for camera panning

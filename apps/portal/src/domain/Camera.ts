@@ -55,6 +55,10 @@ export class Camera {
     this.clampPosition();
   }
 
+  centerOn(x: number, y: number): void {
+    this.move(x, y);
+  }
+
   setZoom(zoom: number): void {
     this._zoom = this.clampZoom(zoom);
     this.clampPosition();

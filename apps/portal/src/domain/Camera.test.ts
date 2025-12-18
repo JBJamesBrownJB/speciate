@@ -167,6 +167,24 @@ describe('Camera', () => {
     });
   });
 
+  describe('centerOn', () => {
+    it('should center camera at given coordinates', () => {
+      camera.centerOn(100, 200);
+      expect(camera.x).toBe(100);
+      expect(camera.y).toBe(200);
+    });
+
+    it('should clamp to world bounds if set', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(800, 600);
+      camera.setZoom(10);
+
+      camera.centerOn(1000, 1000);
+      expect(camera.x).toBeLessThanOrEqual(500);
+      expect(camera.y).toBeLessThanOrEqual(500);
+    });
+  });
+
   describe('adjustZoom', () => {
     it('should adjust zoom by a factor', () => {
       camera.setZoom(10);

@@ -1,5 +1,5 @@
 import { Camera } from "./Camera";
-import { InputManager } from "../input/InputManager";
+import { InputManager } from "@/input";
 import { CAMERA_CONFIG } from "../core/constants";
 
 export class CameraController {

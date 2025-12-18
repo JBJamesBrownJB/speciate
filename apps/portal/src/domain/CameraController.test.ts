@@ -105,6 +105,13 @@ describe("CameraController", () => {
       expect(distance2).toBeCloseTo(distance1 * 2, 5);
     });
 
+    it("should handle zero deltaTime without moving", () => {
+      const initialX = camera.x;
+      inputManager.handleKeyDown("d");
+      controller.update(0);
+      expect(camera.x).toBe(initialX);
+    });
+
     it("should handle diagonal movement", () => {
       const initialX = camera.x;
       const initialY = camera.y;

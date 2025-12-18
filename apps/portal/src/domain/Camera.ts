@@ -102,7 +102,7 @@ export class Camera {
   }
 
   private clampPosition(): void {
-    if (this.worldBounds === null) {
+    if (this.worldBounds === null || this.viewportWidth === 0 || this.viewportHeight === 0) {
       return;
     }
 

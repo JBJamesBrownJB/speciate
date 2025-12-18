@@ -424,5 +424,12 @@ describe('Camera', () => {
       camera.deltaMove(0, 100);
       expect(camera.y).toBe(100);
     });
+
+    it('should handle zero viewport size gracefully', () => {
+      camera.setWorldBounds(createWorldBounds(-500, 500, -500, 500));
+      camera.setViewportSize(0, 0);
+      expect(Number.isFinite(camera.x)).toBe(true);
+      expect(Number.isFinite(camera.y)).toBe(true);
+    });
   });
 });

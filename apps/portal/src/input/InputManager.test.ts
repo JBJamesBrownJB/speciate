@@ -41,6 +41,11 @@ describe("InputManager", () => {
       inputManager.handleKeyUp("w");
       expect(inputManager.isKeyPressed("w")).toBe(false);
     });
+
+    it("should handle releasing a key that was never pressed", () => {
+      inputManager.handleKeyUp("x");
+      expect(inputManager.isKeyPressed("x")).toBe(false);
+    });
   });
 
   describe("Pan Velocity", () => {

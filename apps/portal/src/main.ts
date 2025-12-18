@@ -4,7 +4,7 @@ import { Camera } from "@/domain/Camera";
 import { CameraController } from "@/domain/CameraController";
 import { Viewport } from "@/domain/Viewport";
 import { createWorldBounds } from "@/domain/WorldBounds";
-import { InputManager } from "@/input/InputManager";
+import { InputManager } from "@/input";
 import { RENDERING_CONFIG, CAMERA_CONFIG, VIEWPORT_CULLING_CONFIG, WORLD_BOUNDS } from "@/core/constants";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
 import { PerformanceMetrics } from "@/core/PerformanceMetrics";

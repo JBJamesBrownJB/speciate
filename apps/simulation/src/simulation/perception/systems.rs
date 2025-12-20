@@ -93,7 +93,8 @@ pub fn update_perception_system(
                 // Track max distance seen in adjacent cells (O(1) per candidate)
                 // This is used as cutoff for non-adjacent cells - no expensive partial sort needed
                 let mut max_adjacent_dist_sq: f32 = 0.0;
-                let mut cutoff_dist_sq = f32::MAX;
+                // Expanded cutoff: (sqrt(cutoff) + half_diag)² - allows sqrt-free comparison
+                let mut expanded_cutoff_dist_sq = f32::MAX;
                 let mut processed_adjacent = false;
 
                 for &(sort_key, cell_idx) in cells.iter() {
@@ -102,25 +103,19 @@ pub fn update_perception_system(
 
                     if is_non_adjacent && !processed_adjacent {
                         processed_adjacent = true;
-                        // Use max adjacent distance as cutoff (no sort needed!)
+                        // Pre-compute expanded cutoff: (sqrt(max_dist) + half_diag)²
+                        // This moves sqrt from per-cell to once-per-creature
                         if candidates.len() >= MAX_PERCEIVED_NEIGHBORS {
-                            cutoff_dist_sq = max_adjacent_dist_sq;
+                            let cutoff_dist = max_adjacent_dist_sq.sqrt();
+                            expanded_cutoff_dist_sq = (cutoff_dist + CELL_HALF_DIAGONAL).powi(2);
                         }
                     }
 
-                    // For non-adjacent cells, check if nearest edge could be closer than cutoff
-                    if is_non_adjacent && cutoff_dist_sq < f32::MAX {
-                        // Real distance to cell center (remove the NON_ADJACENT_OFFSET)
+                    // For non-adjacent cells, check if cell center is beyond expanded cutoff
+                    // If center² > (cutoff + half_diag)², the nearest edge must be beyond cutoff
+                    if is_non_adjacent && expanded_cutoff_dist_sq < f32::MAX {
                         let cell_center_dist_sq = sort_key - NON_ADJACENT_OFFSET;
-                        let cell_center_dist = cell_center_dist_sq.sqrt();
-
-                        // Nearest possible distance to cell = center dist - half diagonal
-                        let nearest_edge_dist = (cell_center_dist - CELL_HALF_DIAGONAL).max(0.0);
-                        let nearest_edge_dist_sq = nearest_edge_dist * nearest_edge_dist;
-
-                        // If nearest edge is beyond cutoff, skip this cell AND all remaining
-                        // (cells are sorted by distance, so subsequent cells are even farther)
-                        if nearest_edge_dist_sq > cutoff_dist_sq {
+                        if cell_center_dist_sq > expanded_cutoff_dist_sq {
                             break;
                         }
                     }

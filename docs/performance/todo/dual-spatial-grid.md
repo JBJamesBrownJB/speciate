@@ -136,3 +136,10 @@ Implement Aggregation: Create the system that reduces L0 data into L1 BioSignatu
 Refactor Vision Component: Add perception_threshold (derived from body mass).
 
 Refactor Vision System: Implement the 3-Phase Pipeline (Coarse -> Gate -> Fine).
+
+ALL WORK MUST INCLUDE:
+
+- Biological rationale and check with tom
+- Tests
+- Portal overlays to visualise and appreciate the grids and their usage
+- Cycle through grids by pressing g key 

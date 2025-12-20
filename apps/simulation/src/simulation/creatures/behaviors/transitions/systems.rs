@@ -23,18 +23,16 @@ pub fn behavior_transition_system(
     // Current update slice (cycles 0..UPDATE_SLICE_COUNT each tick)
     let current_slice = (physics_tick.get() % UPDATE_SLICE_COUNT as u64) as u8;
 
-    // Collect into Vec for Rayon parallelization (same pattern as steering system)
-    let mut entities: Vec<_> = query.iter_mut().collect();
+    // Collect only entities in current slice (filters before parallel processing)
+    let mut entities: Vec<_> = query
+        .iter_mut()
+        .filter(|(.., update_slice)| update_slice.id == current_slice)
+        .collect();
 
     // Parallel processing - each creature's updates are independent
     entities
         .par_iter_mut()
-        .for_each(|(creature_state, brain, update_slice)| {
-            // Slice-based system skipping: only process creatures in current slice
-            if update_slice.id != current_slice {
-                return;
-            }
-
+        .for_each(|(creature_state, brain, _update_slice)| {
             creature_state.age += AGE_INCREMENT_PER_TICK;
 
             if creature_state.behavior == BehaviorMode::Wandering {

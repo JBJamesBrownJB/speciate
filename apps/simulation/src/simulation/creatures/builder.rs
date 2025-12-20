@@ -299,17 +299,16 @@ mod tests {
         let bundle2 = CritBuilder::new().build(2);
         let bundle3 = CritBuilder::new().build(3);
 
-        // With UPDATE_SLICE_COUNT = 2:
-        // id 0 -> slice 0, id 1 -> slice 1, id 2 -> slice 0, id 3 -> slice 1
+        // id N -> slice (N % UPDATE_SLICE_COUNT)
         assert_eq!(bundle0.update_slice.id, 0 % UPDATE_SLICE_COUNT);
         assert_eq!(bundle1.update_slice.id, 1 % UPDATE_SLICE_COUNT);
         assert_eq!(bundle2.update_slice.id, 2 % UPDATE_SLICE_COUNT);
         assert_eq!(bundle3.update_slice.id, 3 % UPDATE_SLICE_COUNT);
 
-        // Verify even distribution (0 and 1 should appear equally)
-        assert_eq!(bundle0.update_slice.id, bundle2.update_slice.id);
-        assert_eq!(bundle1.update_slice.id, bundle3.update_slice.id);
-        assert_ne!(bundle0.update_slice.id, bundle1.update_slice.id);
+        // Verify different slices for consecutive IDs (when UPDATE_SLICE_COUNT > 1)
+        if UPDATE_SLICE_COUNT > 1 {
+            assert_ne!(bundle0.update_slice.id, bundle1.update_slice.id);
+        }
     }
 
     #[test]

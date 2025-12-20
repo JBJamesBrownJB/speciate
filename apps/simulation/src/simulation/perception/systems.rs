@@ -94,7 +94,7 @@ pub fn update_perception_system(
                 let mut candidates = candidates_cell.borrow_mut();
                 candidates.clear();
 
-                grid_ref.collect_cells_sorted(x, y, query_radius, facing_x, facing_y, &mut cells);
+                grid_ref.collect_cells_sorted_fov(x, y, query_radius, facing_x, facing_y, cos_half_fov, &mut cells);
 
                 // Pre-compute base distance for faster range checks
                 let base_dist = range + self_radius;
@@ -1254,6 +1254,356 @@ mod tests {
             neighbor_count >= 6,
             "Wide FOV (340°) creature should perceive at least 6 neighbors, but only got {}",
             neighbor_count
+        );
+    }
+
+    // ============================================================================
+    // Category 2: Per-Entity FOV Filtering Tests
+    //
+    // These tests verify the entity-level FOV check works correctly for various
+    // FOV angles. They should PASS (entity-level filtering is correct).
+    // ============================================================================
+
+    /// Test narrow 45° FOV entity filtering boundary cases
+    #[test]
+    fn test_narrow_fov_45_entity_filtering() {
+        let perception = Perception::new(45.0, 1.0);
+        let cos_half_fov = perception.cos_half_fov;
+        let cos_half_fov_sq = perception.cos_half_fov_sq;
+
+        let facing_x = 1.0_f32;
+        let facing_y = 0.0_f32;
+
+        // 45° FOV = ±22.5° from facing
+        let test_cases: [(f32, bool, &str); 5] = [
+            (0.0, true, "directly in front"),
+            (20.0, true, "at 20° (inside FOV)"),
+            (22.0, true, "at 22° (just inside edge)"),
+            (23.5, false, "at 23.5° (just outside edge)"),
+            (45.0, false, "at 45° (well outside)"),
+        ];
+
+        for (angle_deg, expected_visible, description) in test_cases {
+            let angle_rad = angle_deg.to_radians();
+            let dx = angle_rad.cos() * 5.0;
+            let dy = angle_rad.sin() * 5.0;
+            let center_dist_sq = dx * dx + dy * dy;
+            let rough_dot = dx * facing_x + dy * facing_y;
+
+            let in_fov = if cos_half_fov >= 0.0 {
+                rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+            } else {
+                let dist = center_dist_sq.sqrt();
+                rough_dot >= cos_half_fov * dist
+            };
+
+            assert_eq!(
+                in_fov, expected_visible,
+                "Target {} at {}° should be {}, but got {}",
+                description, angle_deg,
+                if expected_visible { "visible" } else { "not visible" },
+                if in_fov { "visible" } else { "filtered" }
+            );
+        }
+    }
+
+    /// Test medium 90° FOV entity filtering boundary cases
+    #[test]
+    fn test_medium_fov_90_entity_filtering() {
+        let perception = Perception::new(90.0, 1.0);
+        let cos_half_fov = perception.cos_half_fov;
+        let cos_half_fov_sq = perception.cos_half_fov_sq;
+
+        let facing_x = 1.0_f32;
+        let facing_y = 0.0_f32;
+
+        // 90° FOV = ±45° from facing
+        let test_cases: [(f32, bool, &str); 5] = [
+            (0.0, true, "directly in front"),
+            (40.0, true, "at 40° (inside FOV)"),
+            (44.0, true, "at 44° (just inside edge)"),
+            (46.0, false, "at 46° (just outside edge)"),
+            (90.0, false, "at 90° (perpendicular)"),
+        ];
+
+        for (angle_deg, expected_visible, description) in test_cases {
+            let angle_rad = angle_deg.to_radians();
+            let dx = angle_rad.cos() * 5.0;
+            let dy = angle_rad.sin() * 5.0;
+            let center_dist_sq = dx * dx + dy * dy;
+            let rough_dot = dx * facing_x + dy * facing_y;
+
+            let in_fov = if cos_half_fov >= 0.0 {
+                rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+            } else {
+                let dist = center_dist_sq.sqrt();
+                rough_dot >= cos_half_fov * dist
+            };
+
+            assert_eq!(
+                in_fov, expected_visible,
+                "Target {} at {}° should be {}, but got {}",
+                description, angle_deg,
+                if expected_visible { "visible" } else { "not visible" },
+                if in_fov { "visible" } else { "filtered" }
+            );
+        }
+    }
+
+    /// Test standard 180° FOV entity filtering boundary cases
+    #[test]
+    fn test_standard_fov_180_entity_filtering() {
+        let perception = Perception::new(180.0, 1.0);
+        let cos_half_fov = perception.cos_half_fov;
+        let cos_half_fov_sq = perception.cos_half_fov_sq;
+
+        let facing_x = 1.0_f32;
+        let facing_y = 0.0_f32;
+
+        // 180° FOV = ±90° from facing (hemisphere in front)
+        let test_cases: [(f32, bool, &str); 5] = [
+            (0.0, true, "directly in front"),
+            (45.0, true, "at 45° (inside FOV)"),
+            (89.0, true, "at 89° (just inside edge)"),
+            (91.0, false, "at 91° (just outside edge)"),
+            (180.0, false, "directly behind"),
+        ];
+
+        for (angle_deg, expected_visible, description) in test_cases {
+            let angle_rad = angle_deg.to_radians();
+            let dx = angle_rad.cos() * 5.0;
+            let dy = angle_rad.sin() * 5.0;
+            let center_dist_sq = dx * dx + dy * dy;
+            let rough_dot = dx * facing_x + dy * facing_y;
+
+            let in_fov = if cos_half_fov >= 0.0 {
+                rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+            } else {
+                let dist = center_dist_sq.sqrt();
+                rough_dot >= cos_half_fov * dist
+            };
+
+            assert_eq!(
+                in_fov, expected_visible,
+                "Target {} at {}° should be {}, but got {}",
+                description, angle_deg,
+                if expected_visible { "visible" } else { "not visible" },
+                if in_fov { "visible" } else { "filtered" }
+            );
+        }
+    }
+
+    /// Test extra-wide 270° FOV entity filtering
+    #[test]
+    fn test_extra_wide_fov_270_entity_filtering() {
+        let perception = Perception::new(270.0, 1.0);
+        let cos_half_fov = perception.cos_half_fov;
+        let cos_half_fov_sq = perception.cos_half_fov_sq;
+
+        let facing_x = 1.0_f32;
+        let facing_y = 0.0_f32;
+
+        // 270° FOV = ±135° from facing (only 45° blind spot behind)
+        let test_cases: [(f32, bool, &str); 5] = [
+            (0.0, true, "directly in front"),
+            (90.0, true, "at 90° (perpendicular, visible)"),
+            (130.0, true, "at 130° (inside FOV)"),
+            (140.0, false, "at 140° (in blind spot)"),
+            (180.0, false, "directly behind"),
+        ];
+
+        for (angle_deg, expected_visible, description) in test_cases {
+            let angle_rad = angle_deg.to_radians();
+            let dx = angle_rad.cos() * 5.0;
+            let dy = angle_rad.sin() * 5.0;
+            let center_dist_sq = dx * dx + dy * dy;
+            let rough_dot = dx * facing_x + dy * facing_y;
+
+            let in_fov = if cos_half_fov >= 0.0 {
+                rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+            } else {
+                let dist = center_dist_sq.sqrt();
+                rough_dot >= cos_half_fov * dist
+            };
+
+            assert_eq!(
+                in_fov, expected_visible,
+                "Target {} at {}° should be {}, but got {}",
+                description, angle_deg,
+                if expected_visible { "visible" } else { "not visible" },
+                if in_fov { "visible" } else { "filtered" }
+            );
+        }
+    }
+
+    // ============================================================================
+    // Category 3: Integration Tests (Full Pipeline)
+    //
+    // These tests verify the complete perception pipeline with various FOV angles.
+    // ============================================================================
+
+    /// Integration test: 45° FOV creature in a crowd
+    #[test]
+    fn test_fov_variants_narrow_45_crowd() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        // Spawn creature with 45° FOV at center
+        let center_crit_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(100.0, 100.0)
+                .with_fov(45.0)
+                .with_all_capabilities(),
+        );
+
+        // Spawn neighbors at known angles (every 30°)
+        let distance = 5.0;
+        for angle_deg in (0..360).step_by(30) {
+            let angle_rad = (angle_deg as f32).to_radians();
+            let x = 100.0 + distance * angle_rad.cos();
+            let y = 100.0 + distance * angle_rad.sin();
+            sim.spawn_crit(
+                CritBuilder::new()
+                    .at(x, y)
+                    .with_all_capabilities(),
+            );
+        }
+
+        // Run enough ticks to ensure perception runs
+        for _ in 0..UPDATE_SLICE_COUNT {
+            sim.update(0.016);
+        }
+
+        // Find the center creature and check its neighbor count
+        let world = sim.world_mut();
+        let center_entity = world
+            .query::<(bevy_ecs::entity::Entity, &crate::simulation::creatures::components::CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == center_crit_id)
+            .map(|(e, _)| e)
+            .expect("Should find center creature");
+
+        let neighbor_cache = world.get::<NeighborCache>(center_entity).expect("Should have NeighborCache");
+        let neighbor_count = neighbor_cache.neighbor_count();
+
+        // 45° FOV = ±22.5° from facing. With 12 neighbors at 30° intervals,
+        // only 0° and maybe ±30° (depending on exact facing) should be visible.
+        // Expected: 1-3 neighbors visible
+        assert!(
+            neighbor_count <= 4,
+            "Narrow FOV (45°) creature should perceive few neighbors (1-4), but got {}",
+            neighbor_count
+        );
+    }
+
+    /// Integration test: 90° FOV creature in a crowd
+    #[test]
+    fn test_fov_variants_medium_90_crowd() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        let center_crit_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(100.0, 100.0)
+                .with_fov(90.0)
+                .with_all_capabilities(),
+        );
+
+        let distance = 5.0;
+        for angle_deg in (0..360).step_by(30) {
+            let angle_rad = (angle_deg as f32).to_radians();
+            let x = 100.0 + distance * angle_rad.cos();
+            let y = 100.0 + distance * angle_rad.sin();
+            sim.spawn_crit(
+                CritBuilder::new()
+                    .at(x, y)
+                    .with_all_capabilities(),
+            );
+        }
+
+        for _ in 0..UPDATE_SLICE_COUNT {
+            sim.update(0.016);
+        }
+
+        let world = sim.world_mut();
+        let center_entity = world
+            .query::<(bevy_ecs::entity::Entity, &crate::simulation::creatures::components::CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == center_crit_id)
+            .map(|(e, _)| e)
+            .expect("Should find center creature");
+
+        let neighbor_cache = world.get::<NeighborCache>(center_entity).expect("Should have NeighborCache");
+        let neighbor_count = neighbor_cache.neighbor_count();
+
+        // 90° FOV = ±45° from facing. With 12 neighbors at 30° intervals,
+        // 0°, ±30° should be visible (3-4 neighbors)
+        assert!(
+            neighbor_count >= 2 && neighbor_count <= 5,
+            "Medium FOV (90°) creature should perceive 2-5 neighbors, but got {}",
+            neighbor_count
+        );
+    }
+
+    // ============================================================================
+    // Category 4: Edge Cases
+    // ============================================================================
+
+    /// Test that stopped creatures maintain their last facing direction
+    #[test]
+    fn test_fov_zero_velocity_maintains_facing() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
+        use crate::simulation::core::components::Rotation;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        // Spawn a creature that will be stopped
+        let crit_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(100.0, 100.0)
+                .with_fov(90.0)
+                .with_all_capabilities(),
+        );
+
+        // Run a few ticks
+        for _ in 0..UPDATE_SLICE_COUNT * 2 {
+            sim.update(0.016);
+        }
+
+        // Get the creature's rotation
+        let world = sim.world_mut();
+        let entity = world
+            .query::<(bevy_ecs::entity::Entity, &crate::simulation::creatures::components::CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == crit_id)
+            .map(|(e, _)| e)
+            .expect("Should find creature");
+
+        let rotation = world.get::<Rotation>(entity).expect("Should have Rotation");
+
+        // Rotation should be valid (not NaN)
+        assert!(
+            !rotation.cos_radians.is_nan() && !rotation.sin_radians.is_nan(),
+            "Rotation should be valid even for stopped creatures"
+        );
+
+        // Should be normalized
+        let magnitude = (rotation.cos_radians.powi(2) + rotation.sin_radians.powi(2)).sqrt();
+        assert!(
+            (magnitude - 1.0).abs() < 0.01,
+            "Rotation should be normalized: magnitude = {}",
+            magnitude
         );
     }
 }

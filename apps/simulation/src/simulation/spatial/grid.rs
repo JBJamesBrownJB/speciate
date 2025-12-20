@@ -592,6 +592,98 @@ impl SpatialGrid {
         }
     }
 
+    /// Collect cell indices with FOV-aware culling.
+    /// Like `collect_cells_sorted`, but uses actual FOV angle to cull cells outside the vision cone.
+    ///
+    /// # Arguments
+    /// * `cos_half_fov` - cos(fov_angle/2). Positive for narrow FOV (≤180°), negative for wide FOV (>180°).
+    ///
+    /// # Performance
+    /// - Narrow FOV: Uses squared comparison (no sqrt per cell)
+    /// - Wide FOV: Uses sqrt per cell (acceptable - wide FOV culls few cells anyway)
+    /// - Adjacent cells (3x3): Always included regardless of FOV
+    #[inline(always)]
+    pub fn collect_cells_sorted_fov(
+        &self,
+        x: f32,
+        y: f32,
+        radius: f32,
+        facing_x: f32,
+        facing_y: f32,
+        cos_half_fov: f32,
+        out: &mut Vec<(f32, usize)>,
+    ) {
+        use super::constants::{COS_SAFETY_MARGIN, NON_ADJACENT_OFFSET, SIN_SAFETY_MARGIN};
+
+        out.clear();
+
+        let (center_cx, center_cy) = self.world_to_cell(x, y);
+        let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
+        let cell_size = self.cell_size;
+        let half_cell = cell_size * 0.5;
+
+        let min_qx = (center_cx - cells_radius).max(self.min_cell_x);
+        let max_qx = (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1);
+        let min_qy = (center_cy - cells_radius).max(self.min_cell_y);
+        let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
+
+        // Adjust FOV threshold with 15° safety margin for cell corners.
+        // cos(alpha + beta) = cos(alpha)*cos(beta) - sin(alpha)*sin(beta)
+        let sin_half_fov = (1.0 - cos_half_fov * cos_half_fov).sqrt();
+        let adjusted_cos = cos_half_fov * COS_SAFETY_MARGIN - sin_half_fov * SIN_SAFETY_MARGIN;
+        let adjusted_cos_sq = adjusted_cos * adjusted_cos;
+
+        for cy in min_qy..=max_qy {
+            for cx in min_qx..=max_qx {
+                let cell_center_x = (cx as f32 * cell_size) + half_cell;
+                let cell_center_y = (cy as f32 * cell_size) + half_cell;
+
+                // Adjacent cells (3x3) - always include, never FOV-cull
+                let is_adjacent = (cx - center_cx).abs() <= 1 && (cy - center_cy).abs() <= 1;
+
+                if !is_adjacent {
+                    let dx = cell_center_x - x;
+                    let dy = cell_center_y - y;
+                    let dot = dx * facing_x + dy * facing_y;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    let in_fov = if adjusted_cos >= 0.0 {
+                        // Narrow FOV: squared comparison avoids sqrt
+                        dot > 0.0 && dot * dot >= adjusted_cos_sq * dist_sq
+                    } else {
+                        // Wide FOV: must use sqrt for sign handling
+                        let dist = dist_sq.sqrt();
+                        dot >= adjusted_cos * dist
+                    };
+
+                    if !in_fov {
+                        continue;
+                    }
+                }
+
+                let idx = ((cy - self.min_cell_y) as usize) * self.width
+                    + ((cx - self.min_cell_x) as usize);
+                let (_, count) = unsafe { *self.cells.get_unchecked(idx) };
+
+                if count > 0 {
+                    let dx = cell_center_x - x;
+                    let dy = cell_center_y - y;
+                    let dist_sq = dx * dx + dy * dy;
+                    let sort_key = if is_adjacent {
+                        dist_sq
+                    } else {
+                        dist_sq + NON_ADJACENT_OFFSET
+                    };
+                    out.push((sort_key, idx));
+                }
+            }
+        }
+
+        if out.len() > 9 {
+            out.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        }
+    }
+
     /// Get proxies for a cell by index. Use after collect_cells_sorted.
     #[inline(always)]
     pub fn get_cell_proxies(&self, cell_idx: usize) -> &[PerceptionProxy] {
@@ -1205,6 +1297,318 @@ mod tests {
             adjacent_front_pos.unwrap() < non_adjacent_pos.unwrap(),
             "Adjacent cell in front ({:?}) should be examined BEFORE non-adjacent cell ({:?}). Order: {:?}",
             adjacent_front_pos, non_adjacent_pos, cell_coords
+        );
+    }
+
+    // ============================================================================
+    // FOV-Aware Cell Culling Tests (Category 1)
+    //
+    // These tests document EXPECTED behavior for `collect_cells_sorted_fov`.
+    // They will FAIL until the optimization is implemented.
+    // ============================================================================
+
+    /// Helper: place entity at specific angle from origin, at given distance
+    fn entity_at_angle(angle_deg: f32, distance: f32) -> (f32, f32) {
+        let angle_rad = angle_deg.to_radians();
+        (
+            distance * angle_rad.cos(),
+            distance * angle_rad.sin(),
+        )
+    }
+
+    /// Helper: compute cos(half_fov) from FOV in degrees
+    fn cos_half_fov_from_degrees(fov_deg: f32) -> f32 {
+        (fov_deg / 2.0).to_radians().cos()
+    }
+
+    #[test]
+    fn test_narrow_fov_45_culls_cells_at_60_degrees() {
+        // 45° FOV = ±22.5° from facing
+        // Cell at 60° from facing should NOT be collected (well outside cone)
+        let mut grid = SpatialGrid::new(50.0);
+
+        // Entity at 60° from creature facing +X, at distance 150 (3 cells away)
+        let (ex, ey) = entity_at_angle(60.0, 150.0);
+        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(45.0); // cos(22.5°) ≈ 0.924
+
+        // Creature at origin facing +X
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        // Cell containing entity at 60° should NOT be collected for 45° FOV
+        let entity_cell = grid.world_to_cell(ex, ey);
+        assert!(
+            !cell_coords.contains(&entity_cell),
+            "Cell at 60° ({:?}) should be culled for 45° FOV. Found cells: {:?}",
+            entity_cell, cell_coords
+        );
+    }
+
+    #[test]
+    fn test_narrow_fov_45_culls_cells_at_90_degrees() {
+        // 45° FOV = ±22.5° from facing
+        // Cell at 90° (directly to the side) should NOT be collected
+        let mut grid = SpatialGrid::new(50.0);
+
+        let (ex, ey) = entity_at_angle(90.0, 150.0);
+        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(45.0);
+
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        let entity_cell = grid.world_to_cell(ex, ey);
+        assert!(
+            !cell_coords.contains(&entity_cell),
+            "Cell at 90° ({:?}) should be culled for 45° FOV. Found cells: {:?}",
+            entity_cell, cell_coords
+        );
+    }
+
+    #[test]
+    fn test_narrow_fov_45_keeps_cells_at_20_degrees() {
+        // 45° FOV = ±22.5° from facing
+        // Cell at 20° (inside cone) SHOULD be collected
+        let mut grid = SpatialGrid::new(50.0);
+
+        let (ex, ey) = entity_at_angle(20.0, 150.0);
+        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(45.0);
+
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        let entity_cell = grid.world_to_cell(ex, ey);
+        assert!(
+            cell_coords.contains(&entity_cell),
+            "Cell at 20° ({:?}) should be kept for 45° FOV. Found cells: {:?}",
+            entity_cell, cell_coords
+        );
+    }
+
+    #[test]
+    fn test_narrow_fov_90_culls_cells_at_80_degrees() {
+        // 90° FOV = ±45° from facing (with 15° safety margin = ±60° for cell culling)
+        // Cell at 80° (well outside cone + safety margin) should NOT be collected
+        let mut grid = SpatialGrid::new(50.0);
+
+        let (ex, ey) = entity_at_angle(80.0, 150.0);
+        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(90.0); // cos(45°) ≈ 0.707
+
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        let entity_cell = grid.world_to_cell(ex, ey);
+        assert!(
+            !cell_coords.contains(&entity_cell),
+            "Cell at 80° ({:?}) should be culled for 90° FOV. Found cells: {:?}",
+            entity_cell, cell_coords
+        );
+    }
+
+    #[test]
+    fn test_narrow_fov_90_keeps_cells_at_40_degrees() {
+        // 90° FOV = ±45° from facing
+        // Cell at 40° (inside cone) SHOULD be collected
+        let mut grid = SpatialGrid::new(50.0);
+
+        let (ex, ey) = entity_at_angle(40.0, 150.0);
+        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(90.0);
+
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        let entity_cell = grid.world_to_cell(ex, ey);
+        assert!(
+            cell_coords.contains(&entity_cell),
+            "Cell at 40° ({:?}) should be kept for 90° FOV. Found cells: {:?}",
+            entity_cell, cell_coords
+        );
+    }
+
+    #[test]
+    fn test_narrow_fov_adjacent_cells_always_kept() {
+        // Adjacent cells (3x3 around creature) should ALWAYS be collected
+        // regardless of FOV, for safety margin
+        let mut grid = SpatialGrid::new(50.0);
+
+        // Entity in adjacent cell BEHIND creature
+        let entities = vec![(Entity::from_raw(1), -25.0, 25.0, 1.0)]; // cell (-1, 0)
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(45.0); // Narrow 45° FOV
+
+        // Creature at (25, 25) facing +X
+        grid.collect_cells_sorted_fov(25.0, 25.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        // Adjacent cell behind (-1, 0) should still be included
+        assert!(
+            cell_coords.contains(&(-1, 0)),
+            "Adjacent cell behind ({:?}) should ALWAYS be kept regardless of FOV. Found: {:?}",
+            (-1, 0), cell_coords
+        );
+    }
+
+    #[test]
+    fn test_wide_fov_340_keeps_cells_at_150_degrees() {
+        // 340° FOV = ±170° from facing (only 20° blind spot behind)
+        // Cell at 150° (inside wide FOV) SHOULD be collected
+        let mut grid = SpatialGrid::new(50.0);
+
+        let (ex, ey) = entity_at_angle(150.0, 150.0);
+        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(340.0); // cos(170°) ≈ -0.985
+
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        let entity_cell = grid.world_to_cell(ex, ey);
+        assert!(
+            cell_coords.contains(&entity_cell),
+            "Cell at 150° ({:?}) should be kept for 340° FOV. Found cells: {:?}",
+            entity_cell, cell_coords
+        );
+    }
+
+    #[test]
+    fn test_wide_fov_340_keeps_cells_at_180_degrees() {
+        // 340° FOV = ±170° from facing (only 10° blind spot behind)
+        // With 15° safety margin, the blind spot is consumed - no cell culling for extreme wide FOV
+        // Cell at 180° SHOULD be collected (safety margin prevents false culling)
+        let mut grid = SpatialGrid::new(50.0);
+
+        let (ex, ey) = entity_at_angle(180.0, 150.0);
+        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(340.0);
+
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        let entity_cell = grid.world_to_cell(ex, ey);
+        // With 15° safety margin eating into 10° blind spot, cells at ~180° are kept
+        assert!(
+            cell_coords.contains(&entity_cell),
+            "Cell at 180° ({:?}) should be KEPT for 340° FOV (safety margin > blind spot). Found cells: {:?}",
+            entity_cell, cell_coords
+        );
+    }
+
+    #[test]
+    fn test_wide_fov_270_culls_cells_at_180_degrees() {
+        // 270° FOV = ±135° from facing (45° blind spot behind)
+        // With 15° safety margin, effective blind spot is 30° (±15° around 180°)
+        // Cell at 180° should be culled (well inside blind spot)
+        let mut grid = SpatialGrid::new(50.0);
+
+        let (ex, ey) = entity_at_angle(180.0, 150.0);
+        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        grid.rebuild(entities.into_iter());
+
+        let mut cells = Vec::new();
+        let cos_half_fov = cos_half_fov_from_degrees(270.0); // cos(135°) ≈ -0.707
+
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov, &mut cells);
+
+        let cell_coords: Vec<(i32, i32)> = cells
+            .iter()
+            .map(|&(_, idx)| grid.get_cell_coords_by_index(idx))
+            .collect();
+
+        let entity_cell = grid.world_to_cell(ex, ey);
+        assert!(
+            !cell_coords.contains(&entity_cell),
+            "Cell at 180° ({:?}) should be culled for 270° FOV. Found cells: {:?}",
+            entity_cell, cell_coords
+        );
+    }
+
+    #[test]
+    fn test_cell_cull_count_narrow_vs_wide() {
+        // Narrow FOV should query FEWER cells than wide FOV
+        // This test documents the performance opportunity
+        let mut grid = SpatialGrid::new(50.0);
+
+        // Populate grid with entities in a ring around origin
+        let mut entities = Vec::new();
+        for angle in (0..360).step_by(30) {
+            let (x, y) = entity_at_angle(angle as f32, 150.0);
+            entities.push((Entity::from_raw(angle as u32), x, y, 1.0));
+        }
+        grid.rebuild(entities.into_iter());
+
+        let mut narrow_cells = Vec::new();
+        let mut wide_cells = Vec::new();
+
+        let cos_half_fov_45 = cos_half_fov_from_degrees(45.0);   // Narrow
+        let cos_half_fov_340 = cos_half_fov_from_degrees(340.0); // Wide
+
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov_45, &mut narrow_cells);
+        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov_340, &mut wide_cells);
+
+        // Narrow FOV (45°) should collect fewer cells than wide FOV (340°)
+        assert!(
+            narrow_cells.len() < wide_cells.len(),
+            "Narrow FOV (45°) should query fewer cells than wide FOV (340°). \
+             Narrow: {}, Wide: {}. This test will FAIL until FOV culling is implemented.",
+            narrow_cells.len(), wide_cells.len()
         );
     }
 }

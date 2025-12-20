@@ -1,0 +1,347 @@
+{
+  "metadata": {
+    "sampleCount": 90,
+    "durationMs": 2267,
+    "startTime": "2025-12-20T17:21:33.523Z",
+    "endTime": "2025-12-20T17:21:35.790Z"
+  },
+  "tick": {
+    "avg": 7963.511111111111,
+    "min": 7942,
+    "max": 7986,
+    "stdDev": 13.710696914327258,
+    "p50": 7964,
+    "p95": 7986,
+    "p99": 7986
+  },
+  "creatureCount": {
+    "avg": 360000,
+    "min": 360000,
+    "max": 360000,
+    "stdDev": 0,
+    "p50": 360000,
+    "p95": 360000,
+    "p99": 360000
+  },
+  "tickRateHz": {
+    "avg": 20,
+    "min": 20,
+    "max": 20,
+    "stdDev": 0,
+    "p50": 20,
+    "p95": 20,
+    "p99": 20
+  },
+  "systemTimings": {
+    "totalTickUs": {
+      "avg": 28160.31111111111,
+      "min": 27041,
+      "max": 29692,
+      "stdDev": 1000.6592121024182,
+      "p50": 27910,
+      "p95": 29692,
+      "p99": 29692
+    },
+    "movementUs": {
+      "avg": 4646.5888888888885,
+      "min": 4381,
+      "max": 5018,
+      "stdDev": 225.42867285066006,
+      "p50": 4581,
+      "p95": 5018,
+      "p99": 5018
+    },
+    "perceptionUs": {
+      "avg": 6002.444444444444,
+      "min": 5369,
+      "max": 6416,
+      "stdDev": 430.7217743666787,
+      "p50": 6192,
+      "p95": 6416,
+      "p99": 6416
+    },
+    "spatialGridRebuildUs": {
+      "avg": 4398.533333333334,
+      "min": 3660,
+      "max": 5526,
+      "stdDev": 685.6203549422314,
+      "p50": 4152,
+      "p95": 5526,
+      "p99": 5526
+    },
+    "behaviorTransitionUs": {
+      "avg": 1803.8111111111111,
+      "min": 1520,
+      "max": 2128,
+      "stdDev": 263.43605146197524,
+      "p50": 1581,
+      "p95": 2128,
+      "p99": 2128
+    },
+    "steeringUs": {
+      "avg": 9553.955555555556,
+      "min": 9081,
+      "max": 10190,
+      "stdDev": 340.0245386932834,
+      "p50": 9556,
+      "p95": 10190,
+      "p99": 10190
+    },
+    "captureDebugAccelUs": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "exportPositionsUs": {
+      "avg": 1572.1666666666667,
+      "min": 1266,
+      "max": 1945,
+      "stdDev": 256.36827893568363,
+      "p50": 1593,
+      "p95": 1945,
+      "p99": 1945
+    },
+    "archetypeCount": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "entityCount": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    }
+  },
+  "hardwareMetrics": {
+    "cyclesDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "instructionsDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "cacheRefsDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "cacheMissesDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "l1dMissesDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "l1iMissesDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "branchInstructionsDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "branchMissesDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "stalledFrontendDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "stalledBackendDelta": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "ipc": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "l1dMissRate": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "l1iMissRate": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "llcMissRate": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "branchMissRate": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "frontendStallRatio": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "backendStallRatio": {
+      "avg": 0,
+      "min": 0,
+      "max": 0,
+      "stdDev": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    }
+  },
+  "hardwareMetricsDerived": {
+    "ipc": 0,
+    "l1dMissRate": 0,
+    "l1iMissRate": 0,
+    "llcMissRate": 0,
+    "branchMissRate": 0,
+    "frontendStallRatio": 0,
+    "backendStallRatio": 0
+  },
+  "parallelizationMetrics": {
+    "cpuCoresTotal": {
+      "avg": 16,
+      "min": 16,
+      "max": 16,
+      "stdDev": 0,
+      "p50": 16,
+      "p95": 16,
+      "p99": 16
+    },
+    "cpuCoresActive": {
+      "avg": 16,
+      "min": 16,
+      "max": 16,
+      "stdDev": 0,
+      "p50": 16,
+      "p95": 16,
+      "p99": 16
+    },
+    "cpuUtilizationPct": {
+      "avg": 43.22447999999995,
+      "min": 43.22448,
+      "max": 43.22448,
+      "stdDev": 4.973799150320701e-14,
+      "p50": 43.22448,
+      "p95": 43.22448,
+      "p99": 43.22448
+    },
+    "estimatedParallelismFactor": {
+      "avg": 1,
+      "min": 1,
+      "max": 1,
+      "stdDev": 0,
+      "p50": 1,
+      "p95": 1,
+      "p99": 1
+    },
+    "concurrentSystemsEstimate": {
+      "avg": 11,
+      "min": 11,
+      "max": 11,
+      "stdDev": 0,
+      "p50": 11,
+      "p95": 11,
+      "p99": 11
+    },
+    "processMemoryBytes": {
+      "avg": 1757102535.1111112,
+      "min": 1750364160,
+      "max": 1764036608,
+      "stdDev": 5070827.356163728,
+      "p50": 1755357184,
+      "p95": 1764036608,
+      "p99": 1764036608
+    }
+  }
+}

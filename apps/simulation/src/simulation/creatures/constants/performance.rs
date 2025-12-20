@@ -6,4 +6,4 @@
 /// Number of update slices for system skipping.
 /// Creatures are distributed across slices; each tick only one slice runs.
 /// 2 = 50% load per tick, 4 = 25% load per tick.
-pub const UPDATE_SLICE_COUNT: u8 = 2;
+pub const UPDATE_SLICE_COUNT: u8 = 10;

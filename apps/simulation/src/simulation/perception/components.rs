@@ -43,12 +43,11 @@ pub struct Perception {
     pub cos_half_fov_sq: f32,  // Cached cos²(fov_angle/2) for sqrt-free FOV checks
 }
 
-/// Cold neighbor cache (~169 bytes) - written by perception, read by avoidance
+/// Cold neighbor cache - written by perception, read by avoidance
 /// Separated from Perception for cache locality (only loaded when iterating neighbors)
 #[derive(Component, Debug, Clone)]
 pub struct NeighborCache {
     neighbor_count: u8,
-    skip_ticks_remaining: u8,
     neighbors: [NeighborData; MAX_PERCEIVED_NEIGHBORS],
 }
 
@@ -98,7 +97,6 @@ impl NeighborCache {
     pub fn new() -> Self {
         Self {
             neighbor_count: 0,
-            skip_ticks_remaining: 0,
             neighbors: [NeighborData::EMPTY; MAX_PERCEIVED_NEIGHBORS],
         }
     }
@@ -130,30 +128,6 @@ impl NeighborCache {
         self.neighbors[..self.neighbor_count as usize]
             .iter()
             .any(|n| n.entity == entity)
-    }
-
-    pub fn is_full(&self) -> bool {
-        self.neighbor_count as usize >= MAX_PERCEIVED_NEIGHBORS
-    }
-
-    #[inline]
-    pub fn should_skip(&self) -> bool {
-        self.skip_ticks_remaining > 0
-    }
-
-    #[inline]
-    pub fn consume_skip(&mut self) -> bool {
-        if self.skip_ticks_remaining > 0 {
-            self.skip_ticks_remaining -= 1;
-            true
-        } else {
-            false
-        }
-    }
-
-    #[inline]
-    pub fn schedule_skip(&mut self, ticks: u8) {
-        self.skip_ticks_remaining = ticks;
     }
 }
 
@@ -372,76 +346,6 @@ mod tests {
         assert_eq!(avoidance.effective_personal_space(-1.0), min_space);
         // Energy > 1.0 clamps to max_modifier
         assert_eq!(avoidance.effective_personal_space(2.0), max_space);
-    }
-
-    // === Perception Skip Tests (Dynamic Neighbour Perception Skipping) ===
-
-    #[test]
-    fn test_neighbor_cache_skip_flag_defaults_to_false() {
-        let cache = NeighborCache::new();
-        assert!(!cache.should_skip(), "Skip flag should default to false");
-
-        let cache_default = NeighborCache::default();
-        assert!(!cache_default.should_skip(), "Skip flag should default to false via Default");
-    }
-
-    #[test]
-    fn test_neighbor_cache_consume_skip_decrements_counter() {
-        let mut cache = NeighborCache::new();
-
-        // Counter starts at 0 - consume_skip returns false
-        assert!(!cache.consume_skip(), "consume_skip should return false when counter is 0");
-        assert!(!cache.should_skip(), "should_skip should be false");
-
-        // Schedule 2 ticks of skipping
-        cache.schedule_skip(2);
-        assert!(cache.should_skip(), "should_skip should be true after schedule_skip(2)");
-
-        // First consume: 2 -> 1
-        assert!(cache.consume_skip(), "consume_skip should return true");
-        assert!(cache.should_skip(), "should_skip should still be true (counter=1)");
-
-        // Second consume: 1 -> 0
-        assert!(cache.consume_skip(), "consume_skip should return true");
-        assert!(!cache.should_skip(), "should_skip should be false (counter=0)");
-
-        // Third consume returns false (counter already 0)
-        assert!(!cache.consume_skip(), "consume_skip should return false when counter is 0");
-    }
-
-    #[test]
-    fn test_neighbor_cache_schedule_skip_sets_counter() {
-        let mut cache = NeighborCache::new();
-        assert!(!cache.should_skip());
-
-        cache.schedule_skip(1);
-        assert!(cache.should_skip(), "schedule_skip(1) should set counter");
-
-        // Consume it
-        cache.consume_skip();
-        assert!(!cache.should_skip());
-
-        // Schedule with higher value
-        cache.schedule_skip(3);
-        assert!(cache.should_skip(), "schedule_skip(3) should set counter");
-    }
-
-    #[test]
-    fn test_clear_preserves_skip_counter() {
-        let mut cache = NeighborCache::new();
-
-        // Add neighbors and set skip counter
-        cache.add_neighbor(NeighborData { entity: Entity::PLACEHOLDER, x: 1.0, y: 2.0, radius: 0.5 });
-        cache.schedule_skip(2);
-
-        assert!(cache.has_neighbors());
-        assert!(cache.should_skip());
-
-        // Clear should reset neighbors but NOT the skip counter
-        cache.clear();
-
-        assert!(!cache.has_neighbors(), "clear() should remove neighbors");
-        assert!(cache.should_skip(), "clear() must NOT reset skip counter");
     }
 
     // === Allometric Scaling Tests ===

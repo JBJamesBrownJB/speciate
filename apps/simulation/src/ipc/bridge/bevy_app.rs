@@ -356,6 +356,7 @@ impl NapiApp {
                     snapshot.x,
                     snapshot.y,
                     snapshot.perception_range,
+                    snapshot.query_radius,
                     snapshot.fov_angle,
                     snapshot.rotation,
                     snapshot.ax,

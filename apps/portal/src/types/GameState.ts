@@ -60,6 +60,7 @@ export interface PerceptionDebugData {
   x: number;
   y: number;
   perceptionRange: number;
+  queryRadius: number;
   fovAngle: number;
   rotation: number;
   ax: number;

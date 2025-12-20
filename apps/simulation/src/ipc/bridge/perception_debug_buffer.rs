@@ -9,37 +9,38 @@
 //! - [2]: target_x
 //! - [3]: target_y
 //! - [4]: perception_range
-//! - [5]: fov_angle (radians)
-//! - [6]: rotation (radians)
-//! - [7]: ax (acceleration x component)
-//! - [8]: ay (acceleration y component)
-//! - [9]: neighbor_count
-//! - [10..10+MAX_NEIGHBORS]: neighbor_ids
-//! - [10+MAX_NEIGHBORS..10+2*MAX_NEIGHBORS]: neighbor_xs
-//! - [10+2*MAX_NEIGHBORS..10+3*MAX_NEIGHBORS]: neighbor_ys
+//! - [5]: query_radius (actual radius used for cell queries)
+//! - [6]: fov_angle (radians)
+//! - [7]: rotation (radians)
+//! - [8]: ax (acceleration x component)
+//! - [9]: ay (acceleration y component)
+//! - [10]: neighbor_count
+//! - [11..11+MAX_NEIGHBORS]: neighbor_ids
+//! - [11+MAX_NEIGHBORS..11+2*MAX_NEIGHBORS]: neighbor_xs
+//! - [11+2*MAX_NEIGHBORS..11+3*MAX_NEIGHBORS]: neighbor_ys
 //!
 //! **Grid cell section (starting at CELL_SECTION_OFFSET):**
-//! - [202]: cell_size (world units per cell)
-//! - [203]: num_queried_cells
-//! - [204]: creature_cell_x
-//! - [205]: creature_cell_y
-//! - [206..206+MAX_CELLS*2]: queried cells (x, y pairs interleaved)
+//! - [203]: cell_size (world units per cell)
+//! - [204]: num_queried_cells
+//! - [205]: creature_cell_x
+//! - [206]: creature_cell_y
+//! - [207..207+MAX_CELLS*2]: queried cells (x, y pairs interleaved)
 //!
 //! **Checked cells section (starting at CHECKED_CELL_SECTION_OFFSET):**
-//! - [406]: num_checked_cells
-//! - [407..407+MAX_CELLS*2]: checked cells (x, y pairs interleaved)
+//! - [407]: num_checked_cells
+//! - [408..408+MAX_CELLS*2]: checked cells (x, y pairs interleaved)
 
 #![cfg(feature = "dev-tools")]
 
 pub const MAX_DEBUG_NEIGHBORS: usize = 64;
-pub const HEADER_SIZE: usize = 10;
+pub const HEADER_SIZE: usize = 11;
 pub const NEIGHBOR_SECTION_SIZE: usize = MAX_DEBUG_NEIGHBORS * 3;
 
-pub const CELL_SECTION_OFFSET: usize = HEADER_SIZE + NEIGHBOR_SECTION_SIZE; // 202
+pub const CELL_SECTION_OFFSET: usize = HEADER_SIZE + NEIGHBOR_SECTION_SIZE; // 203
 pub const CELL_HEADER_SIZE: usize = 4; // cell_size, num_cells, creature_x, creature_y
 pub const MAX_QUERIED_CELLS: usize = 100; // Up to 10x10 grid query
 
-pub const CHECKED_CELL_SECTION_OFFSET: usize = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 406
+pub const CHECKED_CELL_SECTION_OFFSET: usize = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 407
 pub const CHECKED_CELL_HEADER_SIZE: usize = 1; // num_checked_cells
 pub const MAX_CHECKED_CELLS: usize = 100;
 
@@ -111,7 +112,7 @@ impl PerceptionDebugBuffer {
         self.write[0] = 0.0; // has_data = false
     }
 
-    pub fn write_debug_data<N, F>(&mut self, target_id: u32, target_x: f32, target_y: f32, perception_range: f32, fov_angle: f32, rotation: f32, ax: f32, ay: f32, neighbors: N)
+    pub fn write_debug_data<N, F>(&mut self, target_id: u32, target_x: f32, target_y: f32, perception_range: f32, query_radius: f32, fov_angle: f32, rotation: f32, ax: f32, ay: f32, neighbors: N)
     where
         N: ExactSizeIterator<Item = F>,
         F: NeighborFields,
@@ -123,11 +124,12 @@ impl PerceptionDebugBuffer {
         self.write[2] = target_x;
         self.write[3] = target_y;
         self.write[4] = perception_range;
-        self.write[5] = fov_angle;
-        self.write[6] = rotation;
-        self.write[7] = ax;
-        self.write[8] = ay;
-        self.write[9] = neighbor_count as f32;
+        self.write[5] = query_radius;
+        self.write[6] = fov_angle;
+        self.write[7] = rotation;
+        self.write[8] = ax;
+        self.write[9] = ay;
+        self.write[10] = neighbor_count as f32;
 
         let id_offset = HEADER_SIZE;
         let x_offset = HEADER_SIZE + MAX_DEBUG_NEIGHBORS;
@@ -195,7 +197,7 @@ mod tests {
 
         let neighbors: Vec<(u32, f32, f32)> = vec![(42, 10.0, 20.0), (43, 30.0, 40.0)];
 
-        buffer.write_debug_data(1, 100.0, 200.0, 50.0, pi, 0.5, 1.5, -2.5, neighbors.iter().copied());
+        buffer.write_debug_data(1, 100.0, 200.0, 50.0, 55.0, pi, 0.5, 1.5, -2.5, neighbors.iter().copied());
 
         assert!(!buffer.has_data());
 
@@ -207,11 +209,12 @@ mod tests {
         assert_eq!(slice[2], 100.0); // target_x
         assert_eq!(slice[3], 200.0); // target_y
         assert_eq!(slice[4], 50.0); // perception_range
-        assert_eq!(slice[5], pi); // fov_angle
-        assert_eq!(slice[6], 0.5); // rotation
-        assert_eq!(slice[7], 1.5); // ax
-        assert_eq!(slice[8], -2.5); // ay
-        assert_eq!(slice[9], 2.0); // neighbor_count
+        assert_eq!(slice[5], 55.0); // query_radius
+        assert_eq!(slice[6], pi); // fov_angle
+        assert_eq!(slice[7], 0.5); // rotation
+        assert_eq!(slice[8], 1.5); // ax
+        assert_eq!(slice[9], -2.5); // ay
+        assert_eq!(slice[10], 2.0); // neighbor_count
         assert_eq!(slice[HEADER_SIZE], 42.0); // first neighbor id
         assert_eq!(slice[HEADER_SIZE + MAX_DEBUG_NEIGHBORS], 10.0); // first neighbor x
     }
@@ -221,7 +224,7 @@ mod tests {
         let mut buffer = PerceptionDebugBuffer::new();
         let pi = std::f32::consts::PI;
 
-        buffer.write_debug_data(1, 100.0, 200.0, 50.0, pi, 0.0, 0.0, 0.0, std::iter::empty::<(u32, f32, f32)>());
+        buffer.write_debug_data(1, 100.0, 200.0, 50.0, 55.0, pi, 0.0, 0.0, 0.0, std::iter::empty::<(u32, f32, f32)>());
         buffer.swap();
         assert!(buffer.has_data());
 
@@ -237,10 +240,10 @@ mod tests {
 
         let neighbors: Vec<(u32, f32, f32)> = (0..100).map(|i| (i, i as f32, i as f32)).collect();
 
-        buffer.write_debug_data(1, 0.0, 0.0, 50.0, pi, 0.0, 0.0, 0.0, neighbors.iter().copied());
+        buffer.write_debug_data(1, 0.0, 0.0, 50.0, 55.0, pi, 0.0, 0.0, 0.0, neighbors.iter().copied());
         buffer.swap();
 
         let slice = buffer.get_read_slice();
-        assert_eq!(slice[9], MAX_DEBUG_NEIGHBORS as f32); // neighbor_count at index 9 now
+        assert_eq!(slice[10], MAX_DEBUG_NEIGHBORS as f32); // neighbor_count at index 10 now
     }
 }

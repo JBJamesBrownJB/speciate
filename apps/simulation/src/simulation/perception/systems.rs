@@ -238,11 +238,12 @@ pub fn update_perception_system(
         if let Some(target_entity) = debug_target_entity {
             // Find the debug target in our entities list and capture its state
             // NOTE: Entity may not be in `entities` if not in current update slice
-            if let Some((_, pos, rot, _size, perception, neighbor_cache, state, _)) = entities
+            if let Some((_, pos, rot, size, perception, neighbor_cache, state, _)) = entities
                 .iter()
                 .find(|(e, _, _, _, _, _, _, _)| *e == target_entity)
             {
                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
+                let query_radius = perception.range + size.radius() + MAX_OTHER_RADIUS;
 
                 // NOTE: Acceleration is captured LATER by capture_debug_acceleration_system
                 // (runs after behaviors). Set 0.0 here as placeholder - will be overwritten.
@@ -278,6 +279,7 @@ pub fn update_perception_system(
                         entity_id,
                         x, y,
                         perception.range,
+                        query_radius,
                         perception.fov_angle,
                         rot.radians,
                         ax,
@@ -293,6 +295,7 @@ pub fn update_perception_system(
                         entity_id,
                         pos.x, pos.y,
                         perception.range,
+                        query_radius,
                         perception.fov_angle,
                         rot.radians,
                         ax,

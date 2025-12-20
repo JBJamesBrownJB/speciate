@@ -302,4 +302,111 @@ describe('ElectronIPCClient', () => {
       expect(() => client.selectCreatureDebug(42)).not.toThrow();
     });
   });
+
+  describe('perception debug buffer parsing', () => {
+    it('should parse queryRadius at correct buffer offset', async () => {
+      let capturedCallback: ((buffer: Float32Array) => void) | null = null;
+
+      mockElectronAPI.onPerceptionDebugUpdate.mockImplementation((callback) => {
+        capturedCallback = callback;
+        return () => {};
+      });
+
+      const receivedData: any[] = [];
+      await client.connect();
+      client.onPerceptionDebugUpdate((data) => {
+        receivedData.push(data);
+      });
+
+      // Create buffer with specific values at expected offsets
+      // Layout: [0]=has_data, [1]=id, [2]=x, [3]=y, [4]=perceptionRange, [5]=queryRadius, [6]=fovAngle, ...
+      const buffer = new Float32Array(608);
+      buffer[0] = 1.0; // has_data
+      buffer[1] = 42; // entity_id
+      buffer[2] = 100.0; // x
+      buffer[3] = 200.0; // y
+      buffer[4] = 50.0; // perceptionRange
+      buffer[5] = 60.0; // queryRadius (new field)
+      buffer[6] = 1.57; // fovAngle
+      buffer[7] = 0.5; // rotation
+      buffer[8] = 1.0; // ax
+      buffer[9] = 2.0; // ay
+      buffer[10] = 0; // neighbor_count
+
+      capturedCallback!(buffer);
+
+      expect(receivedData.length).toBe(1);
+      expect(receivedData[0].entityId).toBe(42);
+      expect(receivedData[0].perceptionRange).toBe(50.0);
+      expect(receivedData[0].queryRadius).toBe(60.0);
+      expect(receivedData[0].fovAngle).toBeCloseTo(1.57, 2);
+      expect(receivedData[0].rotation).toBe(0.5);
+      expect(receivedData[0].ax).toBe(1.0);
+      expect(receivedData[0].ay).toBe(2.0);
+    });
+
+    it('should call callback with null when has_data is false', async () => {
+      let capturedCallback: ((buffer: Float32Array) => void) | null = null;
+
+      mockElectronAPI.onPerceptionDebugUpdate.mockImplementation((callback) => {
+        capturedCallback = callback;
+        return () => {};
+      });
+
+      const receivedData: any[] = [];
+      await client.connect();
+      client.onPerceptionDebugUpdate((data) => {
+        receivedData.push(data);
+      });
+
+      const buffer = new Float32Array(608);
+      buffer[0] = 0.0; // has_data = false
+
+      capturedCallback!(buffer);
+
+      expect(receivedData.length).toBe(1);
+      expect(receivedData[0]).toBeNull();
+    });
+
+    it('should parse cell data at correct section offset', async () => {
+      let capturedCallback: ((buffer: Float32Array) => void) | null = null;
+
+      mockElectronAPI.onPerceptionDebugUpdate.mockImplementation((callback) => {
+        capturedCallback = callback;
+        return () => {};
+      });
+
+      const receivedData: any[] = [];
+      await client.connect();
+      client.onPerceptionDebugUpdate((data) => {
+        receivedData.push(data);
+      });
+
+      const buffer = new Float32Array(608);
+      buffer[0] = 1.0; // has_data
+      buffer[10] = 0; // neighbor_count = 0
+
+      // Cell section starts at offset 203 (HEADER_SIZE=11 + MAX_DEBUG_NEIGHBORS*3=192)
+      const CELL_SECTION_OFFSET = 203;
+      buffer[CELL_SECTION_OFFSET] = 10.0; // cell_size
+      buffer[CELL_SECTION_OFFSET + 1] = 2; // num_queried_cells
+      buffer[CELL_SECTION_OFFSET + 2] = 5; // creature_cell_x
+      buffer[CELL_SECTION_OFFSET + 3] = 7; // creature_cell_y
+
+      // Queried cells start at CELL_SECTION_OFFSET + 4
+      buffer[CELL_SECTION_OFFSET + 4] = 4; // cell 0 x
+      buffer[CELL_SECTION_OFFSET + 5] = 6; // cell 0 y
+      buffer[CELL_SECTION_OFFSET + 6] = 5; // cell 1 x
+      buffer[CELL_SECTION_OFFSET + 7] = 7; // cell 1 y
+
+      capturedCallback!(buffer);
+
+      expect(receivedData.length).toBe(1);
+      expect(receivedData[0].cellSize).toBe(10.0);
+      expect(receivedData[0].creatureCell).toEqual({ x: 5, y: 7 });
+      expect(receivedData[0].queriedCells.length).toBe(2);
+      expect(receivedData[0].queriedCells[0]).toEqual({ x: 4, y: 6 });
+      expect(receivedData[0].queriedCells[1]).toEqual({ x: 5, y: 7 });
+    });
+  });
 });

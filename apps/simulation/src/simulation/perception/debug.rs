@@ -45,6 +45,7 @@ pub struct PerceptionDebugSnapshot {
     pub x: f32,
     pub y: f32,
     pub perception_range: f32,
+    pub query_radius: f32,
     pub fov_angle: f32,
     pub rotation: f32,
     pub ax: f32,
@@ -61,6 +62,7 @@ impl PerceptionDebugSnapshot {
         self.x = 0.0;
         self.y = 0.0;
         self.perception_range = 0.0;
+        self.query_radius = 0.0;
         self.fov_angle = 0.0;
         self.rotation = 0.0;
         self.ax = 0.0;
@@ -77,6 +79,7 @@ impl PerceptionDebugSnapshot {
         x: f32,
         y: f32,
         perception_range: f32,
+        query_radius: f32,
         fov_angle: f32,
         rotation: f32,
         ax: f32,
@@ -90,6 +93,7 @@ impl PerceptionDebugSnapshot {
         self.x = x;
         self.y = y;
         self.perception_range = perception_range;
+        self.query_radius = query_radius;
         self.fov_angle = fov_angle;
         self.rotation = rotation;
         self.ax = ax;

@@ -97,10 +97,13 @@ function startSimulation() {
     // Create persistent buffers for zero-allocation polling (memory leak fix)
     // 500K creatures * FLOATS_PER_CREATURE = 2.5M floats = 10MB
     creatureBuffer = new Float32Array(500000 * FLOATS_PER_CREATURE);
-    // Perception debug buffer: 607 floats (from perception_debug_buffer.rs BUFFER_SIZE)
-    // BUFFER_SIZE = CHECKED_CELL_SECTION_OFFSET(406) + CHECKED_CELL_HEADER_SIZE(1) + MAX_CHECKED_CELLS(100)*2 = 607
-    perceptionBuffer = new Float32Array(607);
-    console.log('[Electron NAPI] ✅ Persistent buffers created (creature: 10MB, perception: 2.4KB)');
+    // Perception debug buffer: query required size from Rust (single source of truth)
+    if (!simulationEngine.getPerceptionDebugBufferSize) {
+      throw new Error('[Electron NAPI] FATAL: getPerceptionDebugBufferSize() unavailable - rebuild native addon with dev-tools feature');
+    }
+    const perceptionBufferSize = simulationEngine.getPerceptionDebugBufferSize();
+    perceptionBuffer = new Float32Array(perceptionBufferSize);
+    console.log(`[Electron NAPI] ✅ Persistent buffers created (creature: 10MB, perception: ${perceptionBufferSize} floats)`);
 
     // Find most recent save state (by timestamp in filename)
     const assetsPath = path.join(__dirname, '../../simulation');

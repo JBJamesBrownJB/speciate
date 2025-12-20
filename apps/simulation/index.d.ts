@@ -338,30 +338,7 @@ export declare class SimulationEngine {
    * Get perception debug buffer
    *
    * Returns Float32Array with perception debug data for selected creature.
-   *
-   * **Layout:**
-   * - [0]: has_data (1.0 = valid, 0.0 = no selection)
-   * - [1]: target_id
-   * - [2]: target_x
-   * - [3]: target_y
-   * - [4]: perception_range
-   * - [5]: neighbor_count
-   * - [6..6+64]: neighbor_ids
-   * - [6+64..6+128]: neighbor_xs
-   * - [6+128..6+192]: neighbor_ys
-   *
-   * # Example (JavaScript)
-   * ```js
-   * const debug = simulation.getPerceptionDebug();
-   * if (debug[0] > 0.5) { // has_data
-   *   const targetX = debug[2];
-   *   const targetY = debug[3];
-   *   const range = debug[4];
-   *   const neighborCount = debug[5];
-   *   // Draw circle at (targetX, targetY) with radius `range`
-   *   // Draw lines to neighbors at indices 6+i, 70+i, 134+i
-   * }
-   * ```
+   * See `ipc/bridge/perception_debug_buffer.rs` for canonical buffer layout.
    */
   getPerceptionDebug(): Float32Array
   /**
@@ -381,4 +358,9 @@ export declare class SimulationEngine {
    * we only access the buffer during this synchronous call.
    */
   fillPerceptionDebug(buffer: Float32Array): boolean
+  /**
+   * Returns the required buffer size for perception debug data.
+   * Use this to allocate the correct buffer size in JS.
+   */
+  getPerceptionDebugBufferSize(): number
 }

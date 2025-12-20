@@ -3,12 +3,12 @@ import type { GameState, CreatureData, PerceptionDebugData, NeighborDebugInfo, Q
 import type { TelemetryFrame } from '../../types/TelemetryFrame';
 import { getBufferOffsets } from '../../types/BufferLayout';
 
-const HEADER_SIZE = 10;
+const HEADER_SIZE = 11;
 const MAX_DEBUG_NEIGHBORS = 64;
-const CELL_SECTION_OFFSET = HEADER_SIZE + MAX_DEBUG_NEIGHBORS * 3; // 202
+const CELL_SECTION_OFFSET = HEADER_SIZE + MAX_DEBUG_NEIGHBORS * 3; // 203
 const CELL_HEADER_SIZE = 4;
 const MAX_QUERIED_CELLS = 100;
-const CHECKED_CELL_SECTION_OFFSET = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 404
+const CHECKED_CELL_SECTION_OFFSET = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 407
 const CHECKED_CELL_HEADER_SIZE = 1;
 const MAX_CHECKED_CELLS = 100;
 
@@ -120,11 +120,11 @@ export class ElectronIPCClient implements IPCClient {
         }
 
         // Parse buffer layout:
-        // [0]: has_data, [1]: target_id, [2]: x, [3]: y, [4]: range, [5]: fov_angle, [6]: rotation, [7]: ax, [8]: ay, [9]: neighbor_count
-        // [10..74]: neighbor_ids, [74..138]: neighbor_xs, [138..202]: neighbor_ys
-        // [202]: cell_size, [203]: num_cells, [204]: creature_cell_x, [205]: creature_cell_y
-        // [206..]: queried cells as (x, y) pairs
-        const neighborCount = Math.min(buffer[9], MAX_DEBUG_NEIGHBORS);
+        // [0]: has_data, [1]: target_id, [2]: x, [3]: y, [4]: range, [5]: query_radius, [6]: fov_angle, [7]: rotation, [8]: ax, [9]: ay, [10]: neighbor_count
+        // [11..75]: neighbor_ids, [75..139]: neighbor_xs, [139..203]: neighbor_ys
+        // [203]: cell_size, [204]: num_cells, [205]: creature_cell_x, [206]: creature_cell_y
+        // [207..]: queried cells as (x, y) pairs
+        const neighborCount = Math.min(buffer[10], MAX_DEBUG_NEIGHBORS);
 
         const neighbors: NeighborDebugInfo[] = [];
         const idOffset = HEADER_SIZE;
@@ -172,10 +172,11 @@ export class ElectronIPCClient implements IPCClient {
           x: buffer[2],
           y: buffer[3],
           perceptionRange: buffer[4],
-          fovAngle: buffer[5],
-          rotation: buffer[6],
-          ax: buffer[7],
-          ay: buffer[8],
+          queryRadius: buffer[5],
+          fovAngle: buffer[6],
+          rotation: buffer[7],
+          ax: buffer[8],
+          ay: buffer[9],
           neighbors,
           cellSize,
           creatureCell,

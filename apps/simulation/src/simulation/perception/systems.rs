@@ -52,10 +52,18 @@ pub fn update_perception_system(
         .filter(|(.., update_slice)| update_slice.id == current_slice)
         .collect();
 
+    // DEV-TOOLS: Mutex to capture ACTUAL cell data during perception for debug target
+    #[cfg(feature = "dev-tools")]
+    let debug_cell_capture: std::sync::Mutex<Option<(Vec<(i32, i32)>, Vec<(i32, i32)>)>> =
+        std::sync::Mutex::new(None);
+
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
     entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, neighbor_cache, state, _update_slice)| {
+        // Check if this entity is the debug target (dev-tools only)
+        #[cfg(feature = "dev-tools")]
+        let is_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
         neighbor_cache.clear();
 
         if !state.behavior.is_active() {
@@ -67,6 +75,7 @@ pub fn update_perception_system(
         let self_radius = size.radius();
         let range = perception.range;
         let cos_half_fov_sq = perception.cos_half_fov_sq;
+        let cos_half_fov = perception.cos_half_fov;
         // Use cached cos/sin from rotation (avoids 400K trig calls per tick)
         let facing_x = rot.cos_radians;
         let facing_y = rot.sin_radians;
@@ -97,6 +106,12 @@ pub fn update_perception_system(
                 let mut expanded_cutoff_dist_sq = f32::MAX;
                 let mut processed_adjacent = false;
 
+                // DEV-TOOLS: Track actual queried/skipped cells for debug target
+                #[cfg(feature = "dev-tools")]
+                let mut debug_queried: Vec<(i32, i32)> = if is_debug_target { Vec::with_capacity(64) } else { Vec::new() };
+                #[cfg(feature = "dev-tools")]
+                let mut debug_skipped: Vec<(i32, i32)> = if is_debug_target { Vec::with_capacity(32) } else { Vec::new() };
+
                 for &(sort_key, cell_idx) in cells.iter() {
                     // Detect transition from adjacent to non-adjacent cells
                     let is_non_adjacent = sort_key >= NON_ADJACENT_OFFSET * 0.5;
@@ -116,8 +131,29 @@ pub fn update_perception_system(
                     if is_non_adjacent && expanded_cutoff_dist_sq < f32::MAX {
                         let cell_center_dist_sq = sort_key - NON_ADJACENT_OFFSET;
                         if cell_center_dist_sq > expanded_cutoff_dist_sq {
+                            // DEV-TOOLS: Capture skipped cells for debug target
+                            #[cfg(feature = "dev-tools")]
+                            if is_debug_target {
+                                // This cell and remaining cells are skipped
+                                let (cx, cy) = grid_ref.get_cell_coords_by_index(cell_idx);
+                                debug_skipped.push((cx, cy));
+                            }
+                            #[cfg(not(feature = "dev-tools"))]
                             break;
+                            #[cfg(feature = "dev-tools")]
+                            if !is_debug_target {
+                                break;
+                            } else {
+                                continue; // Keep iterating to capture ALL skipped cells
+                            }
                         }
+                    }
+
+                    // DEV-TOOLS: Capture queried cell for debug target
+                    #[cfg(feature = "dev-tools")]
+                    if is_debug_target {
+                        let (cx, cy) = grid_ref.get_cell_coords_by_index(cell_idx);
+                        debug_queried.push((cx, cy));
                     }
 
                     // Process entities in this cell
@@ -137,11 +173,20 @@ pub fn update_perception_system(
                         }
 
                         let rough_dot = dx * facing_x + dy * facing_y;
-                        if rough_dot <= 0.0 {
-                            continue;
-                        }
 
-                        if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
+                        // FOV check: For wide FOV (>180°), cos_half_fov is negative
+                        let in_fov = if cos_half_fov >= 0.0 {
+                            // Narrow FOV (≤180°): target must be in front (rough_dot > 0)
+                            // Use fast squared comparison to avoid sqrt
+                            rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+                        } else {
+                            // Wide FOV (>180°): cos_half_fov is negative, need signed comparison
+                            // rough_dot / dist >= cos_half_fov (both can be negative)
+                            let dist = center_dist_sq.sqrt();
+                            rough_dot >= cos_half_fov * dist
+                        };
+
+                        if in_fov {
                             candidates.push((center_dist_sq, NeighborData {
                                 entity: proxy.entity,
                                 x: proxy.x,
@@ -171,6 +216,12 @@ pub fn update_perception_system(
                         neighbor_cache.add_neighbor(*neighbor);
                     }
                 }
+
+                // DEV-TOOLS: Store captured cell data for debug target
+                #[cfg(feature = "dev-tools")]
+                if is_debug_target {
+                    *debug_cell_capture.lock().unwrap() = Some((debug_queried, debug_skipped));
+                }
             });
         });
     });
@@ -181,9 +232,13 @@ pub fn update_perception_system(
     // ============================================================
     #[cfg(feature = "dev-tools")]
     {
+        // Extract the ACTUAL captured cell data from the Mutex
+        let captured_cells = debug_cell_capture.into_inner().unwrap();
+
         if let Some(target_entity) = debug_target_entity {
             // Find the debug target in our entities list and capture its state
-            if let Some((_, pos, rot, size, perception, neighbor_cache, state, _)) = entities
+            // NOTE: Entity may not be in `entities` if not in current update slice
+            if let Some((_, pos, rot, _size, perception, neighbor_cache, state, _)) = entities
                 .iter()
                 .find(|(e, _, _, _, _, _, _, _)| *e == target_entity)
             {
@@ -196,16 +251,17 @@ pub fn update_perception_system(
                 if state.behavior.is_active() {
                     let x = pos.x;
                     let y = pos.y;
-                    let self_radius = size.radius();
-                    let range = perception.range;
-                    let facing_x = rot.cos_radians;
-                    let facing_y = rot.sin_radians;
-                    let query_radius = range + self_radius + MAX_OTHER_RADIUS;
 
-                    // Compute which cells would be queried/skipped (for visualization only)
-                    let (queried_cells, skipped_cells) = compute_cell_visualization(
-                        x, y, query_radius, facing_x, facing_y, neighbor_cache.neighbor_count(), grid_ref,
-                    );
+                    // Use ACTUAL captured cell data from perception pass (no estimation!)
+                    let (queried_cells, skipped_cells): (Vec<QueriedCell>, Vec<QueriedCell>) =
+                        if let Some((queried, skipped)) = captured_cells {
+                            (
+                                queried.into_iter().map(|(cx, cy)| QueriedCell { x: cx, y: cy }).collect(),
+                                skipped.into_iter().map(|(cx, cy)| QueriedCell { x: cx, y: cy }).collect(),
+                            )
+                        } else {
+                            (Vec::new(), Vec::new())
+                        };
 
                     // Build neighbor debug info from the ACTUAL perception results
                     let neighbor_debug: Vec<NeighborDebugInfo> = neighbor_cache
@@ -221,7 +277,7 @@ pub fn update_perception_system(
                     debug_snapshot.update(
                         entity_id,
                         x, y,
-                        range,
+                        perception.range,
                         perception.fov_angle,
                         rot.radians,
                         ax,
@@ -247,128 +303,14 @@ pub fn update_perception_system(
                         QueriedCell { x: creature_cx, y: creature_cy },
                     );
                 }
-            } else {
-                debug_snapshot.clear();
             }
+            // else: Entity not in current slice - preserve existing snapshot data
+            // (don't clear, as the creature will be processed in a future tick)
         } else {
             // No debug target set - this is normal
             debug_snapshot.clear();
         }
     }
-}
-
-/// Compute which cells are queried vs skipped for visualization.
-/// This is called AFTER perception runs, purely for debug display.
-/// Shows which cells were queried (green) vs skipped (red) due to:
-/// 1. FOV culling (cells behind the creature)
-/// 2. Early-exit optimization (cells beyond cutoff distance after K neighbors found)
-#[cfg(feature = "dev-tools")]
-fn compute_cell_visualization(
-    x: f32,
-    y: f32,
-    query_radius: f32,
-    facing_x: f32,
-    facing_y: f32,
-    neighbor_count: usize,
-    grid: &crate::simulation::spatial::SpatialGrid,
-) -> (Vec<QueriedCell>, Vec<QueriedCell>) {
-    use crate::simulation::spatial::constants::{CELL_SIZE, NON_ADJACENT_OFFSET};
-    use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
-
-    let mut queried = Vec::with_capacity(64);
-    let mut skipped = Vec::with_capacity(32);
-    let mut cells: Vec<(f32, usize)> = Vec::with_capacity(64);
-
-    // Get all cells that pass FOV culling
-    grid.collect_cells_sorted(x, y, query_radius, facing_x, facing_y, &mut cells);
-
-    let cell_size = grid.cell_size();
-    let half_cell = cell_size * 0.5;
-    let cell_half_diag = CELL_SIZE * std::f32::consts::SQRT_2 * 0.5;
-    let (center_cx, center_cy) = grid.world_to_cell(x, y);
-
-    // Simulate early-exit logic to determine which cells were actually queried
-    // If we found K+ neighbors, we can estimate the cutoff distance
-    let cutoff_dist_sq = if neighbor_count >= MAX_PERCEIVED_NEIGHBORS {
-        // Estimate cutoff based on current cell occupancy
-        // In dense crowds, cutoff is roughly the distance to adjacent cells
-        let adjacent_dist = cell_size * 1.5; // ~1.5 cells away
-        adjacent_dist * adjacent_dist
-    } else {
-        f32::MAX
-    };
-
-    let mut processed_adjacent = false;
-
-    for &(sort_key, cell_idx) in cells.iter() {
-        let is_non_adjacent = sort_key >= NON_ADJACENT_OFFSET * 0.5;
-
-        if is_non_adjacent && !processed_adjacent {
-            processed_adjacent = true;
-        }
-
-        // Check early-exit condition for non-adjacent cells
-        if is_non_adjacent && cutoff_dist_sq < f32::MAX {
-            let cell_center_dist_sq = sort_key - NON_ADJACENT_OFFSET;
-            let cell_center_dist = cell_center_dist_sq.sqrt();
-            let nearest_edge_dist = (cell_center_dist - cell_half_diag).max(0.0);
-            let nearest_edge_dist_sq = nearest_edge_dist * nearest_edge_dist;
-
-            if nearest_edge_dist_sq > cutoff_dist_sq {
-                // This cell and all remaining were skipped due to early-exit
-                let (cx, cy) = grid.get_cell_coords_by_index(cell_idx);
-                skipped.push(QueriedCell { x: cx, y: cy });
-                continue;
-            }
-        }
-
-        let (cx, cy) = grid.get_cell_coords_by_index(cell_idx);
-        queried.push(QueriedCell { x: cx, y: cy });
-    }
-
-    // Also find cells skipped due to FOV culling (behind creature)
-    let cells_radius = (query_radius / cell_size).ceil() as i32;
-    let (min_cell_x, min_cell_y) = grid.bounds();
-    let (width, _height) = grid.dimensions();
-
-    let min_qx = (center_cx - cells_radius).max(min_cell_x);
-    let max_qx = (center_cx + cells_radius).min(min_cell_x + width as i32 - 1);
-    let min_qy = (center_cy - cells_radius).max(min_cell_y);
-    let max_qy = (center_cy + cells_radius).min(min_cell_y + width as i32 - 1);
-
-    // Collect queried cell indices for quick lookup
-    let queried_indices: std::collections::HashSet<(i32, i32)> =
-        queried.iter().map(|c| (c.x, c.y)).collect();
-    let skipped_indices: std::collections::HashSet<(i32, i32)> =
-        skipped.iter().map(|c| (c.x, c.y)).collect();
-
-    for cy in min_qy..=max_qy {
-        for cx in min_qx..=max_qx {
-            // Skip if already in queried or skipped
-            if queried_indices.contains(&(cx, cy)) || skipped_indices.contains(&(cx, cy)) {
-                continue;
-            }
-
-            let idx = ((cy - min_cell_y) as usize) * width + ((cx - min_cell_x) as usize);
-
-            // Only show non-empty cells
-            if !grid.cell_has_entities(idx) {
-                continue;
-            }
-
-            // Check if behind creature (FOV culling)
-            let cell_center_x = (cx as f32 * cell_size) + half_cell;
-            let cell_center_y = (cy as f32 * cell_size) + half_cell;
-            let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
-
-            let is_adjacent = (cx - center_cx).abs() <= 1 && (cy - center_cy).abs() <= 1;
-            if !is_adjacent && cell_dir_dot < -cell_size {
-                skipped.push(QueriedCell { x: cx, y: cy });
-            }
-        }
-    }
-
-    (queried, skipped)
 }
 
 /// Captures debug acceleration for force visualization AFTER behavior systems have run.
@@ -782,6 +724,7 @@ mod tests {
         let self_radius = 1.0;
         let range = 500.0;
         let cos_half_fov_sq = 0.0; // Full 180° FOV
+        let cos_half_fov = 0.0;    // cos(90°) = 0 for 180° FOV
         let facing_x = 1.0;
         let facing_y = 0.0;
 
@@ -894,11 +837,16 @@ mod tests {
                         }
 
                         let rough_dot = dx * facing_x + dy * facing_y;
-                        if rough_dot <= 0.0 {
-                            continue;
-                        }
 
-                        if rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq {
+                        // FOV check: matches production code
+                        let in_fov = if cos_half_fov >= 0.0 {
+                            rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+                        } else {
+                            let dist = center_dist_sq.sqrt();
+                            rough_dot >= cos_half_fov * dist
+                        };
+
+                        if in_fov {
                             local_candidates.push((center_dist_sq, NeighborData {
                                 entity: proxy.entity,
                                 x: proxy.x,
@@ -1042,6 +990,7 @@ mod tests {
         use crate::simulation::core::SimulationBuilder;
         use crate::simulation::creatures::builder::CritBuilder;
         use crate::simulation::creatures::components::CritId;
+        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
 
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(100.0, 100.0);
@@ -1068,8 +1017,11 @@ mod tests {
             target.0 = Some(entity);
         }
 
-        // Run simulation to trigger perception system
-        sim.update(0.016);
+        // Run enough updates to ensure the creature is processed at least once
+        // (perception uses UPDATE_SLICE_COUNT slices, each creature processed every N ticks)
+        for _ in 0..UPDATE_SLICE_COUNT {
+            sim.update(0.016);
+        }
 
         // Check that snapshot was populated
         let world = sim.world();
@@ -1136,5 +1088,172 @@ mod tests {
                 "Neighbor count should not exceed MAX_PERCEIVED_NEIGHBORS"
             );
         }
+    }
+
+    /// Test that wide FOV (340°) can perceive targets at 100° from facing.
+    /// Verifies the fixed FOV check correctly handles wide FOV angles.
+    #[test]
+    fn test_wide_fov_340_perceives_target_at_100_degrees() {
+        // 340° FOV has half_fov = 170°, so should see targets from -170° to +170°
+        // A target at 100° from facing should definitely be visible
+        let perception = Perception::new(340.0, 1.0);
+        let cos_half_fov_sq = perception.cos_half_fov_sq;
+        let cos_half_fov = perception.cos_half_fov;
+
+        // Creature at origin facing +X (0°)
+        let facing_x = 1.0_f32;
+        let facing_y = 0.0_f32;
+
+        // Target at 100° from facing
+        let angle_100 = 100.0_f32.to_radians();
+        let dx = angle_100.cos() * 5.0;  // ~-0.87
+        let dy = angle_100.sin() * 5.0;  // ~4.92
+        let center_dist_sq = dx * dx + dy * dy;  // 25.0
+
+        let rough_dot = dx * facing_x + dy * facing_y;
+
+        // Sanity check: target at 100° has negative dot product
+        assert!(
+            rough_dot < 0.0,
+            "Target at 100° should have negative dot product (rough_dot = {})",
+            rough_dot
+        );
+
+        // Wide FOV (340°) has cos_half_fov < 0, so use wide FOV branch
+        assert!(
+            cos_half_fov < 0.0,
+            "340° FOV should have negative cos_half_fov (got {})",
+            cos_half_fov
+        );
+
+        // FIXED check: for wide FOV, compare rough_dot / dist >= cos_half_fov
+        let in_fov = if cos_half_fov >= 0.0 {
+            rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+        } else {
+            let dist = center_dist_sq.sqrt();
+            rough_dot >= cos_half_fov * dist
+        };
+
+        assert!(
+            in_fov,
+            "Target at 100° should be in 340° FOV. rough_dot={}, cos_half_fov={}, dist={}",
+            rough_dot,
+            cos_half_fov,
+            center_dist_sq.sqrt()
+        );
+    }
+
+    /// Test that wide FOV (340°) has only a 20° blind spot directly behind.
+    #[test]
+    fn test_wide_fov_340_blind_spot_is_20_degrees() {
+        let perception = Perception::new(340.0, 1.0);
+        let cos_half_fov_sq = perception.cos_half_fov_sq;
+        let cos_half_fov = perception.cos_half_fov;
+
+        let facing_x = 1.0_f32;
+        let facing_y = 0.0_f32;
+
+        // Test angles around the creature
+        let test_cases: [(f32, bool, &str); 7] = [
+            (0.0, true, "directly in front"),
+            (90.0, true, "at 90° (should be visible)"),
+            (100.0, true, "at 100° (should be visible)"),
+            (150.0, true, "at 150° (should be visible)"),
+            (169.0, true, "at 169° (just inside FOV edge)"),
+            (171.0, false, "at 171° (just outside FOV, in blind spot)"),
+            (180.0, false, "directly behind (blind spot center)"),
+        ];
+
+        for (angle_deg, expected_visible, description) in test_cases {
+            let angle_rad = angle_deg.to_radians();
+            let dx = angle_rad.cos() * 5.0;
+            let dy = angle_rad.sin() * 5.0;
+            let center_dist_sq = dx * dx + dy * dy;
+
+            let rough_dot = dx * facing_x + dy * facing_y;
+
+            // FIXED check: handles both narrow and wide FOV
+            let in_fov = if cos_half_fov >= 0.0 {
+                rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+            } else {
+                let dist = center_dist_sq.sqrt();
+                rough_dot >= cos_half_fov * dist
+            };
+
+            assert_eq!(
+                in_fov, expected_visible,
+                "Target {} at {}° should be {}, but got {}. rough_dot={}",
+                description,
+                angle_deg,
+                if expected_visible { "visible" } else { "in blind spot" },
+                if in_fov { "visible" } else { "filtered" },
+                rough_dot
+            );
+        }
+    }
+
+    /// Integration test: Wide FOV creature in a crowd should perceive many neighbors.
+    #[test]
+    fn test_wide_fov_perceives_many_neighbors_in_crowd() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        // Spawn a creature with 340° FOV at center
+        let center_crit_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(100.0, 100.0)
+                .with_fov(340.0)
+                .with_all_capabilities(),
+        );
+
+        // Spawn neighbors in a circle around it at various angles
+        let distance = 5.0;  // Close enough to be in perception range
+        for angle_deg in (0..360).step_by(30) {
+            let angle_rad = (angle_deg as f32).to_radians();
+            let x = 100.0 + distance * angle_rad.cos();
+            let y = 100.0 + distance * angle_rad.sin();
+            sim.spawn_crit(
+                CritBuilder::new()
+                    .at(x, y)
+                    .with_all_capabilities(),
+            );
+        }
+
+        // Run enough ticks to ensure perception runs
+        for _ in 0..UPDATE_SLICE_COUNT {
+            sim.update(0.016);
+        }
+
+        // Find the center creature and check its neighbor count
+        let world = sim.world_mut();
+        let center_entity = world
+            .query::<(bevy_ecs::entity::Entity, &crate::simulation::creatures::components::CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == center_crit_id)
+            .map(|(e, _)| e)
+            .expect("Should find center creature");
+
+        let neighbor_cache = world.get::<NeighborCache>(center_entity).expect("Should have NeighborCache");
+        let neighbor_count = neighbor_cache.neighbor_count();
+
+        // With 340° FOV and 12 neighbors evenly spaced, should see about 11
+        // (all except the one in the ~20° blind spot behind)
+        // But due to FOV direction and movement, let's just check we see MORE than 1
+        assert!(
+            neighbor_count > 1,
+            "Wide FOV (340°) creature should perceive many neighbors, but only got {}",
+            neighbor_count
+        );
+
+        // Should see at least 6 neighbors (half of the 12 we spawned)
+        assert!(
+            neighbor_count >= 6,
+            "Wide FOV (340°) creature should perceive at least 6 neighbors, but only got {}",
+            neighbor_count
+        );
     }
 }

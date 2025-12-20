@@ -34,13 +34,14 @@ impl Default for NeighborData {
     }
 }
 
-/// Hot perception data (~16 bytes) - read every tick for range/FOV checks
+/// Hot perception data (~20 bytes) - read every tick for range/FOV checks
 /// Split from NeighborCache for cache locality optimization
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
     pub fov_angle: f32,        // Field of view in radians (stored internally as radians for efficient checks)
     pub range: f32,            // Derived from FOV and body size
     pub cos_half_fov_sq: f32,  // Cached cos²(fov_angle/2) for sqrt-free FOV checks
+    pub cos_half_fov: f32,     // Cached cos(fov_angle/2) for wide FOV checks (sign matters)
 }
 
 /// Cold neighbor cache - written by perception, read by avoidance
@@ -62,6 +63,7 @@ impl Perception {
             fov_angle: fov_rad,
             range,
             cos_half_fov_sq: cos_half_fov * cos_half_fov,
+            cos_half_fov,
         }
     }
 

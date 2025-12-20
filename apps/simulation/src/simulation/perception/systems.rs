@@ -46,18 +46,16 @@ pub fn update_perception_system(
     // Current update slice (cycles 0..UPDATE_SLICE_COUNT each tick)
     let current_slice = (physics_tick.get() % UPDATE_SLICE_COUNT as u64) as u8;
 
-    // Collect ALL entities for parallel processing
-    let mut entities: Vec<_> = query.iter_mut().collect();
+    // Collect only entities in current slice (filters before parallel processing)
+    let mut entities: Vec<_> = query
+        .iter_mut()
+        .filter(|(.., update_slice)| update_slice.id == current_slice)
+        .collect();
 
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
-    entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, neighbor_cache, state, update_slice)| {
-        // Slice-based system skipping: only process creatures in current slice
-        if update_slice.id != current_slice {
-            return;
-        }
-
+    entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, neighbor_cache, state, _update_slice)| {
         neighbor_cache.clear();
 
         if !state.behavior.is_active() {
@@ -81,7 +79,7 @@ pub fn update_perception_system(
         // This ensures correctness (always K closest) while being fast in dense crowds
         CELL_SCRATCH.with(|scratch| {
             NEIGHBOR_CANDIDATES.with(|candidates_cell| {
-                use crate::simulation::spatial::constants::{CELL_SIZE, NON_ADJACENT_OFFSET};
+                use crate::simulation::spatial::constants::{CELL_HALF_DIAGONAL, NON_ADJACENT_OFFSET};
 
                 let mut cells = scratch.borrow_mut();
                 let mut candidates = candidates_cell.borrow_mut();
@@ -91,9 +89,6 @@ pub fn update_perception_system(
 
                 // Pre-compute base distance for faster range checks
                 let base_dist = range + self_radius;
-
-                // Half-diagonal of a cell - nearest edge is at most this much closer than center
-                let cell_half_diag = CELL_SIZE * std::f32::consts::SQRT_2 * 0.5;
 
                 // Track max distance seen in adjacent cells (O(1) per candidate)
                 // This is used as cutoff for non-adjacent cells - no expensive partial sort needed
@@ -120,7 +115,7 @@ pub fn update_perception_system(
                         let cell_center_dist = cell_center_dist_sq.sqrt();
 
                         // Nearest possible distance to cell = center dist - half diagonal
-                        let nearest_edge_dist = (cell_center_dist - cell_half_diag).max(0.0);
+                        let nearest_edge_dist = (cell_center_dist - CELL_HALF_DIAGONAL).max(0.0);
                         let nearest_edge_dist_sq = nearest_edge_dist * nearest_edge_dist;
 
                         // If nearest edge is beyond cutoff, skip this cell AND all remaining

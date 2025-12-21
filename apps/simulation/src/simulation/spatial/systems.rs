@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use super::grid::DoubleBufferedSpatialGrid;
+use super::hierarchical::HierarchicalGrid;
 #[cfg(test)]
 use super::grid::SpatialGrid;
 use crate::simulation::core::components::{BodySize, Position};
@@ -8,25 +8,40 @@ use crate::simulation::core::components::{BodySize, Position};
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 
-/// Rebuild spatial grid into the BACK buffer (double-buffered).
+/// Rebuild L0 spatial grid into the BACK buffer (double-buffered).
 /// Uses parallel rebuild for ~3x speedup with Rayon.
 pub fn rebuild_spatial_grid_system(
-    mut grid: ResMut<DoubleBufferedSpatialGrid>,
+    mut grid: ResMut<HierarchicalGrid>,
     query: Query<(Entity, &Position, &BodySize)>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "spatial_grid_rebuild");
 
-    // Write to back buffer using parallel rebuild
-    grid.write_grid()
+    // Write to L0 back buffer using parallel rebuild
+    grid.l0
+        .write_grid()
         .rebuild_parallel(query.iter().map(|(e, pos, size)| (e, pos.x, pos.y, size.radius())));
 }
 
-/// Swap front/back buffers at end of tick.
+/// Aggregate L0 grid data into L1 coarse grid.
+///
+/// Runs after L0 rebuild, before perception.
+/// Delegates to HierarchicalGrid::aggregate_l1() for the actual work.
+pub fn aggregate_l1_system(
+    mut grid: ResMut<HierarchicalGrid>,
+    #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
+) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "l1_aggregation");
+
+    grid.aggregate_l1();
+}
+
+/// Swap L0 front/back buffers at end of tick.
 /// After this, perception will see the newly rebuilt grid.
-pub fn swap_spatial_grid_buffers_system(mut grid: ResMut<DoubleBufferedSpatialGrid>) {
-    grid.swap();
+pub fn swap_spatial_grid_buffers_system(mut grid: ResMut<HierarchicalGrid>) {
+    grid.l0.swap();
 }
 
 #[cfg(test)]

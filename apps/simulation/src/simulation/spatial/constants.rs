@@ -1,5 +1,12 @@
 pub const CELL_SIZE: f32 = 10.0;
 
+/// L1 (coarse) grid cell size in world units.
+/// L1 = 3×3 L0 cells = 30m.
+pub const L1_CELL_SIZE: f32 = 30.0;
+
+/// Ratio of L1 to L0 cell size (L1 = L0_TO_L1_RATIO × L0).
+pub const L0_TO_L1_RATIO: usize = 3;
+
 /// Half-diagonal of a cell (distance from center to corner / √2)
 /// Used for conservative distance bounds in spatial queries.
 pub const CELL_HALF_DIAGONAL: f32 = CELL_SIZE * 0.7071068; // CELL_SIZE * √2 / 2

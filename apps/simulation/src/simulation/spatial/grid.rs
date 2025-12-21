@@ -170,6 +170,25 @@ impl SpatialGrid {
         self.cell_size
     }
 
+    /// Get grid width in cells.
+    #[inline]
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Get grid height in cells.
+    #[inline]
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    /// Get indices of non-empty cells from the previous rebuild.
+    /// Use for efficient iteration (O(non-empty) not O(total cells)).
+    #[inline]
+    pub fn non_empty_cells(&self) -> &[usize] {
+        &self.prev_non_empty
+    }
+
     #[inline(always)]
     pub fn world_to_cell(&self, x: f32, y: f32) -> (i32, i32) {
         (

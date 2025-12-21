@@ -27,14 +27,14 @@ fn benchmark_telemetry_json_serialization() {
 
     let sys_timings = SystemTimingsSnapshot {
         total_tick_us: 12345,
-        movement_us: 2345, // Now includes rotation (fused)
+        movement_us: 2345,
         perception_us: 3456,
-        behavior_transition_us: 567,
-        steering_us: 880, // Fused steering (Sprint 20)
         spatial_grid_rebuild_us: 789,
+        l1_aggregation_us: 100,
+        behavior_transition_us: 567,
+        steering_us: 880,
         capture_debug_accel_us: 5,
-        export_positions_us: 1350, // IPC buffer export with parallel sort (Sprint 16)
-
+        export_positions_us: 1350,
         archetype_count: 42,
         entity_count: 150_000,
     };

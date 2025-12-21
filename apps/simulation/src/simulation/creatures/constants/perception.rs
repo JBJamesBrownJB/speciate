@@ -63,3 +63,14 @@ pub const SIZE_ALLOMETRY_EXPONENT: f32 = 0.35;
 /// [ACTIVE] Reference size for allometric scaling (smallest creature size).
 /// Creatures at this size have allometry factor of 1.0.
 pub const SIZE_ALLOMETRY_REFERENCE: f32 = 0.5;
+
+// =============================================================================
+// L1 PERCEPTION THRESHOLD (Phase A - Dual Spatial Grid)
+// =============================================================================
+
+/// [ACTIVE] Perception threshold fraction.
+/// Creatures ignore L1 cells where total_mass < (creature_mass × this fraction).
+/// Lower values = more sensitive (perceive smaller things).
+/// Higher values = less sensitive (ignore small things).
+/// 0.05 means a creature ignores cells with mass less than 5% of its own.
+pub const PERCEPTION_THRESHOLD_FRACTION: f32 = 0.05;

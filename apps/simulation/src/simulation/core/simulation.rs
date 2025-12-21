@@ -10,7 +10,7 @@ use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId
 use crate::simulation::movement::{integrate_motion_system, update_body_size_cache};
 use crate::simulation::perception;
 use crate::simulation::spatial::{
-    rebuild_spatial_grid_system, swap_spatial_grid_buffers_system, DoubleBufferedSpatialGrid,
+    aggregate_l1_system, rebuild_spatial_grid_system, swap_spatial_grid_buffers_system, HierarchicalGrid,
 };
 use bevy_ecs::prelude::*;
 
@@ -73,8 +73,10 @@ impl SimulationBuilder {
 
         schedule.add_systems((
             rebuild_spatial_grid_system,
-            // Perception MUST run early (after grid rebuild) so neighbors are available for behaviors
-            perception::update_perception_system.after(rebuild_spatial_grid_system),
+            // L1 aggregation runs after L0 rebuild
+            aggregate_l1_system.after(rebuild_spatial_grid_system),
+            // Perception MUST run after L1 aggregation for early-exit optimization
+            perception::update_perception_system.after(aggregate_l1_system),
             // Behavior transition runs after perception (may use perception data in future)
             behavior_transition_system.after(perception::update_perception_system),
             // FUSED STEERING: Single system replaces 4 separate systems (wander, seek, avoidance, flee)
@@ -111,7 +113,7 @@ impl SimulationBuilder {
 
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(DoubleBufferedSpatialGrid::default());
+        world.insert_resource(HierarchicalGrid::new());
 
         Self { world, schedule }
     }
@@ -129,7 +131,7 @@ impl SimulationBuilder {
             .insert_resource(WorldBounds::new(-extent_x, extent_x, -extent_y, extent_y));
 
         // Set spatial grid bounds for fixed-bounds optimization
-        if let Some(mut grid) = self.world.get_resource_mut::<DoubleBufferedSpatialGrid>() {
+        if let Some(mut grid) = self.world.get_resource_mut::<HierarchicalGrid>() {
             grid.set_world_bounds(-extent_x, extent_x, -extent_y, extent_y);
         }
 
@@ -171,7 +173,7 @@ impl Simulation {
             .insert_resource(WorldBounds::new(-extent_x, extent_x, -extent_y, extent_y));
 
         // Set spatial grid bounds for fixed-bounds optimization
-        if let Some(mut grid) = self.world.get_resource_mut::<DoubleBufferedSpatialGrid>() {
+        if let Some(mut grid) = self.world.get_resource_mut::<HierarchicalGrid>() {
             grid.set_world_bounds(-extent_x, extent_x, -extent_y, extent_y);
         }
     }

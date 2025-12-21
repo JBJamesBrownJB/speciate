@@ -3,9 +3,9 @@ use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 use crate::simulation::creatures::constants::{
-    DEFAULT_FOV_DEGREES, ENERGY_MODIFIER, FOV_RANGE_EXPONENT, MAX_PERCEIVED_NEIGHBORS,
-    PERCEPTION_MULTIPLIER, PERSONAL_SPACE_MULTIPLIER, SIZE_ALLOMETRY_EXPONENT,
-    SIZE_ALLOMETRY_REFERENCE,
+    DEFAULT_FOV_DEGREES, DEFAULT_MASS, ENERGY_MODIFIER, FOV_RANGE_EXPONENT, MAX_PERCEIVED_NEIGHBORS,
+    PERCEPTION_MULTIPLIER, PERCEPTION_THRESHOLD_FRACTION, PERSONAL_SPACE_MULTIPLIER,
+    SIZE_ALLOMETRY_EXPONENT, SIZE_ALLOMETRY_REFERENCE,
 };
 
 // Debug types are in perception/debug.rs (dev-tools only)
@@ -34,7 +34,7 @@ impl Default for NeighborData {
     }
 }
 
-/// Hot perception data (~20 bytes) - read every tick for range/FOV checks
+/// Hot perception data (~24 bytes) - read every tick for range/FOV checks
 /// Split from NeighborCache for cache locality optimization
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
@@ -42,6 +42,7 @@ pub struct Perception {
     pub range: f32,            // Derived from FOV and body size
     pub cos_half_fov_sq: f32,  // Cached cos²(fov_angle/2) for sqrt-free FOV checks
     pub cos_half_fov: f32,     // Cached cos(fov_angle/2) for wide FOV checks (sign matters)
+    pub threshold: f32,        // L1 mass threshold: ignore cells with total_mass below this
 }
 
 /// Cold neighbor cache - written by perception, read by avoidance
@@ -55,16 +56,27 @@ pub struct NeighborCache {
 impl Perception {
     /// Create perception with explicit FOV (in degrees) and body size
     /// Range is automatically derived using biological tradeoff formula
+    /// Threshold is derived from body mass for L1 early-exit optimization
     pub fn new(fov_angle_degrees: f32, body_size: f32) -> Self {
         let fov_rad = fov_angle_degrees.to_radians();
         let range = Self::calculate_range(body_size, fov_angle_degrees);
         let cos_half_fov = (fov_rad / 2.0).cos();
+        let threshold = Self::calculate_threshold(body_size);
         Self {
             fov_angle: fov_rad,
             range,
             cos_half_fov_sq: cos_half_fov * cos_half_fov,
             cos_half_fov,
+            threshold,
         }
+    }
+
+    /// Calculate L1 perception threshold from body size
+    /// Uses same mass formula as BodySize::mass()
+    /// Large creatures have higher thresholds (ignore smaller masses)
+    fn calculate_threshold(body_size: f32) -> f32 {
+        let body_mass = DEFAULT_MASS * body_size.powi(3);
+        body_mass * PERCEPTION_THRESHOLD_FRACTION
     }
 
     /// Calculate perception range from body size and FOV

@@ -32,10 +32,11 @@ fn test_performance_snapshot_schema_completeness() {
         movement_us: 200,
         perception_us: 300,
         spatial_grid_rebuild_us: 100,
+        l1_aggregation_us: 30,
         behavior_transition_us: 50,
-        steering_us: 115, // Fused steering (Sprint 20)
+        steering_us: 115,
         capture_debug_accel_us: 2,
-        export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
+        export_positions_us: 135,
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -207,10 +208,11 @@ fn test_system_timings_snapshot_all_fields_present() {
         movement_us: 200,
         perception_us: 300,
         spatial_grid_rebuild_us: 100,
+        l1_aggregation_us: 30,
         behavior_transition_us: 50,
-        steering_us: 115, // Fused steering (Sprint 20)
+        steering_us: 115,
         capture_debug_accel_us: 2,
-        export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
+        export_positions_us: 135,
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -220,11 +222,12 @@ fn test_system_timings_snapshot_all_fields_present() {
 
     let required_fields = vec![
         "totalTickUs",
-        "movementUs", // Now includes rotation (fused)
+        "movementUs",
         "perceptionUs",
         "spatialGridRebuildUs",
+        "l1AggregationUs",
         "behaviorTransitionUs",
-        "steeringUs", // Fused steering (Sprint 20)
+        "steeringUs",
         "captureDebugAccelUs",
         "archetypeCount",
         "entityCount",
@@ -273,10 +276,11 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
         movement_us: 200,
         perception_us: 300,
         spatial_grid_rebuild_us: 100,
+        l1_aggregation_us: 30,
         behavior_transition_us: 50,
-        steering_us: 115, // Fused steering (Sprint 20)
+        steering_us: 115,
         capture_debug_accel_us: 2,
-        export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
+        export_positions_us: 135,
         archetype_count: 5,
         entity_count: 27500,
     };

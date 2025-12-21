@@ -191,13 +191,14 @@ mod tests {
     fn test_telemetry_with_values() {
         let system_timings = SystemTimingsSnapshot {
             total_tick_us: 5000,
-            movement_us: 1000, // Now includes rotation (fused)
+            movement_us: 1000,
             perception_us: 500,
             spatial_grid_rebuild_us: 100,
+            l1_aggregation_us: 50,
             behavior_transition_us: 100,
-            steering_us: 230, // Fused steering (Sprint 20)
+            steering_us: 230,
             capture_debug_accel_us: 5,
-            export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
+            export_positions_us: 135,
             archetype_count: 10,
             entity_count: 1000,
         };

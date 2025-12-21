@@ -47,13 +47,14 @@ export interface ParallelizationMetrics {
 
 export interface SystemTimingsSnapshot {
   totalTickUs: number;
-  movementUs: number; // Now includes rotation (fused in Sprint 20)
+  movementUs: number;
   perceptionUs: number;
   spatialGridRebuildUs: number;
+  l1AggregationUs: number;
   behaviorTransitionUs: number;
-  steeringUs: number; // Fused steering system (Sprint 20)
+  steeringUs: number;
   captureDebugAccelUs: number;
-  exportPositionsUs: number; // IPC buffer export with parallel sort (Sprint 16)
+  exportPositionsUs: number;
   archetypeCount: number;
   entityCount: number;
 }

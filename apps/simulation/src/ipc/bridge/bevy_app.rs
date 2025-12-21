@@ -383,7 +383,7 @@ impl NapiApp {
 
     /// Get telemetry snapshot
     pub fn get_telemetry(&mut self, tick: u64, tick_rate_hz: f32) -> TelemetrySnapshot {
-        use crate::simulation::spatial::DoubleBufferedSpatialGrid;
+        use crate::simulation::spatial::HierarchicalGrid;
 
         // Query creature count directly (no EntityIdMap dependency)
         let count = self.simulation.world
@@ -392,9 +392,9 @@ impl NapiApp {
             .count();
         let system_timings = self.simulation.get_system_timings();
 
-        // Get actual spatial grid bounds
-        let grid = self.simulation.world.resource::<DoubleBufferedSpatialGrid>();
-        let read_grid = grid.read_grid();
+        // Get actual spatial grid bounds (from L0 grid)
+        let grid = self.simulation.world.resource::<HierarchicalGrid>();
+        let read_grid = grid.l0.read_grid();
         let cell_size = read_grid.cell_size();
         let (min_cell_x, min_cell_y) = read_grid.bounds();
         let (width, height) = read_grid.dimensions();

@@ -147,13 +147,14 @@ fn test_gamestate_includes_timing_fields() {
         entity_count: 0,
         system_timings_us: SystemTimingsSnapshot {
             total_tick_us: 600,
-            movement_us: 150, // Now includes rotation (fused)
+            movement_us: 150,
             perception_us: 250,
             spatial_grid_rebuild_us: 50,
+            l1_aggregation_us: 20,
             behavior_transition_us: 50,
-            steering_us: 85, // Fused steering (Sprint 20)
+            steering_us: 85,
             capture_debug_accel_us: 2,
-            export_positions_us: 135, // IPC buffer export with parallel sort (Sprint 16)
+            export_positions_us: 135,
             archetype_count: 5,
             entity_count: 100,
         },

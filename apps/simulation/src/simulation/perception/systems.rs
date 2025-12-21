@@ -6,7 +6,7 @@ use crate::simulation::creatures::components::CreatureState;
 use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
-use crate::simulation::spatial::DoubleBufferedSpatialGrid;
+use crate::simulation::spatial::HierarchicalGrid;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
@@ -27,7 +27,7 @@ thread_local! {
 
 pub fn update_perception_system(
     _physics_tick: Res<PhysicsTick>,
-    grid: Res<DoubleBufferedSpatialGrid>,
+    grid: Res<HierarchicalGrid>,
     mut query: Query<(Entity, &Position, &Rotation, &BodySize, &Perception, &mut NeighborCache, &CreatureState)>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
@@ -37,7 +37,7 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "perception");
 
-    let grid_ref = grid.read_grid();
+    let grid_ref = grid.l0.read_grid();
 
     // Get debug target (dev-tools only) - used for visualization AFTER perception runs
     #[cfg(feature = "dev-tools")]
@@ -50,6 +50,9 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     let debug_cell_capture: std::sync::Mutex<Option<(Vec<(i32, i32)>, Vec<(i32, i32)>)>> =
         std::sync::Mutex::new(None);
+
+    // Get L1 grid reference for early-exit optimization
+    let l1_grid_ref = &grid.l1;
 
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
@@ -66,6 +69,15 @@ pub fn update_perception_system(
 
         let x = pos.x;
         let y = pos.y;
+
+        // L1 Early-Exit Optimization (Phase A):
+        // Check if the creature's L1 cell has enough mass to be worth scanning.
+        // Large creatures (high threshold) skip cells with only small creatures.
+        // This provides O(1) early-exit for sparse areas and size domination.
+        let l1_sig = l1_grid_ref.get_biosignature_at(x, y);
+        if l1_sig.total_mass < perception.threshold {
+            return; // Nothing worth perceiving in this area
+        }
         let self_radius = size.radius();
         let range = perception.range;
         let cos_half_fov_sq = perception.cos_half_fov_sq;

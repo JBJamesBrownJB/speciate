@@ -243,6 +243,23 @@ impl NapiApp {
                         bounds.enabled = true;
                     }
                 }
+                #[cfg(feature = "dev-tools")]
+                SimCommand::QueryL1Cell { world_x, world_y, response_tx } => {
+                    use crate::simulation::spatial::HierarchicalGrid;
+
+                    let result = if let Some(grid) = self.simulation.world.get_resource::<HierarchicalGrid>() {
+                        let bio = grid.l1.get_biosignature_at(world_x, world_y);
+                        let inv_cell_size = 1.0 / grid.l1.cell_size();
+                        let cell_x = (world_x * inv_cell_size).floor() as i32;
+                        let cell_y = (world_y * inv_cell_size).floor() as i32;
+
+                        calculate_l1_cell_info(&bio, cell_x, cell_y)
+                    } else {
+                        None
+                    };
+
+                    let _ = response_tx.send(result);
+                }
             }
         }
     }
@@ -396,6 +413,7 @@ impl NapiApp {
         let grid = self.simulation.world.resource::<HierarchicalGrid>();
         let read_grid = grid.l0.read_grid();
         let cell_size = read_grid.cell_size();
+        let l1_cell_size = grid.l1_cell_size();
         let (min_cell_x, min_cell_y) = read_grid.bounds();
         let (width, height) = read_grid.dimensions();
 
@@ -405,6 +423,8 @@ impl NapiApp {
         let grid_max_x = grid_min_x + (width as f32 * cell_size);
         let grid_max_y = grid_min_y + (height as f32 * cell_size);
         let grid_bounds = (grid_min_x, grid_max_x, grid_min_y, grid_max_y);
+
+        // Note: L1 cell data now sent via separate binary buffer (see fill_l1_buffer)
 
         #[cfg(feature = "dev-tools")]
         {
@@ -416,6 +436,7 @@ impl NapiApp {
                 count,
                 tick_rate_hz,
                 cell_size,
+                l1_cell_size,
                 grid_bounds,
                 system_timings,
                 hardware_metrics,
@@ -430,6 +451,7 @@ impl NapiApp {
                 count,
                 tick_rate_hz,
                 cell_size,
+                l1_cell_size,
                 grid_bounds,
                 system_timings,
             )
@@ -482,5 +504,138 @@ impl NapiApp {
     /// Create save state from current simulation (for periodic/shutdown saves)
     pub fn to_save_state(&mut self) -> Result<crate::persistence::WorldSaveState, crate::persistence::SaveStateError> {
         self.simulation.to_save_state()
+    }
+}
+
+/// Calculate L1CellInfo from biosignature data
+///
+/// Converts raw biosignature (radius-based max_size, raw mass) to
+/// human-readable L1CellInfo (length-based sizes in meters).
+#[cfg(feature = "dev-tools")]
+pub fn calculate_l1_cell_info(
+    bio: &crate::simulation::spatial::BioSignature,
+    cell_x: i32,
+    cell_y: i32,
+) -> Option<crate::ipc::L1CellInfo> {
+    use crate::simulation::creatures::constants::DEFAULT_MASS;
+
+    if bio.is_empty() {
+        return None;
+    }
+
+    // bio.max_size stores radius, convert to length (diameter)
+    let max_size = bio.max_size * 2.0;
+
+    // Derive average size from mass using: mass = DEFAULT_MASS × length³
+    // Therefore: length = (mass / DEFAULT_MASS)^(1/3)
+    let avg_size = if bio.creature_count > 0 {
+        let avg_mass = bio.total_mass / bio.creature_count as f32;
+        (avg_mass / DEFAULT_MASS).powf(1.0 / 3.0)
+    } else {
+        0.0
+    };
+
+    Some(crate::ipc::L1CellInfo {
+        cell_x,
+        cell_y,
+        creature_count: bio.creature_count as u32,
+        total_mass: bio.total_mass,
+        max_size,
+        avg_size,
+    })
+}
+
+#[cfg(all(test, feature = "dev-tools"))]
+mod tests {
+    use super::*;
+    use crate::simulation::spatial::BioSignature;
+    use crate::simulation::creatures::constants::DEFAULT_MASS;
+
+    #[test]
+    fn l1_cell_info_empty_returns_none() {
+        let bio = BioSignature::default();
+        let result = calculate_l1_cell_info(&bio, 0, 0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn l1_cell_info_max_size_converts_radius_to_length() {
+        // BioSignature stores radius, L1CellInfo should return length (diameter)
+        let radius = 2.5;
+        let bio = BioSignature {
+            total_mass: 100.0,
+            max_size: radius,
+            creature_count: 1,
+        };
+
+        let result = calculate_l1_cell_info(&bio, 5, 10).unwrap();
+
+        assert_eq!(result.max_size, radius * 2.0);
+    }
+
+    #[test]
+    fn l1_cell_info_avg_size_derived_from_mass() {
+        // mass = DEFAULT_MASS × length³
+        // For a 5m creature: mass = 35 × 5³ = 35 × 125 = 4375 kg
+        let creature_length: f32 = 5.0;
+        let expected_mass = DEFAULT_MASS * creature_length.powi(3);
+        let bio = BioSignature {
+            total_mass: expected_mass,
+            max_size: creature_length / 2.0, // radius
+            creature_count: 1,
+        };
+
+        let result = calculate_l1_cell_info(&bio, 0, 0).unwrap();
+
+        // avg_size = (mass / DEFAULT_MASS)^(1/3)
+        let expected_avg_size = (expected_mass / DEFAULT_MASS).powf(1.0 / 3.0);
+        assert!((result.avg_size - expected_avg_size).abs() < 0.001);
+        assert!((result.avg_size - creature_length).abs() < 0.001);
+    }
+
+    #[test]
+    fn l1_cell_info_multiple_creatures() {
+        // 3 creatures: 1m, 2m, 3m
+        // masses: 35×1³=35, 35×8=280, 35×27=945
+        // total mass: 1260
+        // avg mass: 420
+        // avg length: (420/35)^(1/3) = 12^(1/3) ≈ 2.29
+        let mass_1m = DEFAULT_MASS * 1.0_f32.powi(3);
+        let mass_2m = DEFAULT_MASS * 2.0_f32.powi(3);
+        let mass_3m = DEFAULT_MASS * 3.0_f32.powi(3);
+        let total_mass = mass_1m + mass_2m + mass_3m;
+        let max_radius = 1.5; // 3m creature has 1.5m radius
+
+        let bio = BioSignature {
+            total_mass,
+            max_size: max_radius,
+            creature_count: 3,
+        };
+
+        let result = calculate_l1_cell_info(&bio, 0, 0).unwrap();
+
+        // max_size should be diameter of largest creature
+        assert_eq!(result.max_size, 3.0);
+        assert_eq!(result.creature_count, 3);
+        assert_eq!(result.total_mass, total_mass);
+
+        // avg_size derived from average mass
+        let avg_mass = total_mass / 3.0;
+        let expected_avg = (avg_mass / DEFAULT_MASS).powf(1.0 / 3.0);
+        assert!((result.avg_size - expected_avg).abs() < 0.001);
+    }
+
+    #[test]
+    fn l1_cell_info_preserves_cell_coordinates() {
+        let bio = BioSignature {
+            total_mass: 100.0,
+            max_size: 1.0,
+            creature_count: 1,
+        };
+
+        let result = calculate_l1_cell_info(&bio, -5, 10).unwrap();
+
+        assert_eq!(result.cell_x, -5);
+        assert_eq!(result.cell_y, 10);
     }
 }

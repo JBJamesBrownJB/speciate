@@ -76,6 +76,7 @@ describe('GameState Types', () => {
         movementUs: 3200, // Now includes rotation (fused)
         perceptionUs: 2500,
         spatialGridRebuildUs: 100,
+        l1AggregationUs: 50,
         behaviorTransitionUs: 800,
         steeringUs: 2300, // Fused steering (Sprint 20)
         captureDebugAccelUs: 5,
@@ -109,6 +110,7 @@ describe('GameState Types', () => {
           movementUs: 3200, // Now includes rotation (fused)
           perceptionUs: 2500,
           spatialGridRebuildUs: 100,
+          l1AggregationUs: 50,
           behaviorTransitionUs: 800,
           steeringUs: 2300, // Fused steering (Sprint 20)
           captureDebugAccelUs: 5,
@@ -204,6 +206,7 @@ describe('GameState Types', () => {
         movementUs: 100, // Now includes rotation (fused)
         perceptionUs: 200,
         spatialGridRebuildUs: 10,
+        l1AggregationUs: 5,
         behaviorTransitionUs: 50,
         steeringUs: 150, // Fused steering (Sprint 20)
         captureDebugAccelUs: 2,

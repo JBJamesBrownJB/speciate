@@ -59,11 +59,20 @@ export interface SystemTimingsSnapshot {
   entityCount: number;
 }
 
+export interface L1CellData {
+  x: number;
+  y: number;
+  totalMass: number;
+  creatureCount: number;
+}
+
 export interface TelemetryFrame {
   tick: number;
   creatureCount: number;
   tickRateHz: number;
   spatialGridCellSize: number;
+  l1CellSize: number;
+  l1Cells: L1CellData[];
   systemTimings: SystemTimingsSnapshot;
   hardwareMetrics?: HardwareMetrics;
   parallelizationMetrics?: ParallelizationMetrics;

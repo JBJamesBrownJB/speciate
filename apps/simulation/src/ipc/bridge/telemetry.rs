@@ -6,6 +6,16 @@ use crate::instrumentation::{SystemTimingsSnapshot, HardwareSnapshot, Paralleliz
 #[cfg(not(feature = "dev-tools"))]
 use crate::instrumentation::SystemTimingsSnapshot;
 
+/// L1 cell data for heatmap visualization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct L1CellData {
+    pub x: i32,
+    pub y: i32,
+    pub total_mass: f32,
+    pub creature_count: u16,
+}
+
 /// Telemetry snapshot for NAPI polling
 ///
 /// This struct mirrors the old stdio IPC telemetry format to maintain
@@ -26,6 +36,7 @@ pub struct TelemetrySnapshot {
     pub creature_count: usize,
     pub tick_rate_hz: f32,
     pub spatial_grid_cell_size: f32,
+    pub l1_cell_size: f32,
     pub spatial_grid_min_x: f32,
     pub spatial_grid_max_x: f32,
     pub spatial_grid_min_y: f32,
@@ -87,6 +98,7 @@ impl TelemetrySnapshot {
         creature_count: usize,
         tick_rate_hz: f32,
         spatial_grid_cell_size: f32,
+        l1_cell_size: f32,
         spatial_grid_bounds: (f32, f32, f32, f32), // (min_x, max_x, min_y, max_y)
         system_timings: SystemTimingsSnapshot,
         #[cfg(feature = "dev-tools")]
@@ -99,6 +111,7 @@ impl TelemetrySnapshot {
             creature_count,
             tick_rate_hz,
             spatial_grid_cell_size,
+            l1_cell_size,
             spatial_grid_min_x: spatial_grid_bounds.0,
             spatial_grid_max_x: spatial_grid_bounds.1,
             spatial_grid_min_y: spatial_grid_bounds.2,
@@ -123,11 +136,13 @@ impl TelemetrySnapshot {
 impl Default for TelemetrySnapshot {
     fn default() -> Self {
         use crate::simulation::core::MAX_WORLD_SIZE;
+        use crate::simulation::spatial::constants::L1_CELL_SIZE;
         Self {
             tick: 0,
             creature_count: 0,
             tick_rate_hz: 0.0,
             spatial_grid_cell_size: crate::simulation::spatial::CELL_SIZE,
+            l1_cell_size: L1_CELL_SIZE,
             spatial_grid_min_x: -MAX_WORLD_SIZE,
             spatial_grid_max_x: MAX_WORLD_SIZE,
             spatial_grid_min_y: -MAX_WORLD_SIZE,
@@ -207,7 +222,8 @@ mod tests {
             42,
             1000,
             29.5,
-            50.0, // spatial_grid_cell_size
+            50.0, // spatial_grid_cell_size (L0)
+            30.0, // l1_cell_size
             (-500.0, 500.0, -500.0, 500.0), // spatial_grid_bounds
             system_timings,
             #[cfg(feature = "dev-tools")]

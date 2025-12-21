@@ -150,6 +150,62 @@ Every advantage must have a cost (built into physics/biology):
 
 ---
 
+## IPC: Binary Buffers, Not JSON - MANDATORY
+
+**CRITICAL: All high-frequency IPC between Rust simulation and TypeScript frontend MUST use binary buffers (Float32Array), NOT JSON serialization.**
+
+### Why This Matters
+
+| IPC Method | Serialization Cost | Example |
+|------------|-------------------|---------|
+| Binary (Float32Array) | ~0ms (zero-copy) | Creature positions, L1 heatmap |
+| JSON (serde + JSON.parse) | 5-20ms | Kills FPS even at low bandwidth |
+
+JSON serialization (`serde_json::to_string()` + `JSON.parse()`) is CPU-bound and causes frame drops even for small payloads. Binary buffers use direct memory access with zero serialization overhead.
+
+### Pattern: Binary Buffer IPC
+
+**Rust (simulation_engine.rs):**
+```rust
+#[napi]
+pub fn fill_buffer(&self, mut buffer: Float32Array) -> i32 {
+    let dest = buffer.as_mut();
+    // Write directly to buffer
+    dest[0] = value1;
+    dest[1] = value2;
+    count as i32
+}
+```
+
+**Electron (napi-main.cjs):**
+```javascript
+const buffer = new Float32Array(MAX_SIZE);
+const count = simulationEngine.fillBuffer(buffer);
+mainWindow.webContents.send('buffer-update', { buffer: buffer.slice(0, count), count });
+```
+
+**TypeScript (main.ts):**
+```typescript
+window.electron?.onBufferUpdate?.((data) => {
+    const x = data.buffer[0];
+    const y = data.buffer[1];
+});
+```
+
+### When JSON is Acceptable
+
+- **Low-frequency data** (< 1 Hz): Config changes, save/load
+- **Complex nested structures**: Where binary layout would be impractical
+- **Debugging/dev-tools only**: Not on the hot path
+
+### When Binary is REQUIRED
+
+- **Per-tick data**: Creature positions, physics state, L1 cells
+- **High-frequency updates**: Anything sent more than once per second
+- **Large arrays**: Entity lists, spatial grid data
+
+---
+
 ## Code Documentation Standards - MANDATORY
 
 **CRITICAL: Code comments are a code smell. Refactor instead.**

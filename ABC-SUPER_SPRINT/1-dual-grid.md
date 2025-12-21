@@ -1,15 +1,20 @@
 # Sprint: Dual Spatial Grid (Phase A)
 
+## Status: COMPLETE ✓
+
+All Phase A deliverables have been implemented.
+
 ## Outcome
 
 Infrastructure-only. No behavior changes. Foundation for Phase C (frequency control) and Phase B (Drive Simplex).
 
 ### Deliverables
 
-1. **L1 Coarse Grid** - 100m cells with aggregated BioSignatures
-2. **L1 Aggregation System** - Reduces L0 → L1 every tick
-3. **Portal Visualization** - G key cycles: Off → L0 → L1 → Heatmap
-4. **Validation** - Confirm 9 L0 cells covers max avoidance range
+1. **L1 Coarse Grid** - 30m cells (3×3 L0) with aggregated BioSignatures ✓
+2. **L1 Aggregation System** - Reduces L0 → L1 every tick ✓
+3. **Portal Visualization** - G key cycles: Off → L0 → L1 ✓
+4. **L1 Cell Query** - Hover-based cell info panel (replaces heatmap streaming) ✓
+5. **Validation** - Confirm 9 L0 cells covers max avoidance range ✓
 
 ### Non-Goals (deferred)
 
@@ -128,22 +133,44 @@ Benchmark with/without to validate perf improvement.
 Add L1 cell size and bounds to telemetry stream for portal.
 
 ### Step 8: Portal Overlay
-**File:** `portal/src/rendering/overlays/DualSpatialGridOverlay.ts`
+**File:** `portal/src/rendering/overlays/SpatialGridOverlay.ts`
 
-G key cycles: Off → L0 grid → L1 grid → BioSignature heatmap → Off
+G key cycles: Off → L0 grid → L1 grid → Off
+
+### Step 9: L1 Cell Query (Hover Info)
+**Files:**
+- `simulation/src/ipc/sim_command.rs` - L1CellInfo struct, QueryL1Cell command
+- `simulation/src/ipc/bridge/bevy_app.rs` - calculate_l1_cell_info(), command handler
+- `simulation/src/napi_addon/simulation_engine.rs` - query_l1_cell() NAPI method
+- `portal/electron/napi-main.cjs` - IPC handler
+- `portal/electron/preload.cjs` - queryL1Cell bridge
+- `portal/src/rendering/overlays/SpatialGridOverlay.ts` - Hover detection, info panel
+
+**What it does:**
+- Mouse hover in L1 mode triggers throttled query (100ms)
+- Backend returns: cell coords, creature count, total mass (kg), avg size (m), max size (m)
+- Portal displays info panel with cell data
+- Cell under mouse is highlighted
+
+**Key calculations:**
+- `max_size = bio.max_size * 2.0` (radius → length)
+- `avg_size = (avg_mass / DEFAULT_MASS)^(1/3)` (mass → length)
+
+**Replaced:** L1 heatmap streaming (caused FPS drops at high creature counts)
 
 ---
 
 ## Validation
 
-- [ ] L1 aggregation produces correct totals (sum of L0 masses)
-- [ ] Portal shows both grids (G key cycling works)
-- [ ] Heatmap renders mass distribution correctly
-- [ ] Performance: L1 aggregation < 1ms at 20K creatures
-- [ ] Benchmark: Early-exit optimization improves perception latency
-- [ ] Size domination: Large crit walks through small crits (doesn't avoid)
-- [ ] Size domination: Small crit avoids/flees from large crit
-- [ ] Confirm: 9 L0 cells (30m) covers max avoidance range for 5m crits
+- [x] L1 aggregation produces correct totals (sum of L0 masses)
+- [x] Portal shows both grids (G key cycling works)
+- [x] L1 hover query shows correct cell info (creatures, mass, sizes)
+- [x] Performance: L1 aggregation < 1ms at 20K creatures
+- [x] Benchmark: Early-exit optimization improves perception latency
+- [x] Unit tests: L1CellInfo calculations (5 tests in bevy_app.rs)
+- [ ] Size domination: Large crit walks through small crits (doesn't avoid) *(Phase B)*
+- [ ] Size domination: Small crit avoids/flees from large crit *(Phase B)*
+- [x] Confirm: 9 L0 cells (30m) covers max avoidance range for 5m crits
 
 ---
 
@@ -157,15 +184,21 @@ G key cycles: Off → L0 grid → L1 grid → BioSignature heatmap → Off
 
 ---
 
-## Files to Create/Modify
+## Files Created/Modified
 
 | File | Change |
 |------|--------|
-| `spatial/biosignature.rs` | NEW: BioSignature struct |
-| `spatial/coarse_grid.rs` | NEW: L1 grid |
-| `spatial/hierarchical.rs` | NEW: Wrapper |
-| `spatial/systems.rs` | NEW: Aggregation system |
-| `spatial/mod.rs` | Export new modules |
-| `core/simulation.rs` | Replace grid resource |
-| `napi_addon/telemetry.rs` | Add L1 data |
-| `portal/.../DualSpatialGridOverlay.ts` | NEW: Cycling overlay |
+| `spatial/biosignature.rs` | NEW: BioSignature struct ✓ |
+| `spatial/coarse_grid.rs` | NEW: L1 grid ✓ |
+| `spatial/hierarchical.rs` | NEW: Wrapper ✓ |
+| `spatial/systems.rs` | NEW: Aggregation system ✓ |
+| `spatial/mod.rs` | Export new modules ✓ |
+| `core/simulation.rs` | Replace grid resource ✓ |
+| `napi_addon/telemetry.rs` | Add L1 data ✓ |
+| `portal/.../SpatialGridOverlay.ts` | Grid cycling + L1 hover query ✓ |
+| `ipc/sim_command.rs` | L1CellInfo struct, QueryL1Cell command ✓ |
+| `ipc/bridge/bevy_app.rs` | calculate_l1_cell_info(), handler ✓ |
+| `napi_addon/simulation_engine.rs` | query_l1_cell() NAPI method ✓ |
+| `portal/electron/napi-main.cjs` | IPC handler ✓ |
+| `portal/electron/preload.cjs` | queryL1Cell bridge ✓ |
+| `portal/src/global.d.ts` | TypeScript types ✓ |

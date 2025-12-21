@@ -31,6 +31,15 @@ declare global {
         maxY: number;
         margin: number;
       }) => void;
+
+      queryL1Cell: (worldX: number, worldY: number) => Promise<{
+        cellX: number;
+        cellY: number;
+        creatureCount: number;
+        totalMass: number;
+        maxSize: number;
+        avgSize: number;
+      } | null>;
     };
   }
 }

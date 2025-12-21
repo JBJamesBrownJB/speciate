@@ -925,6 +925,24 @@ impl SimulationEngine {
     }
 }
 
+/// L1 cell info returned to JavaScript
+#[cfg(feature = "dev-tools")]
+#[napi(object)]
+pub struct L1CellInfoJs {
+    /// Cell X coordinate (grid units)
+    pub cell_x: i32,
+    /// Cell Y coordinate (grid units)
+    pub cell_y: i32,
+    /// Number of creatures in this cell
+    pub creature_count: u32,
+    /// Total mass of all creatures in this cell (kg)
+    pub total_mass: f64,
+    /// Maximum creature size in this cell (length in meters)
+    pub max_size: f64,
+    /// Average creature size in meters (derived from mass)
+    pub avg_size: f64,
+}
+
 /// Dev-tools only NAPI methods
 ///
 /// These methods are only available when compiled with `--features dev-tools`.
@@ -980,6 +998,62 @@ impl SimulationEngine {
     pub fn get_perception_debug_buffer_size(&self) -> u32 {
         use crate::ipc::bridge::perception_debug_buffer::BUFFER_SIZE;
         BUFFER_SIZE as u32
+    }
+
+    /// Query L1 cell metadata at world position
+    ///
+    /// Returns cell info if the cell contains creatures, null otherwise.
+    /// Uses command-response pattern with 100ms timeout.
+    ///
+    /// # Arguments
+    /// * `world_x` - X coordinate in world units
+    /// * `world_y` - Y coordinate in world units
+    ///
+    /// # Returns
+    /// L1CellInfoJs object or null if cell is empty or query times out
+    ///
+    /// # Example (JavaScript)
+    /// ```js
+    /// const info = sim.queryL1Cell(mouseWorldX, mouseWorldY);
+    /// if (info) {
+    ///     console.log(`Cell (${info.cellX}, ${info.cellY}): ${info.creatureCount} creatures`);
+    /// }
+    /// ```
+    #[napi]
+    pub fn query_l1_cell(&self, world_x: f64, world_y: f64) -> Option<L1CellInfoJs> {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+
+        // Send query command
+        if let Some(ref sender) = self.command_sender {
+            let cmd = SimCommand::QueryL1Cell {
+                world_x: world_x as f32,
+                world_y: world_y as f32,
+                response_tx: tx,
+            };
+
+            if sender.try_send(cmd).is_err() {
+                return None;
+            }
+        } else {
+            return None;
+        }
+
+        // Wait for response with timeout (50ms is ample for O(1) grid lookup)
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(Some(info)) => Some(L1CellInfoJs {
+                cell_x: info.cell_x,
+                cell_y: info.cell_y,
+                creature_count: info.creature_count,
+                total_mass: info.total_mass as f64,
+                max_size: info.max_size as f64,
+                avg_size: info.avg_size as f64,
+            }),
+            Ok(None) => None,
+            Err(_) => {
+                eprintln!("⚠️ L1 cell query timed out at ({}, {})", world_x, world_y);
+                None
+            }
+        }
     }
 }
 

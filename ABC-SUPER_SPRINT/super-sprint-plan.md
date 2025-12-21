@@ -8,17 +8,17 @@ Transform the simulation from discrete behavior states to continuous drive-based
 
 ## Phases
 
-| Phase | Name | Complexity | Focus |
-|-------|------|------------|-------|
-| **A** | Dual Spatial Grid | Medium | Infrastructure + Size Domination |
-| **C** | System Update Frequency | Small | Runtime Hz Control |
-| **B** | Simple Drive Simplex | Large | Continuous Drives (Loner Behavior) |
+| Phase | Name | Complexity | Focus | Status |
+|-------|------|------------|-------|--------|
+| **A** | Dual Spatial Grid | Medium | Infrastructure + Size Domination | ✓ COMPLETE |
+| **C** | System Update Frequency | Small | Runtime Hz Control | Pending |
+| **B** | Simple Drive Simplex | Large | Continuous Drives (Loner Behavior) | Pending |
 
 **Order Rationale:** A and C are performance/infrastructure. B is a major behavior overhaul. Do infrastructure first for immediate wins.
 
 ---
 
-## Phase A: Dual Spatial Grid
+## Phase A: Dual Spatial Grid ✓ COMPLETE
 
 **What:** Add L1 coarse grid (30m) on top of existing L0 fine grid (10m).
 
@@ -27,10 +27,14 @@ Transform the simulation from discrete behavior states to continuous drive-based
 - Size domination: large crits don't see small ones (emergent behavior)
 - Foundation for L1-based navigation in Phase B
 
-**Delivers:**
-- L1 BioSignature (total_mass, max_size, creature_count)
-- Perception threshold (5% of body mass)
-- Portal visualization (G key cycles grids)
+**Delivered:**
+- L1 BioSignature (total_mass, max_size, creature_count) ✓
+- Perception threshold (5% of body mass) ✓
+- Early-exit optimization in perception system ✓
+- Portal visualization (G key cycles: Off → L0 → L1) ✓
+- L1 cell size sent via telemetry IPC ✓
+- L1 hover query with info panel (replaces heatmap streaming) ✓
+- Unit tests for L1CellInfo calculations (5 tests) ✓
 
 ---
 

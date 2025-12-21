@@ -47,10 +47,12 @@ export interface TelemetryFrame {
   creatureCount: number;
   tickRateHz: number;
   spatialGridCellSize: number;
+  l1CellSize: number;
   spatialGridMinX: number;
   spatialGridMaxX: number;
   spatialGridMinY: number;
   spatialGridMaxY: number;
+  // Note: L1 cell data now sent via separate binary buffer (onL1BufferUpdate)
   systemTimings: SystemTimingsSnapshot;
   hardwareMetrics?: HardwareMetrics;
   parallelizationMetrics?: ParallelizationMetrics;

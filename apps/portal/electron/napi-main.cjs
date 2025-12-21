@@ -188,6 +188,7 @@ function startSimulation() {
               mainWindow.webContents.send('perception-debug-update', perceptionBuffer);
             }
           }
+
         }
 
         // Get telemetry (every ~0.5 seconds at 22Hz simulation)
@@ -508,6 +509,25 @@ ipcMain.on('set-viewport-bounds', (event, bounds) => {
     );
   } catch (error) {
     console.error('[Electron NAPI] Failed to set viewport bounds:', error);
+  }
+});
+
+/**
+ * IPC handler: Query L1 cell at world position (dev-tools only)
+ *
+ * Returns cell metadata (creature count, mass, sizes) for the cell at the given position.
+ * Returns null if cell is empty or simulation not running.
+ */
+ipcMain.handle('query-l1-cell', async (event, worldX, worldY) => {
+  if (!simulationEngine || !simulationEngine.queryL1Cell) {
+    return null;
+  }
+
+  try {
+    return simulationEngine.queryL1Cell(worldX, worldY);
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to query L1 cell:', error);
+    return null;
   }
 });
 

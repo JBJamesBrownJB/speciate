@@ -149,6 +149,9 @@ async function main(): Promise<void> {
     overlayManager.register(forceOverlay);
     overlayManager.enableKeyboardShortcuts();
 
+    // Wire up canvas for L1 grid hover detection
+    spatialGridOverlay.setCanvas(app.canvas as HTMLCanvasElement);
+
     // Minimap
     const minimap = new Minimap(
       app.stage,
@@ -337,6 +340,9 @@ async function main(): Promise<void> {
       ipcClient.onTelemetryUpdate((telemetry) => {
         if (telemetry.spatialGridCellSize) {
           spatialGridOverlay.setCellSize(telemetry.spatialGridCellSize);
+        }
+        if (telemetry.l1CellSize) {
+          spatialGridOverlay.setL1CellSize(telemetry.l1CellSize);
         }
         // Update grid bounds from actual spatial grid data
         if (

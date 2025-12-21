@@ -29,6 +29,7 @@ Uses coarse grid to decide **where to go**:
 Uses fine grid neighbors for **immediate collision avoidance**:
 - Lateral steering around nearby crits
 - Unchanged from current system
+- Only use minimum (9 surrounding cells) for neighbours assuming this works for crits of all sizes.
 
 ---
 

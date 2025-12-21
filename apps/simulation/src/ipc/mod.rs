@@ -21,5 +21,7 @@ pub use command_executor::command_executor_system;
 
 pub mod sim_command;
 pub use sim_command::SimCommand;
+#[cfg(feature = "dev-tools")]
+pub use sim_command::L1CellInfo;
 
 pub mod bridge;

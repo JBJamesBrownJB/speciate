@@ -233,4 +233,20 @@ contextBridge.exposeInMainWorld('electron', {
     }
     ipcRenderer.send('set-viewport-bounds', bounds);
   },
+
+  /**
+   * Query L1 cell metadata at world position (dev-tools only)
+   *
+   * Returns cell info if the cell contains creatures, null otherwise.
+   *
+   * @param {number} worldX - X coordinate in world units
+   * @param {number} worldY - Y coordinate in world units
+   * @returns {Promise<{cellX: number, cellY: number, creatureCount: number, totalMass: number, maxSize: number, avgSize: number, cellSize: number} | null>}
+   */
+  queryL1Cell: async (worldX, worldY) => {
+    if (typeof worldX !== 'number' || typeof worldY !== 'number') {
+      throw new Error('queryL1Cell: worldX and worldY must be numbers');
+    }
+    return await ipcRenderer.invoke('query-l1-cell', worldX, worldY);
+  },
 });

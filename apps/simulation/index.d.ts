@@ -10,6 +10,21 @@
  * Without this, panics would be silent and difficult to debug.
  */
 export declare function initLogger(): void
+/** L1 cell info returned to JavaScript */
+export interface L1CellInfoJs {
+  /** Cell X coordinate (grid units) */
+  cellX: number
+  /** Cell Y coordinate (grid units) */
+  cellY: number
+  /** Number of creatures in this cell */
+  creatureCount: number
+  /** Total mass of all creatures in this cell (kg) */
+  totalMass: number
+  /** Maximum creature size in this cell (length in meters) */
+  maxSize: number
+  /** Average creature size in meters (derived from mass) */
+  avgSize: number
+}
 /**
  * SimulationEngine - The NAPI bridge to Bevy ECS
  *
@@ -363,4 +378,26 @@ export declare class SimulationEngine {
    * Use this to allocate the correct buffer size in JS.
    */
   getPerceptionDebugBufferSize(): number
+  /**
+   * Query L1 cell metadata at world position
+   *
+   * Returns cell info if the cell contains creatures, null otherwise.
+   * Uses command-response pattern with 100ms timeout.
+   *
+   * # Arguments
+   * * `world_x` - X coordinate in world units
+   * * `world_y` - Y coordinate in world units
+   *
+   * # Returns
+   * L1CellInfoJs object or null if cell is empty or query times out
+   *
+   * # Example (JavaScript)
+   * ```js
+   * const info = sim.queryL1Cell(mouseWorldX, mouseWorldY);
+   * if (info) {
+   *     console.log(`Cell (${info.cellX}, ${info.cellY}): ${info.creatureCount} creatures`);
+   * }
+   * ```
+   */
+  queryL1Cell(worldX: number, worldY: number): L1CellInfoJs | null
 }

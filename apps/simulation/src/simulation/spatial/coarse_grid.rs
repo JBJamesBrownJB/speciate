@@ -158,6 +158,16 @@ impl CoarseGrid {
     pub fn non_empty_count(&self) -> usize {
         self.prev_non_empty.len()
     }
+
+    /// Get all non-empty cells with their coordinates and biosignature data.
+    /// Returns (cell_x, cell_y, biosignature) for each non-empty cell.
+    pub fn non_empty_cells_with_data(&self) -> impl Iterator<Item = (i32, i32, &BioSignature)> {
+        self.prev_non_empty.iter().map(move |&cell_idx| {
+            let cx = (cell_idx % self.width) as i32 + self.min_cell_x;
+            let cy = (cell_idx / self.width) as i32 + self.min_cell_y;
+            (cx, cy, &self.cells[cell_idx])
+        })
+    }
 }
 
 #[cfg(test)]

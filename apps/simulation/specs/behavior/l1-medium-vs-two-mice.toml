@@ -1,0 +1,30 @@
+[meta]
+name = "L1: Medium (3m) vs Two Mice (1m each)"
+description = "Visual test: 3m crit (945kg, threshold=47kg) vs 2 mice (70kg total). Two mice SHOULD exceed threshold - verify perception."
+timeout_seconds = 30
+
+# 3m wanderer at origin
+[[spawns]]
+type = "single"
+tag = "medium"
+x = 0.0
+y = 0.0
+creature_type = "wanderer"
+body_size = 3.0
+
+# Two 1m mice clustered 60m away (70kg total > 47kg threshold)
+[[spawns]]
+type = "single"
+tag = "mouse1"
+x = 60.0
+y = -2.0
+creature_type = "catatonic"
+body_size = 1.0
+
+[[spawns]]
+type = "single"
+tag = "mouse2"
+x = 60.0
+y = 2.0
+creature_type = "catatonic"
+body_size = 1.0

@@ -1,0 +1,22 @@
+[meta]
+name = "L1: Small (2m) vs Tiny (1m)"
+description = "Visual test: 2m crit (280kg, threshold=14kg) vs 1m crit (35kg). Mouse exceeds threshold - verify perception."
+timeout_seconds = 30
+
+# 2m wanderer at origin
+[[spawns]]
+type = "single"
+tag = "small"
+x = 0.0
+y = 0.0
+creature_type = "wanderer"
+body_size = 2.0
+
+# 1m crit 60m away (35kg > 14kg threshold)
+[[spawns]]
+type = "single"
+tag = "tiny"
+x = 60.0
+y = 0.0
+creature_type = "catatonic"
+body_size = 1.0

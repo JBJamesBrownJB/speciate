@@ -1,8 +1,24 @@
 # Sprint: Dual Spatial Grid (Phase A)
 
-## Status: COMPLETE ✓
+## Status: IN PROGRESS - BUG IDENTIFIED
 
-All Phase A deliverables have been implemented.
+Phase A infrastructure is implemented, but **perception threshold (size domination) is NOT working as expected**.
+
+---
+
+## Known Bug: L1 Perception Threshold Not Filtering Targets
+
+**Observed behavior:** A 5m crit (threshold = 219kg) perceives a 0.5m crit (mass = 4.375kg) even when they are 2+ L1 cells apart.
+
+**Expected behavior:** The 5m crit should NOT perceive the 0.5m crit because 4.375kg << 219kg threshold.
+
+**Root cause (suspected):** The L1 early-exit check (Step 6) only checks the **perceiver's current L1 cell**, not the target's cell. Since the perceiver's own mass (4375kg) always exceeds its threshold (219kg), perception runs fully and detects ALL creatures in range regardless of their mass.
+
+**Fix needed:** The L1 threshold check must filter targets per-cell during the perception scan, not just as an early-exit for the perceiver's cell.
+
+**Test trials created:** `apps/simulation/specs/behavior/l1-*.toml` (6 files for visual verification)
+
+---
 
 ## Outcome
 

@@ -89,8 +89,9 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern, randomize_dna: bool,
             creature_type,
             target_x,
             target_y,
+            body_size,
         } => {
-            spawn_creature(world, *x, *y, *creature_type, *target_x, *target_y, tag.clone(), randomize_dna, override_dna);
+            spawn_creature(world, *x, *y, *creature_type, *target_x, *target_y, tag.clone(), *body_size, randomize_dna, override_dna);
         }
 
         SpawnPattern::Grid {
@@ -104,6 +105,7 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern, randomize_dna: bool,
             grid_offset_y,
             target_x,
             target_y,
+            body_size,
         } => {
             for row in 0..*rows {
                 for col in 0..*cols {
@@ -114,7 +116,7 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern, randomize_dna: bool,
                         0.0
                     };
                     let y = start_y + (row as f32 * spacing) + offset;
-                    spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone(), randomize_dna, override_dna);
+                    spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone(), *body_size, randomize_dna, override_dna);
                 }
             }
         }
@@ -128,12 +130,13 @@ fn spawn_pattern(world: &mut World, pattern: &SpawnPattern, randomize_dna: bool,
             creature_type,
             target_x,
             target_y,
+            body_size,
         } => {
             for i in 0..*count {
                 let angle = (i as f32 / *count as f32) * 2.0 * std::f32::consts::PI;
                 let x = center_x + radius * angle.cos();
                 let y = center_y + radius * angle.sin();
-                spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone(), randomize_dna, override_dna);
+                spawn_creature(world, x, y, *creature_type, *target_x, *target_y, tag.clone(), *body_size, randomize_dna, override_dna);
             }
         }
     }
@@ -147,9 +150,12 @@ fn spawn_creature(
     target_x: Option<f32>,
     target_y: Option<f32>,
     tag: Option<String>,
+    body_size: Option<f32>,
     randomize_dna: bool,
     override_dna: Option<&Dna>,
 ) {
+    use crate::simulation::creatures::dna::{SIZE_MIN, SIZE_MAX, DEFAULT_FOV_GENE};
+
     let mut next_id = world.resource_mut::<NextCreatureId>();
     let creature_id = next_id.generate();
 
@@ -174,8 +180,11 @@ fn spawn_creature(
         builder = builder.with_tag(tag_str.clone());
     }
 
-    // Apply DNA: random if requested, override if provided, otherwise default
-    if randomize_dna {
+    // Apply DNA priority: body_size > override_dna > random_dna > default
+    if let Some(size) = body_size {
+        let size_gene = ((size - SIZE_MIN) / (SIZE_MAX - SIZE_MIN)).clamp(0.0, 1.0);
+        builder = builder.with_dna(Dna::new(size_gene, DEFAULT_FOV_GENE));
+    } else if randomize_dna {
         builder = builder.with_dna(Dna::random());
     } else if let Some(dna) = override_dna {
         builder = builder.with_dna(dna.clone());
@@ -208,6 +217,7 @@ mod tests {
             target_x: None,
             target_y: None,
             tag: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -236,6 +246,7 @@ mod tests {
             target_x: None,
             target_y: None,
             tag: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -267,6 +278,7 @@ mod tests {
             target_x: Some(-10.0),
             target_y: Some(5.0),
             tag: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -302,6 +314,7 @@ mod tests {
             tag: None,
             target_x: None,
             target_y: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -334,6 +347,7 @@ mod tests {
             target_x: None,
             target_y: None,
             tag: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -368,6 +382,7 @@ mod tests {
             tag: None,
             target_x: None,
             target_y: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -400,6 +415,7 @@ mod tests {
             target_x: None,
             target_y: None,
             tag: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -422,9 +438,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(NextCreatureId::default());
 
-        spawn_creature(&mut world, 0.0, 0.0, CreatureType::Catatonic, None, None, None, false, None);
-        spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker, None, None, None, false, None);
-        spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer, None, None, None, false, None);
+        spawn_creature(&mut world, 0.0, 0.0, CreatureType::Catatonic, None, None, None, None, false, None);
+        spawn_creature(&mut world, 10.0, 10.0, CreatureType::Seeker, None, None, None, None, false, None);
+        spawn_creature(&mut world, 20.0, 20.0, CreatureType::Wanderer, None, None, None, None, false, None);
 
 
 
@@ -468,6 +484,7 @@ mod tests {
             tag: None,
             target_x: None,
             target_y: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -498,6 +515,7 @@ mod tests {
             target_x: None,
             target_y: None,
             tag: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -531,6 +549,7 @@ mod tests {
             target_x: Some(0.0),
             target_y: Some(0.0),
             tag: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -563,6 +582,7 @@ mod tests {
             tag: None,
             target_x: None,
             target_y: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -597,6 +617,7 @@ mod tests {
             tag: None,
             target_x: None,
             target_y: None,
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);
@@ -628,6 +649,7 @@ mod tests {
             tag: Some("grid-seekers".to_string()),
             target_x: Some(100.0),
             target_y: Some(100.0),
+            body_size: None,
         };
 
         spawn_pattern(&mut world, &pattern, false, None);

@@ -1,0 +1,22 @@
+[meta]
+name = "L1: Medium (3m) vs Single Mouse (1m)"
+description = "Visual test: 3m crit (945kg, threshold=47kg) vs 1m mouse (35kg). Mouse is below threshold - should NOT see it."
+timeout_seconds = 30
+
+# 3m wanderer at origin
+[[spawns]]
+type = "single"
+tag = "medium"
+x = 0.0
+y = 0.0
+creature_type = "wanderer"
+body_size = 3.0
+
+# Single 1m mouse 60m away
+[[spawns]]
+type = "single"
+tag = "mouse"
+x = 60.0
+y = 0.0
+creature_type = "catatonic"
+body_size = 1.0

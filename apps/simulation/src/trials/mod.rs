@@ -107,6 +107,8 @@ pub enum SpawnPattern {
         target_x: Option<f32>,
         #[serde(default)]
         target_y: Option<f32>,
+        #[serde(default)]
+        body_size: Option<f32>,
     },
 
     Grid {
@@ -125,6 +127,8 @@ pub enum SpawnPattern {
         target_x: Option<f32>,
         #[serde(default)]
         target_y: Option<f32>,
+        #[serde(default)]
+        body_size: Option<f32>,
     },
 
     Circle {
@@ -140,6 +144,8 @@ pub enum SpawnPattern {
         target_x: Option<f32>,
         #[serde(default)]
         target_y: Option<f32>,
+        #[serde(default)]
+        body_size: Option<f32>,
     },
 }
 
@@ -857,6 +863,70 @@ mod tests {
                 assert_eq!(*microseconds, 5000);
             }
             _ => panic!("Expected MaxAvgTickLatency"),
+        }
+    }
+
+    #[test]
+    fn test_body_size_field_parsing() {
+        let toml = r#"
+            [meta]
+            name = "Body Size Test"
+
+            [[spawns]]
+            type = "single"
+            tag = "giant"
+            x = 0.0
+            y = 0.0
+            creature_type = "wanderer"
+            body_size = 5.0
+
+            [[spawns]]
+            type = "single"
+            tag = "mouse"
+            x = 10.0
+            y = 0.0
+            creature_type = "catatonic"
+            body_size = 1.0
+        "#;
+
+        let spec: SpecConfig = toml::from_str(toml).unwrap();
+        assert_eq!(spec.spawns.len(), 2);
+
+        match &spec.spawns[0] {
+            SpawnPattern::Single { tag, body_size, .. } => {
+                assert_eq!(*tag, Some("giant".to_string()));
+                assert_eq!(*body_size, Some(5.0));
+            }
+            _ => panic!("Expected Single spawn"),
+        }
+
+        match &spec.spawns[1] {
+            SpawnPattern::Single { tag, body_size, .. } => {
+                assert_eq!(*tag, Some("mouse".to_string()));
+                assert_eq!(*body_size, Some(1.0));
+            }
+            _ => panic!("Expected Single spawn"),
+        }
+    }
+
+    #[test]
+    fn test_body_size_defaults_to_none() {
+        let toml = r#"
+            [meta]
+            name = "No Body Size"
+
+            [[spawns]]
+            type = "single"
+            x = 0.0
+            y = 0.0
+        "#;
+
+        let spec: SpecConfig = toml::from_str(toml).unwrap();
+        match &spec.spawns[0] {
+            SpawnPattern::Single { body_size, .. } => {
+                assert_eq!(*body_size, None);
+            }
+            _ => panic!("Expected Single spawn"),
         }
     }
 }

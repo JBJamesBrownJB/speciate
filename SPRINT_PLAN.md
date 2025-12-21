@@ -1,5 +1,21 @@
 # Performance Optimization Roadmap
 
+## Phase 0: Remove UpdateSlice (Prep)
+**Goal:** Clean slate - remove failed tick-skipping approach
+
+Remove `UpdateSlice` component and its usage from all systems (7 files):
+- `components/update_slice.rs` - DELETE
+- `components/mod.rs` - remove export
+- `builder.rs` - remove from CritBundle
+- `perception/systems.rs` - remove slice filtering
+- `behaviors/transitions/systems.rs` - remove slice filtering
+- `simulation.rs` - remove any registration
+- `snapshot.rs` - remove from persistence
+
+Systems will run every tick (baseline) until Phase 1 adds new frequency control.
+
+---
+
 ## Phase 1: System Frequency Control
 **Goal:** Dynamic per-system Hz control with zero overhead at full rate
 

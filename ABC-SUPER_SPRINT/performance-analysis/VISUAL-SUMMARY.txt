@@ -1,0 +1,267 @@
+═══════════════════════════════════════════════════════════════════════════════
+  SPRINT A-B-C PERFORMANCE ANALYSIS - VISUAL SUMMARY
+═══════════════════════════════════════════════════════════════════════════════
+
+Implementation Order:  Phase A → Phase C → Phase B
+Status:                APPROVED (all low-risk)
+Expected Improvement:  18% tick time reduction @ divisor=2
+
+───────────────────────────────────────────────────────────────────────────────
+  CURRENT BASELINE (360K Creatures @ 20Hz)
+───────────────────────────────────────────────────────────────────────────────
+
+Total Tick: 29.3ms ████████████████████████████████▌ (58% of 50ms budget)
+           ┌─────────────────────────────────────────────────────────────┐
+           │ Steering:     9.4ms ████████████████████▊ (32%)              │
+           │ Movement:     6.0ms █████████████▊ (21%)  [Rayon: IPC 4.25] │
+           │ Perception:   5.9ms █████████████▌ (20%)  [IPC 1.68]        │
+           │ Grid Rebuild: 4.2ms █████████▍ (14%)                        │
+           │ Behavior:     2.0ms ████▌ (7%)                               │
+           └─────────────────────────────────────────────────────────────┘
+
+Hardware Profile:
+  IPC:              1.68  ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░ (memory-bound, target: 2.0)
+  L1D Miss Rate:    3.4%  ▓▓▓▓▓▓░░░░░░░░░░░░░ (acceptable, target: < 3%)
+  LLC Miss Rate:    3.0%  ▓▓▓▓▓▓░░░░░░░░░░░░░ (high, target: < 2%)
+  CPU Utilization:  45%   ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░ (11/16 cores engaged)
+
+Bottleneck: Perception and steering are memory-bound (IPC 1.68)
+
+───────────────────────────────────────────────────────────────────────────────
+  PHASE A: DUAL SPATIAL GRID
+───────────────────────────────────────────────────────────────────────────────
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ L1 Grid (30m cells)                                                         │
+│ ┌───────┬───────┬───────┐                                                   │
+│ │ BioSig│ BioSig│ BioSig│  BioSignature:                                    │
+│ │ mass: │ mass: │ mass: │  - total_mass: f32                                │
+│ │  100  │  500  │    0  │  - max_size: f32                                  │
+│ │ max:  │ max:  │ max:  │                                                   │
+│ │  2.0  │  4.5  │  0.0  │  Aggregated from 3×3 L0 cells                     │
+│ └───────┴───────┴───────┘                                                   │
+│         ▲                                                                    │
+│         │                                                                    │
+│   L0 → L1 Aggregation (< 0.5ms target)                                      │
+│         │                                                                    │
+│ ┌───┬───┬───┬───┬───┬───┬───┬───┬───┐                                       │
+│ │ 🦎│   │ 🦎│ 🦎│   │ 🦎│ 🦎│   │   │  L0 Grid (10m cells)                  │
+│ └───┴───┴───┴───┴───┴───┴───┴───┴───┘                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Early-Exit Optimization:
+  Before L0 Scan: Check L1 cell total_mass
+  ┌───────────────────────────────────────────┐
+  │ if L1.total_mass < perception_threshold:  │
+  │   → SKIP L0 scan (0 neighbors)            │  50%+ faster in sparse areas
+  │ else:                                     │
+  │   → Proceed with L0 scan                  │
+  └───────────────────────────────────────────┘
+
+Performance Impact:
+  ✓ L1 aggregation:   < 0.5ms (new overhead, acceptable)
+  ✓ Sparse perception: 50%+ faster (early-exit benefit)
+  ✓ IPC improvement:   1.68 → 1.8-2.0 (less memory-bound)
+
+Gates:
+  [ ] L1 aggregation < 0.5ms at 360K creatures
+  [ ] Early-exit reduces sparse perception by 50%+
+  [ ] IPC increases to 1.8+
+  [ ] Determinism test passes
+
+───────────────────────────────────────────────────────────────────────────────
+  PHASE C: SYSTEM UPDATE FREQUENCY
+───────────────────────────────────────────────────────────────────────────────
+
+L1 Cell Bucketing (Spatial Locality):
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ Tick 0:  Process L1 cells where (cell_idx % divisor == 0)              │
+  │ Tick 1:  Process L1 cells where (cell_idx % divisor == 1)              │
+  │ Tick 2:  Process L1 cells where (cell_idx % divisor == 2)              │
+  │ ...                                                                     │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  Benefit: Nearby creatures update together → shared L0 cache hits
+
+Throttling Performance (360K Creatures):
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ Divisor │ Effective Hz │ Perception Time │ Total Tick │ Max Creatures │
+  ├─────────┼──────────────┼─────────────────┼────────────┼───────────────┤
+  │    1    │     20       │     5.9ms       │   29.3ms   │     360K      │
+  │    2    │     10       │     3.0ms ▼50%  │   26.4ms   │     500K      │
+  │    4    │      5       │     1.5ms ▼75%  │   24.9ms   │     700K      │
+  │   10    │      2       │     0.6ms ▼90%  │   23.6ms   │     1M+       │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+Zero Overhead (divisor=1):
+  Fast Path:  if divisor == 1 { /* existing code */ return; }
+  Result:     Within 2% of baseline (no frequency control code)
+
+Gates:
+  [ ] Divisor=1 within 2% of baseline (zero overhead)
+  [ ] Divisor=2 reduces perception by 50%
+  [ ] Divisor=4 reduces perception by 75%
+  [ ] Determinism passes at all divisors
+
+───────────────────────────────────────────────────────────────────────────────
+  PHASE B: SIMPLE DRIVE SIMPLEX
+───────────────────────────────────────────────────────────────────────────────
+
+Drive System (Replaces Behavior State Machine):
+
+  Old:  BehaviorMode enum (Catatonic, Wandering, Seeking, Fleeing)
+        State transitions, wandering timers, random directions
+        2.0ms per tick
+
+  New:  DriveState component (continuous force accumulation)
+        No states, no transitions, emergent behavior
+        < 2.0ms per tick (target)
+
+L1 Drive Computation:
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ For each creature:                                                      │
+  │   1. Scan L1 cells in perception range (~35 cells)                     │
+  │   2. Accumulate repulsion from large crits (max_size > self)           │
+  │   3. Accumulate attraction to empty space (total_mass < threshold)     │
+  │   4. Write DriveState.direction (force vector)                         │
+  │                                                                         │
+  │ Complexity: 35 cells × 12 ops = 420 ops per creature                   │
+  │ Estimate:   360K × 420 = 151M ops → 1.5ms (parallel, 16 cores)        │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+Emergent Behaviors:
+  ┌───────────────────────────────────────────┐
+  │ Situation        │ Drive  │ Behavior      │
+  ├──────────────────┼────────┼───────────────┤
+  │ Empty L1 cell    │   0    │ Resting       │ (no code, just emergent)
+  │ Crowded cell     │   ↓    │ Dispersing    │
+  │ Large crit near  │   ↑    │ Fleeing       │
+  │ Equilibrium      │   0    │ Resting       │
+  └───────────────────────────────────────────┘
+
+Performance Impact:
+  ✓ Drive computation:  < 2ms (competitive with old behavior 2.0ms)
+  ✓ IPC:                2.0+ (compute-bound, not memory-bound)
+  ✓ L1D miss rate:      < 3% (BioSignatures are small, 8 bytes)
+  ✓ Rayon parallel:     16 cores engaged
+
+Gates:
+  [ ] Drive computation < 2ms at 360K creatures
+  [ ] IPC > 1.8 (compute-bound)
+  [ ] L1D miss rate < 3%
+  [ ] Rayon parallelization engaged
+  [ ] Emergent behaviors validated (visual confirmation)
+
+───────────────────────────────────────────────────────────────────────────────
+  COMBINED IMPACT (All Phases)
+───────────────────────────────────────────────────────────────────────────────
+
+Scenario Comparison:
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │ Scenario                    │ Current │ After A+C+B │ Improvement     │
+  ├─────────────────────────────┼─────────┼─────────────┼─────────────────┤
+  │ 360K (divisor=1, full rate) │ 29.3ms  │   ~27ms     │  8% faster      │
+  │ 360K (divisor=2, 10Hz)      │ 29.3ms  │   ~24ms     │ 18% faster      │
+  │ 500K (divisor=2, 10Hz)      │   N/A   │   ~33ms     │ NEW capability  │
+  │ 700K (divisor=4, 5Hz)       │   N/A   │   ~35ms     │ NEW capability  │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+IPC Progression:
+  Baseline:     1.68  ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░  (memory-bound)
+  After A:      1.80  ▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░  (less stalls, early-exit)
+  After A+C+B:  2.00  ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░  (compute-bound, optimal)
+
+───────────────────────────────────────────────────────────────────────────────
+  RISK ASSESSMENT
+───────────────────────────────────────────────────────────────────────────────
+
+  Phase A:  ✓✓✓ LOW RISK    (simple aggregation, proven early-exit)
+  Phase C:  ✓✓✓ LOW RISK    (trivial bucketing, zero-cost guarantee)
+  Phase B:  ✓✓  MEDIUM RISK (need to validate L1 scan performance)
+
+  Overall:  LOW RISK (all phases have mitigation strategies)
+
+  Abort Criteria:
+    Phase A: L1 aggregation > 1ms → Reconsider L1 grid design
+    Phase B: Drive computation > 3ms → Keep behavior state machine
+
+───────────────────────────────────────────────────────────────────────────────
+  MEASUREMENT WORKFLOW
+───────────────────────────────────────────────────────────────────────────────
+
+  Before:
+    ┌────────────────────────────────────────────────────────────┐
+    │ cargo build --release                                      │
+    │ perf stat timeout 10s ./target/release/sim_app --creatures 360000 │
+    │ cp docs/performance/snapshots/NOW.json baseline-pre-abc.json │
+    └────────────────────────────────────────────────────────────┘
+
+  During:
+    ┌────────────────────────────────────────────────────────────┐
+    │ Phase A: ./scripts/measure_phase_a.sh                     │
+    │ Phase C: ./scripts/measure_phase_c.sh                     │
+    │ Phase B: ./scripts/measure_phase_b.sh                     │
+    │                                                            │
+    │ Review: docs/performance/snapshots/phase-{a,c,b}/summary.md │
+    └────────────────────────────────────────────────────────────┘
+
+  After:
+    ┌────────────────────────────────────────────────────────────┐
+    │ cargo test --release --package simulation --test specs    │
+    │ cargo test test_deterministic_simulation_20k              │
+    │ Visual smoke test: 10K creatures, 60 seconds              │
+    └────────────────────────────────────────────────────────────┘
+
+───────────────────────────────────────────────────────────────────────────────
+  FINAL CHECKLIST
+───────────────────────────────────────────────────────────────────────────────
+
+  Phase A Gates:
+    [ ] L1 aggregation < 0.5ms
+    [ ] Early-exit reduces sparse perception by 50%+
+    [ ] IPC increases to 1.8+
+    [ ] Determinism test passes
+
+  Phase C Gates:
+    [ ] Divisor=1 within 2% of baseline
+    [ ] Divisor=2 reduces perception by 50%
+    [ ] Divisor=4 reduces perception by 75%
+    [ ] Determinism passes at all divisors
+
+  Phase B Gates:
+    [ ] Drive computation < 2ms
+    [ ] IPC > 1.8
+    [ ] L1D miss rate < 3%
+    [ ] Rayon engages 16 cores
+    [ ] Emergent behaviors validated
+
+  Integration:
+    [ ] All phase gates passed
+    [ ] Full spec suite passes
+    [ ] Determinism test passes
+    [ ] Visual smoke test (10K creatures, 60 seconds)
+    [ ] Performance snapshots captured and reviewed
+    [ ] IPC improved or maintained (no regression)
+
+───────────────────────────────────────────────────────────────────────────────
+  EXPECTED OUTCOME
+───────────────────────────────────────────────────────────────────────────────
+
+  Timeline:     8-11 days (implementation + measurement + review)
+  Improvement:  18% tick time reduction @ divisor=2
+  New Capacity: 500K creatures @ 10Hz, 700K @ 5Hz
+  Code Quality: Simpler behavior logic (no state machine)
+  Emergent:     Dispersal, avoidance, equilibrium from simple drive rules
+
+  Status: READY FOR IMPLEMENTATION 🚀
+
+═══════════════════════════════════════════════════════════════════════════════
+  For detailed analysis, see:
+  /home/dev/dev/speciate/docs/performance/analysis/sprint-abc-performance-assessment.md
+
+  For quick reference, see:
+  /home/dev/dev/speciate/docs/performance/analysis/SPRINT-ABC-EXECUTIVE-SUMMARY.md
+
+  For hardware counters, see:
+  /home/dev/dev/speciate/docs/performance/analysis/hardware-counter-reference.md
+═══════════════════════════════════════════════════════════════════════════════

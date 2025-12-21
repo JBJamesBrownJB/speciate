@@ -2,8 +2,8 @@ use super::components::*;
 #[cfg(feature = "dev-tools")]
 use super::debug::*;
 use crate::simulation::core::components::{BodySize, PhysicsTick, Position, Rotation};
-use crate::simulation::creatures::components::{CreatureState, UpdateSlice};
-use crate::simulation::creatures::constants::{MAX_PERCEIVED_NEIGHBORS, UPDATE_SLICE_COUNT};
+use crate::simulation::creatures::components::CreatureState;
+use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
 use crate::simulation::spatial::DoubleBufferedSpatialGrid;
@@ -26,9 +26,9 @@ thread_local! {
 }
 
 pub fn update_perception_system(
-    physics_tick: Res<PhysicsTick>,
+    _physics_tick: Res<PhysicsTick>,
     grid: Res<DoubleBufferedSpatialGrid>,
-    mut query: Query<(Entity, &Position, &Rotation, &BodySize, &Perception, &mut NeighborCache, &CreatureState, &UpdateSlice)>,
+    mut query: Query<(Entity, &Position, &Rotation, &BodySize, &Perception, &mut NeighborCache, &CreatureState)>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
     #[cfg(feature = "dev-tools")] mut debug_snapshot: ResMut<PerceptionDebugSnapshot>,
@@ -43,14 +43,8 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     let debug_target_entity = debug_target.get();
 
-    // Current update slice (cycles 0..UPDATE_SLICE_COUNT each tick)
-    let current_slice = (physics_tick.get() % UPDATE_SLICE_COUNT as u64) as u8;
-
-    // Collect only entities in current slice (filters before parallel processing)
-    let mut entities: Vec<_> = query
-        .iter_mut()
-        .filter(|(.., update_slice)| update_slice.id == current_slice)
-        .collect();
+    // Collect all entities for parallel processing
+    let mut entities: Vec<_> = query.iter_mut().collect();
 
     // DEV-TOOLS: Mutex to capture ACTUAL cell data during perception for debug target
     #[cfg(feature = "dev-tools")]
@@ -60,7 +54,7 @@ pub fn update_perception_system(
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
-    entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, neighbor_cache, state, _update_slice)| {
+    entities.par_iter_mut().for_each(|(entity, pos, rot, size, perception, neighbor_cache, state)| {
         // Check if this entity is the debug target (dev-tools only)
         #[cfg(feature = "dev-tools")]
         let is_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
@@ -237,10 +231,9 @@ pub fn update_perception_system(
 
         if let Some(target_entity) = debug_target_entity {
             // Find the debug target in our entities list and capture its state
-            // NOTE: Entity may not be in `entities` if not in current update slice
-            if let Some((_, pos, rot, size, perception, neighbor_cache, state, _)) = entities
+            if let Some((_, pos, rot, size, perception, neighbor_cache, state)) = entities
                 .iter()
-                .find(|(e, _, _, _, _, _, _, _)| *e == target_entity)
+                .find(|(e, _, _, _, _, _, _)| *e == target_entity)
             {
                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
                 let query_radius = perception.range + size.radius() + MAX_OTHER_RADIUS;
@@ -307,8 +300,7 @@ pub fn update_perception_system(
                     );
                 }
             }
-            // else: Entity not in current slice - preserve existing snapshot data
-            // (don't clear, as the creature will be processed in a future tick)
+            // else: Entity not found in query results
         } else {
             // No debug target set - this is normal
             debug_snapshot.clear();
@@ -993,7 +985,6 @@ mod tests {
         use crate::simulation::core::SimulationBuilder;
         use crate::simulation::creatures::builder::CritBuilder;
         use crate::simulation::creatures::components::CritId;
-        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
 
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(100.0, 100.0);
@@ -1020,9 +1011,8 @@ mod tests {
             target.0 = Some(entity);
         }
 
-        // Run enough updates to ensure the creature is processed at least once
-        // (perception uses UPDATE_SLICE_COUNT slices, each creature processed every N ticks)
-        for _ in 0..UPDATE_SLICE_COUNT {
+        // Run a few updates to ensure perception runs
+        for _ in 0..3 {
             sim.update(0.016);
         }
 
@@ -1200,7 +1190,6 @@ mod tests {
     fn test_wide_fov_perceives_many_neighbors_in_crowd() {
         use crate::simulation::core::SimulationBuilder;
         use crate::simulation::creatures::builder::CritBuilder;
-        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
 
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(200.0, 200.0);
@@ -1226,8 +1215,8 @@ mod tests {
             );
         }
 
-        // Run enough ticks to ensure perception runs
-        for _ in 0..UPDATE_SLICE_COUNT {
+        // Run a few ticks to ensure perception runs
+        for _ in 0..3 {
             sim.update(0.016);
         }
 
@@ -1450,7 +1439,6 @@ mod tests {
     fn test_fov_variants_narrow_45_crowd() {
         use crate::simulation::core::SimulationBuilder;
         use crate::simulation::creatures::builder::CritBuilder;
-        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
 
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(200.0, 200.0);
@@ -1476,8 +1464,8 @@ mod tests {
             );
         }
 
-        // Run enough ticks to ensure perception runs
-        for _ in 0..UPDATE_SLICE_COUNT {
+        // Run a few ticks to ensure perception runs
+        for _ in 0..3 {
             sim.update(0.016);
         }
 
@@ -1508,7 +1496,6 @@ mod tests {
     fn test_fov_variants_medium_90_crowd() {
         use crate::simulation::core::SimulationBuilder;
         use crate::simulation::creatures::builder::CritBuilder;
-        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
 
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(200.0, 200.0);
@@ -1532,7 +1519,7 @@ mod tests {
             );
         }
 
-        for _ in 0..UPDATE_SLICE_COUNT {
+        for _ in 0..3 {
             sim.update(0.016);
         }
 
@@ -1565,7 +1552,6 @@ mod tests {
     fn test_fov_zero_velocity_maintains_facing() {
         use crate::simulation::core::SimulationBuilder;
         use crate::simulation::creatures::builder::CritBuilder;
-        use crate::simulation::creatures::constants::UPDATE_SLICE_COUNT;
         use crate::simulation::core::components::Rotation;
 
         let mut sim = SimulationBuilder::new().build();
@@ -1580,7 +1566,7 @@ mod tests {
         );
 
         // Run a few ticks
-        for _ in 0..UPDATE_SLICE_COUNT * 2 {
+        for _ in 0..5 {
             sim.update(0.016);
         }
 

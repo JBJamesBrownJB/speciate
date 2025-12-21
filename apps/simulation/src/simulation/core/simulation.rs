@@ -34,7 +34,7 @@ impl SimulationBuilder {
         use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
         use crate::simulation::creatures::components::{
             BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
-            CreatureState, CritId, FleeState, HomePosition, Target, UpdateSlice, WanderState,
+            CreatureState, CritId, FleeState, HomePosition, Target, WanderState,
         };
         use crate::simulation::perception::AvoidanceBehavior;
         use bevy_ecs::prelude::AppTypeRegistry;
@@ -67,7 +67,6 @@ impl SimulationBuilder {
 
             type_registry.register::<WanderState>();
             type_registry.register::<FleeState>();
-            type_registry.register::<UpdateSlice>();
         }
 
         schedule.add_systems(process_spawn_events);

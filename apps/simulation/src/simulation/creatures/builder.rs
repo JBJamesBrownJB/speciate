@@ -1,10 +1,10 @@
 use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
 use crate::simulation::creatures::components::{
     BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
-    CreatureState, CritId, EntityTag, HomePosition, Target, UpdateSlice, WanderState,
+    CreatureState, CritId, EntityTag, HomePosition, Target, WanderState,
 };
 use crate::simulation::creatures::constants::{
-    ANGLE_CHANGE, MAX_SPEED, UPDATE_SLICE_COUNT, WANDER_DISTANCE, WANDER_RADIUS,
+    ANGLE_CHANGE, MAX_SPEED, WANDER_DISTANCE, WANDER_RADIUS,
 };
 use crate::simulation::creatures::dna::Dna;
 use crate::simulation::perception::{AvoidanceBehavior, NeighborCache, Perception};
@@ -32,7 +32,6 @@ pub struct CritBundle {
     pub neighbor_cache: NeighborCache,
     pub avoidance_behavior: AvoidanceBehavior,
     pub target: Target,
-    pub update_slice: UpdateSlice,
 }
 
 #[derive(Clone)]
@@ -239,7 +238,6 @@ impl CritBuilder {
             neighbor_cache: NeighborCache::new(),
             avoidance_behavior: AvoidanceBehavior::from_body_size(size),
             target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
-            update_slice: UpdateSlice::new((id % UPDATE_SLICE_COUNT as u32) as u8),
         }
     }
 }
@@ -289,26 +287,6 @@ mod tests {
         // with_all_capabilities is now a no-op since all creatures have all capabilities
         let builder = CritBuilder::new().with_all_capabilities();
         assert_eq!(builder.position, (0.0, 0.0)); // Just verify it doesn't break the chain
-    }
-
-    #[test]
-    fn test_update_slice_deterministic_assignment() {
-        // Verify slice assignment cycles through UPDATE_SLICE_COUNT
-        let bundle0 = CritBuilder::new().build(0);
-        let bundle1 = CritBuilder::new().build(1);
-        let bundle2 = CritBuilder::new().build(2);
-        let bundle3 = CritBuilder::new().build(3);
-
-        // id N -> slice (N % UPDATE_SLICE_COUNT)
-        assert_eq!(bundle0.update_slice.id, 0 % UPDATE_SLICE_COUNT);
-        assert_eq!(bundle1.update_slice.id, 1 % UPDATE_SLICE_COUNT);
-        assert_eq!(bundle2.update_slice.id, 2 % UPDATE_SLICE_COUNT);
-        assert_eq!(bundle3.update_slice.id, 3 % UPDATE_SLICE_COUNT);
-
-        // Verify different slices for consecutive IDs (when UPDATE_SLICE_COUNT > 1)
-        if UPDATE_SLICE_COUNT > 1 {
-            assert_ne!(bundle0.update_slice.id, bundle1.update_slice.id);
-        }
     }
 
     #[test]

@@ -54,6 +54,30 @@ You are responsible for creating these foundational documents immediately:
 * **ECS_STANDARDS.md:** Define the rules for designing ECS Components in Rust (e.g., component data must be simple and serializable), and standardize all **Units of Measure** (e.g., distance in meters, time in milliseconds) to prevent conversion errors.
 * **ASSET_STRATEGY.md:** Define the policies for asset storage, texture atlas creation, and deployment to the Cloud Storage/CDN.
 
+## 🏆 Golden Zone Architecture - ALWAYS SEEK THIS
+
+**The Golden Zone is where a performance optimization IS the biological feature.**
+
+When designing any system architecture, you MUST actively seek Golden Zone opportunities where skipping computation delivers emergent biological behavior for free:
+
+| Optimization | Biological Behavior | Golden Zone? |
+|--------------|---------------------|--------------|
+| Skip perception of small entities | Size domination (giants ignore mice) | ✅ YES |
+| Skip stationary targets | Prey freeze = camouflage | ✅ YES |
+| Satiated creatures skip prey detection | Post-meal predators rest | ✅ YES |
+| FOV culling (only perceive forward) | Realistic vision cone | ✅ YES |
+| Arbitrary frame skipping | Nothing biological | ❌ NO |
+
+**Your Golden Zone mandate:**
+1. When reviewing system designs, ask: "Can we skip work in a way that matches real biology?"
+2. Consult `zoologist-tom` to validate biological accuracy of proposed optimizations
+3. Prioritize Golden Zone features in architecture decisions - they deliver double value
+4. Reject arbitrary optimizations that don't have biological justification
+
+**Architecture principle:** The best optimization is one that makes the simulation MORE biologically accurate, not less.
+
+---
+
 ## Cross-Team Integration
 
 * **DevOps Integration:** Work with the **DevOps Engineer** to ensure the automated deployment and monitoring metrics align with the system's performance requirements (e.g., latency goals for the Ledger API).

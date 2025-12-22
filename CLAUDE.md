@@ -104,6 +104,32 @@ Every advantage must have a cost (built into physics/biology):
 
 **Goal:** Create viable ecological niches, not perfect balance.
 
+### Golden Zone - ALWAYS SEEK THIS
+
+**The Golden Zone is where a performance optimization IS the biological feature.**
+
+When designing systems, actively look for optimizations that also create emergent biological behavior for free:
+
+| Optimization | Biological Behavior | Golden Zone? |
+|--------------|---------------------|--------------|
+| Skip perception of small entities | Size domination (giants ignore mice) | ✅ YES |
+| Skip stationary targets | Prey freeze = camouflage | ✅ YES |
+| Satiated creatures skip prey detection | Post-meal predators rest | ✅ YES |
+| FOV culling (only perceive forward) | Realistic vision cone | ✅ YES |
+| Arbitrary frame skipping | Nothing biological | ❌ NO |
+
+**Why Golden Zone matters:**
+- Performance win + gameplay win = double value
+- Biologically accurate behavior emerges "for free"
+- Creates interesting player-observable dynamics
+- Reduces complexity (one system serves two purposes)
+
+**When designing any perception/behavior system, ask:** "Can we skip work in a way that matches real biology?"
+
+See `docs/biology/todo/` for documented Golden Zone opportunities:
+- `motion-detection.md` - Skip stationary entities (prey freeze)
+- `hunger-gating.md` - Satiated predators ignore prey
+
 ### New Trait Workflow
 
 1. Consult `zoologist-tom` agent FIRST

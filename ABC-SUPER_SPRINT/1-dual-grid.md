@@ -1,220 +1,326 @@
-# Sprint: Dual Spatial Grid (Phase A)
+# Phase A: Dual Spatial Grid
 
-## Status: IN PROGRESS - BUG IDENTIFIED
+## Status: IN PROGRESS
 
-Phase A infrastructure is implemented, but **perception threshold (size domination) is NOT working as expected**.
-
----
-
-## Known Bug: L1 Perception Threshold Not Filtering Targets
-
-**Observed behavior:** A 5m crit (threshold = 219kg) perceives a 0.5m crit (mass = 4.375kg) even when they are 2+ L1 cells apart.
-
-**Expected behavior:** The 5m crit should NOT perceive the 0.5m crit because 4.375kg << 219kg threshold.
-
-**Root cause (suspected):** The L1 early-exit check (Step 6) only checks the **perceiver's current L1 cell**, not the target's cell. Since the perceiver's own mass (4375kg) always exceeds its threshold (219kg), perception runs fully and detects ALL creatures in range regardless of their mass.
-
-**Fix needed:** The L1 threshold check must filter targets per-cell during the perception scan, not just as an early-exit for the perceiver's cell.
-
-**Test trials created:** `apps/simulation/specs/behavior/l1-*.toml` (6 files for visual verification)
+Infrastructure complete. Now implementing two-stage perception with size domination.
 
 ---
 
-## Outcome
+## Prior Work (Complete)
 
-Infrastructure-only. No behavior changes. Foundation for Phase C (frequency control) and Phase B (Drive Simplex).
+| Component | Status | Notes |
+|-----------|--------|-------|
+| L1 Coarse Grid (30m cells) | Done | `spatial/coarse_grid.rs` |
+| BioSignature struct | Done | `total_mass`, `max_size`, `creature_count` |
+| L1 Aggregation System | Done | L0 → L1 every tick |
+| HierarchicalGrid wrapper | Done | `spatial/hierarchical.rs` |
+| Portal visualization | Done | G key cycles: Off → L0 → L1 |
+| L1 hover query | Done | Cell info panel on mouse hover |
+| Perception threshold field | Done | `perception.threshold = mass * 0.05` |
 
-### Deliverables
-
-1. **L1 Coarse Grid** - 30m cells (3×3 L0) with aggregated BioSignatures ✓
-2. **L1 Aggregation System** - Reduces L0 → L1 every tick ✓
-3. **Portal Visualization** - G key cycles: Off → L0 → L1 ✓
-4. **L1 Cell Query** - Hover-based cell info panel (replaces heatmap streaming) ✓
-5. **Validation** - Confirm 9 L0 cells covers max avoidance range ✓
-
-### Non-Goals (deferred)
-
-- Crits using L1 for steering (Phase B: Drive Simplex)
-- Frequency control bucketing (Phase C)
-- 3-phase perception pipeline (Phase B)
+**Bug identified:** Current L1 early-exit only checks perceiver's own cell, not target cells. Size domination not working.
 
 ---
 
-## Architecture
+## Architecture (Team Consultation)
 
-### Grid Sizes
+### Design Decision: Fixed-Size Components + Pure Functions
 
-| Grid | Cell Size | Total Cells | Content |
-|------|-----------|-------------|---------|
-| L0 (Fine) | 10m | 1,000,000 | Entity IDs |
-| L1 (Coarse) | 30m (3×3 L0) | ~111,000 | BioSignatures |
+After consulting architect-andy and ecs-emma, the recommended architecture is:
 
-**Rationale:** Max crit size is 5m, so 10m L0 cells are fine. L1 = 3×3 L0 = 30m.
+**Option B+C Hybrid**: Fixed-size components with isolated pure functions for testability.
 
-### L1 BioSignature (Minimal)
+### Why NOT Vec-based Components
 
 ```rust
-pub struct BioSignature {
-    pub total_mass: f32,      // Sum of all creature mass in this L1 cell
-    pub max_size: f32,        // Largest creature (for future threat assessment)
-    pub creature_count: u16,  // Number of creatures (cheap, useful for empty detection)
+// BAD - heap allocation = cache miss at 500K scale
+pub struct L1Perceptions {
+    cells: Vec<L1CellPerception>,
+}
+
+// GOOD - inline array, sequential memory, prefetcher happy
+pub struct L1Perceptions {
+    count: u8,
+    cells: [L1CellPerception; 48],
 }
 ```
 
-**Future additions** (when needed): herbivore_mass, carnivore_mass, center_of_mass
+- 500K creatures with `Vec` = 500K random heap accesses
+- Fixed array = sequential memory access
+- Archetype stability guaranteed (size never changes)
 
-### Perception Threshold (Size Domination)
+### Memory Budget (500K creatures)
 
-**Emergent behavior:** Large crits don't see small ones, but small ones see large ones.
+| Component | Bytes/Entity | 500K Total |
+|-----------|--------------|------------|
+| NeighborCache | ~120 | 60 MB |
+| L1Perceptions (48 cells) | ~770 | 385 MB |
+| **Total** | ~890 | **445 MB** |
 
-```rust
-// Add to Perception component
-pub perception_threshold: f32,  // = body_mass * 0.05 (5% of own mass)
+**Verdict:** Acceptable for target hardware.
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      COMPONENTS (stable)                         │
+├─────────────────────────────────────────────────────────────────┤
+│  NeighborCache     │ Fixed array [NeighborData; 7]              │
+│  L1Perceptions     │ Fixed array [L1CellPerception; 48]         │
+│  PerceptionConfig  │ DNA-derived ranges, thresholds             │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│              PURE FUNCTIONS (testable, isolated)                 │
+├─────────────────────────────────────────────────────────────────┤
+│  classify_l1_cell(biosig, my_mass, my_size, is_own_cell)       │
+│      -> L1Classification { Empty, Threat, Prey, Crowded }      │
+│                                                                 │
+│  should_perceive_entity(threshold, target_mass, dist, fov)     │
+│      -> bool                                                    │
+│                                                                 │
+│  compute_l1_drive(l1_perceptions)                              │
+│      -> Vec2 (direction)  [Phase B]                            │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                   TYPE ALIASES (queries.rs)                      │
+├─────────────────────────────────────────────────────────────────┤
+│  PerceptionQuery   │ Full query with all perception components  │
+│  L1PerceptionQuery │ Read L1Perceptions for drive system        │
+│  SteeringQuery     │ Read NeighborCache for steering            │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**How it works:**
-- Giant (mass 1000) → threshold = 50
-- Mouse (mass 1) → below Giant's threshold → Giant doesn't "see" Mouse
-- But Mouse sees Giant (Giant's mass >> Mouse's threshold)
+### Data Structures
 
-**Result:** Mouse must get out of Giant's way. Giant walks straight through.
-
-This creates asymmetric avoidance without explicit "size domination" code.
-
----
-
-## Implementation
-
-### Step 1: BioSignature Struct
-**File:** `spatial/biosignature.rs` (new)
-
-### Step 2: CoarseGrid (L1)
-**File:** `spatial/coarse_grid.rs` (new)
-- 100m cell size
-- Stores `BioSignature` per cell
-- Methods: `get_biosignature(cell_idx)`, `clear()`, `non_empty_cells()`
-
-### Step 3: HierarchicalGrid Wrapper
-**File:** `spatial/hierarchical.rs` (new)
 ```rust
-pub struct HierarchicalGrid {
-    pub l0: DoubleBufferedSpatialGrid,
-    pub l1: CoarseGrid,
+pub const MAX_L1_PERCEPTIONS: usize = 48;
+
+#[repr(u8)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum L1Classification {
+    #[default]
+    Empty   = 0,  // Nothing worth perceiving
+    Threat  = 1,  // Contains creature larger than me
+    Prey    = 2,  // Contains creatures smaller than me (huntable)
+    Crowded = 3,  // Contains visible mass but no threat/prey
 }
-```
 
-### Step 4: L1 Aggregation System
-**File:** `spatial/systems.rs`
-
-Runs every tick after L0 rebuild:
-1. Clear all L1 cells
-2. For each non-empty L0 cell, aggregate into parent L1 cell
-3. Sum `total_mass`, track `max_size`, increment `creature_count`
-
-**Design for Rayon:** Structure data for parallel aggregation where possible.
-
-### Step 5: Add Perception Threshold
-**File:** `perception/components.rs`
-
-Add to Perception component:
-```rust
-pub perception_threshold: f32,  // = body_mass * 0.05
-```
-
-Initialize in `Perception::from_body_size()` based on creature mass.
-
-### Step 6: Early-Exit + Size Domination
-**File:** `perception/systems.rs`
-
-Before L0 scan, check if creature's L1 cell has visible mass:
-```rust
-let l1_cell = grid.l1.get_cell(pos.x, pos.y);
-let threshold = perception.threshold;  // body_mass * 0.05
-
-if l1_cell.total_mass < threshold {
-    // Cell is "invisible" to this creature (empty or only tiny crits)
-    neighbor_cache.clear();
-    return;
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct L1CellPerception {
+    pub cell_idx: u32,              // 4 bytes
+    pub classification: L1Classification,  // 1 byte
+    pub _pad: [u8; 3],              // 3 bytes alignment
+    pub direction: Vec2,            // 8 bytes
 }
-// Otherwise proceed with normal L0 scan
+// Total: 16 bytes per cell (cache-line friendly)
+
+#[derive(Component)]
+pub struct L1Perceptions {
+    count: u8,
+    cells: [L1CellPerception; MAX_L1_PERCEPTIONS],
+}
+// Total: ~770 bytes per creature
 ```
 
-**Two benefits:**
-1. **Perf:** Skip L0 scan when cell is empty
-2. **Emergent:** Large crits skip cells with only small crits (size domination)
+### Extensibility Path
 
-Benchmark with/without to validate perf improvement.
-
-### Step 7: Telemetry IPC
-Add L1 cell size and bounds to telemetry stream for portal.
-
-### Step 8: Portal Overlay
-**File:** `portal/src/rendering/overlays/SpatialGridOverlay.ts`
-
-G key cycles: Off → L0 grid → L1 grid → Off
-
-### Step 9: L1 Cell Query (Hover Info)
-**Files:**
-- `simulation/src/ipc/sim_command.rs` - L1CellInfo struct, QueryL1Cell command
-- `simulation/src/ipc/bridge/bevy_app.rs` - calculate_l1_cell_info(), command handler
-- `simulation/src/napi_addon/simulation_engine.rs` - query_l1_cell() NAPI method
-- `portal/electron/napi-main.cjs` - IPC handler
-- `portal/electron/preload.cjs` - queryL1Cell bridge
-- `portal/src/rendering/overlays/SpatialGridOverlay.ts` - Hover detection, info panel
-
-**What it does:**
-- Mouse hover in L1 mode triggers throttled query (100ms)
-- Backend returns: cell coords, creature count, total mass (kg), avg size (m), max size (m)
-- Portal displays info panel with cell data
-- Cell under mouse is highlighted
-
-**Key calculations:**
-- `max_size = bio.max_size * 2.0` (radius → length)
-- `avg_size = (avg_mass / DEFAULT_MASS)^(1/3)` (mass → length)
-
-**Replaced:** L1 heatmap streaming (caused FPS drops at high creature counts)
+| Future Feature | Extension Point |
+|----------------|-----------------|
+| Phase B Drives | Add `compute_l1_drive()` pure function |
+| Gregariousness | New `L1Classification::Kin` variant |
+| Species recognition | Extend BioSignature with species hash |
+| Complex AI | Upgrade to trait-based classifiers |
 
 ---
 
-## Validation
+## Biology Consultation (zoologist-tom)
 
-- [x] L1 aggregation produces correct totals (sum of L0 masses)
-- [x] Portal shows both grids (G key cycling works)
-- [x] L1 hover query shows correct cell info (creatures, mass, sizes)
-- [x] Performance: L1 aggregation < 1ms at 20K creatures
-- [x] Benchmark: Early-exit optimization improves perception latency
-- [x] Unit tests: L1CellInfo calculations (5 tests in bevy_app.rs)
-- [ ] Size domination: Large crit walks through small crits (doesn't avoid) *(Phase B)*
-- [ ] Size domination: Small crit avoids/flees from large crit *(Phase B)*
-- [x] Confirm: 9 L0 cells (30m) covers max avoidance range for 5m crits
+### Size Domination Threshold: Approved
+
+**5% threshold is biologically plausible** based on predator energy economics:
+- Lion (500kg) ignoring mouse (0.5kg) = correct behavior
+- Pursuit energy > caloric return for tiny prey
+
+**Future enhancement:** Dual-threshold for "peripheral awareness"
+```
+ignore_threshold = my_mass * 0.02   // Completely invisible
+notice_threshold = my_mass * 0.10   // Worth tracking
+```
+Creatures between 2-10% exist in peripheral zone - noticed but not tracked.
+
+### GOLDEN ZONE Opportunities
+
+Performance optimizations that give FREE emergent biological behavior:
+
+| Optimization | Performance Win | Free Biology | Entertainment | Status |
+|--------------|-----------------|--------------|---------------|--------|
+| **Size domination** | Skip tiny entities | Energy economics | High | Phase A |
+| **FOV culling** | Skip rear cells | Blind spot | Medium | Phase A |
+| **Motion detection** | Skip stationary entities | Prey freeze = camouflage | Very High | Deferred (see `docs/biology/todo/`) |
+| **Hunger gating** | Skip prey when full | Satiated predators rest | High | Deferred (see `docs/biology/todo/`) |
+| **Distance attenuation** | Sample fewer far cells | Visual acuity degrades | High | Future |
+
+### Classification Set (Phase A)
+
+| Classification | Condition | Response |
+|----------------|-----------|----------|
+| EMPTY | count=0 OR mass < threshold | Safe passage, wander target |
+| THREAT | max_size > my_size | Flee, avoid |
+| PREY | max_size < my_size * 0.3 | Hunt, approach |
+| CROWDED | Has mass, no threat/prey | Avoid (default behavior) |
+
+**Note:** DNA-driven crowding response (solitary vs social) deferred to future. See `docs/biology/todo/crowding-affinity.md`.
+
+### Research References
+
+- [Madrona Framework](https://madrona-engine.github.io/shacklett_siggraph23.pdf) - ECS for high-performance batched AI
+- [Hytale ECS](https://hytale.com/news/2024/6/summer-2024-technical-explainer-hytale-s-entity-component-system-oPwpCAMdI) - Decoupling data/logic for parallelization
+- [big-brain](https://github.com/zkat/big-brain) - Utility AI pattern: Scorers + Actions
+- [bevy_observed_utility](https://github.com/ItsDoot/bevy_observed_utility) - Scoring → Picking → Acting lifecycle
 
 ---
 
-## Decisions Made
+## Algorithm
 
-1. **L0 cell size:** Keep 10m (max crit = 5m, so 10m is fine)
-2. **L1 cell size:** 30m (3×3 L0 cells)
-3. **BioSignature:** Minimal - `total_mass` + `max_size` + `creature_count` (no herb/carni yet)
-4. **Early-exit:** Yes, test L1 emptiness check before L0 scan for perf
-5. **Rayon-ready:** Design grid structures for parallel aggregation
+```
+PERCEPTION SYSTEM (per creature)
+================================
+
+1. CALCULATE L1 CELLS TO SCAN
+   - Use perception.range to determine L1 cell radius
+   - Apply FOV culling (reuse collect_cells_sorted_fov pattern)
+   - Result: variable number of L1 cells based on creature size/FOV
+
+2. L1 SCAN (classify each L1 cell)
+   For each L1 cell in range + FOV:
+     biosig = l1_grid.get(cell)
+     if my_cell:
+       biosig.total_mass -= my_mass
+       biosig.count -= 1
+
+     CLASSIFY (pure function):
+       EMPTY:   count == 0 OR total_mass < threshold
+       THREAT:  max_size > my_size
+       PREY:    max_size < my_size * 0.3
+       CROWDED: has mass, no threat/prey
+
+     Store: L1Perceptions.push({ cell_idx, direction, classification })
+
+3. L0 SCAN (always 9 cells max, for steering)
+   For each of 9 adjacent L0 cells:
+     Check parent L1 cell classification
+     If EMPTY for me -> skip this L0 cell (size domination optimization)
+     Otherwise: scan entities with per-entity filtering
+
+     For each entity in L0 cell (pure function filter):
+       SKIP if: entity == self
+       SKIP if: distance > perception_range
+       SKIP if: entity.mass < my_threshold  <- SIZE DOMINATION
+       SKIP if: outside FOV
+       ADD to NeighborCache
+
+4. OUTPUTS
+   NeighborCache: for steering systems (fixed array)
+   L1Perceptions: for Phase B drive system (fixed array)
+```
+
+### L1 Scan Scope (Decision: Variable + FOV)
+
+L1 scan uses perception range and FOV culling (same as L0):
+- 5m creature: range ~100m -> ~4 L1 cells radius -> ~49 cells, ~25 after FOV cull
+- L1 biosignatures are cheap (12 bytes each), checking 40 is trivial
+- Consistent with existing perception architecture
+- Strategic awareness scales with perception range
+
+### Self-Pollution Solution
+
+When creature checks its own L1 cell:
+- Subtract own mass from `total_mass`
+- Decrement `count` by 1
+- Cannot adjust `max_size` (don't know second-largest)
+- Solution: Own cell always gets L0 scan (small cost, guarantees correctness)
 
 ---
 
-## Files Created/Modified
+## Testing Strategy
+
+### Pure Functions (Unit Testable Without ECS)
+
+#### classification.rs
+
+```rust
+pub fn classify_l1_cell(
+    biosig: &BioSignature,
+    my_mass: f32,
+    my_size: f32,
+    is_my_cell: bool,
+) -> L1Classification
+```
+
+**Unit tests:**
+- Empty cell -> Empty
+- Cell with only tiny crits (below threshold) -> Empty
+- Cell with giant (max_size > my_size) -> Threat
+- Cell with small crits (max_size < my_size * 0.3) -> Prey
+- Cell with many medium crits (total_mass > threshold, no threat/prey) -> Crowded
+- Own cell subtraction works correctly
+
+#### entity_filter.rs
+
+```rust
+pub fn should_perceive_entity(
+    my_threshold: f32,
+    target_mass: f32,
+    distance_sq: f32,
+    perception_range_sq: f32,
+    in_fov: bool,
+) -> bool
+```
+
+**Unit tests:**
+- Target below threshold -> false (size domination)
+- Target above threshold, in range, in FOV -> true
+- Target above threshold, out of range -> false
+- Target above threshold, out of FOV -> false
+
+### Integration Tests
+
+Test that perception system correctly:
+- Calls L1 classifier with correct biosignatures
+- Skips L0 cells when L1 says "empty"
+- Applies per-entity size filtering
+- Outputs correct NeighborCache and L1Perceptions
+
+**Test trials:** `apps/simulation/specs/behavior/l1-*.toml` (6 files)
+
+---
+
+## Validation Checklist
+
+- [x] L1 aggregation produces correct totals
+- [x] Portal shows both grids (G key cycling)
+- [x] L1 hover query shows correct cell info
+- [x] L1 aggregation < 1ms at 20K creatures
+- [ ] L1 classifier unit tests pass
+- [ ] Entity filter unit tests pass
+- [ ] Size domination: Giant ignores mouse (doesn't perceive)
+- [ ] Size domination: Mouse perceives giant
+- [ ] L0 scan skips cells marked EMPTY by L1
+- [ ] L1Perceptions populated for Phase B
+- [ ] PREY classification working (predator sees prey-rich cells)
+
+---
+
+## Files to Create/Modify
 
 | File | Change |
 |------|--------|
-| `spatial/biosignature.rs` | NEW: BioSignature struct ✓ |
-| `spatial/coarse_grid.rs` | NEW: L1 grid ✓ |
-| `spatial/hierarchical.rs` | NEW: Wrapper ✓ |
-| `spatial/systems.rs` | NEW: Aggregation system ✓ |
-| `spatial/mod.rs` | Export new modules ✓ |
-| `core/simulation.rs` | Replace grid resource ✓ |
-| `napi_addon/telemetry.rs` | Add L1 data ✓ |
-| `portal/.../SpatialGridOverlay.ts` | Grid cycling + L1 hover query ✓ |
-| `ipc/sim_command.rs` | L1CellInfo struct, QueryL1Cell command ✓ |
-| `ipc/bridge/bevy_app.rs` | calculate_l1_cell_info(), handler ✓ |
-| `napi_addon/simulation_engine.rs` | query_l1_cell() NAPI method ✓ |
-| `portal/electron/napi-main.cjs` | IPC handler ✓ |
-| `portal/electron/preload.cjs` | queryL1Cell bridge ✓ |
-| `portal/src/global.d.ts` | TypeScript types ✓ |
+| `perception/classification.rs` | NEW: L1Classification enum, classify_l1_cell() |
+| `perception/entity_filter.rs` | NEW: should_perceive_entity() |
+| `perception/components.rs` | ADD: L1Perceptions, L1CellPerception structs |
+| `perception/queries.rs` | NEW: Type aliases for perception queries |
+| `perception/systems.rs` | MODIFY: Two-stage perception algorithm |
+| `perception/mod.rs` | Export new modules |

@@ -1,62 +1,89 @@
 [meta]
-name = "L1: Giant (5m) vs Swarm of 6 Mice"
-description = "Visual test: 6 mice = 210kg < 219kg threshold. Giant should NOT see swarm (just below threshold)."
+name = "L1: Giant (5m) vs Swarm of 6 Mice - Threshold Edge"
+description = """
+L1 aggregation edge case: 6 mice just BELOW giant's threshold.
+- Giant (5m, ~4375kg) threshold = 219kg
+- 6 mice = 6 × 35kg = 210kg < 219kg threshold
+- Giant should NOT perceive swarm (just below threshold)
+- All mice SHOULD perceive giant
+
+Watch: Giant's perception line should NOT appear toward mice.
+Watch: All mice perception lines SHOULD appear toward giant.
+"""
 timeout_seconds = 30
 
-# Giant wanderer at origin
+[[assertions]]
+type = "ticks_completed"
+count = 300
+
+# Giant seeking toward swarm
 [[spawns]]
 type = "single"
 tag = "giant"
-x = 0.0
+x = -50.0
 y = 0.0
-creature_type = "wanderer"
+creature_type = "seeker"
+target_x = 100.0
+target_y = 0.0
 body_size = 5.0
 
-# 6 mice clustered (total mass = 6 x 35kg = 210kg < 219kg threshold)
+# 6 mice clustered, seeking away from giant
 [[spawns]]
 type = "single"
 tag = "mouse1"
-x = 60.0
+x = 50.0
 y = -3.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = -3.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse2"
-x = 62.0
+x = 52.0
 y = 0.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 0.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse3"
-x = 60.0
+x = 50.0
 y = 3.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 3.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse4"
-x = 64.0
+x = 54.0
 y = -3.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = -3.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse5"
-x = 66.0
+x = 56.0
 y = 0.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 0.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse6"
-x = 64.0
+x = 54.0
 y = 3.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 3.0
 body_size = 1.0

@@ -1,30 +1,47 @@
 [meta]
-name = "L1: Medium (3m) vs Two Mice (1m each)"
-description = "Visual test: 3m crit (945kg, threshold=47kg) vs 2 mice (70kg total). Two mice SHOULD exceed threshold - verify perception."
+name = "L1: Medium (3m) vs Two Mice (1m each) - L1 Aggregation"
+description = """
+L1 aggregation test: Medium seeks toward clustered mice.
+- Medium (3m, ~945kg) threshold = 47kg
+- Single mouse (35kg) < threshold, BUT two mice (70kg) > threshold
+- Medium SHOULD perceive the cluster (L1 aggregates mass)
+
+Watch: Medium's perception line should appear toward the mice cluster.
+"""
 timeout_seconds = 30
 
-# 3m wanderer at origin
+[[assertions]]
+type = "ticks_completed"
+count = 300
+
+# Medium (3m) seeking toward mice cluster
 [[spawns]]
 type = "single"
 tag = "medium"
-x = 0.0
+x = -50.0
 y = 0.0
-creature_type = "wanderer"
+creature_type = "seeker"
+target_x = 100.0
+target_y = 0.0
 body_size = 3.0
 
-# Two 1m mice clustered 60m away (70kg total > 47kg threshold)
+# Two 1m mice clustered, seeking away from medium
 [[spawns]]
 type = "single"
 tag = "mouse1"
-x = 60.0
+x = 50.0
 y = -2.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = -2.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse2"
-x = 60.0
+x = 50.0
 y = 2.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 2.0
 body_size = 1.0

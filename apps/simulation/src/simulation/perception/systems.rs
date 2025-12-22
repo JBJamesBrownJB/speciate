@@ -1,19 +1,24 @@
+use super::classification::{classify_l1_cell, L1Classification};
 use super::components::*;
 #[cfg(feature = "dev-tools")]
 use super::debug::*;
+use super::entity_filter::should_perceive_entity;
 use crate::simulation::core::components::{BodySize, PhysicsTick, Position, Rotation};
 use crate::simulation::creatures::components::CreatureState;
 use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
-use crate::simulation::spatial::HierarchicalGrid;
+use crate::simulation::spatial::constants::CELL_SIZE;
+use crate::simulation::spatial::{BioSignature, HierarchicalGrid};
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 use std::cell::RefCell;
 
-const MAX_OTHER_RADIUS: f32 = 5.0;
+/// L0 scan radius: Always query 9 adjacent cells only (~14m coverage with 10m cells).
+/// This is FIXED regardless of creature's perception range - L1 provides long-range awareness.
+const L0_SCAN_RADIUS: f32 = CELL_SIZE * 1.5;  // 15m covers 3×3 cells
 
 // Thread-local scratch buffer for sorted cell indices (avoids allocation per creature)
 thread_local! {
@@ -69,23 +74,21 @@ pub fn update_perception_system(
 
         let x = pos.x;
         let y = pos.y;
-
-        // L1 Early-Exit Optimization (Phase A):
-        // Check if the creature's L1 cell has enough mass to be worth scanning.
-        // Large creatures (high threshold) skip cells with only small creatures.
-        // This provides O(1) early-exit for sparse areas and size domination.
-        let l1_sig = l1_grid_ref.get_biosignature_at(x, y);
-        if l1_sig.total_mass < perception.threshold {
-            return; // Nothing worth perceiving in this area
-        }
         let self_radius = size.radius();
+        // NOTE: L1 early-exit now happens PER L0 CELL inside the loop (lines 181-192)
+        // This correctly handles creatures near L1 cell boundaries where adjacent
+        // L0 cells may belong to different L1 cells with different classifications.
         let range = perception.range;
+        let range_sq = range * range;
+        let threshold = perception.threshold;
         let cos_half_fov_sq = perception.cos_half_fov_sq;
         let cos_half_fov = perception.cos_half_fov;
         // Use cached cos/sin from rotation (avoids 400K trig calls per tick)
         let facing_x = rot.cos_radians;
         let facing_y = rot.sin_radians;
-        let query_radius = range + self_radius + MAX_OTHER_RADIUS;
+        // L0 scan: ALWAYS 9 adjacent cells only (fixed radius, not perception range)
+        // L1 provides long-range awareness via L1Perceptions component
+        let query_radius = L0_SCAN_RADIUS;
 
         // Topological neighbor selection with smart early-exit:
         // 1. Always scan adjacent cells, tracking max distance seen
@@ -101,6 +104,11 @@ pub fn update_perception_system(
                 candidates.clear();
 
                 grid_ref.collect_cells_sorted_fov(x, y, query_radius, facing_x, facing_y, cos_half_fov, &mut cells);
+
+                // Pre-compute for L1 classification (size domination optimization)
+                let my_mass = BioSignature::mass_from_radius(self_radius);
+                let my_l1_cell_idx = l1_grid_ref.position_to_cell_index(x, y);
+                let l0_width = grid_ref.width();
 
                 // Pre-compute base distance for faster range checks
                 let base_dist = range + self_radius;
@@ -162,6 +170,19 @@ pub fn update_perception_system(
                         debug_queried.push((cx, cy));
                     }
 
+                    // L1 CLASSIFICATION CHECK (size domination optimization):
+                    // Check if this L0 cell's parent L1 cell has any creatures worth perceiving.
+                    // If Empty, skip the entire L0 cell scan - no entities above our threshold.
+                    let parent_l1_idx = l1_grid_ref.l0_to_l1_cell_index(cell_idx, l0_width);
+                    let l1_biosig = l1_grid_ref.get_biosignature(parent_l1_idx);
+                    let is_my_l1_cell = my_l1_cell_idx == parent_l1_idx;
+                    let classification = classify_l1_cell(l1_biosig, my_mass, self_radius, is_my_l1_cell);
+
+                    if classification == L1Classification::Empty {
+                        // Skip this L0 cell - nothing above our perception threshold
+                        continue;
+                    }
+
                     // Process entities in this cell
                     for proxy in grid_ref.get_cell_proxies(cell_idx) {
                         if *entity == proxy.entity {
@@ -193,6 +214,14 @@ pub fn update_perception_system(
                         };
 
                         if in_fov {
+                            // SIZE DOMINATION FILTER (Phase A):
+                            // Large creatures ignore small entities below their perception threshold.
+                            // This creates asymmetric perception: mice see giants, giants ignore mice.
+                            let target_mass = BioSignature::mass_from_radius(proxy.radius);
+                            if !should_perceive_entity(threshold, target_mass, center_dist_sq, range_sq, in_fov) {
+                                continue; // Target too small for this perceiver
+                            }
+
                             candidates.push((center_dist_sq, NeighborData {
                                 entity: proxy.entity,
                                 x: proxy.x,
@@ -248,7 +277,8 @@ pub fn update_perception_system(
                 .find(|(e, _, _, _, _, _, _)| *e == target_entity)
             {
                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
-                let query_radius = perception.range + size.radius() + MAX_OTHER_RADIUS;
+                // L0 scan uses fixed radius (9 adjacent cells), not perception range
+                let query_radius = L0_SCAN_RADIUS;
 
                 // NOTE: Acceleration is captured LATER by capture_debug_acceleration_system
                 // (runs after behaviors). Set 0.0 here as placeholder - will be overwritten.
@@ -710,193 +740,10 @@ mod tests {
         );
     }
 
-    /// Regression test: In crowds, perception must select CLOSEST neighbors,
-    /// not just first-found from adjacent cells. The early-exit optimization
-    /// was skipping non-adjacent cells that contained closer neighbors.
-    ///
-    /// NOTE: collect_cells_sorted only sorts when > 9 cells, so we need a large
-    /// query radius to ensure enough cells are collected and sorted properly.
-    #[test]
-    fn test_crowd_selects_closest_not_first_found() {
-        use crate::simulation::spatial::SpatialGrid;
-        use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
-
-        // Create grid with SMALL cell size to ensure many cells
-        let mut grid = SpatialGrid::new(20.0);
-
-        // Test setup: creature at (19, 10) facing +X in cell (0, 0)
-        let self_entity = Entity::from_raw(0);
-        let x = 19.0;
-        let y = 10.0;
-        let self_radius = 1.0;
-        let range = 500.0;
-        let cos_half_fov_sq = 0.0; // Full 180° FOV
-        let cos_half_fov = 0.0;    // cos(90°) = 0 for 180° FOV
-        let facing_x = 1.0;
-        let facing_y = 0.0;
-
-        let mut entities: Vec<(Entity, f32, f32, f32)> = Vec::new();
-        let mut entity_id = 1u32;
-
-        // To trigger the bug, we need:
-        // 1. > 9 cells with entities (to trigger sorting)
-        // 2. >= MAX_PERCEIVED_NEIGHBORS candidates from adjacent cells AFTER sorting
-        // 3. A closer entity in a non-adjacent cell that gets skipped
-        //
-        // Key insight: entities BEHIND the creature (dx < 0) are FOV filtered!
-        // So we need entities in FRONT (dx >= 0) in adjacent cells.
-
-        // With cell_size = 20, creature at (19, 10) in cell (0, 0):
-        // Adjacent cells WITH positive dx:
-        // - Cell (1, -1): 20..40 x -20..0 - ALL entities have dx > 0 ✓
-        // - Cell (1, 0): 20..40 x 0..20 - ALL entities have dx > 0 ✓
-        // - Cell (1, 1): 20..40 x 20..40 - ALL entities have dx > 0 ✓
-        // - Cell (0, -1): 0..20 x -20..0 - entities at x > 19 have dx > 0
-        // - Cell (0, 0): 0..20 x 0..20 - entities at x > 19 have dx > 0
-        // - Cell (0, 1): 0..20 x 20..40 - entities at x > 19 have dx > 0
-
-        // Put MAX+1 entities in adjacent cells that pass FOV (all at x > 19)
-        // Cell (1, 0) - 3 entities at far distances
-        entities.push((Entity::from_raw(entity_id), 38.0, 5.0, 1.0)); entity_id += 1;  // dist 19.6
-        entities.push((Entity::from_raw(entity_id), 38.0, 10.0, 1.0)); entity_id += 1; // dist 19.0
-        entities.push((Entity::from_raw(entity_id), 38.0, 15.0, 1.0)); entity_id += 1; // dist 19.6
-
-        // Cell (1, 1) - 3 entities at far distances
-        entities.push((Entity::from_raw(entity_id), 35.0, 35.0, 1.0)); entity_id += 1; // dist 29.7
-        entities.push((Entity::from_raw(entity_id), 38.0, 35.0, 1.0)); entity_id += 1; // dist 31.4
-        entities.push((Entity::from_raw(entity_id), 38.0, 38.0, 1.0)); entity_id += 1; // dist 33.3
-
-        // Cell (1, -1) - 3 entities (negative y but in front)
-        entities.push((Entity::from_raw(entity_id), 35.0, -5.0, 1.0)); entity_id += 1;  // dist 21.9
-        entities.push((Entity::from_raw(entity_id), 35.0, -10.0, 1.0)); entity_id += 1; // dist 25.6
-        entities.push((Entity::from_raw(entity_id), 35.0, -15.0, 1.0)); entity_id += 1; // dist 29.7
-
-        // Now we have 9 entities in 3 adjacent cells, all passing FOV.
-        // That's > MAX_PERCEIVED_NEIGHBORS (7).
-
-        // Add entities to non-adjacent cells to get > 9 total cells
-        // Cell (2, 0): 40..60 x 0..20
-        entities.push((Entity::from_raw(entity_id), 55.0, 10.0, 1.0)); entity_id += 1; // dist 36
-        // Cell (2, 1): 40..60 x 20..40
-        entities.push((Entity::from_raw(entity_id), 55.0, 35.0, 1.0)); entity_id += 1; // dist ~45
-        // Cell (2, -1): 40..60 x -20..0
-        entities.push((Entity::from_raw(entity_id), 55.0, -10.0, 1.0)); entity_id += 1; // dist 40
-        // Cell (3, 0): 60..80 x 0..20
-        entities.push((Entity::from_raw(entity_id), 75.0, 10.0, 1.0)); entity_id += 1; // dist 56
-        // Cell (3, 1): 60..80 x 20..40
-        entities.push((Entity::from_raw(entity_id), 75.0, 35.0, 1.0)); entity_id += 1; // dist ~63
-        // Cell (3, -1): 60..80 x -20..0
-        entities.push((Entity::from_raw(entity_id), 75.0, -10.0, 1.0)); entity_id += 1; // dist 60
-        // Cell (4, 0): 80..100 x 0..20
-        entities.push((Entity::from_raw(entity_id), 95.0, 10.0, 1.0)); // dist 76
-
-        // Now we have 16 entities in 10 cells:
-        // 3 adjacent cells with 9 entities (all pass FOV)
-        // 7 non-adjacent cells with 7 entities
-        // Total: 10 cells, triggers sorting
-
-        // Now place entity 100 in a NON-ADJACENT cell at a distance that's CLOSER
-        // than some adjacent entities but will be SKIPPED due to early exit!
-        //
-        // Adjacent entities have distances: 19.0, 19.6, 19.6, 21.9, 25.6, 29.7, 29.7, 31.4, 33.3
-        // If we place entity 100 at distance 25.0, it should be in top 7.
-        // But since it's in a non-adjacent cell, it will be skipped.
-        //
-        // Cell (2, 0): x=40..60, y=0..20
-        // Entity at (44, 10): distance = 44 - 19 = 25.0 - CLOSER than entities at 25.6, 29.7, etc.
-
-        entities.push((
-            Entity::from_raw(100),
-            44.0, // x: in cell (2, 0)
-            10.0, // y: same as creature
-            1.0,
-        ));
-        // Distance 25.0 - SHOULD be in top 7, but will be skipped by early exit!
-
-        grid.rebuild(entities.into_iter());
-
-        let mut candidates: Vec<(f32, NeighborData)> = Vec::new();
-
-        CELL_SCRATCH.with(|scratch| {
-            NEIGHBOR_CANDIDATES.with(|candidates_cell| {
-                let mut cells = scratch.borrow_mut();
-                let mut local_candidates = candidates_cell.borrow_mut();
-                local_candidates.clear();
-
-                let query_radius = range + self_radius + MAX_OTHER_RADIUS;
-                grid.collect_cells_sorted(x, y, query_radius, facing_x, facing_y, &mut cells);
-
-                // THIS IS THE CODE UNDER TEST - matches the fixed production code
-                // No early exit - collect ALL candidates, then partial sort
-                for &(_sort_key, cell_idx) in cells.iter() {
-                    for proxy in grid.get_cell_proxies(cell_idx) {
-                        if self_entity == proxy.entity {
-                            continue;
-                        }
-
-                        let dx = proxy.x - x;
-                        let dy = proxy.y - y;
-                        let center_dist_sq = dx * dx + dy * dy;
-
-                        let max_dist = range + self_radius + proxy.radius;
-                        if center_dist_sq > max_dist * max_dist {
-                            continue;
-                        }
-
-                        let rough_dot = dx * facing_x + dy * facing_y;
-
-                        // FOV check: matches production code
-                        let in_fov = if cos_half_fov >= 0.0 {
-                            rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
-                        } else {
-                            let dist = center_dist_sq.sqrt();
-                            rough_dot >= cos_half_fov * dist
-                        };
-
-                        if in_fov {
-                            local_candidates.push((center_dist_sq, NeighborData {
-                                entity: proxy.entity,
-                                x: proxy.x,
-                                y: proxy.y,
-                                radius: proxy.radius,
-                            }));
-                        }
-                    }
-                }
-
-                // Partial sort to get K closest
-                let k = MAX_PERCEIVED_NEIGHBORS.min(local_candidates.len());
-                if k > 0 && local_candidates.len() > k {
-                    local_candidates.select_nth_unstable_by(k - 1, |a, b| {
-                        a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
-                    });
-                }
-
-                for (dist_sq, neighbor) in local_candidates.iter().take(k) {
-                    candidates.push((*dist_sq, *neighbor));
-                }
-            });
-        });
-
-        candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Entity 100 at distance 25.0 should be in top 7:
-        // Sorted adjacent: 19.0, 19.6, 19.6, 21.9, 25.6, 29.7, 29.7, 31.4, 33.3
-        // Entity 100 at 25.0 is closer than entities at 25.6, 29.7, etc.
-        // So it SHOULD be in the final 7 neighbors.
-        //
-        // But with the bug, the early exit triggers after processing adjacent cells
-        // (which have 9 entities >= MAX), skipping non-adjacent cells including entity 100.
-
-        let entity_100_found = candidates.iter().any(|(_, n)| n.entity == Entity::from_raw(100));
-
-        // This assertion will FAIL with the current buggy code
-        assert!(
-            entity_100_found,
-            "Entity 100 in non-adjacent cell (distance 25.0) should be in top 7 neighbors because it's closer than adjacent entities at 25.6, 29.7, etc. Found entities: {:?}",
-            candidates.iter().map(|(d, n)| (n.entity, d.sqrt())).collect::<Vec<_>>()
-        );
-    }
+    // NOTE: test_crowd_selects_closest_not_first_found was REMOVED.
+    // That test verified scanning non-adjacent cells, which is now INTENTIONALLY
+    // limited to 9 adjacent cells only (L0_SCAN_RADIUS). Long-range awareness
+    // is handled by L1Perceptions (Phase B).
 
     #[test]
     fn test_topological_selects_closest_neighbors_across_cells() {
@@ -1605,6 +1452,319 @@ mod tests {
             (magnitude - 1.0).abs() < 0.01,
             "Rotation should be normalized: magnitude = {}",
             magnitude
+        );
+    }
+
+    // ============================================================
+    // L0/L1 ARCHITECTURE BUG TESTS
+    // These tests document the bugs that need to be fixed.
+    // ============================================================
+
+    /// BUG TEST: Giant should NOT query L0 cells beyond 9 adjacent.
+    /// Currently FAILS because query_radius uses perception range (119m for giant).
+    ///
+    /// The L0 scan should ALWAYS be limited to the 9 adjacent cells (~14m radius),
+    /// regardless of perception range. L1 is used for long-range awareness and
+    /// to skip L0 cells that are Empty.
+    #[cfg(feature = "dev-tools")]
+    #[test]
+    fn test_bug_l0_scan_queries_too_many_cells() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::components::CritId;
+        use crate::simulation::spatial::constants::CELL_SIZE;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        // Giant at center with huge perception range
+        // 5m body size → perception range ~112m → query_radius ~119m (BUG!)
+        // Should only query 9 adjacent cells (~14m radius)
+        let giant_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(100.0, 100.0)
+                .with_size(5.0)
+                .facing(0.0)
+                .with_max_speed(0.0)
+                .with_all_capabilities(),
+        );
+
+        // Add OTHER creatures so the giant has something to perceive (fills L1 cells)
+        // Scatter them across the world so multiple L0/L1 cells have content
+        for i in 0..20 {
+            let angle = (i as f32) * std::f32::consts::TAU / 20.0;
+            let distance = 30.0 + (i as f32) * 5.0;  // 30m to 125m away
+            sim.spawn_crit(
+                CritBuilder::new()
+                    .at(100.0 + angle.cos() * distance, 100.0 + angle.sin() * distance)
+                    .with_size(3.0)  // 3m creatures (above giant's threshold)
+                    .with_max_speed(0.0)
+                    .with_all_capabilities(),
+            );
+        }
+
+        // Find the giant entity
+        let world = sim.world_mut();
+        let giant_entity = world
+            .query::<(Entity, &CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == giant_id)
+            .map(|(e, _)| e)
+            .expect("Giant should exist");
+
+        // Set debug target to capture queried cells
+        {
+            let mut target = world.get_resource_mut::<PerceptionDebugTarget>().unwrap();
+            target.0 = Some(giant_entity);
+        }
+
+        // Run perception
+        sim.update(0.016);
+
+        // Get the debug snapshot
+        let world = sim.world();
+        let snapshot = world.get_resource::<PerceptionDebugSnapshot>().unwrap();
+
+        // With 10m cells, 9 adjacent cells cover ~14m radius.
+        // query_radius should be ~CELL_SIZE * 1.5 = 15m, giving us 9 cells.
+        let max_expected_cells = 9;
+        let actual_cells = snapshot.queried_cells.len();
+
+        // CRITICAL: The query_radius is the bug indicator!
+        // Even if cells happen to be <= 9 due to FOV culling, the query_radius
+        // should be ~15m, not ~119m.
+        let expected_query_radius = CELL_SIZE * 1.5;  // ~15m for 9 adjacent cells
+        assert!(
+            snapshot.query_radius <= expected_query_radius + 5.0,  // Allow some margin
+            "BUG: query_radius should be ~{}m (for 9 adjacent cells), not {}m (perception range + body + MAX_OTHER). \
+             Current implementation uses perception range for L0 scan instead of fixed 9 cells.",
+            expected_query_radius,
+            snapshot.query_radius
+        );
+
+        // Secondary check: cells queried should be <= 9
+        assert!(
+            actual_cells <= max_expected_cells,
+            "BUG: L0 scan should query at most {} cells (9 adjacent), but queried {}",
+            max_expected_cells,
+            actual_cells
+        );
+    }
+
+    /// BUG TEST: L1 early-exit only checks creature's own L1 cell.
+    /// Should check EACH L0 cell's parent L1 before scanning entities.
+    ///
+    /// NOTE: This bug is hard to observe directly because entity-level filtering
+    /// (should_perceive_entity) catches the mouse anyway. But the L1 optimization
+    /// should skip the entire L0 cell scan, not just filter entities after scanning.
+    #[test]
+    fn test_l1_classification_used_for_early_exit() {
+        // This test verifies that classify_l1_cell correctly handles self-subtraction
+        // (which it does - see classification.rs tests). The fix is to USE this
+        // function per-L0-cell in the perception loop.
+        use crate::simulation::spatial::BioSignature;
+        use crate::simulation::perception::classify_l1_cell;
+        use crate::simulation::perception::L1Classification;
+
+        // Giant alone in its L1 cell
+        let mut biosig = BioSignature::default();
+        biosig.add(4375.0, 5.0);  // Giant: mass ~4375kg, size 5m
+
+        // When checking own cell, should subtract self → Empty
+        let result = classify_l1_cell(&biosig, 4375.0, 5.0, true);
+        assert_eq!(
+            result,
+            L1Classification::Empty,
+            "Giant's own cell should be Empty after self-subtraction"
+        );
+
+        // When checking another cell with just a mouse, should be Empty for giant
+        let mut mouse_cell = BioSignature::default();
+        mouse_cell.add(35.0, 1.0);  // Mouse: mass ~35kg, size 1m
+
+        let result = classify_l1_cell(&mouse_cell, 4375.0, 5.0, false);
+        assert_eq!(
+            result,
+            L1Classification::Empty,
+            "Cell with only mouse should be Empty for giant (35kg < 218kg threshold)"
+        );
+    }
+
+    // ============================================================
+    // SIZE DOMINATION INTEGRATION TESTS (Phase A)
+    // ============================================================
+
+    /// Test that a giant (5m) does NOT perceive a mouse (1m) due to size domination.
+    /// The giant's threshold (5% of 4375kg = 218.75kg) exceeds the mouse's mass (35kg).
+    #[test]
+    fn test_size_domination_giant_ignores_mouse() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::components::CritId;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        // Giant at origin facing +X (toward mouse) - stationary for deterministic test
+        let giant_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(0.0, 0.0)
+                .with_size(5.0)
+                .facing(0.0)  // Facing +X direction
+                .with_max_speed(0.0)  // Don't move during test
+                .with_all_capabilities(),
+        );
+
+        // Mouse 50m away in +X direction (within giant's FOV) - stationary for deterministic test
+        let _mouse_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(50.0, 0.0)
+                .with_size(1.0)
+                .with_max_speed(0.0)  // Don't move during test
+                .with_all_capabilities(),
+        );
+
+        // Run simulation to trigger perception
+        for _ in 0..5 {
+            sim.update(0.016);
+        }
+
+        // Find giant entity and check its perception
+        let world = sim.world_mut();
+        let giant_entity = world
+            .query::<(Entity, &CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == giant_id)
+            .map(|(e, _)| e)
+            .expect("Giant should exist");
+
+        let giant_cache = world.get::<NeighborCache>(giant_entity).expect("Should have NeighborCache");
+
+        // Giant should NOT perceive mouse (size domination)
+        assert_eq!(
+            giant_cache.neighbor_count(), 0,
+            "Giant should NOT perceive mouse due to size domination (mouse mass {} < threshold {})",
+            35.0, 218.75
+        );
+    }
+
+    /// Test that a mouse (1m) DOES perceive a giant (5m) - the giant is a threat.
+    #[test]
+    fn test_size_domination_mouse_perceives_giant() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::components::CritId;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        // Giant at origin - stationary target
+        sim.spawn_crit(
+            CritBuilder::new()
+                .at(0.0, 0.0)
+                .with_size(5.0)
+                .with_max_speed(0.0)  // Don't move during test
+                .with_all_capabilities(),
+        );
+
+        // Mouse 8m away facing the giant (within range and FOV)
+        let mouse_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(8.0, 0.0)
+                .with_size(1.0)
+                .facing(std::f32::consts::PI)  // Facing -X (toward giant)
+                .with_max_speed(0.0)  // Don't move during test
+                .with_all_capabilities(),
+        );
+
+        // Run simulation
+        for _ in 0..5 {
+            sim.update(0.016);
+        }
+
+        let world = sim.world_mut();
+        let mouse_entity = world
+            .query::<(Entity, &CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == mouse_id)
+            .map(|(e, _)| e)
+            .expect("Mouse should exist");
+
+        let mouse_cache = world.get::<NeighborCache>(mouse_entity).expect("Should have NeighborCache");
+
+        // Mouse SHOULD perceive giant (above threshold)
+        assert!(
+            mouse_cache.neighbor_count() > 0,
+            "Mouse SHOULD perceive giant - giant mass (~4375kg) >> mouse threshold (~1.75kg)"
+        );
+    }
+
+    /// Test asymmetric perception: predator ignores tiny prey, but prey perceives predator.
+    #[test]
+    fn test_size_domination_asymmetric_perception() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::components::CritId;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        // Predator at origin facing +X (toward prey)
+        // Use max_speed=0 so creatures don't move during test but are still "active" for perception
+        let predator_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(0.0, 0.0)
+                .with_size(3.0)  // Mass ~945kg, threshold ~47.25kg
+                .facing(0.0)    // Facing +X
+                .with_max_speed(0.0)
+                .with_all_capabilities(),
+        );
+
+        // Prey 4m away facing -X (toward predator)
+        // Prey range = 5m, distance = 4m (tight margin, so no movement allowed)
+        let prey_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(4.0, 0.0)
+                .with_size(0.5)  // Mass ~4.375kg, below predator's threshold
+                .facing(std::f32::consts::PI)  // Facing -X (toward predator)
+                .with_max_speed(0.0)
+                .with_all_capabilities(),
+        );
+
+        for _ in 0..5 {
+            sim.update(0.016);
+        }
+
+        let world = sim.world_mut();
+
+        // Find both entities
+        let predator_entity = world
+            .query::<(Entity, &CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == predator_id)
+            .map(|(e, _)| e)
+            .expect("Predator should exist");
+
+        let prey_entity = world
+            .query::<(Entity, &CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == prey_id)
+            .map(|(e, _)| e)
+            .expect("Prey should exist");
+
+        let predator_cache = world.get::<NeighborCache>(predator_entity).unwrap();
+        let prey_cache = world.get::<NeighborCache>(prey_entity).unwrap();
+
+        // Predator should NOT see prey (prey mass 4.375kg < threshold 47.25kg)
+        assert_eq!(
+            predator_cache.neighbor_count(), 0,
+            "Predator should ignore tiny prey (size domination)"
+        );
+
+        // Prey SHOULD see predator (predator mass 945kg >> prey threshold 0.22kg)
+        assert!(
+            prey_cache.neighbor_count() > 0,
+            "Prey should perceive predator as threat"
         );
     }
 }

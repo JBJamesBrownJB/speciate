@@ -1,22 +1,37 @@
 [meta]
-name = "L1: Giant (5m) vs Single Mouse (1m)"
-description = "Visual test: 5m giant should ignore 1m mouse (35kg < 219kg threshold). Watch if giant perception line appears toward mouse."
+name = "L1: Giant (5m) vs Single Mouse (1m) - Opposing Seekers"
+description = """
+Size domination test: Giant and mouse seek PAST each other.
+- Giant (5m, ~4375kg) should NOT perceive mouse (threshold 219kg > mouse 35kg)
+- Mouse (1m, ~35kg) SHOULD perceive giant (threshold 1.75kg < giant 4375kg)
+
+Watch: Giant's perception line should NOT appear toward mouse as they pass.
+Watch: Mouse's perception line SHOULD appear toward giant.
+"""
 timeout_seconds = 30
 
-# Giant wanderer at origin
+[[assertions]]
+type = "ticks_completed"
+count = 300
+
+# Giant seeking from left to right (target beyond mouse)
 [[spawns]]
 type = "single"
 tag = "giant"
-x = 0.0
+x = -50.0
 y = 0.0
-creature_type = "wanderer"
+creature_type = "seeker"
+target_x = 100.0
+target_y = 0.0
 body_size = 5.0
 
-# Single mouse 60m away (different L1 cell)
+# Mouse seeking from right to left (target beyond giant)
 [[spawns]]
 type = "single"
 tag = "mouse"
-x = 60.0
+x = 50.0
 y = 0.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 0.0
 body_size = 1.0

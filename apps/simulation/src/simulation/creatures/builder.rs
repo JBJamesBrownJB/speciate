@@ -7,7 +7,7 @@ use crate::simulation::creatures::constants::{
     ANGLE_CHANGE, MAX_SPEED, WANDER_DISTANCE, WANDER_RADIUS,
 };
 use crate::simulation::creatures::dna::Dna;
-use crate::simulation::perception::{AvoidanceBehavior, NeighborCache, Perception};
+use crate::simulation::perception::{AvoidanceBehavior, L1Perceptions, NeighborCache, Perception};
 use bevy_ecs::prelude::*;
 use rand::Rng;
 
@@ -30,6 +30,7 @@ pub struct CritBundle {
     pub can_avoid_obstacles: CanAvoidObstacles,
     pub perception: Perception,
     pub neighbor_cache: NeighborCache,
+    pub l1_perceptions: L1Perceptions,
     pub avoidance_behavior: AvoidanceBehavior,
     pub target: Target,
 }
@@ -47,6 +48,7 @@ pub struct CritBuilder {
     dna: Dna,
     size_override: Option<f32>,
     fov_override: Option<f32>,
+    facing_override: Option<f32>,
     tag: Option<String>,
 }
 
@@ -70,6 +72,7 @@ impl CritBuilder {
             dna: Dna::default(),
             size_override: None,
             fov_override: None,
+            facing_override: None,
             tag: None,
         }
     }
@@ -81,6 +84,30 @@ impl CritBuilder {
 
     pub fn with_velocity(mut self, vx: f32, vy: f32) -> Self {
         self.velocity = (vx, vy);
+        self
+    }
+
+    /// Set the creature's facing direction by angle in radians.
+    /// 0 = facing +X, PI/2 = facing +Y, PI = facing -X, etc.
+    pub fn facing(mut self, angle_radians: f32) -> Self {
+        self.facing_override = Some(angle_radians);
+        self
+    }
+
+    /// Set the creature's facing direction by direction vector.
+    /// The vector will be normalized internally.
+    pub fn facing_direction(mut self, dx: f32, dy: f32) -> Self {
+        let angle = dy.atan2(dx);
+        self.facing_override = Some(angle);
+        self
+    }
+
+    /// Face towards a specific point from current position.
+    pub fn facing_point(mut self, target_x: f32, target_y: f32) -> Self {
+        let dx = target_x - self.position.0;
+        let dy = target_y - self.position.1;
+        let angle = dy.atan2(dx);
+        self.facing_override = Some(angle);
         self
     }
 
@@ -215,7 +242,9 @@ impl CritBuilder {
             },
             acceleration: Acceleration { ax: 0.0, ay: 0.0 },
             body_size: BodySize::new(size),
-            rotation: Rotation::new(rng.gen_range(0.0..std::f32::consts::TAU)),
+            rotation: Rotation::new(
+                self.facing_override.unwrap_or_else(|| rng.gen_range(0.0..std::f32::consts::TAU))
+            ),
             creature_state: CreatureState {
                 behavior: self.behavior,
                 energy: self.energy,
@@ -236,6 +265,7 @@ impl CritBuilder {
             can_avoid_obstacles: CanAvoidObstacles,
             perception: Perception::from_body_size_with_fov(size, fov_degrees),
             neighbor_cache: NeighborCache::new(),
+            l1_perceptions: L1Perceptions::new(),
             avoidance_behavior: AvoidanceBehavior::from_body_size(size),
             target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
         }

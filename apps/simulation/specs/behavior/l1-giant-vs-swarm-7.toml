@@ -1,70 +1,100 @@
 [meta]
-name = "L1: Giant (5m) vs Swarm of 7 Mice"
-description = "Visual test: 7 mice = 245kg > 219kg threshold. Giant SHOULD see and avoid swarm. Press G to show L1 grid."
+name = "L1: Giant (5m) vs Swarm of 7 Mice - Above Threshold"
+description = """
+L1 aggregation: 7 mice just ABOVE giant's threshold.
+- Giant (5m, ~4375kg) threshold = 219kg
+- 7 mice = 7 × 35kg = 245kg > 219kg threshold
+- Giant SHOULD perceive swarm (above threshold)
+- All mice SHOULD perceive giant
+
+Watch: Giant's perception line SHOULD appear toward mice swarm.
+Watch: All mice perception lines SHOULD appear toward giant.
+Press G to show L1 grid.
+"""
 timeout_seconds = 30
 
-# Giant wanderer at origin, facing right
+[[assertions]]
+type = "ticks_completed"
+count = 300
+
+# Giant seeking toward swarm
 [[spawns]]
 type = "single"
 tag = "giant"
-x = 0.0
+x = -50.0
 y = 0.0
-creature_type = "wanderer"
+creature_type = "seeker"
+target_x = 100.0
+target_y = 0.0
 body_size = 5.0
 
-# 7 mice clustered in a single L1 cell (total mass = 7 x 35kg = 245kg > 219kg threshold)
+# 7 mice clustered, seeking away from giant
 [[spawns]]
 type = "single"
 tag = "mouse1"
-x = 60.0
+x = 50.0
 y = -3.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = -3.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse2"
-x = 62.0
+x = 52.0
 y = 0.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 0.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse3"
-x = 60.0
+x = 50.0
 y = 3.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 3.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse4"
-x = 64.0
+x = 54.0
 y = -3.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = -3.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse5"
-x = 66.0
+x = 56.0
 y = 0.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 0.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse6"
-x = 64.0
+x = 54.0
 y = 3.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 3.0
 body_size = 1.0
 
 [[spawns]]
 type = "single"
 tag = "mouse7"
-x = 68.0
+x = 58.0
 y = 0.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 0.0
 body_size = 1.0

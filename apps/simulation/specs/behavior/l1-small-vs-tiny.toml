@@ -1,22 +1,36 @@
 [meta]
-name = "L1: Small (2m) vs Tiny (1m)"
-description = "Visual test: 2m crit (280kg, threshold=14kg) vs 1m crit (35kg). Mouse exceeds threshold - verify perception."
+name = "L1: Small (2m) vs Tiny (1m) - Opposing Seekers"
+description = """
+Size domination test: Small and tiny creatures seek PAST each other.
+- Small (2m, ~280kg) threshold = 14kg, tiny (35kg) EXCEEDS threshold
+- Both should perceive each other (35kg > 14kg and 280kg > 1.75kg)
+
+Watch: Both perception lines should appear as they approach and pass.
+"""
 timeout_seconds = 30
 
-# 2m wanderer at origin
+[[assertions]]
+type = "ticks_completed"
+count = 300
+
+# Small (2m) seeking from left to right
 [[spawns]]
 type = "single"
 tag = "small"
-x = 0.0
+x = -50.0
 y = 0.0
-creature_type = "wanderer"
+creature_type = "seeker"
+target_x = 100.0
+target_y = 0.0
 body_size = 2.0
 
-# 1m crit 60m away (35kg > 14kg threshold)
+# Tiny (1m) seeking from right to left
 [[spawns]]
 type = "single"
 tag = "tiny"
-x = 60.0
+x = 50.0
 y = 0.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 0.0
 body_size = 1.0

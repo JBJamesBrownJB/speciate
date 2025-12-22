@@ -7,6 +7,7 @@ use crate::simulation::creatures::constants::{
     PERCEPTION_MULTIPLIER, PERCEPTION_THRESHOLD_FRACTION, PERSONAL_SPACE_MULTIPLIER,
     SIZE_ALLOMETRY_EXPONENT, SIZE_ALLOMETRY_REFERENCE,
 };
+use super::classification::{L1Classification, MAX_L1_PERCEPTIONS};
 
 // Debug types are in perception/debug.rs (dev-tools only)
 
@@ -146,6 +147,85 @@ impl NeighborCache {
 }
 
 impl Default for NeighborCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Single L1 cell perception data.
+/// Fixed 16 bytes for cache-line friendly access.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct L1CellPerception {
+    pub cell_idx: u32,
+    pub classification: L1Classification,
+    pub _pad: [u8; 3],
+    pub direction_x: f32,
+    pub direction_y: f32,
+}
+
+impl L1CellPerception {
+    pub const EMPTY: Self = Self {
+        cell_idx: 0,
+        classification: L1Classification::Empty,
+        _pad: [0; 3],
+        direction_x: 0.0,
+        direction_y: 0.0,
+    };
+}
+
+impl Default for L1CellPerception {
+    fn default() -> Self {
+        Self::EMPTY
+    }
+}
+
+/// L1 perception results - stores classifications of L1 cells in perception range.
+/// Fixed-size array (not Vec) for cache efficiency at 500K creatures.
+/// Used by Phase B drive system to compute navigation gradients.
+#[derive(Component, Clone)]
+pub struct L1Perceptions {
+    count: u8,
+    cells: [L1CellPerception; MAX_L1_PERCEPTIONS],
+}
+
+impl L1Perceptions {
+    pub fn new() -> Self {
+        Self {
+            count: 0,
+            cells: [L1CellPerception::EMPTY; MAX_L1_PERCEPTIONS],
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.count = 0;
+    }
+
+    pub fn count(&self) -> usize {
+        self.count as usize
+    }
+
+    pub fn push(&mut self, cell: L1CellPerception) {
+        if (self.count as usize) < MAX_L1_PERCEPTIONS {
+            self.cells[self.count as usize] = cell;
+            self.count += 1;
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &L1CellPerception> {
+        self.cells[..self.count as usize].iter()
+    }
+
+    pub fn has_threat(&self) -> bool {
+        self.iter().any(|c| c.classification == L1Classification::Threat)
+    }
+
+    pub fn has_prey(&self) -> bool {
+        self.iter().any(|c| c.classification == L1Classification::Prey)
+    }
+}
+
+impl Default for L1Perceptions {
     fn default() -> Self {
         Self::new()
     }

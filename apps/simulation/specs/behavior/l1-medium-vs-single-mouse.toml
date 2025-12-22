@@ -1,22 +1,38 @@
 [meta]
-name = "L1: Medium (3m) vs Single Mouse (1m)"
-description = "Visual test: 3m crit (945kg, threshold=47kg) vs 1m mouse (35kg). Mouse is below threshold - should NOT see it."
+name = "L1: Medium (3m) vs Single Mouse (1m) - Opposing Seekers"
+description = """
+Size domination test: Medium and mouse seek PAST each other.
+- Medium (3m, ~945kg) threshold = 47kg, mouse (35kg) is BELOW threshold
+- Medium should NOT perceive mouse
+- Mouse SHOULD perceive medium
+
+Watch: Medium's perception line should NOT appear toward mouse.
+Watch: Mouse's perception line SHOULD appear toward medium.
+"""
 timeout_seconds = 30
 
-# 3m wanderer at origin
+[[assertions]]
+type = "ticks_completed"
+count = 300
+
+# Medium (3m) seeking from left to right
 [[spawns]]
 type = "single"
 tag = "medium"
-x = 0.0
+x = -50.0
 y = 0.0
-creature_type = "wanderer"
+creature_type = "seeker"
+target_x = 100.0
+target_y = 0.0
 body_size = 3.0
 
-# Single 1m mouse 60m away
+# Mouse (1m) seeking from right to left
 [[spawns]]
 type = "single"
 tag = "mouse"
-x = 60.0
+x = 50.0
 y = 0.0
-creature_type = "catatonic"
+creature_type = "seeker"
+target_x = -100.0
+target_y = 0.0
 body_size = 1.0

@@ -4,7 +4,9 @@
 
 Remove behavior state machine. Everything becomes drive-based.
 
-**Depends on:** Phase A (Dual Grid) - L1 BioSignatures
+**Depends on:** Phase A (Dual Grid) - L1 BioSignatures ✓, L1 Classification ✓
+
+**Note:** Phase A completed L0/L1 architecture fixes but DEFERRED L1Perceptions population to Phase B Step 0 (see Implementation Steps below).
 
 ---
 
@@ -128,8 +130,34 @@ Default behavior without DNA complexity:
 
 ## Implementation Steps (High Level)
 
+### Step 0: Populate L1Perceptions (DEFERRED FROM PHASE A)
+
+**Why this is first:** The L1 drive system needs L1Perceptions to know where threats/prey/crowds are. The component exists but is NOT YET POPULATED.
+
+**TDD - Write test first:**
+```rust
+#[test]
+fn test_l1_perceptions_populated_after_perception() {
+    // Setup: Creature surrounded by others at various distances
+    // Run perception
+    // Assert: L1Perceptions.count() > 0
+    // Assert: Classifications match expected (Threat/Prey/Crowded)
+}
+```
+
+**Implementation:** Add L1 scan loop to `perception/systems.rs` (after L0 scan):
+- Iterate L1 cells within `perception.range` + FOV
+- Classify each using `classify_l1_cell()`
+- Store in `L1Perceptions` component
+
+**Files:** `perception/systems.rs`, possibly `spatial/coarse_grid.rs` (add `cells_in_radius()`)
+
+---
+
+### Remaining Steps
+
 1. **Add DriveState component** - stores combined drive direction
-2. **Create L1 drive system** - computes repulsion + attraction from L1 grid
+2. **Create L1 drive system** - computes repulsion + attraction from L1Perceptions
 3. **Integrate with steering** - drive feeds into acceleration alongside avoidance
 4. **Remove BehaviorMode** - delete enum and state transition logic
 5. **Remove wandering system** - L1 drive replaces it

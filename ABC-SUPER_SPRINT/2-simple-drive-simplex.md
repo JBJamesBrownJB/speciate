@@ -178,6 +178,42 @@ fn test_l1_perceptions_populated_after_perception() {
 
 ---
 
+## Avoidance Constants Review (REQUIRED)
+
+**Location:** `creatures/constants/behavior.rs`
+
+These constants assume discrete behavioral states. In a drive-simplex world, they need rethinking:
+
+| Constant | Current Purpose | Problem | Drive-Simplex Solution |
+|----------|-----------------|---------|------------------------|
+| `SEEKING_SPACE_REDUCTION` (0.5) | Seekers tolerate closer proximity | No "seeking" state exists | **Hunt drive intensity** reduces personal space |
+| `PERSONAL_SPACE_MULTIPLIER` (2.0) | Base personal space | Might be fine as-is | Consider if drive strength should modulate |
+| `EMERGENCY_BRAKE_DISTANCE` (0.5m) | Max avoidance force range | Doesn't scale with body size! | Should be `body_radius * X` |
+| `ENERGY_MODIFIER` | Starving = smaller personal space | Still relevant | Keep, possibly tie to drive urgency |
+
+### Proposed Changes
+
+1. **Replace `SEEKING_SPACE_REDUCTION`** with hunt-drive-based space reduction:
+   ```rust
+   // Old: if behavior == Seeking { space *= 0.5 }
+   // New: space *= (1.0 - hunt_drive_intensity * 0.5)
+   ```
+
+2. **Fix `EMERGENCY_BRAKE_DISTANCE`** to scale with body size:
+   ```rust
+   // Old: const EMERGENCY_BRAKE_DISTANCE: f32 = 0.5;
+   // New: emergency_brake = body_radius * EMERGENCY_BRAKE_MULTIPLIER;
+   ```
+
+3. **Consider drive-modulated personal space:**
+   - High flee drive = wants MORE space (panicking)
+   - High hunt drive = tolerates LESS space (focused on prey)
+   - Low drives = baseline personal space
+
+**Decision required:** How should drive intensity affect avoidance behavior?
+
+---
+
 ## Files to Modify
 
 | Area | Change |
@@ -185,4 +221,5 @@ fn test_l1_perceptions_populated_after_perception() {
 | `creatures/components/` | Add DriveState, remove BehaviorMode |
 | `creatures/behaviors/` | Add L1 drive system, remove wander |
 | `creatures/steering/` | Integrate drive into acceleration |
+| `creatures/constants/behavior.rs` | Rework avoidance constants for drive-based world |
 | `core/simulation.rs` | Update system registration |

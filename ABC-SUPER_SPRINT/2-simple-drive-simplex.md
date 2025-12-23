@@ -164,6 +164,76 @@ fn test_l1_perceptions_populated_after_perception() {
 
 ---
 
+## Visualization: L1 Perception Debug Overlay
+
+**Requirement:** Visual debugging for L1 perceptions, similar to existing L0 neighbor perception lines.
+
+**Current (L0):** Selected creature draws lines to perceived neighbors (entities).
+
+**New (L1):** Selected creature draws lines to perceived L1 cell centers, color-coded by classification:
+
+| Classification | Color | Meaning |
+|----------------|-------|---------|
+| EMPTY | Green | Safe, attractive |
+| THREAT | Red | Dangerous, repulsive |
+| PREY | Orange | Huntable, attractive |
+| CROWDED | Yellow | Neutral, mild avoidance |
+
+**Implementation:**
+- Toggle via existing perception debug overlay (extend, don't replace L0 lines)
+- Line from creature center → L1 cell center
+- Line opacity/thickness could indicate distance or drive strength
+- Only render for selected creature (performance)
+
+**Files:** Portal rendering (likely `SpatialGridOverlay.ts` or new overlay), IPC buffer for L1Perceptions data
+
+---
+
+## Visualization: Drive Simplex Display
+
+**Requirement:** Show selected creature's drive state as a visual simplex diagram.
+
+**Concept:** A triangle (or barycentric display) where each vertex represents a primary drive:
+
+```
+           FLEE (red)
+              ▲
+             /·\          · = current drive state
+            /   \         Position shows balance between drives
+           /  ·  \        Center = equilibrium (resting)
+          /       \
+         ▼─────────▼
+    HUNT (orange)  DISPERSE (green)
+```
+
+**Drive Axes:**
+| Vertex | Drive | Triggered By |
+|--------|-------|--------------|
+| Top | FLEE | THREAT cells (large crits nearby) |
+| Bottom-Left | HUNT | PREY cells (smaller crits nearby) |
+| Bottom-Right | DISPERSE | CROWDED cells (seek EMPTY space) |
+
+**Floating Dot Behavior:**
+- Dot position = weighted average of active drives
+- Center = no drives active (resting/equilibrium)
+- Near vertex = strong single drive
+- Edge = two competing drives
+- Dot could trail/smooth for visual appeal (lerp toward target position)
+
+**Additional Info to Display:**
+- Drive magnitude (how far from center)
+- Urgency level (flee_urgency from threat velocity)
+- Maybe: small arrow showing resulting movement direction
+
+**Implementation:**
+- Render as HUD element near selected creature (or in corner of screen)
+- Update every frame from DriveState component
+- Only for selected creature
+
+**Files:** Portal UI (new component), IPC for DriveState data
+
+---
+
 ## Validation
 
 - [ ] Crits naturally disperse across the world
@@ -175,6 +245,8 @@ fn test_l1_perceptions_populated_after_perception() {
 - [ ] Threat variety: prey flees faster when predator charges
 - [ ] Threat variety: prey grazes cautiously near resting predator
 - [ ] Hunt drive: predators drift toward PREY-classified cells (L0 avoidance still active)
+- [ ] L1 perception debug overlay shows lines to cell centers with correct colors
+- [ ] Drive simplex triangle displays for selected creature with floating dot
 
 ---
 

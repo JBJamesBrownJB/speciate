@@ -164,7 +164,8 @@ pub fn update_steering_system(
     let mut entities: Vec<_> = query.iter_mut().collect();
 
     // Parallel iteration with minimum batch size for efficiency
-    entities.par_iter_mut().for_each(
+    // Steering: Medium workload - moderate chunks balance load vs overhead
+    entities.par_iter_mut().with_min_len(256).for_each(
         |(
             _entity,
             position,

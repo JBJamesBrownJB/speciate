@@ -101,7 +101,8 @@ pub fn update_perception_system(
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
-    entities.par_iter_mut().for_each(
+    // Perception: Heavy, variable workload - smaller chunks for load balancing
+    entities.par_iter_mut().with_min_len(128).for_each(
         |(entity, pos, rot, size, perception, neighbor_cache, state)| {
             // Check if this entity is the debug target (dev-tools only)
             #[cfg(feature = "dev-tools")]
@@ -153,11 +154,15 @@ pub fn update_perception_system(
                     // Compute FOV cell pattern once per creature (precomputed lookup table)
                     let cell_pattern = fov_patterns::get_cell_pattern(fov_angle, facing_x, facing_y);
 
+                    // Use pre-computed cos_half_fov from perception component for grid-level FOV culling
                     grid_ref.collect_cells_sorted_fov(
                         x,
                         y,
                         query_radius,
                         range, // perception_range: cull cells beyond creature's perception
+                        facing_x,
+                        facing_y,
+                        cos_half_fov,
                         &mut cells,
                     );
 

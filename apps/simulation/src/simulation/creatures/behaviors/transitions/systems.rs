@@ -18,11 +18,10 @@ pub fn behavior_transition_system(
 
     let current_time = physics_tick.get() as f64 * TICK_INTERVAL_SECONDS;
 
-    // Collect all entities for parallel processing
     let mut entities: Vec<_> = query.iter_mut().collect();
 
-    // Parallel processing - each creature's updates are independent
-    entities.par_iter_mut().for_each(|(creature_state, brain)| {
+    // Transitions: Light workload - moderate chunks
+    entities.par_iter_mut().with_min_len(256).for_each(|(creature_state, brain)| {
         creature_state.age += AGE_INCREMENT_PER_TICK;
 
         if creature_state.behavior == BehaviorMode::Wandering {

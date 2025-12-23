@@ -118,3 +118,8 @@ name = "memory_leak_profile"
 path = "tests/memory_leak_profile.rs"
 required-features = ["dhat-heap"]
 
+[[test]]
+name = "branch_profile"
+path = "tests/branch_profile.rs"
+required-features = ["test-helpers"]
+

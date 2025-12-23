@@ -56,7 +56,8 @@ pub fn integrate_motion_system(
     let stopped_threshold_sq = STOPPED_THRESHOLD * STOPPED_THRESHOLD;
 
     // Parallel physics integration + boundary enforcement + rotation (merged into single loop)
-    entities.par_iter_mut().for_each(
+    // Movement: Light, uniform workload - moderate chunks for efficiency
+    entities.par_iter_mut().with_min_len(256).for_each(
         |(entity, size, position, velocity, acceleration, creature_state, rotation)| {
             if creature_state.behavior == BehaviorMode::Catatonic {
                 acceleration.ax = 0.0;

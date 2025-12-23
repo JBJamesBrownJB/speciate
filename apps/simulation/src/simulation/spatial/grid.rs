@@ -520,8 +520,9 @@ impl SpatialGrid {
         }
     }
 
-    /// Collect cell indices with range-based culling.
+    /// Collect cell indices with range AND FOV culling.
     /// Cells whose nearest edge is beyond perception_range are skipped.
+    /// Non-adjacent cells outside the creature's FOV cone are also skipped.
     #[inline(always)]
     pub fn collect_cells_sorted_fov(
         &self,
@@ -529,6 +530,9 @@ impl SpatialGrid {
         y: f32,
         radius: f32,
         perception_range: f32,
+        facing_x: f32,
+        facing_y: f32,
+        cos_half_fov: f32,
         out: &mut Vec<(f32, usize)>,
     ) {
         out.clear();
@@ -537,6 +541,21 @@ impl SpatialGrid {
         let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
         let cell_size = self.cell_size;
         let half_cell = cell_size * 0.5;
+
+        // Skip FOV culling for very wide FOVs (>= 300°, i.e., cos_half_fov <= -0.866)
+        // This avoids edge cases with the safety margin math
+        let skip_fov_culling = cos_half_fov <= -0.866;
+
+        // 15° safety margin: expand FOV cone slightly to avoid edge cases
+        // cos(fov + 15°) = cos(fov)*cos(15°) - sin(fov)*sin(15°)
+        let adjusted_cos = if skip_fov_culling {
+            -2.0 // Effectively disables culling (no cos_angle can be < -2)
+        } else {
+            let sin_half_fov = (1.0 - cos_half_fov * cos_half_fov).sqrt();
+            const COS_15: f32 = 0.9659; // cos(15°)
+            const SIN_15: f32 = 0.2588; // sin(15°)
+            cos_half_fov * COS_15 - sin_half_fov * SIN_15
+        };
 
         let min_qx = (center_cx - cells_radius).max(self.min_cell_x);
         let max_qx = (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1);
@@ -547,6 +566,25 @@ impl SpatialGrid {
             for cx in min_qx..=max_qx {
                 let cell_center_x = (cx as f32 * cell_size) + half_cell;
                 let cell_center_y = (cy as f32 * cell_size) + half_cell;
+
+                // Own cell is ALWAYS included (can't skip where we are)
+                let is_own_cell = cx == center_cx && cy == center_cy;
+
+                if !is_own_cell {
+                    // FOV culling: skip cells outside FOV cone (applies to ALL cells except own)
+                    let dx = cell_center_x - x;
+                    let dy = cell_center_y - y;
+                    let dist = (dx * dx + dy * dy).sqrt();
+
+                    if dist > 0.001 {
+                        // Normalized dot product = cos(angle between facing and cell direction)
+                        let cos_angle = (dx * facing_x + dy * facing_y) / dist;
+                        // Skip if cell is outside FOV cone (with safety margin)
+                        if cos_angle < adjusted_cos {
+                            continue;
+                        }
+                    }
+                }
 
                 // Range check: skip cells whose nearest edge is beyond perception range
                 let dx_to_center = (cell_center_x - x).abs();
@@ -1138,8 +1176,9 @@ mod tests {
 
         let mut cells = Vec::new();
 
-        // Creature at (10, 10) - center of cell, with 5m perception
-        grid.collect_cells_sorted_fov(10.0, 10.0, 200.0, 5.0, &mut cells);
+        // Creature at (10, 10) - center of cell, with 5m perception, facing right
+        // cos_half_fov = -1.0 (full 360° FOV) so FOV culling doesn't affect range test
+        grid.collect_cells_sorted_fov(10.0, 10.0, 200.0, 5.0, 1.0, 0.0, -1.0, &mut cells);
 
         // Should get own cell (0,0) only - diagonal cells are ~14m away, beyond 5m perception
         // Cardinal cells are 10m away, also beyond 5m perception
@@ -1174,8 +1213,9 @@ mod tests {
 
         let mut cells = Vec::new();
 
-        // Creature at (19, 19) - corner of cell, with 5m perception
-        grid.collect_cells_sorted_fov(19.0, 19.0, 200.0, 5.0, &mut cells);
+        // Creature at (19, 19) - corner of cell, with 5m perception, facing right
+        // cos_half_fov = -1.0 (full 360° FOV) so FOV culling doesn't affect range test
+        grid.collect_cells_sorted_fov(19.0, 19.0, 200.0, 5.0, 1.0, 0.0, -1.0, &mut cells);
 
         // At corner (19,19), distances to adjacent cells are much shorter:
         // - Own cell: 0m (always included)
@@ -1204,8 +1244,9 @@ mod tests {
 
         let mut cells = Vec::new();
 
-        // 1m perception - should still get own cell
-        grid.collect_cells_sorted_fov(10.0, 10.0, 200.0, 1.0, &mut cells);
+        // 1m perception - should still get own cell (facing right)
+        // cos_half_fov = -1.0 (full 360° FOV) so FOV culling doesn't affect range test
+        grid.collect_cells_sorted_fov(10.0, 10.0, 200.0, 1.0, 1.0, 0.0, -1.0, &mut cells);
 
         assert_eq!(
             cells.len(),
@@ -1234,8 +1275,9 @@ mod tests {
 
         let mut cells = Vec::new();
 
-        // 50m perception - should get all 9 cells
-        grid.collect_cells_sorted_fov(10.0, 10.0, 200.0, 50.0, &mut cells);
+        // 50m perception - should get all 9 cells (facing right)
+        // cos_half_fov = -1.0 (full 360° FOV) so FOV culling doesn't affect range test
+        grid.collect_cells_sorted_fov(10.0, 10.0, 200.0, 50.0, 1.0, 0.0, -1.0, &mut cells);
 
         assert_eq!(
             cells.len(),

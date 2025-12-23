@@ -158,10 +158,21 @@ Performance optimizations that give FREE emergent biological behavior:
 | Optimization | Performance Win | Free Biology | Entertainment | Status |
 |--------------|-----------------|--------------|---------------|--------|
 | **Size domination** | Skip tiny entities | Energy economics | High | Phase A |
-| **FOV culling** | Skip rear cells | Blind spot | Medium | Phase A |
+| **FOV culling** | Skip rear cells | Blind spot | Medium | ✅ Done |
 | **Motion detection** | Skip stationary entities | Prey freeze = camouflage | Very High | Deferred (see `docs/biology/todo/`) |
 | **Hunger gating** | Skip prey when full | Satiated predators rest | High | Deferred (see `docs/biology/todo/`) |
 | **Distance attenuation** | Sample fewer far cells | Visual acuity degrades | High | Future |
+
+#### FOV Culling Implementation (Dec 2023)
+
+Grid-level FOV culling restored after being accidentally removed in commit d1f354a. The fix applies FOV culling to ALL cells except the creature's own cell (not just "non-adjacent" cells as originally attempted).
+
+**Key changes:**
+- `spatial/grid.rs:collect_cells_sorted_fov()` - Added `cos_half_fov` parameter
+- FOV culling uses 15° safety margin to avoid edge-case over-culling
+- Special handling for wide FOVs (≥300°) to prevent artifacts
+
+**Results:** 360k creatures (200k spread + 160k medium density) at 39.68ms avg (target <50ms), ~24% improvement from extrapolated 52ms baseline.
 
 ### Classification Set (Phase A)
 
@@ -304,6 +315,8 @@ Test that perception system correctly:
 - [x] Portal shows both grids (G key cycling)
 - [x] L1 hover query shows correct cell info
 - [x] L1 aggregation < 1ms at 20K creatures
+- [x] Grid-level FOV culling restored (was accidentally removed in d1f354a)
+- [x] 360k creatures @ <50ms tick latency achieved (39.68ms avg)
 - [ ] L1 classifier unit tests pass
 - [ ] Entity filter unit tests pass
 - [ ] Size domination: Giant ignores mouse (doesn't perceive)

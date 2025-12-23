@@ -72,6 +72,8 @@ These are **post-ABC features** that build on the drive architecture.
 - Portal visualization (G key cycles: Off → L0 → L1) ✓
 - L1 hover query with info panel ✓
 - Unit tests for L1CellInfo calculations ✓
+- **Grid-level FOV culling restored** ✓ (was removed in d1f354a, ~24% perf gain)
+- **360k creatures @ <50ms validated** ✓ (39.68ms avg tick latency)
 
 **Current Work:**
 - Two-stage perception (L1 classify → L0 scan)

@@ -49,10 +49,11 @@ These are **post-ABC features** that build on the drive architecture.
 | Phase | Name | Complexity | Focus | Status |
 |-------|------|------------|-------|--------|
 | **A** | Dual Spatial Grid | Medium | Infrastructure + Size Domination | IN PROGRESS |
+| **4** | Better Avoidance | Small | TTC-Based Anti-Collision | **NEW** |
 | **C** | System Update Frequency | Small | Runtime Hz Control | Pending |
 | **B** | Simple Drive Simplex | Large | Continuous Drives (Loner Behavior) | Pending |
 
-**Order Rationale:** A and C are performance/infrastructure. B is a major behavior overhaul. Do infrastructure first for immediate wins.
+**Order Rationale:** A establishes grid infrastructure. **Phase 4** fixes collision avoidance using TTC (creatures steer around each other properly). C is performance tuning. B is the major behavior overhaul (flee/chase/drives).
 
 ---
 
@@ -85,6 +86,40 @@ These are **post-ABC features** that build on the drive architecture.
 - L1 grid overlay shows cell classifications
 
 **Details:** See `1-dual-grid.md`
+
+---
+
+## Phase 4: Better Avoidance (NEW)
+
+**What:** Fix collision avoidance using Time-to-Collision (TTC).
+
+**Scope:** Anti-collision ONLY. Flee/chase/predator dynamics come in Phase B.
+
+**Why:**
+- Current bug: Perception detects at ~8m, avoidance kicks in at ~0.25m edge
+- Not enough time to steer around large obstacles
+- Root cause: `max_interaction_distance` gate filters out perceived neighbors
+
+**Delivers:**
+- TTC-based urgency (closing speed determines reaction)
+- Golden Zone: skip calculation for diverging paths
+- Simpler code (one formula replaces multiple checks)
+
+**Core Formula:**
+```
+closing_speed = dot(relative_velocity, direction_to_them)
+if closing_speed <= 0: skip  // Moving apart
+ttc = edge_distance / closing_speed
+urgency = (critical_time / ttc).clamp(0, 1)
+force = urgency² * max_accel
+```
+
+**You'll See:**
+- Fast approaches trigger strong avoidance
+- Parallel/diverging paths don't waste force
+- Creatures smoothly steer around each other
+
+**Details:** See `4-better-avoid.md`
 
 ---
 

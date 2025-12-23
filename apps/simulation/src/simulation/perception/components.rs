@@ -9,6 +9,11 @@ use crate::simulation::creatures::constants::{
 
 // Debug types are in perception/debug.rs (dev-tools only)
 
+/// Biological floor for perception range (meters).
+/// Even tiny creatures can detect immediate surroundings through touch, vibration, air pressure.
+/// Prevents degenerate cases where creatures are blind to adjacent entities.
+const MIN_PERCEPTION_RANGE: f32 = 3.0;
+
 /// Neighbor data cached during perception (avoids re-querying positions in avoidance)
 #[derive(Debug, Clone, Copy)]
 pub struct NeighborData {
@@ -85,12 +90,14 @@ impl Perception {
     /// Calculate perception range from body size and FOV
     /// Uses allometric scaling: larger creatures see proportionally further, but with diminishing returns.
     /// Narrow FOV = longer range (more photoreceptors per degree)
-    /// Formula: range = base_range × size_allometry × fov_factor
+    /// Formula: range = max(MIN_PERCEPTION_RANGE, base_range × size_allometry × fov_factor)
     fn calculate_range(body_size: f32, fov_angle_degrees: f32) -> f32 {
         let base_range = body_size * PERCEPTION_MULTIPLIER;
         let size_allometry = (body_size / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
         let fov_factor = (180.0 / fov_angle_degrees).powf(FOV_RANGE_EXPONENT);
-        base_range * size_allometry * fov_factor
+        let calculated = base_range * size_allometry * fov_factor;
+        // Enforce biological floor: even tiny creatures detect immediate surroundings
+        calculated.max(MIN_PERCEPTION_RANGE)
     }
 
     /// Create perception with default FOV (180°) from body size

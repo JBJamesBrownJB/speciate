@@ -41,6 +41,8 @@ export interface SystemTimingsSnapshot {
   ipcFrameDropsTotal: number;
   ipcChannelUtilizationPct: number;
   ipcWriterThreadUs: number;
+  // Count metrics (reset-on-read)
+  cellsQueriedTotal: number;
   archetypeCount: number;
   entityCount: number;
 }

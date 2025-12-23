@@ -35,6 +35,7 @@ fn benchmark_telemetry_json_serialization() {
         steering_us: 880,
         capture_debug_accel_us: 5,
         export_positions_us: 1350,
+        cells_queried_total: 9000,
         archetype_count: 42,
         entity_count: 150_000,
     };

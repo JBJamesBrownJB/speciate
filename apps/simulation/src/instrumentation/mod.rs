@@ -121,6 +121,8 @@ pub struct SystemTimings {
     pub steering_us: AtomicU64, // Fused steering system (Sprint 20)
     pub capture_debug_accel_us: AtomicU64,
     pub export_positions_us: AtomicU64, // IPC buffer export with parallel sort (Sprint 16)
+    // Count metrics (not timings)
+    pub cells_queried_total: AtomicU64, // Sum of L0 cells queried across all creatures this tick
 }
 
 impl SystemTimings {
@@ -135,6 +137,7 @@ impl SystemTimings {
             steering_us: AtomicU64::new(0),
             capture_debug_accel_us: AtomicU64::new(0),
             export_positions_us: AtomicU64::new(0),
+            cells_queried_total: AtomicU64::new(0),
         }
     }
 
@@ -165,6 +168,7 @@ impl SystemTimings {
             steering_us: self.steering_us.load(Ordering::Relaxed),
             capture_debug_accel_us: self.capture_debug_accel_us.load(Ordering::Relaxed),
             export_positions_us: self.export_positions_us.load(Ordering::Relaxed),
+            cells_queried_total: self.cells_queried_total.swap(0, Ordering::Relaxed),
             archetype_count: 0,
             entity_count: 0,
         }
@@ -210,6 +214,8 @@ pub struct SystemTimingsSnapshot {
     pub steering_us: u64,
     pub capture_debug_accel_us: u64,
     pub export_positions_us: u64,
+    // Count metrics (reset-on-read via swap)
+    pub cells_queried_total: u64,
 
     pub archetype_count: u64,
     pub entity_count: u64,

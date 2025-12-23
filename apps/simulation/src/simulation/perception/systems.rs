@@ -25,12 +25,14 @@ const L0_SCAN_RADIUS: f32 = CELL_SIZE * 1.0; // 10m → ceil(1.0) = 1 → 3×3 =
 
 /// How many cells out we query (derived from L0_SCAN_RADIUS).
 /// IMPORTANT: If you change L0_SCAN_RADIUS, update this! Rust const doesn't support ceil().
+#[allow(dead_code)]
 const L0_CELLS_RADIUS: f32 = 1.0; // ceil(L0_SCAN_RADIUS / CELL_SIZE) = ceil(1.0) = 1
 
 /// Actual L0 visible range - the furthest distance at which entities can be perceived via L0.
 /// This is the distance to the corner of the furthest queried cell.
 /// Formula: sqrt(2) × (cells_radius + 0.5) × CELL_SIZE
 /// Entities entering this sphere CAN become neighbors (assuming not size-culled).
+#[allow(dead_code)]
 const L0_VISIBLE_RANGE: f32 = 1.41421356 * (L0_CELLS_RADIUS + 0.5) * CELL_SIZE;
 
 // Thread-local scratch buffer for sorted cell indices (avoids allocation per creature)
@@ -147,11 +149,15 @@ pub fn update_perception_system(
                         x,
                         y,
                         query_radius,
-                        facing_x,
-                        facing_y,
-                        cos_half_fov,
+                        range, // perception_range: cull cells beyond creature's perception
                         &mut cells,
                     );
+
+                    // Instrumentation: count cells queried for performance tracking
+                    #[cfg(feature = "dev-tools")]
+                    timings
+                        .cells_queried_total
+                        .fetch_add(cells.len() as u64, std::sync::atomic::Ordering::Relaxed);
 
                     // Pre-compute for L1 classification (size domination optimization)
                     let my_mass = BioSignature::mass_from_radius(self_radius);

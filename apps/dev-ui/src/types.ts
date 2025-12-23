@@ -55,6 +55,8 @@ export interface SystemTimingsSnapshot {
   steeringUs: number;
   captureDebugAccelUs: number;
   exportPositionsUs: number;
+  // Count metrics (reset-on-read)
+  cellsQueriedTotal: number;
   archetypeCount: number;
   entityCount: number;
 }

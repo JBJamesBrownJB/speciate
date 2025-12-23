@@ -79,6 +79,59 @@ const formatTiming = (valueUs: number): string => {
   return `${valueMs.toFixed(2)} ms`;
 };
 
+const formatCount = (value: number): string => {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M`;
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}K`;
+  }
+  return value.toFixed(0);
+};
+
+const renderCountSparkline = (
+  canvas: HTMLCanvasElement,
+  history: number[],
+  maxHistory: number
+): void => {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+
+  const width = rect.width;
+  const height = rect.height;
+
+  ctx.clearRect(0, 0, width, height);
+
+  if (history.length < 2) return;
+
+  const maxValue = Math.max(...history, 1);
+  const xStep = width / (maxHistory - 1);
+
+  ctx.beginPath();
+  ctx.lineWidth = 1.5;
+
+  history.forEach((value, i) => {
+    const x = i * xStep;
+    const normalizedValue = Math.min(value / maxValue, 1);
+    const y = height - normalizedValue * height;
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+
+  ctx.strokeStyle = '#5c9fd4'; // Blue for count metrics
+  ctx.stroke();
+};
+
 const getTimingClass = (valueUs: number): string => {
   if (valueUs >= DANGER_THRESHOLD_US) return 'danger';
   if (valueUs >= WARNING_THRESHOLD_US) return 'warning';
@@ -103,11 +156,32 @@ const TimingRow: React.FC<TimingRowProps> = ({ name, valueUs, canvasRef }) => (
   </div>
 );
 
+interface CountRowProps {
+  name: string;
+  value: number;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+}
+
+const CountRow: React.FC<CountRowProps> = ({ name, value, canvasRef }) => (
+  <div className="timing-row">
+    <div className="timing-header">
+      <span className="timing-name">{name}</span>
+      <span className="timing-value count-value">
+        {formatCount(value)}
+      </span>
+    </div>
+    <canvas ref={canvasRef as React.RefObject<HTMLCanvasElement>} className="timing-sparkline" />
+  </div>
+);
+
 // Reserved metrics that should always appear at the top
 const CRITICAL_METRICS = ['totalTickUs'];
 
-// Non-timing metrics that should be excluded from sparklines
-const NON_TIMING_METRICS = ['archetypeCount', 'entityCount'];
+// Non-timing metrics that should be excluded from timing sparklines
+const NON_TIMING_METRICS = ['archetypeCount', 'entityCount', 'cellsQueriedTotal'];
+
+// Count metrics that get their own sparkline section
+const COUNT_METRICS = ['cellsQueriedTotal'];
 
 // Convert camelCase to snake_case for display
 const toSnakeCase = (str: string): string => {
@@ -127,7 +201,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
   useEffect(() => {
     if (!timings) return;
 
-    // Dynamically create refs and history for each metric
+    // Dynamically create refs and history for timing metrics
     const allKeys = Object.keys(timings).filter(key =>
       typeof timings[key as keyof SystemTimingsSnapshot] === 'number' &&
       !NON_TIMING_METRICS.includes(key)
@@ -158,6 +232,34 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
       const canvas = canvasRefs.current[key]?.current;
       if (canvas) {
         renderSparkline(canvas, history.history, history.maxHistory);
+      }
+    });
+
+    // Process count metrics separately (different sparkline renderer)
+    COUNT_METRICS.forEach(key => {
+      if (!(key in timings)) return;
+
+      if (!canvasRefs.current[key]) {
+        canvasRefs.current[key] = React.createRef<HTMLCanvasElement>();
+      }
+      if (!historyRefs.current[key]) {
+        historyRefs.current[key] = { history: [], maxHistory: 120 };
+      }
+
+      const value = timings[key as keyof SystemTimingsSnapshot] as number;
+      const history = historyRefs.current[key];
+      history.history.push(value);
+      if (history.history.length > history.maxHistory) {
+        history.history.shift();
+      }
+
+      const rollingWindow = history.history.slice(-ROLLING_WINDOW_FRAMES);
+      const average = rollingWindow.reduce((sum, v) => sum + v, 0) / rollingWindow.length;
+      averageRefs.current[key] = average;
+
+      const canvas = canvasRefs.current[key]?.current;
+      if (canvas) {
+        renderCountSparkline(canvas, history.history, history.maxHistory);
       }
     });
 
@@ -214,6 +316,16 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
       canvasRef: canvasRefs.current[key],
     }));
 
+  // Count metrics (cells queried, etc.)
+  const countMetrics = COUNT_METRICS
+    .filter(key => key in timings)
+    .map(key => ({
+      key,
+      name: toSnakeCase(key),
+      value: averageRefs.current[key] || (timings[key as keyof SystemTimingsSnapshot] as number),
+      canvasRef: canvasRefs.current[key],
+    }));
+
   return (
     <div className="section">
       <h2>Critical Timings</h2>
@@ -244,6 +356,22 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
           />
         ))}
       </div>
+
+      {countMetrics.length > 0 && (
+        <>
+          <h2 style={{ marginTop: '24px' }}>Spatial Metrics</h2>
+          <div className="timings-grid">
+            {countMetrics.map((entry) => (
+              <CountRow
+                key={entry.key}
+                name={entry.name}
+                value={entry.value}
+                canvasRef={entry.canvasRef}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };

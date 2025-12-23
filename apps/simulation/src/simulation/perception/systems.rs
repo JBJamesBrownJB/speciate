@@ -33,6 +33,21 @@ thread_local! {
     static NEIGHBOR_CANDIDATES: RefCell<Vec<(f32, NeighborData)>> = RefCell::new(Vec::with_capacity(256));
 }
 
+/// Check if a target is within the field of view.
+/// For narrow FOV (≤180°), uses fast squared comparison.
+/// For wide FOV (>180°), falls back to signed comparison with sqrt.
+#[inline]
+fn is_in_fov(rough_dot: f32, center_dist_sq: f32, cos_half_fov: f32, cos_half_fov_sq: f32) -> bool {
+    if cos_half_fov >= 0.0 {
+        // Narrow FOV (≤180°): target must be in front
+        rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
+    } else {
+        // Wide FOV (>180°): signed comparison
+        let dist = center_dist_sq.sqrt();
+        rough_dot >= cos_half_fov * dist
+    }
+}
+
 pub fn update_perception_system(
     _physics_tick: Res<PhysicsTick>,
     grid: Res<HierarchicalGrid>,
@@ -78,9 +93,10 @@ pub fn update_perception_system(
         let x = pos.x;
         let y = pos.y;
         let self_radius = size.radius();
-        // NOTE: L1 early-exit now happens PER L0 CELL inside the loop (lines 181-192)
-        // This correctly handles creatures near L1 cell boundaries where adjacent
-        // L0 cells may belong to different L1 cells with different classifications.
+        // NOTE: L1 early-exit happens PER L0 CELL (not per-creature).
+        // Each L0 cell's parent L1 is classified; if Empty, the entire L0 cell is skipped.
+        // This handles creatures near L1 boundaries where adjacent L0 cells may have
+        // different L1 parents with different classifications.
         let range = perception.range;
         let range_sq = range * range;
         let threshold = perception.threshold;
@@ -113,6 +129,30 @@ pub fn update_perception_system(
                 let my_l1_cell_idx = l1_grid_ref.position_to_cell_index(x, y);
                 let l0_width = grid_ref.width();
 
+                // L1 classification cache: avoid redundant classify_l1_cell calls.
+                // A 3×3 L0 neighborhood has at most 4 unique L1 parents.
+                let mut l1_cache_count = 0usize;
+                let mut l1_cache: [(usize, L1Classification); 4] = [(usize::MAX, L1Classification::Empty); 4];
+
+                // Helper: get or compute L1 classification with caching
+                let get_l1_classification = |l1_idx: usize, cache: &mut [(usize, L1Classification); 4], cache_count: &mut usize| -> L1Classification {
+                    // Check cache first
+                    for i in 0..*cache_count {
+                        if cache[i].0 == l1_idx {
+                            return cache[i].1;
+                        }
+                    }
+                    // Not cached - compute and cache
+                    let biosig = l1_grid_ref.get_biosignature(l1_idx);
+                    let is_my_cell = l1_idx == my_l1_cell_idx;
+                    let classification = classify_l1_cell(biosig, my_mass, self_radius, is_my_cell);
+                    if *cache_count < 4 {
+                        cache[*cache_count] = (l1_idx, classification);
+                        *cache_count += 1;
+                    }
+                    classification
+                };
+
                 // Pre-compute base distance for faster range checks
                 let base_dist = range + self_radius;
 
@@ -130,7 +170,10 @@ pub fn update_perception_system(
                 let mut debug_skipped: Vec<(i32, i32)> = if is_debug_target { Vec::with_capacity(32) } else { Vec::new() };
 
                 for &(sort_key, cell_idx) in cells.iter() {
-                    // Detect transition from adjacent to non-adjacent cells
+                    // Detect transition from adjacent to non-adjacent cells.
+                    // Adjacent cells: sort_key = distance² (typically < 500 for ~22m diagonal)
+                    // Non-adjacent: sort_key = distance² + NON_ADJACENT_OFFSET (1e9)
+                    // The 0.5 multiplier creates a safe threshold (5e8) between these ranges.
                     let is_non_adjacent = sort_key >= NON_ADJACENT_OFFSET * 0.5;
 
                     if is_non_adjacent && !processed_adjacent {
@@ -176,10 +219,9 @@ pub fn update_perception_system(
                     // L1 CLASSIFICATION CHECK (size domination optimization):
                     // Check if this L0 cell's parent L1 cell has any creatures worth perceiving.
                     // If Empty, skip the entire L0 cell scan - no entities above our threshold.
+                    // Uses cache since 3×3 L0 neighborhood has at most 4 unique L1 parents.
                     let parent_l1_idx = l1_grid_ref.l0_to_l1_cell_index(cell_idx, l0_width);
-                    let l1_biosig = l1_grid_ref.get_biosignature(parent_l1_idx);
-                    let is_my_l1_cell = my_l1_cell_idx == parent_l1_idx;
-                    let classification = classify_l1_cell(l1_biosig, my_mass, self_radius, is_my_l1_cell);
+                    let classification = get_l1_classification(parent_l1_idx, &mut l1_cache, &mut l1_cache_count);
 
                     if classification == L1Classification::Empty {
                         // Skip this L0 cell - nothing above our perception threshold
@@ -203,18 +245,7 @@ pub fn update_perception_system(
                         }
 
                         let rough_dot = dx * facing_x + dy * facing_y;
-
-                        // FOV check: For wide FOV (>180°), cos_half_fov is negative
-                        let in_fov = if cos_half_fov >= 0.0 {
-                            // Narrow FOV (≤180°): target must be in front (rough_dot > 0)
-                            // Use fast squared comparison to avoid sqrt
-                            rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
-                        } else {
-                            // Wide FOV (>180°): cos_half_fov is negative, need signed comparison
-                            // rough_dot / dist >= cos_half_fov (both can be negative)
-                            let dist = center_dist_sq.sqrt();
-                            rough_dot >= cos_half_fov * dist
-                        };
+                        let in_fov = is_in_fov(rough_dot, center_dist_sq, cos_half_fov, cos_half_fov_sq);
 
                         if in_fov {
                             // SIZE DOMINATION FILTER (Phase A):
@@ -1768,6 +1799,72 @@ mod tests {
         assert!(
             prey_cache.neighbor_count() > 0,
             "Prey should perceive predator as threat"
+        );
+    }
+
+    /// Test L1 Empty early-exit: When adjacent L0 cells have Empty L1 parents,
+    /// their entities should be skipped without entity iteration.
+    /// This test places a giant near an L1 boundary with a mouse in a different L1 cell.
+    /// The mouse's L1 cell (containing only the mouse) should be classified as Empty
+    /// for the giant, causing the L0 cell scan to be skipped.
+    #[test]
+    fn test_l1_empty_skips_adjacent_l0_cell() {
+        use crate::simulation::core::SimulationBuilder;
+        use crate::simulation::creatures::builder::CritBuilder;
+        use crate::simulation::creatures::components::CritId;
+
+        let mut sim = SimulationBuilder::new().build();
+        sim.set_boundaries(200.0, 200.0);
+
+        // Place giant near an L1 cell boundary so adjacent L0 cells cross L1 boundaries.
+        // L0 cells are 10m, L1 cells are 30m (3x L0).
+        // Giant at (28, 28) is in L0 cell (2, 2), L1 cell (0, 0).
+        // Adjacent L0 cell (3, 2) at x=30-40 is in L1 cell (1, 0) - DIFFERENT L1!
+        let giant_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(28.0, 28.0)
+                .with_size(5.0)
+                .facing(0.0)  // Facing +X toward mouse
+                .with_max_speed(0.0)
+                .with_all_capabilities(),
+        );
+
+        // Mouse at (32, 28) is in L0 cell (3, 2), which is in L1 cell (1, 0).
+        // This L1 cell contains ONLY the mouse (mass ~35kg).
+        // Giant's threshold is ~218kg, so mouse mass < threshold.
+        // L1 cell (1, 0) should be classified as Empty for the giant.
+        let _mouse_id = sim.spawn_crit(
+            CritBuilder::new()
+                .at(32.0, 28.0)
+                .with_size(1.0)
+                .with_max_speed(0.0)
+                .with_all_capabilities(),
+        );
+
+        // Run perception
+        for _ in 0..5 {
+            sim.update(0.016);
+        }
+
+        // Find giant and check perception
+        let world = sim.world_mut();
+        let giant_entity = world
+            .query::<(Entity, &CritId)>()
+            .iter(world)
+            .find(|(_, id)| id.0 == giant_id)
+            .map(|(e, _)| e)
+            .expect("Giant should exist");
+
+        let giant_cache = world.get::<NeighborCache>(giant_entity).unwrap();
+
+        // Giant should NOT perceive mouse.
+        // This happens because either:
+        // 1. L1 Empty early-exit skips L0 cell (3, 2) entirely, OR
+        // 2. Per-entity filter rejects mouse due to size domination
+        // Both achieve the same result - giant ignores the mouse.
+        assert_eq!(
+            giant_cache.neighbor_count(), 0,
+            "Giant should not perceive mouse (L1 Empty or size domination filter)"
         );
     }
 }

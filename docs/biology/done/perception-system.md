@@ -1,122 +1,121 @@
 # Perception System (Current Implementation)
 
-**Status:** Implemented
+**Status:** ✅ Implemented
 **Location:** `apps/simulation/src/simulation/perception/`
+
+---
 
 ## What It Does
 
-Provides FOV-based neighbor detection within a directional cone. Creatures detect nearby entities within their field of view each tick. FOV angle determines both the arc width and perception range through a biological tradeoff (narrow FOV = longer range).
+Provides FOV-based neighbor detection using a hierarchical spatial grid (L0/L1). Creatures detect nearby entities within their field of view each tick. FOV angle determines both the arc width and perception range through a biological tradeoff (narrow FOV = longer range).
 
 **See also:** `docs/biology/done/dna-fov.md` for detailed FOV documentation.
+
+---
 
 ## Key Components
 
 ### Perception Component
 
-**Location:** `perception/components.rs`
+**Location:** `perception/components.rs:43-49`
+
+**Fields:**
+- `fov_angle` - Field of view in radians
+- `range` - Detection radius (derived from FOV and body size)
+- `cos_half_fov_sq` - Cached for sqrt-free FOV checks
+- `cos_half_fov` - Cached for wide FOV checks (sign matters)
+- `threshold` - L1 mass threshold for size domination filtering
+
+**Scaling:**
+- `from_body_size(body_length)` - Range = body_length × PERCEPTION_MULTIPLIER (at 180° FOV)
+- Range varies with FOV: `range = base_range * (180/fov)^0.4`
+
+### NeighborCache Component
+
+**Location:** `perception/components.rs:51-57`
+
+Cold neighbor cache - written by perception, read by avoidance/steering.
 
 **Key features:**
 - Fixed-size array (21 neighbors max) - no heap allocations, cache-friendly
-- FOV cone perception - creatures only see within their field of view
-- Range derived from FOV angle (narrow = longer, wide = shorter)
+- Includes position AND velocity (vx, vy) for TTC-based avoidance
 - `MAX_PERCEIVED_NEIGHBORS = 21` (constants.rs)
 
-**Scaling:**
-- `from_body_size(body_length)` - Range = body_length × 10.0 (at 180 FOV)
-- Range varies with FOV: `range = base_range * (180/fov)^0.4`
-
-### AvoidanceBehavior Component
-
-**Location:** `perception/components.rs:77-127`
-
-**Scaling:**
-- `from_body_size(body_length)` - personal_space = body_length + 1.5m
-- Default: personal_space = 2.5m (for 1.0m creature)
-
-**Key methods:**
-- `panic_threshold()` - Returns personal_space × 0.5 (emergency response distance)
-- `effective_personal_space(energy_fraction)` - ✅ Energy-modulated personal space
-
-### Energy-Modulated Personal Space ✅ Implemented
-
-**Biological principle:** Hungry creatures tolerate closer proximity to reach resources.
-
-**Formula:** `effective_space = base × (0.4 + 0.6 × energy_fraction)`
-
-**Energy effects:**
-- 100% energy → 1.0× modifier (full personal space maintained)
-- 50% energy → 0.7× modifier (30% reduction)
-- 0% energy → 0.4× modifier (60% reduction, starvation override)
-
-**Biological basis:**
-- Ghrelin (hunger hormone) reduces territorial aggression
-- Real-world examples: Vultures at kills (100m spacing → body contact), wolves at food
-
-**Implementation:** `components.rs:84-91, 118-120`
+---
 
 ## Perception Update System
 
 **Location:** `perception/systems.rs`
 
-**Algorithm:** O(N²) brute force (see `SPRINTS/spatial-grid/SPRINT_PLAN.md` for O(N) optimization)
+**Algorithm:** O(N) using hierarchical spatial grid with L1 early-exit optimization.
 
 **Process:**
-1. Collect all (Entity, Position, BodySize) into scratch buffer
-2. For each creature with Perception component:
-   - Clear previous neighbor list
-   - Skip if behavior is Catatonic (inactive creatures don't perceive)
-   - For each other creature: calculate edge-to-edge distance
-   - If edge_distance ≤ perception.range: add to nearby list (max 40)
+1. Query L0 spatial grid cells within scan radius (always 9 adjacent cells)
+2. For each L0 cell, check parent L1 classification
+3. Skip L0 cell if L1 is Empty (size domination optimization)
+4. For each entity in L0 cell: check distance, FOV, mass threshold
+5. Topological sort: select K closest neighbors via `select_nth_unstable`
 
-### Edge-to-Edge Distance
+### L1 Early-Exit Optimization
 
-**Formula:** `edge_distance = center_distance - self_radius - other_radius`
+**Golden Zone:** Giants skip scanning cells containing only mice.
 
-**Why edge-to-edge?**
-- Large creatures are easier to see (bigger visual profile)
-- Small creatures are harder to see (smaller visual profile)
-- Matches biological reality: elephants visible from further than mice
+When the L1 cell's total mass is below the creature's perception threshold (5% of body mass), the entire L0 cell scan is skipped. This provides both:
+- **Performance win:** Skip entity iteration entirely
+- **Biological behavior:** Size domination (large creatures ignore insignificant small ones)
 
-### Scratch Buffer Optimization
+### FOV Check
 
-**Location:** `components.rs:7-10`
+**Narrow FOV (≤180°):** Uses squared comparison (avoids sqrt)
+```
+in_fov = rough_dot > 0 && rough_dot² >= cos²(half_fov) × dist²
+```
 
-Reusable allocation for position queries, reduces heap pressure during perception updates.
+**Wide FOV (>180°):** Falls back to signed comparison with sqrt (handles negative cos)
 
-## Constants
+---
 
-**See:** `apps/simulation/src/simulation/movement/constants.rs` (PERCEPTION struct)
+## Size Domination (Phase A)
 
-| Constant | Purpose |
-|----------|---------|
-| `perception_multiplier` | Range = body_length × this |
-| `personal_space` | Base spacing buffer |
-| `panic_threshold_ratio` | Panic at 50% of personal space |
+**Location:** `perception/entity_filter.rs`
 
-**Example values (1.0m creature):**
-- Perception range: 10.0m
-- Personal space: 2.5m (1.0 + 1.5)
-- Panic threshold: 1.25m (50% of 2.5m)
+Large creatures don't perceive small entities below their threshold.
 
-## Integration with Other Systems
+**Formula:** `threshold = body_mass × PERCEPTION_THRESHOLD_FRACTION` (5%)
 
-**Avoidance System** (`creatures/behaviors/avoidance.rs`):
-- Reads `Perception::iter_neighbors()` to calculate avoidance steering forces
-- Weighs force by distance (closer = stronger)
-- Applies panic force (50N) if within panic threshold
-- Accumulates forces into `Acceleration` component
+**Example:**
+- Giant (5m, ~4375kg): threshold = 218kg
+- Mouse (1m, ~35kg): below threshold → ignored
+- Result: Giant walks through crowd of mice without perceiving them
 
-**Brain System** (future):
-- Will read perception data to make decisions (flee, seek food, etc.)
-- Currently: Perception only used for avoidance steering, no higher-level AI yet
+---
+
+## Integration with Steering System
+
+**Avoidance System** (`steering/avoidance.rs`):
+- Uses TTC (Time-to-Collision) based calculation
+- Reads neighbor velocity from `NeighborCache`
+- Skip diverging paths (Golden Zone optimization)
+- See: `docs/biology/done/avoidance-behavior.md`
+
+**Fused Steering** (`steering/system.rs`):
+- Single query iteration for all steering behaviors
+- Avoidance forces accumulate with wander/seek
+- Forces capped to creature's max_accel
+
+---
 
 ## Performance Characteristics
 
-| Implementation | Complexity | Cost @ 20K | Notes |
-|---------------|------------|------------|-------|
-| **Current (Brute Force)** | O(N²) | ~50ms | All-pairs distance checks |
-| **Spatial Grid (Planned)** | O(N) | ~3-5ms | See `SPRINTS/spatial-grid/SPRINT_PLAN.md` |
-| **Stochastic Updates (Future)** | O(N) | ~1-2ms @ 200K | Only ~10% update per tick |
+| Feature | Benefit |
+|---------|---------|
+| L1 early-exit | Skip entire L0 cells for sparse areas |
+| Size domination | Giants have smaller neighbor sets |
+| Fixed 9-cell scan | Consistent L0 query regardless of perception range |
+| Topological sort | Only compute K closest (partial sort) |
+| Rayon parallel | Multi-core processing |
+
+---
 
 ## Current Limitations
 
@@ -128,7 +127,9 @@ Reusable allocation for position queries, reduces heap pressure during perceptio
 - Small animals: ~68ms reaction time (fast)
 - Large animals: ~500ms reaction time (slow)
 
-**Fix:** Planned `VisionTiming` component with stochastic updates.
+**Fix:** Planned stochastic vision with per-creature update timing.
+
+---
 
 ## Future Work
 
@@ -136,24 +137,23 @@ Reusable allocation for position queries, reduces heap pressure during perceptio
 
 Planned reaction-time-gated perception updates to reduce CPU load and add biological realism.
 
+### Frequency Control (Phase C)
+
+Runtime-adjustable Hz for perception system using entity-ID bucketing.
+
 ### Additional DNA Vision Genes
 
 - `visual_range_multiplier` - Independent range control (4-25x)
 - `neural_speed` - Reaction time modifier (0.5-2.0)
 
-**See:** `docs/biology/todo/dna-driven-fov.md` for full vision gene roadmap
-
-### Spatial Awareness (Future)
-
-- Obstacle detection (currently placeholder, needs terrain/wall collision)
-- Predator-prey dynamics (brain system will use perception to trigger flee/chase)
-- Social behaviors (flocking, herding requires perception of group mates)
+---
 
 ## References
 
 - `apps/simulation/src/simulation/perception/` - Implementation
-- `docs/biology/done/movement-physics.md` - Perception constants rationale
+- `docs/biology/done/avoidance-behavior.md` - TTC-based avoidance
+- `ABC-SUPER_SPRINT/1-dual-grid.md` - L1 grid design
 
 ---
 
-**Last Updated:** 2025-11-30
+**Last Updated:** 2025-12-23

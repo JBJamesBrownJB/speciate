@@ -136,11 +136,17 @@ let urgency = ttc_urgency.max(distance_urgency);
 
 ## Success Criteria
 
-- [ ] Creatures steer around each other without collisions
-- [ ] Fast approaches trigger earlier/stronger avoidance
-- [ ] Parallel/diverging paths don't waste force
-- [ ] No jittery over-reaction to distant neighbors
-- [ ] Code simpler than before (one clear formula)
+- [x] Creatures steer around each other without collisions
+- [x] Fast approaches trigger earlier/stronger avoidance
+- [x] Parallel/diverging paths don't waste force
+- [x] No jittery over-reaction to distant neighbors
+- [x] Code simpler than before (one clear formula)
+
+**Status: ✅ COMPLETE (2025-12-23)**
+- TTC-based avoidance implemented in `steering/avoidance.rs`
+- Golden Zone optimization skips diverging paths
+- Neighbor velocity now passed through `NeighborCache`
+- 12 unit tests covering all edge cases
 
 ---
 

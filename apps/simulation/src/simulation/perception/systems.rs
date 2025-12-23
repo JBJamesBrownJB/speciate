@@ -23,6 +23,16 @@ use std::cell::RefCell;
 ///   - CELL_SIZE * 1.5 = 15m → ceil(1.5) = 2 → 5×5 = 25 cells ✗
 const L0_SCAN_RADIUS: f32 = CELL_SIZE * 1.0; // 10m → ceil(1.0) = 1 → 3×3 = 9 cells
 
+/// How many cells out we query (derived from L0_SCAN_RADIUS).
+/// IMPORTANT: If you change L0_SCAN_RADIUS, update this! Rust const doesn't support ceil().
+const L0_CELLS_RADIUS: f32 = 1.0; // ceil(L0_SCAN_RADIUS / CELL_SIZE) = ceil(1.0) = 1
+
+/// Actual L0 visible range - the furthest distance at which entities can be perceived via L0.
+/// This is the distance to the corner of the furthest queried cell.
+/// Formula: sqrt(2) × (cells_radius + 0.5) × CELL_SIZE
+/// Entities entering this sphere CAN become neighbors (assuming not size-culled).
+const L0_VISIBLE_RANGE: f32 = 1.41421356 * (L0_CELLS_RADIUS + 0.5) * CELL_SIZE;
+
 // Thread-local scratch buffer for sorted cell indices (avoids allocation per creature)
 thread_local! {
     static CELL_SCRATCH: RefCell<Vec<(f32, usize)>> = RefCell::new(Vec::with_capacity(256));
@@ -409,7 +419,7 @@ pub fn update_perception_system(
                         x,
                         y,
                         perception.range,
-                        query_radius,
+                        L0_VISIBLE_RANGE, // Actual visible range, not query radius
                         perception.fov_angle,
                         rot.radians,
                         ax,
@@ -429,7 +439,7 @@ pub fn update_perception_system(
                         pos.x,
                         pos.y,
                         perception.range,
-                        query_radius,
+                        L0_VISIBLE_RANGE, // Actual visible range, not query radius
                         perception.fov_angle,
                         rot.radians,
                         ax,

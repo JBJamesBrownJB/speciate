@@ -1,4 +1,4 @@
-pub const CELL_SIZE: f32 = 10.0;
+pub const CELL_SIZE: f32 = 20.0;
 
 /// Ratio of L1 to L0 cell size (L1 = L0_TO_L1_RATIO × L0).
 pub const L0_TO_L1_RATIO: usize = 3;

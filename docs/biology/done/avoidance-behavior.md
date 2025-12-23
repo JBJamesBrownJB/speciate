@@ -1,184 +1,129 @@
-# Avoidance Behavior - Personal Space & Collision Prevention
+# Avoidance Behavior - TTC-Based Collision Prevention
 
-**Status:** ✅ Implemented
-**Location:** `apps/simulation/src/simulation/creatures/behaviors/avoidance.rs`
+**Status:** ✅ Implemented (ABC Super Sprint, Phase 4)
+**Location:** `apps/simulation/src/simulation/creatures/steering/avoidance.rs`
 
 ---
 
 ## What It Does
 
-Creatures maintain personal space by generating repulsion forces when others get too close. Force strength follows inverse-square scaling (like electromagnetic repulsion) - the closer the neighbor, the exponentially stronger the push-away force.
+Creatures steer away from imminent collisions using Time-to-Collision (TTC). The closer and faster a collision approaches, the stronger the avoidance force. Paths that are diverging or parallel trigger no avoidance at all.
 
-**Result:** Natural spacing emerges without hard collision detection. Creatures flow around each other smoothly like birds in a murmuration or fish in a school.
+**Result:** Smooth, physics-based collision prevention. Creatures flowing around each other naturally without jittering or over-reaction.
 
 ---
 
-## Why It Exists
+## Why TTC (Not Distance-Based)
 
-### Biological Realism
+### The Old Problem
 
-**Real animals maintain spacing for:**
-- Collision prevention (physical safety)
-- Resource competition (feeding zones)
-- Disease avoidance (epidemiological buffer)
-- Comfort/stress management (social tolerance threshold)
+Distance-based avoidance had a critical flaw:
+- Perception detected neighbors at ~8m
+- Avoidance only triggered at ~0.25m edge distance
+- Not enough time/distance to steer around large obstacles
 
-**Examples:**
-- Schooling fish: 1-2 body lengths spacing (predator confusion)
-- Wolves traveling: 2-5m spacing (navigation freedom)
-- Birds on wire: Wing-span + buffer (takeoff clearance)
+**Root cause:** The range gate filtered out neighbors perception had already detected.
 
-### Electromagnetic Analogy
+### The TTC Solution
 
-Inverse-square force matches real physics:
-- Like charges repel with F ∝ 1/r²
-- Closer = exponentially stronger (not linear)
-- Prevents "soft collisions" (gradual overlap)
-- Creates natural equilibrium distance
+Physics question: **Given closing speed and distance, is there enough time to steer away?**
+
+TTC naturally handles what distance-based couldn't:
+- Fast approach + close = short TTC = high urgency = strong force NOW
+- Slow approach + far = long TTC = low urgency = gentle steering
+- Moving apart = infinite TTC = skip entirely (Golden Zone)
+
+---
+
+## Core Algorithm
+
+**Location:** `steering/avoidance.rs:83` (`calculate_avoidance`)
+
+```
+closing_speed = -(relative_velocity · direction_to_neighbor)
+
+if closing_speed <= 0:
+    return 0  // Moving apart - no collision risk (Golden Zone)
+
+time_to_collision = edge_distance / closing_speed
+urgency = (critical_time / TTC).clamp(0, 1)
+force = urgency² × max_accel × direction_away
+```
+
+The quadratic urgency ramp (`urgency²`) creates smooth force scaling - gentle at long TTC, aggressive when collision is imminent.
 
 ---
 
 ## Key Parameters
 
-**Location:** `apps/simulation/src/simulation/movement/constants.rs`
+**Location:** `apps/simulation/src/simulation/creatures/constants/behavior.rs`
 
-### Personal Space
-- See `constants.rs` PERCEPTION.personal_space for base buffer value
-- Added to body radius to determine minimum spacing
-- **Scaling:** Larger creatures need proportionally larger buffers
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| `CRITICAL_TTC_SECONDS` | 2.0 | TTC threshold for max urgency |
 
-### Force Magnitudes
-See `constants.rs` STEERING constants for current values:
-- **avoidance_force** - Baseline repulsion force
-- **panic_force** - Emergency override force (significantly stronger)
-
-### Panic Threshold
-- See `constants.rs` or brain component for panic threshold multiplier
-- Trigger distance scales with body_size
-- **Rationale:** Amygdala hijack - fight-or-flight overrides deliberative processing
+**Tuning notes:**
+- Too short → collisions happen (not enough reaction time)
+- Too long → creatures over-react to distant neighbors
+- 2.0 seconds provides good balance for current creature speeds
 
 ---
 
-## Energy-Modulated Personal Space
+## Golden Zone Optimization
 
-**Status:** ✅ Implemented
+**Skip calculation entirely when paths are diverging.**
 
-### Biological Principle
+This is both a performance win AND biologically accurate:
+- **Performance:** Creatures only calculate avoidance for actual collision threats
+- **Biology:** Real animals don't react to things moving away from them
 
-**Hungry creatures tolerate closer proximity to reach contested resources.**
-
-**Formula:** `effective_space = base_space × (0.4 + 0.6 × energy_fraction)`
-
-### Energy Effects
-
-| Energy Level | Modifier | Spacing Change |
-|--------------|----------|----------------|
-| 100% (full) | 1.0× | Full personal space maintained |
-| 50% (hungry) | 0.7× | 30% reduction, mild hunger tolerance |
-| 0% (starving) | 0.4× | 60% reduction, desperation override |
-
-### Biological Basis
-
-**Hormonal mechanisms:**
-- **Ghrelin (hunger hormone):** Reduces territorial aggression by 40-60% in mammals
-- **Cortisol (stress):** Dampens amygdala threat response to proximity
-- **Prefrontal override:** Goal-directed behavior suppresses avoidance when resources critical
-
-**Real-world examples:**
-- **Vultures:** 50-100m soaring spacing → body-contact feeding (200+ birds in 20m²)
-- **Wolves:** 2-5m travel spacing → shoulder-to-shoulder at kills
-- **Wildebeest:** 5-10m grazing spacing → trampling density at water sources
-
-### Trade-offs
-
-**Costs of crowding:**
-- Disease transmission risk (respiratory, contact spread)
-- Physical injury (trampling, aggressive competition)
-- Stress metabolism (elevated cortisol → fat storage)
-
-**Benefits of crowding:**
-- Access to high-value resources (food, water, mates)
-- Resource monopolization (exclude competitors through sheer presence)
-- Social learning (observe successful foraging strategies)
+**Implementation:** `closing_speed <= 0` check at `avoidance.rs:117`
 
 ---
 
-## Panic Override System
+## Edge Cases Handled
 
-### When Panic Triggers
+| Scenario | TTC | Urgency | Behavior |
+|----------|-----|---------|----------|
+| Head-on collision course | Short | High | Strong avoidance |
+| Parallel paths, close | ∞ | 0 | No force (won't collide) |
+| Stationary obstacle ahead | Finite | Based on my speed | Avoidance (I'm approaching) |
+| Overtaking (same direction) | Long | Low | Gentle steering |
+| Moving apart | Negative closing | 0 | Skip entirely |
+| Already overlapping | Very short | Max | Strong separation force |
 
-**Distance threshold:** Neighbor within `body_size × 2.0`
+---
 
-**Bypass normal decision cooldown** - immediate reaction, no deliberation.
+## Integration with Steering System
 
-### Biological Rationale
+**Location:** `apps/simulation/src/simulation/creatures/steering/system.rs:90-118`
 
-**Amygdala hijack:**
-- Thalamus → Amygdala (fast, crude threat assessment: 12-25ms)
-- Bypasses cortex (slow, accurate processing: 100-300ms)
-- Motor cortex activation before conscious awareness
+Avoidance is computed from the fused steering system alongside wander/seek. Forces accumulate additively then get capped to `max_accel`.
 
-**Survival advantage:** React to threat before brain "knows" it's a threat.
+**Key integration detail:** Neighbor velocity (vx, vy) is passed from `NeighborCache` to enable TTC calculation. This was the key change from Phase 4 - the old system only had position/radius.
+
+---
+
+## Biological Rationale
+
+### Real Animal Collision Avoidance
+
+Animals use motion cues (optical flow, looming) to predict collisions:
+- **Looming response:** Rate of size expansion predicts time-to-impact
+- **Tau variable:** τ = distance / closing_velocity (exactly TTC!)
+- **Neural basis:** Looming-sensitive neurons in optic tectum (fish, birds) and superior colliculus (mammals)
 
 **Examples:**
-- Startle response (predator lunges)
-- Flinch reflex (falling object)
-- Emergency swerve (car cutting in)
+- Pigeons time their escape based on τ, not distance
+- Fish schools maintain spacing through velocity matching and TTC estimation
+- Locusts have dedicated looming detectors that trigger jump reflex
 
-### Panic Disabling
+### Why Quadratic Urgency
 
-**Trigger:** Energy < 5.0
-
-**Rationale:** Too weak to run, "giving up" behavior (conserve last energy for basic metabolism).
-
----
-
-## Implementation Details
-
-### Inverse-Square Force Formula
-
-**For each nearby creature:**
-```
-distance_ratio = personal_space / actual_distance
-force_magnitude = base_force × distance_ratio²
-```
-
-**Force scaling examples:**
-- Distance = personal_space → Force = 1.0× base (equilibrium)
-- Distance = personal_space / 2 → Force = 4.0× base (close quarters)
-- Distance = personal_space / 4 → Force = 16.0× base (collision imminent)
-
-### Force Capping
-
-**Maximum total force:** `max_force` parameter
-
-**Why cap?** Prevents numerical instability at extreme proximity (divide-by-zero, runaway acceleration).
-
-### Performance Optimization
-
-**OPT-7 Early Exit:**
-- Check squared distance BEFORE computing expensive `sqrt()`
-- 80% of neighbors filtered with cheap comparison
-- Only compute `sqrt()` for close neighbors (20% of cases)
-
-**Performance gain:** 19% faster (3.2ms → 2.6ms @ 10K creatures)
-
----
-
-## Integration with Other Systems
-
-### Perception System
-Avoidance uses `Perception::iter_neighbors()` to find nearby creatures. Only checks entities within perception range (typically 10× body length).
-
-### Movement System
-Avoidance forces **accumulate** into `Acceleration` component alongside:
-- Seek forces (goal pursuit)
-- Flee forces (threat escape)
-- Wander forces (exploration)
-
-**Result:** Natural path planning emerges from force blending.
-
-**Example:** Creature seeking food weaves around obstacles automatically (seek + avoid = smooth navigation).
+The urgency² scaling matches biological response curves:
+- **Startle threshold:** Response only triggers past a threshold
+- **Graded response:** Force increases non-linearly as threat approaches
+- **Smooth transitions:** No hard boundaries, natural blending
 
 ---
 
@@ -186,46 +131,37 @@ Avoidance forces **accumulate** into `Acceleration` component alongside:
 
 ### DNA Integration (Planned)
 
-**Gene: `personal_space_multiplier` (0.5-3.0)**
-- Low (0.5): Colonial/tolerant species (schooling fish, herding ungulates)
-- High (3.0): Territorial species (wolves, bears, big cats)
+**Gene: `reaction_time` (0.5-3.0 seconds)**
+- Low: Nervous, hair-trigger (prey species)
+- High: Calm, late-reactor (confident predators)
 
-**Gene: `panic_threshold_multiplier` (1.5-3.0)**
-- Low (1.5): Nervous, hair-trigger response (prey species)
-- High (3.0): Calm, confident (apex predators)
+**Gene: `collision_tolerance` (0.0-1.0)**
+- Low: Gives wide berth, conservative paths
+- High: Cuts close, takes risks
 
-**Gene: `energy_sensitivity` (0.2-1.0)**
-- Low (0.2): Maintains boundaries even when starving (cautious, risk-averse)
-- High (1.0): Collapses personal space when hungry (bold, risk-tolerant)
+### Size-Asymmetric TTC
 
-### Energy Costs
-
-**Metabolic penalty for crowding:**
-- Stress hormone production (cortisol)
-- Immune system activation (disease exposure)
-- Vigilance metabolism (constant threat monitoring)
-
-**Formula (planned):** `stress_metabolism = base × (1.0 - effective_space / base_space)`
+Currently all creatures use same `CRITICAL_TTC_SECONDS`. Future work could scale by size:
+- Large creatures need more time to turn (higher TTC threshold)
+- Small creatures are more agile (can use lower TTC)
 
 ---
 
 ## Related Systems
 
-- **Seeking:** Target-directed movement (combines with avoidance for path planning)
-- **Fleeing:** Threat escape (uses avoidance to navigate around obstacles while fleeing)
-- **Wandering:** Exploration (avoidance keeps wandering creatures from bunching up)
+- **Perception:** Provides `NeighborCache` with neighbor positions and velocities
+- **Steering:** Avoidance forces accumulate with wander/seek in fused system
+- **Movement:** Integrated forces applied in `integrate_motion_system`
 
 ---
 
 ## References
 
-- Electromagnetic inverse-square law (physics analog)
-- Amygdala hijack (LeDoux, 1996 - fear response)
-- Ghrelin-aggression link (Hansson et al., 2014 - hunger physiology)
-- Movement ecology (Nathan et al., 2008 - spacing behaviors)
-
-**See also:** `docs/biology/done/movement-physics.md`, `docs/biology/done/perception-system.md`, `docs/biology/done/target-radius-seeking.md`
+- Lee, D.N. (1976) - Tau variable and visual collision detection
+- Fotowat, H. & Bhattacharya, S. (2008) - Looming-sensitive neurons in locust
+- Reynolds, C.W. (1987) - Boids flocking (separation behavior)
+- ABC-SUPER_SPRINT/4-better-avoid.md - Design specification
 
 ---
 
-**Last Updated:** 2025-11-29
+**Last Updated:** 2025-12-23

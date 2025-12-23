@@ -114,11 +114,12 @@ mod tests {
 
     #[test]
     fn with_fixed_bounds_allocates_both_grids() {
-        let grid = HierarchicalGrid::with_fixed_bounds(-100.0, 100.0, -100.0, 100.0);
+        // World size = 8 × L1_CELL_SIZE to guarantee reasonable grid allocation
+        let half_world = L1_CELL_SIZE * 4.0;
+        let grid = HierarchicalGrid::with_fixed_bounds(-half_world, half_world, -half_world, half_world);
 
-        // L0: 200m / 10m = 20 cells per side
-        // L1: 200m / 30m ≈ 7 cells per side
-        assert!(grid.l1.width() >= 6);
-        assert!(grid.l1.height() >= 6);
+        // Should have at least 6 L1 cells per side (8 × L1_CELL_SIZE / L1_CELL_SIZE = 8, minus edge effects)
+        assert!(grid.l1.width() >= 6, "Expected L1 width >= 6, got {}", grid.l1.width());
+        assert!(grid.l1.height() >= 6, "Expected L1 height >= 6, got {}", grid.l1.height());
     }
 }

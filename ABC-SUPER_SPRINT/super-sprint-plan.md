@@ -49,7 +49,7 @@ These are **post-ABC features** that build on the drive architecture.
 | Phase | Name | Complexity | Focus | Status |
 |-------|------|------------|-------|--------|
 | **A** | Dual Spatial Grid | Medium | Infrastructure + Size Domination | IN PROGRESS |
-| **4** | Better Avoidance | Small | TTC-Based Anti-Collision | **NEW** |
+| **4** | Better Avoidance | Small | TTC-Based Anti-Collision | ✅ COMPLETE |
 | **C** | System Update Frequency | Small | Runtime Hz Control | Pending |
 | **B** | Simple Drive Simplex | Large | Continuous Drives (Loner Behavior) | Pending |
 

@@ -176,12 +176,15 @@ mod tests {
 
     #[test]
     fn set_world_bounds_allocates_grid() {
-        let mut grid = CoarseGrid::new();
-        // 100m × 100m world at 30m cell size = ~4×4 cells
-        grid.set_world_bounds(-50.0, 50.0, -50.0, 50.0);
+        use super::super::constants::L1_CELL_SIZE;
 
-        assert!(grid.width >= 3);
-        assert!(grid.height >= 3);
+        let mut grid = CoarseGrid::new();
+        // World size = 4 × L1_CELL_SIZE to guarantee at least 4×4 cells
+        let half_world = L1_CELL_SIZE * 2.0;
+        grid.set_world_bounds(-half_world, half_world, -half_world, half_world);
+
+        assert!(grid.width >= 3, "Expected >= 3 cells, got {}", grid.width);
+        assert!(grid.height >= 3, "Expected >= 3 cells, got {}", grid.height);
         assert_eq!(grid.cells.len(), grid.width * grid.height);
     }
 

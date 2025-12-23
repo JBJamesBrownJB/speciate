@@ -357,18 +357,53 @@ pub fn update_perception_system(
                         }
                     }
 
-                    // Final selection: get K closest
+                    // Final selection: get K closest using bounded max-heap (predictable branches)
                     let k = MAX_PERCEIVED_NEIGHBORS.min(candidates.len());
                     if k > 0 {
-                        if candidates.len() > k {
-                            // Partition so first K elements are the K smallest
-                            candidates.select_nth_unstable_by(k - 1, |a, b| {
-                                a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
-                            });
+                        // Max-heap by distance: top = furthest of our K closest
+                        let mut heap: Vec<(f32, NeighborData)> = Vec::with_capacity(k);
+
+                        for candidate in candidates.drain(..) {
+                            if heap.len() < k {
+                                // Room in heap, push and sift up
+                                heap.push(candidate);
+                                let mut i = heap.len() - 1;
+                                while i > 0 {
+                                    let parent = (i - 1) / 2;
+                                    if heap[i].0 > heap[parent].0 {
+                                        heap.swap(i, parent);
+                                        i = parent;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            } else if candidate.0 < heap[0].0 {
+                                // Closer than furthest: replace root and sift down
+                                heap[0] = candidate;
+                                let mut i = 0;
+                                loop {
+                                    let left = 2 * i + 1;
+                                    let right = 2 * i + 2;
+                                    let mut largest = i;
+                                    if left < k && heap[left].0 > heap[largest].0 {
+                                        largest = left;
+                                    }
+                                    if right < k && heap[right].0 > heap[largest].0 {
+                                        largest = right;
+                                    }
+                                    if largest != i {
+                                        heap.swap(i, largest);
+                                        i = largest;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
                         }
-                        // Add the K closest neighbors
-                        for (_, neighbor) in candidates.iter().take(k) {
-                            neighbor_cache.add_neighbor(*neighbor);
+
+                        // Add all K neighbors
+                        for (_, neighbor) in heap {
+                            neighbor_cache.add_neighbor(neighbor);
                         }
                     }
 

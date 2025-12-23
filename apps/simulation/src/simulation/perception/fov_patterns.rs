@@ -39,24 +39,18 @@ const FOV_CELL_PATTERNS: [[u16; 8]; 3] = [
 const FOV_THRESHOLD_125: f32 = 125.0 * std::f32::consts::PI / 180.0;
 const FOV_THRESHOLD_215: f32 = 215.0 * std::f32::consts::PI / 180.0;
 
-/// Quantize FOV (radians) to bucket 0-2
+/// Quantize FOV (radians) to bucket 0-2 (branchless)
 #[inline]
 pub fn fov_to_bucket(fov_rad: f32) -> usize {
-    if fov_rad < FOV_THRESHOLD_125 {
-        0
-    } else if fov_rad < FOV_THRESHOLD_215 {
-        1
-    } else {
-        2
-    }
+    (fov_rad >= FOV_THRESHOLD_125) as usize + (fov_rad >= FOV_THRESHOLD_215) as usize
 }
 
-/// Quantize facing direction to octant 0-7 (E=0, NE=1, N=2, ...)
+/// Quantize facing direction to octant 0-7 (E=0, NE=1, N=2, ...) (branchless)
 #[inline]
 pub fn facing_to_octant(fx: f32, fy: f32) -> usize {
     let angle = fy.atan2(fx);
-    let norm = if angle < 0.0 { angle + TAU } else { angle };
-    ((norm + FRAC_PI_8) / FRAC_PI_4) as usize % 8
+    let norm = (angle + TAU).rem_euclid(TAU);
+    ((norm + FRAC_PI_8) / FRAC_PI_4) as usize & 7
 }
 
 /// Get bitmask of cells to query for given FOV and facing direction
@@ -65,22 +59,32 @@ pub fn get_cell_pattern(fov_rad: f32, fx: f32, fy: f32) -> u16 {
     FOV_CELL_PATTERNS[fov_to_bucket(fov_rad)][facing_to_octant(fx, fy)]
 }
 
-/// Check if cell at offset (dx, dy) should be queried given the pattern
+/// Maps (dx+1)*3 + (dy+1) → bit position in pattern (branchless lookup)
+/// Layout: [-1,-1]=0, [-1,0]=1, [-1,1]=2, [0,-1]=3, [0,0]=4, [0,1]=5, [1,-1]=6, [1,0]=7, [1,1]=8
+const OFFSET_TO_BIT: [u8; 9] = [
+    6, // (-1,-1) → SW
+    5, // (-1, 0) → W
+    4, // (-1, 1) → NW
+    7, // ( 0,-1) → S
+    0, // ( 0, 0) → own cell
+    3, // ( 0, 1) → N
+    8, // ( 1,-1) → SE
+    1, // ( 1, 0) → E
+    2, // ( 1, 1) → NE
+];
+
+/// Check if cell at offset (dx, dy) should be queried given the pattern (branchless)
+/// SAFETY: dx and dy must be in [-1, 1]. The perception cell loop guarantees this.
 #[inline]
 pub fn should_query_cell(dx: i32, dy: i32, pattern: u16) -> bool {
-    let bit = match (dx, dy) {
-        (0, 0) => 0,
-        (1, 0) => 1,
-        (1, 1) => 2,
-        (0, 1) => 3,
-        (-1, 1) => 4,
-        (-1, 0) => 5,
-        (-1, -1) => 6,
-        (0, -1) => 7,
-        (1, -1) => 8,
-        _ => return true, // Unknown offset: query to be safe
-    };
-    (pattern >> bit) & 1 == 1
+    debug_assert!(
+        (-1..=1).contains(&dx) && (-1..=1).contains(&dy),
+        "should_query_cell: offset ({}, {}) out of range",
+        dx,
+        dy
+    );
+    let idx = ((dx + 1) * 3 + (dy + 1)) as usize;
+    (pattern >> OFFSET_TO_BIT[idx]) & 1 == 1
 }
 
 #[cfg(test)]
@@ -204,11 +208,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_unknown_offset_queries_safely() {
-        // Out-of-range offsets should query to be safe
-        assert!(should_query_cell(2, 0, 0x000));
-        assert!(should_query_cell(0, 2, 0x000));
-        assert!(should_query_cell(-2, -2, 0x000));
-    }
 }

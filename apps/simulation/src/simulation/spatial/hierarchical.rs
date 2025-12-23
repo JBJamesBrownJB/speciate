@@ -102,8 +102,8 @@ impl HierarchicalGrid {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::constants::L1_CELL_SIZE;
+    use super::*;
 
     #[test]
     fn default_creates_empty_grids() {

@@ -1,8 +1,7 @@
 use speciate::{
     persistence::WorldSaveState,
     simulation::{Simulation, SimulationBuilder},
-    CritBuilder,
-    MAX_WORLD_SIZE,
+    CritBuilder, MAX_WORLD_SIZE,
 };
 use tempfile::TempDir;
 
@@ -54,7 +53,11 @@ fn test_large_scale_save_load_10k_creatures() {
         .expect("Save file should exist")
         .len();
 
-    println!("Save file size: {} bytes ({:.2} MB)", file_size, file_size as f64 / 1_048_576.0);
+    println!(
+        "Save file size: {} bytes ({:.2} MB)",
+        file_size,
+        file_size as f64 / 1_048_576.0
+    );
 
     assert!(
         file_size > 5_000_000,
@@ -69,8 +72,8 @@ fn test_large_scale_save_load_10k_creatures() {
 
     // Load from file (this is where deserialization streaming matters)
     println!("Loading from disk...");
-    let loaded = WorldSaveState::load_from_file(&save_path)
-        .expect("Failed to load large save state");
+    let loaded =
+        WorldSaveState::load_from_file(&save_path).expect("Failed to load large save state");
 
     assert_eq!(
         loaded.metadata.creature_count, 10_000,
@@ -79,8 +82,8 @@ fn test_large_scale_save_load_10k_creatures() {
 
     // Restore simulation
     println!("Restoring simulation...");
-    let restored_sim = Simulation::from_save_state(loaded)
-        .expect("Failed to restore from large save state");
+    let restored_sim =
+        Simulation::from_save_state(loaded).expect("Failed to restore from large save state");
 
     assert_eq!(
         restored_sim.creature_count(),
@@ -147,11 +150,12 @@ fn test_quick_shutdown_no_truncation() {
     );
 
     // Verify restoration works
-    let restored = Simulation::from_save_state(loaded)
-        .expect("Should restore after quick shutdown");
+    let restored =
+        Simulation::from_save_state(loaded).expect("Should restore after quick shutdown");
 
     assert_eq!(
-        restored.creature_count(), 1000,
+        restored.creature_count(),
+        1000,
         "Restored sim should have correct count"
     );
 
@@ -176,9 +180,7 @@ fn test_no_truncation_at_scale() {
         }
 
         let save_state = sim.to_save_state().expect("Failed to create save state");
-        save_state
-            .save_to_file(&save_path)
-            .expect("Failed to save");
+        save_state.save_to_file(&save_path).expect("Failed to save");
 
         // Immediately reload - this is where truncation would be detected
         let loaded = WorldSaveState::load_from_file(&save_path)

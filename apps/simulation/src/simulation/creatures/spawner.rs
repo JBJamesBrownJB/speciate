@@ -1,18 +1,16 @@
 use super::builder::CritBuilder;
-use crate::simulation::creatures::components::CreatureState;
 use crate::simulation::core::WorldBounds;
+use crate::simulation::creatures::components::CreatureState;
 use crate::simulation::Simulation;
 use crate::state::loader::{Rectangle, SpawnSection};
 use log::info;
 use rand::Rng;
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct CreatureSpawnRequest {
     position: Option<(f32, f32)>,
     state: Option<CreatureState>,
 }
-
 
 impl CreatureSpawnRequest {
     pub fn new() -> Self {
@@ -47,8 +45,7 @@ pub fn spawn_creature(simulation: &mut Simulation, request: CreatureSpawnRequest
         builder = builder
             .in_behavior(state.behavior)
             .with_energy(state.energy)
-            .with_age(state.age)
-            .with_max_speed(state.max_speed);
+            .with_age(state.age);
     }
 
     simulation.spawn_crit(builder)
@@ -227,7 +224,6 @@ mod tests {
             behavior: BehaviorMode::Catatonic,
             energy: 50.0,
             age: 10.0,
-            max_speed: 15.0,
         };
 
         let entity_id = spawn_creature(
@@ -248,7 +244,6 @@ mod tests {
             behavior: BehaviorMode::Catatonic,
             energy: 75.0,
             age: 0.0,
-            max_speed: 20.0,
         };
 
         let entity1 = spawn_creature(
@@ -273,7 +268,6 @@ mod tests {
             behavior: BehaviorMode::Catatonic,
             energy: 80.0,
             age: 5.0,
-            max_speed: 18.0,
         };
 
         let entity_id = spawn_creature(
@@ -294,7 +288,6 @@ mod tests {
             behavior: BehaviorMode::Catatonic,
             energy: 60.0,
             age: 0.0,
-            max_speed: 20.0,
         };
 
         let entity1 = spawn_creature(
@@ -319,7 +312,6 @@ mod tests {
             behavior: BehaviorMode::Catatonic,
             energy: 0.0,
             age: 0.0,
-            max_speed: 20.0,
         };
 
         let entity_id = spawn_creature(
@@ -352,12 +344,7 @@ mod tests {
         let mut simulation = SimulationBuilder::new().build();
         simulation.set_boundaries(50.0, 50.0);
 
-        let corners = vec![
-            (0.0, 0.0),
-            (100.0, 0.0),
-            (0.0, 100.0),
-            (100.0, 100.0),
-        ];
+        let corners = vec![(0.0, 0.0), (100.0, 0.0), (0.0, 100.0), (100.0, 100.0)];
 
         for (x, y) in corners {
             let entity_id = spawn_creature(&mut simulation, CreatureSpawnRequest::new().at(x, y));
@@ -380,7 +367,6 @@ mod tests {
             behavior: BehaviorMode::Catatonic,
             energy: 90.0,
             age: 0.0,
-            max_speed: 20.0,
         };
         spawn_creature(
             &mut simulation,

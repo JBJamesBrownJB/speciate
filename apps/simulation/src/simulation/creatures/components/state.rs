@@ -2,7 +2,9 @@ use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
-use crate::simulation::creatures::constants::{DEFAULT_ENERGY, LOW_ENERGY_THRESHOLD, EXHAUSTED_THRESHOLD};
+use crate::simulation::creatures::constants::{
+    DEFAULT_ENERGY, EXHAUSTED_THRESHOLD, LOW_ENERGY_THRESHOLD,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize, Reflect)]
 #[repr(u8)]
@@ -26,7 +28,6 @@ pub struct CreatureState {
     pub behavior: BehaviorMode,
     pub energy: f32,
     pub age: f32,
-    pub max_speed: f32,
 }
 
 impl Default for CreatureState {
@@ -35,7 +36,6 @@ impl Default for CreatureState {
             behavior: BehaviorMode::Catatonic,
             energy: DEFAULT_ENERGY,
             age: 0.0,
-            max_speed: 20.0,
         }
     }
 }

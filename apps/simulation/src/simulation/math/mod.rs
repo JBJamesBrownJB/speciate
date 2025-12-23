@@ -9,10 +9,7 @@ pub mod vector_ops;
 pub use integration::{
     integrate_motion, integrate_motion_no_turn_limit, IntegrationParams, IntegrationResult,
 };
-pub use physics::{
-    calculate_avoidance, clamp_steering_to_max_accel, force_to_acceleration, AvoidanceParams,
-    AvoidanceResult,
-};
+pub use physics::{clamp_steering_to_max_accel, force_to_acceleration};
 pub use steering::{
     accumulate_steering, steering_to_acceleration, SteeringContext, SteeringResult,
 };

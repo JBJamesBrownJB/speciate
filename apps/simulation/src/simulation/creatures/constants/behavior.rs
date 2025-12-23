@@ -1,6 +1,6 @@
 //! Behavior constants
 //!
-//! Force budget multipliers, avoidance, seek, and wander parameters.
+//! Force budget multipliers and wander parameters.
 
 use crate::simulation::math::UnitInterval;
 
@@ -20,44 +20,13 @@ pub const WANDER_FORCE_MULT: UnitInterval = UnitInterval::new(0.25);
 pub const SEEK_FORCE_MULT: UnitInterval = UnitInterval::new(0.7);
 
 // =============================================================================
-// PERSONAL SPACE & AVOIDANCE
+// AVOIDANCE (TTC-BASED)
 // =============================================================================
 
-/// [ACTIVE] Personal space = body_radius × this multiplier.
-/// 2× radius = 1 body diameter - appropriate for social species at low speed.
-pub const PERSONAL_SPACE_MULTIPLIER: f32 = 2.0;
-
-/// [ACTIVE] Seeking creatures tolerate closer proximity (tunnel vision during pursuit).
-/// VALIDATED: Hunting animals override personal space concerns.
-pub const SEEKING_SPACE_REDUCTION: f32 = 0.5;
-
-/// [ACTIVE] Emergency braking distance - apply max avoidance force within this range.
-/// WARNING: Fixed 50cm doesn't scale with body size!
-pub const EMERGENCY_BRAKE_DISTANCE: f32 = 0.5;
-
-/// Energy-driven personal space modifier constants.
-#[derive(Debug, Clone, Copy)]
-pub struct EnergyModifierConstants {
-    pub min_modifier: f32,
-    pub max_modifier: f32,
-}
-
-impl Default for EnergyModifierConstants {
-    fn default() -> Self {
-        Self {
-            min_modifier: 0.4,
-            max_modifier: 1.0,
-        }
-    }
-}
-
-/// [ACTIVE] Energy-based personal space scaling.
-/// Starving (0%): 10% of normal space - desperate crowding tolerated.
-/// Full (100%): 100% of normal space - territorial behavior.
-pub static ENERGY_MODIFIER: EnergyModifierConstants = EnergyModifierConstants {
-    min_modifier: 0.1,
-    max_modifier: 1.0,
-};
+/// Critical time-to-collision threshold (seconds).
+/// When TTC < this value, avoidance urgency reaches maximum.
+/// 2.0 seconds gives creatures enough reaction time to steer around obstacles.
+pub const CRITICAL_TTC_SECONDS: f32 = 2.0;
 
 // =============================================================================
 // WANDER BEHAVIOR

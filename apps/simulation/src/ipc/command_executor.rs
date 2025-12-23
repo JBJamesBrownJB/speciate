@@ -1,6 +1,6 @@
 use bevy_ecs::world::World;
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
 
 use super::Command;
 use crate::simulation::core::WorldBounds;
@@ -14,7 +14,6 @@ pub struct CommandReceiver(pub Arc<Mutex<Receiver<Command>>>);
 
 #[cfg(feature = "dev-tools")]
 pub fn command_executor_system(world: &mut World) {
-
     let commands: Vec<Command> = {
         let receiver = match world.get_resource::<CommandReceiver>() {
             Some(r) => r,
@@ -31,7 +30,6 @@ pub fn command_executor_system(world: &mut World) {
         }
         cmds
     };
-
 
     for cmd in commands {
         match cmd {
@@ -80,7 +78,6 @@ pub fn command_executor_system(world: &mut World) {
             Command::DevLoadTrial { template } => {
                 eprintln!("[CommandExecutor] Loading trial: {}", template);
 
-
                 #[cfg(feature = "dev-tools")]
                 {
                     use crate::trials;
@@ -103,18 +100,14 @@ pub fn command_executor_system(world: &mut World) {
                 }
             }
             Command::DevClearCreatures => {
-
-                use bevy_ecs::query::QueryState;
                 use bevy_ecs::entity::Entity;
+                use bevy_ecs::query::QueryState;
 
                 let mut query_state: QueryState<(Entity, &CritId)> = world.query();
-                let entities: Vec<Entity> = query_state
-                    .iter(world)
-                    .map(|(entity, _)| entity)
-                    .collect();
+                let entities: Vec<Entity> =
+                    query_state.iter(world).map(|(entity, _)| entity).collect();
 
                 let count = entities.len();
-
 
                 for entity in entities {
                     world.despawn(entity);
@@ -146,7 +139,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(
+            1000.0, 1000.0,
+        ));
 
         command_executor_system(&mut world);
 
@@ -194,7 +189,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(
+            1000.0, 1000.0,
+        ));
 
         command_executor_system(&mut world);
 
@@ -237,7 +234,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(
+            1000.0, 1000.0,
+        ));
 
         command_executor_system(&mut world);
 
@@ -266,7 +265,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(
+            1000.0, 1000.0,
+        ));
 
         command_executor_system(&mut world);
 
@@ -278,12 +279,15 @@ mod tests {
         assert_eq!(pos.x, 100.0);
         assert_eq!(dna.size_gene, 1.0);
         assert_eq!(dna.fov_gene, 0.5);
-        assert_eq!(body.length, SIZE_MAX, "DNA size_gene=1.0 should produce SIZE_MAX creature");
+        assert_eq!(
+            body.length, SIZE_MAX,
+            "DNA size_gene=1.0 should produce SIZE_MAX creature"
+        );
     }
 
     #[test]
     fn test_spawn_without_dna_uses_default() {
-        use crate::simulation::creatures::dna::{Dna, DEFAULT_SIZE_GENE, DEFAULT_FOV_GENE};
+        use crate::simulation::creatures::dna::{Dna, DEFAULT_FOV_GENE, DEFAULT_SIZE_GENE};
 
         let (tx, rx) = mpsc::channel();
 
@@ -297,7 +301,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(
+            1000.0, 1000.0,
+        ));
 
         command_executor_system(&mut world);
 
@@ -312,7 +318,7 @@ mod tests {
 
     #[test]
     fn test_spawn_includes_full_bundle_components() {
-        use crate::simulation::creatures::components::{Brain, CanSeek, CanFlee, Target};
+        use crate::simulation::creatures::components::{Brain, CanFlee, CanSeek, Target};
         use crate::simulation::perception::Perception;
 
         let (tx, rx) = mpsc::channel();
@@ -327,14 +333,19 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(
+            1000.0, 1000.0,
+        ));
 
         command_executor_system(&mut world);
 
         // Verify full bundle components are present
         let mut query = world.query::<(&Brain, &CanSeek, &CanFlee, &Perception, &Target)>();
         let count = query.iter(&world).count();
-        assert_eq!(count, 1, "Creature should have full bundle components (Brain, CanSeek, etc.)");
+        assert_eq!(
+            count, 1,
+            "Creature should have full bundle components (Brain, CanSeek, etc.)"
+        );
     }
 
     #[test]
@@ -363,7 +374,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
         world.insert_resource(NextCreatureId::default());
-        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::from_dimensions(
+            1000.0, 1000.0,
+        ));
 
         command_executor_system(&mut world);
 
@@ -374,13 +387,16 @@ mod tests {
 
         command_executor_system(&mut world);
 
-        assert_eq!(query.iter(&world).count(), 0, "Should have 0 creatures after clear");
+        assert_eq!(
+            query.iter(&world).count(),
+            0,
+            "Should have 0 creatures after clear"
+        );
     }
 
     #[test]
     fn test_clear_creatures_with_empty_world() {
         let (tx, rx) = mpsc::channel();
-
 
         tx.send(Command::DevClearCreatures).unwrap();
 
@@ -388,9 +404,7 @@ mod tests {
         world.insert_resource(CommandReceiver(Arc::new(Mutex::new(rx))));
         world.insert_resource(NextCreatureId::default());
 
-
         command_executor_system(&mut world);
-
 
         let mut query = world.query::<&CritId>();
         assert_eq!(query.iter(&world).count(), 0);

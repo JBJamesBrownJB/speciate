@@ -163,7 +163,10 @@ mod tests {
             tick_count += 1;
         });
 
-        assert!(metrics.ticks_this_frame >= 1, "Should run at least 1 tick after 60ms");
+        assert!(
+            metrics.ticks_this_frame >= 1,
+            "Should run at least 1 tick after 60ms"
+        );
         assert_eq!(tick_count, metrics.ticks_this_frame as usize);
     }
 
@@ -240,7 +243,10 @@ mod tests {
             tick_count += 1;
         });
 
-        assert_eq!(metrics.ticks_this_frame, 0, "With 0x scale, no ticks should run");
+        assert_eq!(
+            metrics.ticks_this_frame, 0,
+            "With 0x scale, no ticks should run"
+        );
     }
 
     #[test]
@@ -253,7 +259,10 @@ mod tests {
         // Immediately after reset, no time has passed
         let metrics = controller.tick(|_dt| {});
 
-        assert_eq!(metrics.ticks_this_frame, 0, "After reset, no ticks should run immediately");
+        assert_eq!(
+            metrics.ticks_this_frame, 0,
+            "After reset, no ticks should run immediately"
+        );
     }
 
     #[test]

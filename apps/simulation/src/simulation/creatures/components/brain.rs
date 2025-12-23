@@ -121,7 +121,10 @@ mod tests {
         let young_cooldown = brain.effective_cooldown_ms(0.0, 100.0);
         let old_cooldown = brain.effective_cooldown_ms(80.0, 100.0);
 
-        assert!(old_cooldown > young_cooldown * 1.5, "Old creatures should think slower");
+        assert!(
+            old_cooldown > young_cooldown * 1.5,
+            "Old creatures should think slower"
+        );
     }
 
     #[test]
@@ -175,9 +178,15 @@ mod tests {
         let loaded_brain: Brain = serde_json::from_str(&json).unwrap();
 
         // last_decision_time should be reset to 0.0 (default)
-        assert_eq!(loaded_brain.last_decision_time, 0.0,
-            "last_decision_time should not be serialized - it must reset on reload");
-        assert_eq!(loaded_brain.mode, BrainMode::Normal, "mode should be preserved");
+        assert_eq!(
+            loaded_brain.last_decision_time, 0.0,
+            "last_decision_time should not be serialized - it must reset on reload"
+        );
+        assert_eq!(
+            loaded_brain.mode,
+            BrainMode::Normal,
+            "mode should be preserved"
+        );
     }
 
     #[test]

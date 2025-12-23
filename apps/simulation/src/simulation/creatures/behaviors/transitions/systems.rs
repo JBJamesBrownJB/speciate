@@ -1,8 +1,8 @@
+use crate::simulation::core::components::PhysicsTick;
+use crate::simulation::creatures::components::{BehaviorMode, Brain, BrainMode, CreatureState};
 use crate::simulation::creatures::constants::{
     AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING, TICK_INTERVAL_SECONDS,
 };
-use crate::simulation::core::components::PhysicsTick;
-use crate::simulation::creatures::components::{BehaviorMode, Brain, BrainMode, CreatureState};
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 
@@ -23,20 +23,20 @@ pub fn behavior_transition_system(
 
     // Parallel processing - each creature's updates are independent
     entities.par_iter_mut().for_each(|(creature_state, brain)| {
-            creature_state.age += AGE_INCREMENT_PER_TICK;
+        creature_state.age += AGE_INCREMENT_PER_TICK;
 
-            if creature_state.behavior == BehaviorMode::Wandering {
-                creature_state.consume_energy(ENERGY_COST_WANDERING);
-            }
+        if creature_state.behavior == BehaviorMode::Wandering {
+            creature_state.consume_energy(ENERGY_COST_WANDERING);
+        }
 
-            if brain.mode == BrainMode::Normal {
-                let age = creature_state.age;
-                let energy = creature_state.energy;
-                if brain.can_decide(current_time, age, energy) {
-                    brain.record_decision(current_time);
-                }
+        if brain.mode == BrainMode::Normal {
+            let age = creature_state.age;
+            let energy = creature_state.energy;
+            if brain.can_decide(current_time, age, energy) {
+                brain.record_decision(current_time);
             }
-        });
+        }
+    });
 }
 
 #[cfg(test)]
@@ -73,5 +73,4 @@ mod tests {
         let state = world.get::<CreatureState>(entity).unwrap();
         assert_eq!(state.behavior, BehaviorMode::Catatonic);
     }
-
 }

@@ -4,7 +4,9 @@ use std::collections::HashMap;
 pub mod director;
 pub mod loader;
 
-pub use director::{OverlapData, TrialDirector, TrialResult, TrialSnapshot, TrialState, TaggedEntities};
+pub use director::{
+    OverlapData, TaggedEntities, TrialDirector, TrialResult, TrialSnapshot, TrialState,
+};
 
 /// Production simulation tick rate (Hz)
 /// Must match TARGET_SIMULATION_HZ in napi_addon/simulation_engine.rs
@@ -515,7 +517,9 @@ mod tests {
         let config: TrialConfig = toml::from_str(toml).unwrap();
 
         match &config.spawns[0] {
-            SpawnPattern::Single { target_x, target_y, .. } => {
+            SpawnPattern::Single {
+                target_x, target_y, ..
+            } => {
                 assert_eq!(*target_x, None);
                 assert_eq!(*target_y, None);
             }
@@ -706,7 +710,13 @@ mod tests {
 
         let spec: SpecConfig = toml::from_str(toml).unwrap();
         match &spec.spawns[0] {
-            SpawnPattern::Single { tag, x, y, creature_type, .. } => {
+            SpawnPattern::Single {
+                tag,
+                x,
+                y,
+                creature_type,
+                ..
+            } => {
                 assert_eq!(*tag, Some("hero".to_string()));
                 assert_eq!(*x, 10.0);
                 assert_eq!(*y, 20.0);
@@ -769,14 +779,25 @@ mod tests {
 
         // Assertions
         assert_eq!(spec.assertions.len(), 2);
-        assert!(matches!(spec.assertions[0], Assertion::TicksCompleted { count: 500 }));
-        assert!(matches!(&spec.assertions[1], Assertion::CreatureReachedTarget { tag } if tag == "seeker"));
+        assert!(matches!(
+            spec.assertions[0],
+            Assertion::TicksCompleted { count: 500 }
+        ));
+        assert!(
+            matches!(&spec.assertions[1], Assertion::CreatureReachedTarget { tag } if tag == "seeker")
+        );
 
         // Spawns
         assert_eq!(spec.spawns.len(), 2);
         assert!(matches!(&spec.spawns[0], SpawnPattern::Grid { .. }));
         match &spec.spawns[1] {
-            SpawnPattern::Single { tag, creature_type, target_x, target_y, .. } => {
+            SpawnPattern::Single {
+                tag,
+                creature_type,
+                target_x,
+                target_y,
+                ..
+            } => {
                 assert_eq!(*tag, Some("seeker".to_string()));
                 assert_eq!(*creature_type, CreatureType::Seeker);
                 assert_eq!(*target_x, Some(30.0));

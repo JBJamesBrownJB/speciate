@@ -1,13 +1,11 @@
 use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
 use crate::simulation::creatures::components::{
-    BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
-    CreatureState, CritId, EntityTag, HomePosition, Target, WanderState,
+    BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander, CreatureState,
+    CritId, EntityTag, HomePosition, Target, WanderState,
 };
-use crate::simulation::creatures::constants::{
-    ANGLE_CHANGE, MAX_SPEED, WANDER_DISTANCE, WANDER_RADIUS,
-};
+use crate::simulation::creatures::constants::{ANGLE_CHANGE, WANDER_DISTANCE, WANDER_RADIUS};
 use crate::simulation::creatures::dna::Dna;
-use crate::simulation::perception::{AvoidanceBehavior, L1Perceptions, NeighborCache, Perception};
+use crate::simulation::perception::{L1Perceptions, NeighborCache, Perception};
 use bevy_ecs::prelude::*;
 use rand::Rng;
 
@@ -31,7 +29,6 @@ pub struct CritBundle {
     pub perception: Perception,
     pub neighbor_cache: NeighborCache,
     pub l1_perceptions: L1Perceptions,
-    pub avoidance_behavior: AvoidanceBehavior,
     pub target: Target,
 }
 
@@ -43,7 +40,6 @@ pub struct CritBuilder {
     brain_mode: BrainMode,
     energy: f32,
     age: f32,
-    max_speed: f32,
     target: Option<Target>,
     dna: Dna,
     size_override: Option<f32>,
@@ -67,7 +63,6 @@ impl CritBuilder {
             brain_mode: BrainMode::Normal,
             energy: 100.0,
             age: 0.0,
-            max_speed: MAX_SPEED,
             target: None,
             dna: Dna::default(),
             size_override: None,
@@ -165,8 +160,9 @@ impl CritBuilder {
         self
     }
 
-    pub fn with_max_speed(mut self, max_speed: f32) -> Self {
-        self.max_speed = max_speed;
+    /// Deprecated: max_speed is now derived from body size.
+    #[deprecated(note = "max_speed is now derived from BodySize, this method is a no-op")]
+    pub fn with_max_speed(self, _max_speed: f32) -> Self {
         self
     }
 
@@ -226,8 +222,12 @@ impl CritBuilder {
     pub fn build(self, id: u32) -> CritBundle {
         let mut rng = rand::thread_rng();
 
-        let size = self.size_override.unwrap_or_else(|| self.dna.expressed_size());
-        let fov_degrees = self.fov_override.unwrap_or_else(|| self.dna.expressed_fov());
+        let size = self
+            .size_override
+            .unwrap_or_else(|| self.dna.expressed_size());
+        let fov_degrees = self
+            .fov_override
+            .unwrap_or_else(|| self.dna.expressed_fov());
 
         CritBundle {
             id: CritId(id),
@@ -243,13 +243,13 @@ impl CritBuilder {
             acceleration: Acceleration { ax: 0.0, ay: 0.0 },
             body_size: BodySize::new(size),
             rotation: Rotation::new(
-                self.facing_override.unwrap_or_else(|| rng.gen_range(0.0..std::f32::consts::TAU))
+                self.facing_override
+                    .unwrap_or_else(|| rng.gen_range(0.0..std::f32::consts::TAU)),
             ),
             creature_state: CreatureState {
                 behavior: self.behavior,
                 energy: self.energy,
                 age: self.age,
-                max_speed: self.max_speed,
             },
             brain: Brain::with_mode(self.brain_mode),
             wander_state: WanderState {
@@ -266,7 +266,6 @@ impl CritBuilder {
             perception: Perception::from_body_size_with_fov(size, fov_degrees),
             neighbor_cache: NeighborCache::new(),
             l1_perceptions: L1Perceptions::new(),
-            avoidance_behavior: AvoidanceBehavior::from_body_size(size),
             target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
         }
     }
@@ -372,10 +371,7 @@ mod tests {
     #[test]
     fn test_builder_with_size_overrides_dna() {
         let dna = Dna::new(1.0, 0.5);
-        let bundle = CritBuilder::new()
-            .with_dna(dna)
-            .with_size(2.0)
-            .build(0);
+        let bundle = CritBuilder::new().with_dna(dna).with_size(2.0).build(0);
 
         assert_eq!(bundle.body_size.length, 2.0);
         assert_eq!(bundle.dna.size_gene, 1.0);
@@ -384,10 +380,7 @@ mod tests {
     #[test]
     fn test_builder_with_fov_overrides_dna() {
         let dna = Dna::new(0.5, 1.0);
-        let bundle = CritBuilder::new()
-            .with_dna(dna)
-            .with_fov(90.0)
-            .build(0);
+        let bundle = CritBuilder::new().with_dna(dna).with_fov(90.0).build(0);
 
         let expected_fov_rad = 90.0_f32.to_radians();
         assert!(

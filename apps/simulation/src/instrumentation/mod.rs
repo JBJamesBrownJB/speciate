@@ -17,7 +17,7 @@ mod parallelization;
 pub use hardware_metrics::{HardwareMetrics, HardwareSnapshot, HardwareSnapshotResource};
 
 #[cfg(feature = "dev-tools")]
-pub use snapshot::{PerformanceSnapshot, EcsMetrics};
+pub use snapshot::{EcsMetrics, PerformanceSnapshot};
 
 #[cfg(feature = "dev-tools")]
 pub use parallelization::{ParallelizationMetrics, ParallelizationSnapshot};

@@ -12,11 +12,10 @@ mod runner {
     use std::path::PathBuf;
     use std::time::Instant;
 
-    use speciate::trials::{
-        Assertion, SpecConfig, TaggedEntities, TrialDirector, TrialSnapshot,
-        PRODUCTION_DELTA_TIME,
-    };
     use speciate::trials::loader::load_trial;
+    use speciate::trials::{
+        Assertion, SpecConfig, TaggedEntities, TrialDirector, TrialSnapshot, PRODUCTION_DELTA_TIME,
+    };
     use speciate::{BodySize, CritId, EntityTag, Position, SimulationBuilder, Target, Velocity};
 
     /// Discover all spec files in the specs/ directory
@@ -50,16 +49,14 @@ mod runner {
                     }
                 }
 
-                for spec_entry in fs::read_dir(&category_path).expect("Failed to read category dir") {
+                for spec_entry in fs::read_dir(&category_path).expect("Failed to read category dir")
+                {
                     let spec_entry = spec_entry.expect("Failed to read spec entry");
                     let spec_path = spec_entry.path();
 
                     if spec_path.extension().map_or(false, |ext| ext == "toml") {
-                        let spec_name = spec_path
-                            .file_stem()
-                            .unwrap()
-                            .to_string_lossy()
-                            .to_string();
+                        let spec_name =
+                            spec_path.file_stem().unwrap().to_string_lossy().to_string();
 
                         let full_name = format!("{}/{}", category_name, spec_name);
                         specs.push((full_name, spec_path));
@@ -74,13 +71,12 @@ mod runner {
 
     /// Parse a spec file into SpecConfig
     fn parse_spec(path: &PathBuf) -> Result<SpecConfig, String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read spec file: {}", e))?;
+        let content =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read spec file: {}", e))?;
 
         // Check if it's a spec format (has [meta]) or legacy trial format
         if content.contains("[meta]") {
-            toml::from_str(&content)
-                .map_err(|e| format!("Failed to parse spec TOML: {}", e))
+            toml::from_str(&content).map_err(|e| format!("Failed to parse spec TOML: {}", e))
         } else {
             // Legacy format - convert to spec format with no assertions
             let trial: speciate::trials::TrialConfig = toml::from_str(&content)
@@ -121,9 +117,9 @@ mod runner {
 
     /// Check if spec has any tag-based assertions
     fn needs_tag_tracking(spec: &SpecConfig) -> bool {
-        spec.assertions.iter().any(|a| {
-            matches!(a, Assertion::CreatureReachedTarget { .. })
-        })
+        spec.assertions
+            .iter()
+            .any(|a| matches!(a, Assertion::CreatureReachedTarget { .. }))
     }
 
     /// Create a minimal snapshot (just tick count and timing, no world queries)
@@ -272,7 +268,11 @@ mod runner {
             Some(result) => {
                 let mut msg = format!("Spec '{}' failed after {} ticks:\n", name, result.ticks_run);
                 for assertion_result in &result.assertion_results {
-                    let status = if assertion_result.passed { "PASS" } else { "FAIL" };
+                    let status = if assertion_result.passed {
+                        "PASS"
+                    } else {
+                        "FAIL"
+                    };
                     msg.push_str(&format!("  [{}] {}\n", status, assertion_result.message));
                 }
                 Err(msg)
@@ -307,19 +307,17 @@ mod runner {
             print!("Running spec '{}'... ", name);
 
             match parse_spec(path) {
-                Ok(spec) => {
-                    match run_spec(name, &spec) {
-                        Ok(()) => {
-                            println!("PASS");
-                            passed += 1;
-                        }
-                        Err(e) => {
-                            println!("FAIL");
-                            errors.push(e);
-                            failed += 1;
-                        }
+                Ok(spec) => match run_spec(name, &spec) {
+                    Ok(()) => {
+                        println!("PASS");
+                        passed += 1;
                     }
-                }
+                    Err(e) => {
+                        println!("FAIL");
+                        errors.push(e);
+                        failed += 1;
+                    }
+                },
                 Err(e) => {
                     println!("ERROR: {}", e);
                     errors.push(format!("Spec '{}': {}", name, e));
@@ -362,7 +360,8 @@ mod runner {
 
         {
             let world = sim.world_mut();
-            load_trial(world, "behavior/catatonic-crowd", false, None).expect("Failed to load trial");
+            load_trial(world, "behavior/catatonic-crowd", false, None)
+                .expect("Failed to load trial");
         }
 
         // Count creatures
@@ -387,7 +386,8 @@ mod runner {
 
         {
             let world = sim.world_mut();
-            load_trial(world, "performance/many-wanderers-dense", false, None).expect("Failed to load trial");
+            load_trial(world, "performance/many-wanderers-dense", false, None)
+                .expect("Failed to load trial");
         }
 
         // Count creatures
@@ -420,7 +420,13 @@ mod runner {
 
         {
             let world = sim.world_mut();
-            load_trial(world, "performance/many-wanderers-world-spread", false, None).expect("Failed to load trial");
+            load_trial(
+                world,
+                "performance/many-wanderers-world-spread",
+                false,
+                None,
+            )
+            .expect("Failed to load trial");
         }
         let spawn_time = spawn_start.elapsed();
         println!("Spawn time: {:?}", spawn_time);
@@ -487,7 +493,8 @@ mod runner {
 
         {
             let world = sim.world_mut();
-            load_trial(world, "performance/many-seekers-world-spread", false, None).expect("Failed to load trial");
+            load_trial(world, "performance/many-seekers-world-spread", false, None)
+                .expect("Failed to load trial");
         }
         let spawn_time = spawn_start.elapsed();
         println!("Spawn time: {:?}", spawn_time);

@@ -1,4 +1,3 @@
-
 use super::builder::CritBuilder;
 use bevy_ecs::event::Event;
 

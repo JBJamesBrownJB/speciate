@@ -16,9 +16,7 @@ impl NoiseTable {
         let size = 1usize << power; // 2^power
         let mut rng = rand::thread_rng();
 
-        let values: Vec<f32> = (0..size)
-            .map(|_| rng.gen_range(-1.0..1.0))
-            .collect();
+        let values: Vec<f32> = (0..size).map(|_| rng.gen_range(-1.0..1.0)).collect();
 
         Self {
             values,
@@ -74,13 +72,16 @@ mod tests {
     fn test_noise_in_valid_range() {
         for tick in 0..100 {
             let noise = perlin_locomotion_noise(1, tick, 0, 0.05);
-            assert!(noise >= -1.0 && noise <= 1.0, "Noise out of range: {}", noise);
+            assert!(
+                noise >= -1.0 && noise <= 1.0,
+                "Noise out of range: {}",
+                noise
+            );
         }
     }
 
     #[test]
     fn test_noise_deterministic() {
-
         let noise1 = perlin_locomotion_noise(42, 100, 0, 0.05);
         let noise2 = perlin_locomotion_noise(42, 100, 0, 0.05);
         assert_eq!(noise1, noise2);
@@ -88,9 +89,9 @@ mod tests {
 
     #[test]
     fn test_noise_varies_with_tick() {
-
-        let noises: Vec<f32> = (0..10).map(|t| perlin_locomotion_noise(1, t * 10, 0, 0.05)).collect();
-
+        let noises: Vec<f32> = (0..10)
+            .map(|t| perlin_locomotion_noise(1, t * 10, 0, 0.05))
+            .collect();
 
         let all_same = noises.windows(2).all(|w| (w[0] - w[1]).abs() < 0.001);
         assert!(!all_same, "Noise should vary across ticks");
@@ -98,9 +99,9 @@ mod tests {
 
     #[test]
     fn test_noise_varies_with_entity() {
-
-        let noises: Vec<f32> = (1..=10).map(|e| perlin_locomotion_noise(e, 50, 0, 0.05)).collect();
-
+        let noises: Vec<f32> = (1..=10)
+            .map(|e| perlin_locomotion_noise(e, 50, 0, 0.05))
+            .collect();
 
         let all_same = noises.windows(2).all(|w| (w[0] - w[1]).abs() < 0.001);
         assert!(!all_same, "Noise should vary across entities");
@@ -108,12 +109,16 @@ mod tests {
 
     #[test]
     fn test_noise_independent_axes() {
+        let noises_x: Vec<f32> = (0..10)
+            .map(|t| perlin_locomotion_noise(1, t, 0, 0.05))
+            .collect();
+        let noises_y: Vec<f32> = (0..10)
+            .map(|t| perlin_locomotion_noise(1, t, 1, 0.05))
+            .collect();
 
-        let noises_x: Vec<f32> = (0..10).map(|t| perlin_locomotion_noise(1, t, 0, 0.05)).collect();
-        let noises_y: Vec<f32> = (0..10).map(|t| perlin_locomotion_noise(1, t, 1, 0.05)).collect();
-
-
-        let identical = noises_x.iter().zip(noises_y.iter())
+        let identical = noises_x
+            .iter()
+            .zip(noises_y.iter())
             .all(|(x, y)| (x - y).abs() < 0.001);
         assert!(!identical, "X and Y axes should have independent noise");
     }

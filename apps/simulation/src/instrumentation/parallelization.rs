@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, Ordering};
 use bevy_ecs::system::Resource;
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 
 #[cfg(feature = "dev-tools")]
 use sysinfo::{CpuRefreshKind, RefreshKind, System};
@@ -49,10 +49,7 @@ pub struct ParallelizationMetrics {
 impl ParallelizationMetrics {
     fn create_cpu_system() -> System {
         // Only request CPU info - no process info (much lighter)
-        System::new_with_specifics(
-            RefreshKind::new()
-                .with_cpu(CpuRefreshKind::everything()),
-        )
+        System::new_with_specifics(RefreshKind::new().with_cpu(CpuRefreshKind::everything()))
     }
 
     /// Read process memory directly from /proc/self/statm (zero allocations on Linux)
@@ -64,7 +61,8 @@ impl ParallelizationMetrics {
             .and_then(|contents| {
                 let mut parts = contents.split_whitespace();
                 parts.next(); // skip 'size'
-                parts.next()  // get 'resident' (RSS in pages)
+                parts
+                    .next() // get 'resident' (RSS in pages)
                     .and_then(|s| s.parse::<u64>().ok())
                     .map(|pages| pages * 4096) // Convert pages to bytes (4KB pages)
             })
@@ -90,7 +88,9 @@ impl ParallelizationMetrics {
 
         // Only refresh CPU metrics every N reads to reduce sysinfo allocations
         if count % CPU_REFRESH_INTERVAL == 0 {
-            let mut system = self.system.lock()
+            let mut system = self
+                .system
+                .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
 
             // Recreate system periodically to prevent any internal accumulation
@@ -108,10 +108,7 @@ impl ParallelizationMetrics {
                 0.0
             };
 
-            self.cached_active_cores = cpus
-                .iter()
-                .filter(|cpu| cpu.cpu_usage() > 10.0)
-                .count();
+            self.cached_active_cores = cpus.iter().filter(|cpu| cpu.cpu_usage() > 10.0).count();
         }
 
         let parallelism_factor = if self.cpu_cores_total > 0 {
@@ -202,7 +199,13 @@ mod tests {
         let mut metrics = ParallelizationMetrics::new();
         let snapshot = metrics.read();
 
-        assert!(snapshot.process_memory_bytes > 0, "Process memory should be non-zero");
-        assert!(snapshot.process_memory_bytes < 10 * 1024 * 1024 * 1024, "Process memory should be < 10GB");
+        assert!(
+            snapshot.process_memory_bytes > 0,
+            "Process memory should be non-zero"
+        );
+        assert!(
+            snapshot.process_memory_bytes < 10 * 1024 * 1024 * 1024,
+            "Process memory should be < 10GB"
+        );
     }
 }

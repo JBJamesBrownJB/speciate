@@ -12,23 +12,23 @@
 //! - Bevy thread: Runs simulation loop, writes to DoubleBuffer
 //! - Atomic swap: Lock-free synchronization between threads
 
-use napi_derive::napi;
+use crossbeam_channel;
+use log::error;
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::thread::{self, JoinHandle};
-use std::path::Path;
-use std::time::Duration;
-use std::panic::AssertUnwindSafe;
-use crossbeam_channel;
+use napi_derive::napi;
 use parking_lot::{Mutex, RwLock};
-use log::error;
+use std::panic::AssertUnwindSafe;
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
-use crate::ipc::bridge::{DoubleBuffer, NapiApp, TelemetrySnapshot};
+use crate::config::SaveStateConfig;
 #[cfg(feature = "dev-tools")]
 use crate::ipc::bridge::PerceptionDebugBuffer;
-use crate::config::SaveStateConfig;
+use crate::ipc::bridge::{DoubleBuffer, NapiApp, TelemetrySnapshot};
 use crate::persistence::{SaveStateWorker, SaveType};
 use crate::simulation::TickController;
 
@@ -39,7 +39,6 @@ use crate::simulation::TickController;
 const TARGET_SIMULATION_HZ: f32 = 20.0;
 
 use crate::ipc::SimCommand;
-
 
 /// Initialize panic handler (MUST be called before creating SimulationEngine)
 ///
@@ -106,7 +105,9 @@ impl SimulationEngine {
 
         // Initialize SaveStateWorker if enabled (Arc<Mutex<>> for thread sharing)
         let save_state_worker = if save_state_config.enabled {
-            Some(Arc::new(Mutex::new(SaveStateWorker::start(save_state_config.clone()))))
+            Some(Arc::new(Mutex::new(SaveStateWorker::start(
+                save_state_config.clone(),
+            ))))
         } else {
             None
         };
@@ -175,10 +176,8 @@ impl SimulationEngine {
         }
 
         // Create telemetry callback (bounded queue to prevent memory issues)
-        let tsfn: ThreadsafeFunction<String> = callback
-            .create_threadsafe_function(10, |ctx| {
-                Ok(vec![ctx.value])
-            })?;
+        let tsfn: ThreadsafeFunction<String> =
+            callback.create_threadsafe_function(10, |ctx| Ok(vec![ctx.value]))?;
         self.telemetry_cb = Some(tsfn);
 
         // Bounded command queue (size: 128 - prevents overflow)
@@ -189,7 +188,7 @@ impl SimulationEngine {
         // Pre-allocate for 500K creatures (20 MB, double-buffered = 40 MB total)
         // Sprint 20 upgrade - performance allows larger populations
         const MAX_CREATURES: usize = 500_000;
-        let size = MAX_CREATURES * 5;  // 2.5M f32s (ID, X, Y, Rot, Size)
+        let size = MAX_CREATURES * 5; // 2.5M f32s (ID, X, Y, Rot, Size)
         *self.buffer.lock() = DoubleBuffer::new(size);
 
         self.running.store(true, Ordering::SeqCst);
@@ -261,7 +260,9 @@ impl SimulationEngine {
                         // Export positions to write buffer (SoA layout)
                         let export_start = std::time::Instant::now();
                         let exported_count = app.export_positions(&buffer_ref);
-                        app.record_export_positions_timing(export_start.elapsed().as_micros() as u64);
+                        app.record_export_positions_timing(
+                            export_start.elapsed().as_micros() as u64
+                        );
 
                         // Read hardware counters (dev-tools only)
                         #[cfg(feature = "dev-tools")]
@@ -306,18 +307,24 @@ impl SimulationEngine {
                                     "{}".to_string()
                                 });
 
-                                let _ = tsfn.call(Ok(telemetry_json), ThreadsafeFunctionCallMode::NonBlocking);
+                                let _ = tsfn.call(
+                                    Ok(telemetry_json),
+                                    ThreadsafeFunctionCallMode::NonBlocking,
+                                );
                             }
                         }
 
                         // Periodic save state (if enabled and interval elapsed)
                         if save_state_config.enabled {
-                            let save_interval = Duration::from_secs(save_state_config.interval_secs);
+                            let save_interval =
+                                Duration::from_secs(save_state_config.interval_secs);
                             if last_save.elapsed() >= save_interval {
                                 match app.to_save_state() {
                                     Ok(save_state) => {
                                         if let Some(ref worker_ref) = save_state_worker_ref {
-                                            worker_ref.lock().save_world_state(save_state, SaveType::Periodic);
+                                            worker_ref
+                                                .lock()
+                                                .save_world_state(save_state, SaveType::Periodic);
                                         }
                                         last_save = std::time::Instant::now();
                                     }
@@ -331,7 +338,10 @@ impl SimulationEngine {
 
                     // Log if we dropped time (for debugging performance issues)
                     if metrics.time_dropped > 0.01 {
-                        eprintln!("⚠️  Dropped {:.1}ms of simulation time (overrun)", metrics.time_dropped * 1000.0);
+                        eprintln!(
+                            "⚠️  Dropped {:.1}ms of simulation time (overrun)",
+                            metrics.time_dropped * 1000.0
+                        );
                     }
                 }
 
@@ -374,10 +384,7 @@ impl SimulationEngine {
                     })
                     .to_string();
 
-                    let _ = tsfn.call(
-                        Ok(panic_json),
-                        ThreadsafeFunctionCallMode::NonBlocking,
-                    );
+                    let _ = tsfn.call(Ok(panic_json), ThreadsafeFunctionCallMode::NonBlocking);
                 }
             }
         });
@@ -503,16 +510,10 @@ impl SimulationEngine {
     pub fn spawn_creatures(&self, count: u32) -> Result<()> {
         self.command_sender
             .as_ref()
-            .ok_or(Error::new(
-                Status::GenericFailure,
-                "Simulation not started",
-            ))?
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
             .try_send(SimCommand::Spawn(count))
             .map_err(|e| {
-                Error::new(
-                    Status::GenericFailure,
-                    format!("Command queue full: {}", e),
-                )
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
             })?;
         Ok(())
     }
@@ -529,7 +530,13 @@ impl SimulationEngine {
     /// * Simulation not started
     /// * Command queue full
     #[napi]
-    pub fn spawn_creature_at(&self, x: f64, y: f64, dna_size_gene: Option<f64>, dna_fov_gene: Option<f64>) -> Result<()> {
+    pub fn spawn_creature_at(
+        &self,
+        x: f64,
+        y: f64,
+        dna_size_gene: Option<f64>,
+        dna_fov_gene: Option<f64>,
+    ) -> Result<()> {
         use crate::simulation::creatures::dna::Dna;
 
         let dna = match (dna_size_gene, dna_fov_gene) {
@@ -539,16 +546,14 @@ impl SimulationEngine {
 
         self.command_sender
             .as_ref()
-            .ok_or(Error::new(
-                Status::GenericFailure,
-                "Simulation not started",
-            ))?
-            .try_send(SimCommand::SpawnAt { x: x as f32, y: y as f32, dna })
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
+            .try_send(SimCommand::SpawnAt {
+                x: x as f32,
+                y: y as f32,
+                dna,
+            })
             .map_err(|e| {
-                Error::new(
-                    Status::GenericFailure,
-                    format!("Command queue full: {}", e),
-                )
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
             })?;
         Ok(())
     }
@@ -562,16 +567,10 @@ impl SimulationEngine {
     pub fn kill_all(&self) -> Result<()> {
         self.command_sender
             .as_ref()
-            .ok_or(Error::new(
-                Status::GenericFailure,
-                "Simulation not started",
-            ))?
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
             .try_send(SimCommand::KillAll)
             .map_err(|e| {
-                Error::new(
-                    Status::GenericFailure,
-                    format!("Command queue full: {}", e),
-                )
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
             })?;
         Ok(())
     }
@@ -588,16 +587,10 @@ impl SimulationEngine {
     pub fn set_paused(&self, paused: bool) -> Result<()> {
         self.command_sender
             .as_ref()
-            .ok_or(Error::new(
-                Status::GenericFailure,
-                "Simulation not started",
-            ))?
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
             .try_send(SimCommand::SetPaused(paused))
             .map_err(|e| {
-                Error::new(
-                    Status::GenericFailure,
-                    format!("Command queue full: {}", e),
-                )
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
             })?;
         Ok(())
     }
@@ -620,16 +613,10 @@ impl SimulationEngine {
     pub fn set_time_scale(&self, scale: f64) -> Result<()> {
         self.command_sender
             .as_ref()
-            .ok_or(Error::new(
-                Status::GenericFailure,
-                "Simulation not started",
-            ))?
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
             .try_send(SimCommand::SetTimeScale(scale as f32))
             .map_err(|e| {
-                Error::new(
-                    Status::GenericFailure,
-                    format!("Command queue full: {}", e),
-                )
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
             })?;
         Ok(())
     }
@@ -657,13 +644,17 @@ impl SimulationEngine {
     /// * Simulation not started
     /// * Command queue full
     #[napi]
-    pub fn set_viewport_bounds(&self, min_x: f64, min_y: f64, max_x: f64, max_y: f64, margin: f64) -> Result<()> {
+    pub fn set_viewport_bounds(
+        &self,
+        min_x: f64,
+        min_y: f64,
+        max_x: f64,
+        max_y: f64,
+        margin: f64,
+    ) -> Result<()> {
         self.command_sender
             .as_ref()
-            .ok_or(Error::new(
-                Status::GenericFailure,
-                "Simulation not started",
-            ))?
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
             .try_send(SimCommand::SetViewportBounds {
                 min_x: min_x as f32,
                 min_y: min_y as f32,
@@ -672,10 +663,7 @@ impl SimulationEngine {
                 margin: margin as f32,
             })
             .map_err(|e| {
-                Error::new(
-                    Status::GenericFailure,
-                    format!("Command queue full: {}", e),
-                )
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
             })?;
         Ok(())
     }
@@ -688,7 +676,13 @@ impl SimulationEngine {
     /// * `dna_size_gene` - Optional size gene (0.0-1.0, used when randomize_dna is false)
     /// * `dna_fov_gene` - Optional FOV gene (0.0-1.0, used when randomize_dna is false)
     #[napi]
-    pub fn load_trial(&self, template: String, randomize_dna: bool, dna_size_gene: Option<f64>, dna_fov_gene: Option<f64>) -> Result<()> {
+    pub fn load_trial(
+        &self,
+        template: String,
+        randomize_dna: bool,
+        dna_size_gene: Option<f64>,
+        dna_fov_gene: Option<f64>,
+    ) -> Result<()> {
         use crate::simulation::creatures::dna::Dna;
 
         let dna = match (dna_size_gene, dna_fov_gene) {
@@ -698,16 +692,14 @@ impl SimulationEngine {
 
         self.command_sender
             .as_ref()
-            .ok_or(Error::new(
-                Status::GenericFailure,
-                "Simulation not started",
-            ))?
-            .try_send(SimCommand::LoadTrial { trial_name: template, randomize_dna, dna })
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
+            .try_send(SimCommand::LoadTrial {
+                trial_name: template,
+                randomize_dna,
+                dna,
+            })
             .map_err(|e| {
-                Error::new(
-                    Status::GenericFailure,
-                    format!("Command queue full: {}", e),
-                )
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
             })?;
         Ok(())
     }
@@ -732,16 +724,10 @@ impl SimulationEngine {
     pub fn select_creature_debug(&self, creature_id: Option<u32>) -> Result<()> {
         self.command_sender
             .as_ref()
-            .ok_or(Error::new(
-                Status::GenericFailure,
-                "Simulation not started",
-            ))?
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
             .try_send(SimCommand::SelectCreatureDebug(creature_id))
             .map_err(|e| {
-                Error::new(
-                    Status::GenericFailure,
-                    format!("Command queue full: {}", e),
-                )
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
             })?;
         Ok(())
     }
@@ -767,17 +753,17 @@ impl SimulationEngine {
     /// ```
     #[napi]
     pub fn get_telemetry(&self) -> Result<String> {
-        let snapshot = self.telemetry.try_read()
-            .ok_or_else(|| Error::new(
-                Status::GenericFailure,
-                "Telemetry lock poisoned",
-            ))?;
+        let snapshot = self
+            .telemetry
+            .try_read()
+            .ok_or_else(|| Error::new(Status::GenericFailure, "Telemetry lock poisoned"))?;
 
-        snapshot.to_json()
-            .map_err(|e| Error::new(
+        snapshot.to_json().map_err(|e| {
+            Error::new(
                 Status::GenericFailure,
                 format!("Failed to serialize telemetry: {}", e),
-            ))
+            )
+        })
     }
 
     /// Get current simulation tick
@@ -792,7 +778,8 @@ impl SimulationEngine {
     /// ```
     #[napi]
     pub fn get_tick(&self) -> i64 {
-        self.telemetry.try_read()
+        self.telemetry
+            .try_read()
             .map(|snapshot| snapshot.tick as i64)
             .unwrap_or(0)
     }
@@ -809,7 +796,7 @@ impl SimulationEngine {
     /// ```
     #[napi]
     pub fn get_tick_rate(&self) -> f32 {
-        30.0  // Fixed for now, will be DNA-driven in future
+        30.0 // Fixed for now, will be DNA-driven in future
     }
 
     /// Get current creature count
@@ -824,7 +811,8 @@ impl SimulationEngine {
     /// ```
     #[napi]
     pub fn get_creature_count(&self) -> i64 {
-        self.telemetry.try_read()
+        self.telemetry
+            .try_read()
             .map(|snapshot| snapshot.creature_count as i64)
             .unwrap_or(0)
     }
@@ -863,7 +851,7 @@ impl SimulationEngine {
     #[napi]
     pub fn get_buffer_stats(&self) -> String {
         let buffer = self.buffer.lock();
-        let capacity = buffer.size() / 5;  // 5 f32s per creature: ID, X, Y, Rot, Size
+        let capacity = buffer.size() / 5; // 5 f32s per creature: ID, X, Y, Rot, Size
         let used = self.get_creature_count() as usize;
         let utilization_pct = if capacity > 0 {
             (used * 100) / capacity
@@ -889,14 +877,12 @@ impl SimulationEngine {
         // Wait for Bevy thread FIRST - it creates the shutdown save before exiting
         if let Some(handle) = self.thread_handle.take() {
             eprintln!("🛑 Waiting for Bevy thread to exit (includes shutdown save)...");
-            handle
-                .join()
-                .map_err(|e| {
-                    Error::new(
-                        Status::GenericFailure,
-                        format!("Thread join failed: {:?}", e),
-                    )
-                })?;
+            handle.join().map_err(|e| {
+                Error::new(
+                    Status::GenericFailure,
+                    format!("Thread join failed: {:?}", e),
+                )
+            })?;
             eprintln!("✅ Bevy thread stopped cleanly");
         }
 

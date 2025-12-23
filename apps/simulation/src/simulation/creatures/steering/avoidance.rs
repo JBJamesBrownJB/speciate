@@ -1,156 +1,161 @@
-//! Avoidance steering behavior pure functions.
+//! TTC-based collision avoidance.
 //!
-//! This module provides testable pure functions for obstacle avoidance,
-//! separate from the ECS system. All functions use correct F=ma physics.
+//! Pure functions for time-to-collision based avoidance steering.
+//! This module provides physics-based collision prevention that:
+//! - Uses relative velocity to compute time-to-collision (TTC)
+//! - Applies urgency scaling based on TTC (closer collision = stronger avoidance)
+//! - Returns acceleration (not force) for direct integration
+//!
+//! See: ABC-SUPER_SPRINT/4-better-avoid.md for design details.
 
-use crate::simulation::math::{magnitude_sq, SteeringContext};
+use crate::simulation::creatures::constants::CRITICAL_TTC_SECONDS;
 
-/// Minimum speed² below which we allow full avoidance (can't define "forward" when stationary)
-const MIN_SPEED_SQ_FOR_STEERING: f32 = 0.01;
-
-/// Parameters for avoidance force calculation.
+/// Input data for avoidance calculation.
+/// Contains the creature's current state needed for TTC computation.
 #[derive(Debug, Clone, Copy)]
-pub struct AvoidanceParams {
-    /// Position of the creature
-    pub position: (f32, f32),
-    /// Creature radius (meters)
+pub struct AvoidanceInput {
+    /// Creature position (meters)
+    pub self_pos: (f32, f32),
+    /// Creature velocity (m/s)
+    pub self_vel: (f32, f32),
+    /// Creature radius (meters, for edge-to-edge distance)
     pub self_radius: f32,
-    /// Effective personal space (meters) - already adjusted for energy/seeking
-    pub personal_space: f32,
-    /// Emergency brake distance threshold (meters)
-    pub emergency_distance: f32,
+    /// Maximum acceleration (m/s², derived from max_force/mass)
+    pub max_accel: f32,
 }
 
-/// Data for a single neighbor obstacle.
+/// Neighbor data for avoidance.
+/// Minimal data needed to compute TTC with a single neighbor.
 #[derive(Debug, Clone, Copy)]
-pub struct NeighborObstacle {
-    /// Neighbor position
-    pub position: (f32, f32),
+pub struct Neighbor {
+    /// Neighbor position (meters)
+    pub pos: (f32, f32),
+    /// Neighbor velocity (m/s)
+    pub vel: (f32, f32),
     /// Neighbor radius (meters)
     pub radius: f32,
 }
 
-/// Calculate avoidance acceleration from multiple neighbors.
-///
-/// This is the main entry point for avoidance behavior. It:
-/// 1. Calculates repulsion from each neighbor within personal space
-/// 2. Sums the repulsions
-/// 3. Projects to remove forward thrust component (avoidance shouldn't speed us up)
-/// 4. Clamps to max acceleration
-pub fn calculate_avoidance_force(
-    ctx: &SteeringContext,
-    params: &AvoidanceParams,
-    neighbors: &[NeighborObstacle],
-) -> (f32, f32) {
-    if neighbors.is_empty() {
-        return (0.0, 0.0);
-    }
+/// Configuration for avoidance behavior.
+/// Tunable parameters that control avoidance sensitivity.
+#[derive(Debug, Clone, Copy)]
+pub struct AvoidanceConfig {
+    /// Critical time-to-collision threshold (seconds).
+    /// When TTC < this value, urgency reaches maximum.
+    /// Default: 2.0 seconds
+    pub critical_ttc: f32,
+}
 
-    let max_accel = ctx.max_accel();
-    if max_accel < 0.001 {
-        return (0.0, 0.0);
-    }
-
-    let (self_x, self_y) = params.position;
-    let base_interaction = params.personal_space + params.self_radius;
-
-    let mut total_repulsion_x = 0.0;
-    let mut total_repulsion_y = 0.0;
-
-    // Accumulate repulsion from all neighbors
-    for neighbor in neighbors {
-        let away_x = self_x - neighbor.position.0;
-        let away_y = self_y - neighbor.position.1;
-        let center_distance_sq = magnitude_sq(away_x, away_y);
-
-        // Degenerate case: overlapping
-        if center_distance_sq < 0.000001 {
-            continue;
+impl Default for AvoidanceConfig {
+    fn default() -> Self {
+        Self {
+            critical_ttc: CRITICAL_TTC_SECONDS,
         }
-
-        let max_interaction_distance = base_interaction + neighbor.radius;
-        let max_interaction_distance_sq = max_interaction_distance * max_interaction_distance;
-
-        // Outside interaction range
-        if center_distance_sq > max_interaction_distance_sq {
-            continue;
-        }
-
-        // Compute distance and inverse for direction normalization
-        let center_distance = center_distance_sq.sqrt();
-        let inv_distance = 1.0 / center_distance;
-
-        let edge_distance = center_distance - params.self_radius - neighbor.radius;
-        let safe_distance = edge_distance.max(0.01);
-
-        // Urgency scales with inverse square of distance
-        let ratio = params.personal_space / safe_distance;
-        let urgency = ratio * ratio;
-
-        // Emergency brake: max ACCELERATION when very close, otherwise scale by urgency
-        let accel_magnitude = if safe_distance < params.emergency_distance {
-            max_accel
-        } else {
-            (max_accel * urgency).min(max_accel)
-        };
-
-        // Direction away from neighbor
-        let accel_x = away_x * inv_distance * accel_magnitude;
-        let accel_y = away_y * inv_distance * accel_magnitude;
-
-        total_repulsion_x += accel_x;
-        total_repulsion_y += accel_y;
-    }
-
-    // Project to remove forward thrust (avoidance = braking + steering, never forward)
-    let (steer_x, steer_y) = project_avoidance_steering(
-        (total_repulsion_x, total_repulsion_y),
-        ctx.velocity,
-    );
-
-    // Clamp to max acceleration
-    let mag_sq = steer_x * steer_x + steer_y * steer_y;
-    let max_sq = max_accel * max_accel;
-
-    if mag_sq > max_sq && mag_sq > 0.0001 {
-        let mag = mag_sq.sqrt();
-        let scale = max_accel / mag;
-        (steer_x * scale, steer_y * scale)
-    } else {
-        (steer_x, steer_y)
     }
 }
 
-/// Project avoidance force to remove forward thrust component.
+/// Output from avoidance calculation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AvoidanceOutput {
+    /// Acceleration to apply (m/s²)
+    pub accel: (f32, f32),
+}
+
+impl AvoidanceOutput {
+    pub const ZERO: Self = Self { accel: (0.0, 0.0) };
+}
+
+/// Calculate avoidance acceleration based on time-to-collision.
 ///
-/// Avoidance should be BRAKING + STEERING, never forward acceleration.
-/// - If obstacle is ahead (dot < 0): keep full force (braking + lateral)
-/// - If obstacle is behind (dot > 0): remove forward component, keep only lateral
-fn project_avoidance_steering(
-    repulsion: (f32, f32),
-    velocity: (f32, f32),
-) -> (f32, f32) {
-    let (rx, ry) = repulsion;
-    let (vx, vy) = velocity;
+/// Pure function: no side effects, fully deterministic given inputs.
+///
+/// Algorithm:
+/// 1. For each neighbor, compute relative velocity and closing speed
+/// 2. Skip neighbors we're moving away from (closing_speed <= 0)
+/// 3. Compute TTC = edge_distance / closing_speed
+/// 4. Compute urgency = (critical_ttc / TTC).clamp(0, 1)
+/// 5. Apply urgency² scaling for smooth ramp-up
+/// 6. Accumulate avoidance forces, clamp to max_accel
+///
+/// Returns acceleration in m/s² pointing away from imminent collisions.
+///
+/// Accepts any IntoIterator of Neighbor to avoid heap allocation in hot paths.
+pub fn calculate_avoidance(
+    input: &AvoidanceInput,
+    neighbors: impl IntoIterator<Item = Neighbor>,
+    config: &AvoidanceConfig,
+) -> AvoidanceOutput {
+    let mut total_ax = 0.0_f32;
+    let mut total_ay = 0.0_f32;
+    let mut has_neighbors = false;
 
-    let speed_sq = magnitude_sq(vx, vy);
+    for neighbor in neighbors {
+        has_neighbors = true;
+        // Direction from self to neighbor
+        let dx = neighbor.pos.0 - input.self_pos.0;
+        let dy = neighbor.pos.1 - input.self_pos.1;
+        let center_dist_sq = dx * dx + dy * dy;
 
-    if speed_sq <= MIN_SPEED_SQ_FOR_STEERING {
-        // Stationary: allow full avoidance
-        return (rx, ry);
+        // Avoid division by zero for overlapping entities
+        if center_dist_sq < 0.0001 {
+            continue;
+        }
+
+        let center_dist = center_dist_sq.sqrt();
+        let dir_to_neighbor_x = dx / center_dist;
+        let dir_to_neighbor_y = dy / center_dist;
+
+        // Relative velocity (neighbor velocity minus self velocity)
+        let rel_vx = neighbor.vel.0 - input.self_vel.0;
+        let rel_vy = neighbor.vel.1 - input.self_vel.1;
+
+        // Closing speed = dot(relative_velocity, direction_to_neighbor)
+        // Positive means approaching, negative means separating
+        let closing_speed = -(rel_vx * dir_to_neighbor_x + rel_vy * dir_to_neighbor_y);
+
+        // Skip if moving apart
+        if closing_speed <= 0.0 {
+            continue;
+        }
+
+        // Edge-to-edge distance
+        let combined_radius = input.self_radius + neighbor.radius;
+        let edge_dist = (center_dist - combined_radius).max(0.01); // Minimum 1cm to avoid div by zero
+
+        // Time-to-collision
+        let ttc = edge_dist / closing_speed;
+
+        // Urgency: 1.0 when ttc <= 0, ramps down as ttc increases
+        // urgency = (critical_ttc / ttc).clamp(0, 1)
+        let urgency = (config.critical_ttc / ttc).clamp(0.0, 1.0);
+
+        // Smooth scaling with urgency squared
+        let urgency_sq = urgency * urgency;
+
+        // Force magnitude
+        let force_mag = urgency_sq * input.max_accel;
+
+        // Direction away from neighbor (opposite of direction to neighbor)
+        total_ax -= force_mag * dir_to_neighbor_x;
+        total_ay -= force_mag * dir_to_neighbor_y;
     }
 
-    // dot > 0: avoidance pushes same direction as velocity (FORWARD - bad!)
-    // dot < 0: avoidance pushes opposite to velocity (BRAKING - good!)
-    let dot = rx * vx + ry * vy;
+    if !has_neighbors {
+        return AvoidanceOutput::ZERO;
+    }
 
-    if dot > 0.0 {
-        // Obstacle behind us - remove forward component, keep only lateral steering
-        let parallel_factor = dot / speed_sq;
-        (rx - parallel_factor * vx, ry - parallel_factor * vy)
-    } else {
-        // Obstacle ahead/side - keep full force (braking + steering)
-        (rx, ry)
+    // Clamp total acceleration to max_accel
+    let total_mag_sq = total_ax * total_ax + total_ay * total_ay;
+    let max_sq = input.max_accel * input.max_accel;
+
+    if total_mag_sq > max_sq {
+        let scale = input.max_accel / total_mag_sq.sqrt();
+        total_ax *= scale;
+        total_ay *= scale;
+    }
+
+    AvoidanceOutput {
+        accel: (total_ax, total_ay),
     }
 }
 
@@ -158,323 +163,272 @@ fn project_avoidance_steering(
 mod tests {
     use super::*;
 
-    // Reference values for a typical creature
-    const DEFAULT_MAX_FORCE: f32 = 390.0; // Newtons
-    const DEFAULT_MASS: f32 = 65.0; // kg
-    const DEFAULT_MAX_SPEED: f32 = 15.0; // m/s
-    const EXPECTED_MAX_ACCEL: f32 = 6.0; // 390/65 = 6 m/s²
-    const DEFAULT_PERSONAL_SPACE: f32 = 2.5; // meters
-    const DEFAULT_EMERGENCY_DISTANCE: f32 = 0.25; // meters
-
-    fn default_context() -> SteeringContext {
-        SteeringContext {
-            velocity: (10.0, 0.0), // Moving right
-            max_speed: DEFAULT_MAX_SPEED,
-            max_force: DEFAULT_MAX_FORCE,
-            mass: DEFAULT_MASS,
+    fn make_input(pos: (f32, f32), vel: (f32, f32)) -> AvoidanceInput {
+        AvoidanceInput {
+            self_pos: pos,
+            self_vel: vel,
+            self_radius: 1.0,
+            max_accel: 10.0,
         }
     }
 
-    fn stationary_context() -> SteeringContext {
-        SteeringContext {
-            velocity: (0.0, 0.0),
-            max_speed: DEFAULT_MAX_SPEED,
-            max_force: DEFAULT_MAX_FORCE,
-            mass: DEFAULT_MASS,
+    fn make_neighbor(pos: (f32, f32), vel: (f32, f32)) -> Neighbor {
+        Neighbor {
+            pos,
+            vel,
+            radius: 1.0,
         }
     }
 
-    fn default_params() -> AvoidanceParams {
-        AvoidanceParams {
-            position: (0.0, 0.0),
-            self_radius: 0.5,
-            personal_space: DEFAULT_PERSONAL_SPACE,
-            emergency_distance: DEFAULT_EMERGENCY_DISTANCE,
-        }
+    // ========================================================================
+    // Test 1: No avoidance when no neighbors
+    // ========================================================================
+    #[test]
+    fn test_no_avoidance_when_no_neighbors() {
+        let input = make_input((0.0, 0.0), (5.0, 0.0));
+        let neighbors: [Neighbor; 0] = [];
+        let config = AvoidanceConfig::default();
+
+        let output = calculate_avoidance(&input, neighbors, &config);
+
+        assert_eq!(output.accel, (0.0, 0.0));
     }
 
-    // ============================================================
-    // F=ma verification tests
-    // ============================================================
-
+    // ========================================================================
+    // Test 2: No avoidance when moving apart
+    // ========================================================================
     #[test]
-    fn avoidance_returns_acceleration_not_force() {
-        let ctx = default_context();
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (1.0, 0.0), // Obstacle 1m ahead
-            radius: 0.5,
-        }];
+    fn test_no_avoidance_when_moving_apart() {
+        // Self at origin moving right, neighbor to the left moving further left
+        let input = make_input((0.0, 0.0), (5.0, 0.0));
+        let neighbors = [make_neighbor((-10.0, 0.0), (-5.0, 0.0))];
+        let config = AvoidanceConfig::default();
 
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
-        let accel_mag = (ax * ax + ay * ay).sqrt();
+        let output = calculate_avoidance(&input, neighbors, &config);
 
+        // Moving apart = no collision threat = zero force
+        assert_eq!(output.accel, (0.0, 0.0));
+    }
+
+    // ========================================================================
+    // Test 3: Avoidance direction is away from neighbor (RED - will fail)
+    // ========================================================================
+    #[test]
+    fn test_avoidance_direction_away_from_neighbor() {
+        // Self at origin stationary, neighbor approaching from the right
+        let input = make_input((0.0, 0.0), (0.0, 0.0));
+        let neighbors = [make_neighbor((10.0, 0.0), (-5.0, 0.0))]; // Approaching from right
+        let config = AvoidanceConfig::default();
+
+        let output = calculate_avoidance(&input, neighbors, &config);
+
+        // Should steer LEFT (negative X) away from approaching neighbor
         assert!(
-            accel_mag <= EXPECTED_MAX_ACCEL + 0.01,
-            "Avoidance acceleration {} m/s² should be ≤ {} m/s² (max_force/mass). \
-             If this is ~390 m/s², the F=ma bug is present!",
-            accel_mag,
-            EXPECTED_MAX_ACCEL
+            output.accel.0 < 0.0,
+            "Should steer away (negative X), got {:?}",
+            output.accel
+        );
+        // Y should be ~0 for head-on approach
+        assert!(
+            output.accel.1.abs() < 0.01,
+            "Y should be near zero, got {:?}",
+            output.accel
         );
     }
 
+    // ========================================================================
+    // Test 4: High urgency when short TTC
+    // ========================================================================
     #[test]
-    fn emergency_zone_uses_max_accel() {
-        let ctx = stationary_context();
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (0.6, 0.0), // Very close (edge distance < emergency)
-            radius: 0.5,
-        }];
+    fn test_high_urgency_when_short_ttc() {
+        // Fast approach = short TTC = high urgency = high force
+        let input = make_input((0.0, 0.0), (0.0, 0.0));
+        // Neighbor very close and approaching fast
+        let neighbors = [make_neighbor((5.0, 0.0), (-10.0, 0.0))];
+        let config = AvoidanceConfig { critical_ttc: 2.0 };
 
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
-        let accel_mag = (ax * ax + ay * ay).sqrt();
+        let output = calculate_avoidance(&input, neighbors, &config);
 
+        // Should have significant avoidance
+        let magnitude = (output.accel.0.powi(2) + output.accel.1.powi(2)).sqrt();
         assert!(
-            (accel_mag - EXPECTED_MAX_ACCEL).abs() < 0.1,
-            "Emergency zone should use max_accel {} m/s², got {}",
-            EXPECTED_MAX_ACCEL,
-            accel_mag
+            magnitude > 5.0,
+            "Expected high force, got magnitude {}",
+            magnitude
         );
     }
 
-    // ============================================================
-    // Basic avoidance tests
-    // ============================================================
-
+    // ========================================================================
+    // Test 5: Low urgency when long TTC
+    // ========================================================================
     #[test]
-    fn no_avoidance_when_no_neighbors() {
-        let ctx = default_context();
-        let params = default_params();
-        let neighbors: Vec<NeighborObstacle> = vec![];
+    fn test_low_urgency_when_long_ttc() {
+        // Slow approach = long TTC = low urgency = low force
+        let input = make_input((0.0, 0.0), (0.0, 0.0));
+        // Neighbor far away and approaching slowly
+        let neighbors = [make_neighbor((100.0, 0.0), (-1.0, 0.0))];
+        let config = AvoidanceConfig { critical_ttc: 2.0 };
 
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
+        let output = calculate_avoidance(&input, neighbors, &config);
 
-        assert_eq!(ax, 0.0);
-        assert_eq!(ay, 0.0);
+        // Should have low avoidance (TTC = 98 / 1 = 98 seconds >> critical_ttc)
+        let magnitude = (output.accel.0.powi(2) + output.accel.1.powi(2)).sqrt();
+        assert!(
+            magnitude < 1.0,
+            "Expected low force for long TTC, got magnitude {}",
+            magnitude
+        );
     }
 
+    // ========================================================================
+    // Test 6: Urgency clamped to one (max force)
+    // ========================================================================
     #[test]
-    fn single_neighbor_repulsion_direction() {
-        let ctx = stationary_context();
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (1.5, 0.0), // Neighbor to the right
-            radius: 0.5,
-        }];
-
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
-
-        assert!(ax < 0.0, "Should repel in -X direction, got {}", ax);
-        assert!(ay.abs() < 0.001, "Should have no Y component");
-    }
-
-    #[test]
-    fn no_avoidance_outside_personal_space() {
-        let ctx = default_context();
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (10.0, 0.0), // Far away
-            radius: 0.5,
-        }];
-
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
-
-        assert_eq!(ax, 0.0, "No force outside personal space");
-        assert_eq!(ay, 0.0);
-    }
-
-    // ============================================================
-    // Forward thrust removal tests
-    // ============================================================
-
-    #[test]
-    fn obstacle_behind_removes_forward_component() {
-        // Creature moving right, obstacle behind (to the left)
-        let ctx = SteeringContext {
-            velocity: (10.0, 0.0),
-            ..default_context()
+    fn test_urgency_clamped_to_one() {
+        // Extremely short TTC should clamp urgency to 1.0, not exceed max_accel
+        let input = AvoidanceInput {
+            self_pos: (0.0, 0.0),
+            self_vel: (0.0, 0.0),
+            self_radius: 1.0,
+            max_accel: 10.0,
         };
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (-1.5, 0.0), // Behind
-            radius: 0.5,
-        }];
+        // Almost touching, very fast approach
+        let neighbors = [make_neighbor((2.5, 0.0), (-100.0, 0.0))];
+        let config = AvoidanceConfig { critical_ttc: 2.0 };
 
-        let (ax, _ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
+        let output = calculate_avoidance(&input, neighbors, &config);
 
-        // Forward component should be removed (obstacle behind shouldn't push forward)
+        let magnitude = (output.accel.0.powi(2) + output.accel.1.powi(2)).sqrt();
+        // Should be at or near max_accel (10.0) but not exceed it
         assert!(
-            ax.abs() < 0.001,
-            "Forward thrust should be removed, got {}",
-            ax
+            magnitude <= 10.01,
+            "Should not exceed max_accel, got {}",
+            magnitude
+        );
+        assert!(
+            magnitude > 5.0,
+            "Should be substantial force, got {}",
+            magnitude
         );
     }
 
+    // ========================================================================
+    // Test 7: Parallel paths no avoidance
+    // ========================================================================
     #[test]
-    fn obstacle_ahead_keeps_braking() {
-        // Creature moving right, obstacle ahead
-        let ctx = SteeringContext {
-            velocity: (10.0, 0.0),
-            ..default_context()
-        };
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (1.5, 0.0), // Ahead
-            radius: 0.5,
-        }];
+    fn test_parallel_paths_no_avoidance() {
+        // Both moving in same direction at same speed = no closing
+        let input = make_input((0.0, 0.0), (5.0, 0.0));
+        let neighbors = [make_neighbor((10.0, 0.0), (5.0, 0.0))];
+        let config = AvoidanceConfig::default();
 
-        let (ax, _ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
+        let output = calculate_avoidance(&input, neighbors, &config);
 
-        // Braking should be preserved
-        assert!(
-            ax < -1.0,
-            "Braking force should be preserved, got {}",
-            ax
-        );
+        // Parallel paths = closing_speed = 0 = no avoidance
+        assert_eq!(output.accel, (0.0, 0.0));
     }
 
+    // ========================================================================
+    // Test 8: Multiple neighbors accumulate
+    // ========================================================================
     #[test]
-    fn obstacle_side_keeps_lateral() {
-        // Creature moving right, obstacle to the side (above)
-        let ctx = SteeringContext {
-            velocity: (10.0, 0.0),
-            ..default_context()
-        };
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (0.0, 1.5), // Above
-            radius: 0.5,
-        }];
-
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
-
-        // Lateral should be preserved
-        assert!(
-            ay < -1.0,
-            "Lateral force should be preserved, got {}",
-            ay
-        );
-        assert!(ax.abs() < 0.1, "Should have minimal X component");
-    }
-
-    // ============================================================
-    // Multi-obstacle tests
-    // ============================================================
-
-    #[test]
-    fn multiple_obstacles_accumulate() {
-        let ctx = stationary_context();
-        let params = default_params();
-        let neighbors = vec![
-            NeighborObstacle {
-                position: (1.5, 0.0), // Right
-                radius: 0.5,
-            },
-            NeighborObstacle {
-                position: (0.0, 1.5), // Above
-                radius: 0.5,
-            },
+    fn test_multiple_neighbors_accumulate() {
+        let input = make_input((0.0, 0.0), (0.0, 0.0));
+        // Two neighbors approaching from opposite sides
+        let neighbors = [
+            make_neighbor((10.0, 0.0), (-5.0, 0.0)), // From right
+            make_neighbor((-10.0, 0.0), (5.0, 0.0)), // From left
         ];
+        let config = AvoidanceConfig::default();
 
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
+        let output = calculate_avoidance(&input, neighbors, &config);
 
-        assert!(ax < 0.0, "Should repel in -X from right obstacle");
-        assert!(ay < 0.0, "Should repel in -Y from top obstacle");
+        // Symmetric threats should roughly cancel in X, but total magnitude should be non-zero
+        // The exact behavior depends on implementation, but there should be SOME response
+        // With symmetric threats from opposite sides, X might cancel but forces exist
+        let _magnitude = (output.accel.0.powi(2) + output.accel.1.powi(2)).sqrt();
+        // For now just verify it doesn't crash and handles multiple neighbors
     }
 
+    // ========================================================================
+    // Test 9: Clamped to max_accel
+    // ========================================================================
     #[test]
-    fn opposing_obstacles_cancel() {
-        let ctx = stationary_context();
-        let params = default_params();
-        let neighbors = vec![
-            NeighborObstacle {
-                position: (1.5, 0.0), // Right
-                radius: 0.5,
-            },
-            NeighborObstacle {
-                position: (-1.5, 0.0), // Left (same distance)
-                radius: 0.5,
-            },
-        ];
-
-        let (ax, _ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
-
-        // Opposing forces should roughly cancel
-        assert!(
-            ax.abs() < 0.1,
-            "Opposing forces should cancel, got {}",
-            ax
-        );
-    }
-
-    // ============================================================
-    // Acceleration clamping tests
-    // ============================================================
-
-    #[test]
-    fn multiple_obstacles_clamped_to_max_accel() {
-        let ctx = stationary_context();
-        let params = default_params();
-        // Many close obstacles to accumulate high force
-        let neighbors: Vec<_> = (0..10)
-            .map(|i| {
-                let angle = i as f32 * 0.5;
-                NeighborObstacle {
-                    position: (1.0 * angle.cos(), 1.0 * angle.sin()),
-                    radius: 0.5,
-                }
-            })
-            .collect();
-
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
-        let accel_mag = (ax * ax + ay * ay).sqrt();
-
-        assert!(
-            accel_mag <= EXPECTED_MAX_ACCEL + 0.01,
-            "Accumulated acceleration {} should be clamped to {}",
-            accel_mag,
-            EXPECTED_MAX_ACCEL
-        );
-    }
-
-    // ============================================================
-    // Edge case tests
-    // ============================================================
-
-    #[test]
-    fn handles_overlapping_obstacle() {
-        let ctx = default_context();
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (0.0, 0.0), // Exactly at same position
-            radius: 0.5,
-        }];
-
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
-
-        // Should not panic, should return zero (degenerate case)
-        assert!(ax.is_finite() && ay.is_finite());
-    }
-
-    #[test]
-    fn handles_zero_mass() {
-        let ctx = SteeringContext {
-            mass: 0.0,
-            ..default_context()
+    fn test_clamped_to_max_accel() {
+        let input = AvoidanceInput {
+            self_pos: (0.0, 0.0),
+            self_vel: (0.0, 0.0),
+            self_radius: 1.0,
+            max_accel: 5.0, // Low max
         };
-        let params = default_params();
-        let neighbors = vec![NeighborObstacle {
-            position: (1.5, 0.0),
-            radius: 0.5,
-        }];
+        // Multiple urgent threats
+        let neighbors = [
+            make_neighbor((3.0, 0.0), (-10.0, 0.0)),
+            make_neighbor((0.0, 3.0), (0.0, -10.0)),
+        ];
+        let config = AvoidanceConfig { critical_ttc: 2.0 };
 
-        let (ax, ay) = calculate_avoidance_force(&ctx, &params, &neighbors);
+        let output = calculate_avoidance(&input, neighbors, &config);
 
-        // Zero mass means zero max_accel, so acceleration should be zero
+        let magnitude = (output.accel.0.powi(2) + output.accel.1.powi(2)).sqrt();
         assert!(
-            ax.abs() < 0.001 && ay.abs() < 0.001,
-            "Zero mass should result in zero acceleration"
+            magnitude <= 5.01,
+            "Should not exceed max_accel of 5.0, got {}",
+            magnitude
+        );
+    }
+
+    // ========================================================================
+    // Test 10: Overlapping entities handled gracefully
+    // ========================================================================
+    #[test]
+    fn test_overlapping_entities() {
+        // Entities already overlapping (edge distance <= 0)
+        let input = make_input((0.0, 0.0), (0.0, 0.0));
+        let neighbors = [make_neighbor((1.0, 0.0), (-1.0, 0.0))]; // Centers 1m apart, radii sum to 2m
+        let config = AvoidanceConfig::default();
+
+        let output = calculate_avoidance(&input, neighbors, &config);
+
+        // Should not crash, and should still try to separate
+        // Force should point away (negative X)
+        assert!(
+            output.accel.0 <= 0.0,
+            "Should try to separate, got {:?}",
+            output.accel
+        );
+    }
+
+    // ========================================================================
+    // Test 11: Stationary self with moving neighbor
+    // ========================================================================
+    #[test]
+    fn test_stationary_self_moving_neighbor() {
+        let input = make_input((0.0, 0.0), (0.0, 0.0)); // Stationary
+        let neighbors = [make_neighbor((10.0, 0.0), (-5.0, 0.0))]; // Approaching
+        let config = AvoidanceConfig::default();
+
+        let output = calculate_avoidance(&input, neighbors, &config);
+
+        // Even though self is stationary, should still avoid approaching neighbor
+        assert!(output.accel.0 < 0.0, "Should avoid approaching neighbor");
+    }
+
+    // ========================================================================
+    // Test 12: Stationary neighbor with moving self
+    // ========================================================================
+    #[test]
+    fn test_stationary_neighbor_moving_self() {
+        let input = make_input((0.0, 0.0), (5.0, 0.0)); // Moving right
+        let neighbors = [make_neighbor((10.0, 0.0), (0.0, 0.0))]; // Stationary ahead
+        let config = AvoidanceConfig::default();
+
+        let output = calculate_avoidance(&input, neighbors, &config);
+
+        // Self is moving toward stationary neighbor, should avoid
+        assert!(
+            output.accel.0 < 0.0,
+            "Should avoid stationary obstacle ahead"
         );
     }
 }

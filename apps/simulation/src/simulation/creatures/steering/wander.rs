@@ -151,8 +151,7 @@ mod tests {
         let wander = default_wander();
 
         let result = calculate_wander(&ctx, &wander, 0.0);
-        let accel_mag =
-            (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
+        let accel_mag = (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
 
         // Maximum acceleration for wander = (max_force × 0.1) / mass
         // = (390 × 0.1) / 65 = 39 / 65 = 0.6 m/s²
@@ -190,8 +189,7 @@ mod tests {
         // Verify our implementation uses the correct value
         let wander = default_wander();
         let result = calculate_wander(&ctx, &wander, 0.0);
-        let accel_mag =
-            (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
+        let accel_mag = (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
 
         assert!(
             accel_mag < buggy_max_accel,
@@ -211,8 +209,7 @@ mod tests {
         let wander = default_wander();
 
         let result = calculate_wander(&ctx, &wander, 0.0);
-        let accel_mag =
-            (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
+        let accel_mag = (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
 
         assert!(
             accel_mag > 0.0,
@@ -278,8 +275,7 @@ mod tests {
         // Stationary creature should start moving in wander direction
         // Since wander_angle is 90° and target is projected from that heading,
         // the acceleration should have a significant upward component
-        let accel_mag =
-            (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
+        let accel_mag = (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
         assert!(accel_mag > 0.0, "Stationary creature should still steer");
     }
 

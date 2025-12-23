@@ -1,13 +1,11 @@
 use bevy_ecs::prelude::*;
-use bevy_reflect::Reflect;
-use serde::{Deserialize, Serialize};
 
-use crate::simulation::creatures::constants::{
-    DEFAULT_FOV_DEGREES, DEFAULT_MASS, ENERGY_MODIFIER, FOV_RANGE_EXPONENT, MAX_PERCEIVED_NEIGHBORS,
-    PERCEPTION_MULTIPLIER, PERCEPTION_THRESHOLD_FRACTION, PERSONAL_SPACE_MULTIPLIER,
-    SIZE_ALLOMETRY_EXPONENT, SIZE_ALLOMETRY_REFERENCE,
-};
 use super::classification::{L1Classification, MAX_L1_PERCEPTIONS};
+use crate::simulation::creatures::constants::{
+    DEFAULT_FOV_DEGREES, DEFAULT_MASS, FOV_RANGE_EXPONENT, MAX_PERCEIVED_NEIGHBORS,
+    PERCEPTION_MULTIPLIER, PERCEPTION_THRESHOLD_FRACTION, SIZE_ALLOMETRY_EXPONENT,
+    SIZE_ALLOMETRY_REFERENCE,
+};
 
 // Debug types are in perception/debug.rs (dev-tools only)
 
@@ -17,6 +15,8 @@ pub struct NeighborData {
     pub entity: Entity,
     pub x: f32,
     pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
     pub radius: f32,
 }
 
@@ -25,6 +25,8 @@ impl NeighborData {
         entity: Entity::PLACEHOLDER,
         x: 0.0,
         y: 0.0,
+        vx: 0.0,
+        vy: 0.0,
         radius: 0.0,
     };
 }
@@ -39,11 +41,11 @@ impl Default for NeighborData {
 /// Split from NeighborCache for cache locality optimization
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
-    pub fov_angle: f32,        // Field of view in radians (stored internally as radians for efficient checks)
-    pub range: f32,            // Derived from FOV and body size
-    pub cos_half_fov_sq: f32,  // Cached cos²(fov_angle/2) for sqrt-free FOV checks
-    pub cos_half_fov: f32,     // Cached cos(fov_angle/2) for wide FOV checks (sign matters)
-    pub threshold: f32,        // L1 mass threshold: ignore cells with total_mass below this
+    pub fov_angle: f32, // Field of view in radians (stored internally as radians for efficient checks)
+    pub range: f32,     // Derived from FOV and body size
+    pub cos_half_fov_sq: f32, // Cached cos²(fov_angle/2) for sqrt-free FOV checks
+    pub cos_half_fov: f32, // Cached cos(fov_angle/2) for wide FOV checks (sign matters)
+    pub threshold: f32, // L1 mass threshold: ignore cells with total_mass below this
 }
 
 /// Cold neighbor cache - written by perception, read by avoidance
@@ -86,8 +88,7 @@ impl Perception {
     /// Formula: range = base_range × size_allometry × fov_factor
     fn calculate_range(body_size: f32, fov_angle_degrees: f32) -> f32 {
         let base_range = body_size * PERCEPTION_MULTIPLIER;
-        let size_allometry =
-            (body_size / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
+        let size_allometry = (body_size / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
         let fov_factor = (180.0 / fov_angle_degrees).powf(FOV_RANGE_EXPONENT);
         base_range * size_allometry * fov_factor
     }
@@ -136,7 +137,9 @@ impl NeighborCache {
     }
 
     pub fn iter_neighbors(&self) -> impl Iterator<Item = NeighborData> + '_ {
-        self.neighbors[..self.neighbor_count as usize].iter().copied()
+        self.neighbors[..self.neighbor_count as usize]
+            .iter()
+            .copied()
     }
 
     pub fn contains(&self, entity: Entity) -> bool {
@@ -217,63 +220,19 @@ impl L1Perceptions {
     }
 
     pub fn has_threat(&self) -> bool {
-        self.iter().any(|c| c.classification == L1Classification::Threat)
+        self.iter()
+            .any(|c| c.classification == L1Classification::Threat)
     }
 
     pub fn has_prey(&self) -> bool {
-        self.iter().any(|c| c.classification == L1Classification::Prey)
+        self.iter()
+            .any(|c| c.classification == L1Classification::Prey)
     }
 }
 
 impl Default for L1Perceptions {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[derive(Component, Debug, Clone, Copy, Reflect, Serialize, Deserialize)]
-#[reflect(Component)]
-pub struct AvoidanceBehavior {
-    body_radius: f32,
-}
-
-// Energy-driven personal space reduction (biological realism)
-// Hungry creatures tolerate closer proximity to reach resources
-// 100% energy = max_modifier space, 0% energy = min_modifier space
-// TODO(DNA): Replace hardcoded modifier range with energy_sensitivity gene
-fn calculate_energy_modifier(energy_fraction: f32) -> f32 {
-    let clamped = energy_fraction.clamp(0.0, 1.0);
-    let range = ENERGY_MODIFIER.max_modifier - ENERGY_MODIFIER.min_modifier;
-    ENERGY_MODIFIER.min_modifier + (range * clamped)
-}
-
-impl AvoidanceBehavior {
-    pub fn new(body_radius: f32) -> Self {
-        Self { body_radius }
-    }
-
-    pub fn from_body_size(body_length: f32) -> Self {
-        Self::new(body_length / 2.0)
-    }
-
-    // Personal space: comfort zone for wandering = body_radius × multiplier
-    pub fn personal_space(&self) -> f32 {
-        self.body_radius * PERSONAL_SPACE_MULTIPLIER
-    }
-
-    // Energy-modified personal space (hungry creatures tolerate closer proximity)
-    pub fn effective_personal_space(&self, energy_fraction: f32) -> f32 {
-        self.personal_space() * calculate_energy_modifier(energy_fraction)
-    }
-
-    pub fn body_radius(&self) -> f32 {
-        self.body_radius
-    }
-}
-
-impl Default for AvoidanceBehavior {
-    fn default() -> Self {
-        Self::new(0.5) // Default 1m creature = 0.5m radius
     }
 }
 
@@ -360,32 +319,28 @@ mod tests {
     }
 
     #[test]
-    fn test_avoidance_scaling_with_body_size() {
-        // New multiplicative model: personal_space = body_radius × PERSONAL_SPACE_MULTIPLIER
-        // body_radius = body_length / 2
-
-        let small_avoid = AvoidanceBehavior::from_body_size(0.5);
-        // body_radius = 0.25, personal_space = 0.25 × 2.0 = 0.5
-        assert_eq!(small_avoid.personal_space(), 0.5);
-
-        let standard_avoid = AvoidanceBehavior::from_body_size(1.0);
-        // body_radius = 0.5, personal_space = 0.5 × 2.0 = 1.0
-        assert_eq!(standard_avoid.personal_space(), 1.0);
-
-        let large_avoid = AvoidanceBehavior::from_body_size(2.0);
-        // body_radius = 1.0, personal_space = 1.0 × 2.0 = 2.0
-        assert_eq!(large_avoid.personal_space(), 2.0);
-    }
-
-    #[test]
     fn test_neighbor_cache_tracking() {
         let mut cache = NeighborCache::new();
 
         assert!(!cache.has_neighbors());
         assert_eq!(cache.neighbor_count(), 0);
 
-        cache.add_neighbor(NeighborData { entity: Entity::PLACEHOLDER, x: 1.0, y: 2.0, radius: 0.5 });
-        cache.add_neighbor(NeighborData { entity: Entity::PLACEHOLDER, x: 3.0, y: 4.0, radius: 0.5 });
+        cache.add_neighbor(NeighborData {
+            entity: Entity::PLACEHOLDER,
+            x: 1.0,
+            y: 2.0,
+            vx: 0.0,
+            vy: 0.0,
+            radius: 0.5,
+        });
+        cache.add_neighbor(NeighborData {
+            entity: Entity::PLACEHOLDER,
+            x: 3.0,
+            y: 4.0,
+            vx: 0.0,
+            vy: 0.0,
+            radius: 0.5,
+        });
 
         assert!(cache.has_neighbors());
         assert_eq!(cache.neighbor_count(), 2);
@@ -393,53 +348,6 @@ mod tests {
         cache.clear();
         assert!(!cache.has_neighbors());
         assert_eq!(cache.neighbor_count(), 0);
-    }
-
-    #[test]
-    fn test_effective_personal_space_at_full_energy() {
-        // body_radius = 5.0 → personal_space = 5.0 × 2.0 = 10.0
-        let body_radius = 5.0;
-        let avoidance = AvoidanceBehavior::new(body_radius);
-        let personal_space = avoidance.personal_space(); // 10.0
-        // At full energy (1.0), effective space = personal_space × max_modifier (1.0)
-        assert_eq!(avoidance.effective_personal_space(1.0), personal_space);
-    }
-
-    #[test]
-    fn test_effective_personal_space_at_zero_energy() {
-        // body_radius = 5.0 → personal_space = 5.0 × 2.0 = 10.0
-        let body_radius = 5.0;
-        let avoidance = AvoidanceBehavior::new(body_radius);
-        let personal_space = avoidance.personal_space();
-        // At zero energy, effective space = personal_space × min_modifier (0.1)
-        let expected = personal_space * ENERGY_MODIFIER.min_modifier;
-        assert_eq!(avoidance.effective_personal_space(0.0), expected);
-    }
-
-    #[test]
-    fn test_effective_personal_space_at_half_energy() {
-        // body_radius = 5.0 → personal_space = 5.0 × 2.0 = 10.0
-        let body_radius = 5.0;
-        let avoidance = AvoidanceBehavior::new(body_radius);
-        let personal_space = avoidance.personal_space();
-        let range = ENERGY_MODIFIER.max_modifier - ENERGY_MODIFIER.min_modifier;
-        let expected = personal_space * (ENERGY_MODIFIER.min_modifier + range * 0.5);
-        let result = avoidance.effective_personal_space(0.5);
-        assert!((result - expected).abs() < 0.001, "Expected ~{}, got {}", expected, result);
-    }
-
-    #[test]
-    fn test_energy_fraction_clamped() {
-        // body_radius = 5.0 → personal_space = 5.0 × 2.0 = 10.0
-        let body_radius = 5.0;
-        let avoidance = AvoidanceBehavior::new(body_radius);
-        let personal_space = avoidance.personal_space();
-        let min_space = personal_space * ENERGY_MODIFIER.min_modifier;
-        let max_space = personal_space * ENERGY_MODIFIER.max_modifier;
-        // Negative energy clamps to min_modifier
-        assert_eq!(avoidance.effective_personal_space(-1.0), min_space);
-        // Energy > 1.0 clamps to max_modifier
-        assert_eq!(avoidance.effective_personal_space(2.0), max_space);
     }
 
     // === Allometric Scaling Tests ===

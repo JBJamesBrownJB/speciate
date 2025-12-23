@@ -5,9 +5,9 @@
 mod common;
 
 use common::*;
-use speciate::persistence::{WorldSaveState, SaveStateWorker, SaveType};
 use speciate::config::SaveStateConfig;
 use speciate::ipc::bridge::NapiApp;
+use speciate::persistence::{SaveStateWorker, SaveType, WorldSaveState};
 use std::time::{Duration, Instant};
 use tempfile::tempdir;
 
@@ -107,13 +107,11 @@ fn test_napi_shutdown_save_creates_latest() {
         "Should have a timestamped save state after shutdown"
     );
 
-    let save_state = WorldSaveState::load_from_file(
-        &most_recent.unwrap()
-    ).expect("Should be able to load shutdown save state");
+    let save_state = WorldSaveState::load_from_file(&most_recent.unwrap())
+        .expect("Should be able to load shutdown save state");
 
     assert_eq!(
-        save_state.metadata.version,
-        "2.0.0",
+        save_state.metadata.version, "2.0.0",
         "Save state should have correct version"
     );
 }
@@ -149,8 +147,7 @@ fn test_napi_disabled_config_prevents_saves() {
     let save_count = count_save_states_in_dir(&save_dir);
 
     assert_eq!(
-        save_count,
-        0,
+        save_count, 0,
         "Should NOT create any saves when disabled, got {}",
         save_count
     );

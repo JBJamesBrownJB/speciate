@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "dev-tools")]
-use crate::instrumentation::{SystemTimingsSnapshot, HardwareSnapshot, ParallelizationSnapshot};
+use crate::instrumentation::{HardwareSnapshot, ParallelizationSnapshot, SystemTimingsSnapshot};
 
 #[cfg(not(feature = "dev-tools"))]
 use crate::instrumentation::SystemTimingsSnapshot;
@@ -101,10 +101,8 @@ impl TelemetrySnapshot {
         l1_cell_size: f32,
         spatial_grid_bounds: (f32, f32, f32, f32), // (min_x, max_x, min_y, max_y)
         system_timings: SystemTimingsSnapshot,
-        #[cfg(feature = "dev-tools")]
-        hardware_metrics: HardwareSnapshot,
-        #[cfg(feature = "dev-tools")]
-        parallelization_metrics: ParallelizationSnapshot,
+        #[cfg(feature = "dev-tools")] hardware_metrics: HardwareSnapshot,
+        #[cfg(feature = "dev-tools")] parallelization_metrics: ParallelizationSnapshot,
     ) -> Self {
         Self {
             tick,
@@ -222,8 +220,8 @@ mod tests {
             42,
             1000,
             29.5,
-            50.0, // spatial_grid_cell_size (L0)
-            30.0, // l1_cell_size
+            50.0,                           // spatial_grid_cell_size (L0)
+            30.0,                           // l1_cell_size
             (-500.0, 500.0, -500.0, 500.0), // spatial_grid_bounds
             system_timings,
             #[cfg(feature = "dev-tools")]

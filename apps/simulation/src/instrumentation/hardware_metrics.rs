@@ -137,15 +137,14 @@ impl HardwareMetrics {
     }
 
     fn try_init() -> Result<Self, std::io::Error> {
-        use perf_event::events::{Hardware, Cache, CacheOp, CacheResult, WhichCache};
+        use perf_event::events::{Cache, CacheOp, CacheResult, Hardware, WhichCache};
 
         // ===== GROUP 1: IPC (2 counters, 1 syscall) =====
         // Only guaranteed counters in group to avoid corruption from failed builds
-        let mut ipc_group = Group::new()
-            .map_err(|e| {
-                eprintln!("   Failed to create IPC counter group: {}", e);
-                e
-            })?;
+        let mut ipc_group = Group::new().map_err(|e| {
+            eprintln!("   Failed to create IPC counter group: {}", e);
+            e
+        })?;
 
         let cycles = Builder::new()
             .group(&mut ipc_group)
@@ -170,11 +169,10 @@ impl HardwareMetrics {
 
         // ===== GROUP 2: CACHE METRICS (2 counters, 1 syscall) =====
         // Only guaranteed counters in group
-        let mut cache_group = Group::new()
-            .map_err(|e| {
-                eprintln!("   Failed to create cache counter group: {}", e);
-                e
-            })?;
+        let mut cache_group = Group::new().map_err(|e| {
+            eprintln!("   Failed to create cache counter group: {}", e);
+            e
+        })?;
 
         let cache_references = Builder::new()
             .group(&mut cache_group)
@@ -198,11 +196,10 @@ impl HardwareMetrics {
         cache_group.enable()?;
 
         // ===== GROUP 3: BRANCH METRICS (2 counters, 1 syscall) =====
-        let mut branch_group = Group::new()
-            .map_err(|e| {
-                eprintln!("   Failed to create branch counter group: {}", e);
-                e
-            })?;
+        let mut branch_group = Group::new().map_err(|e| {
+            eprintln!("   Failed to create branch counter group: {}", e);
+            e
+        })?;
 
         let branch_instructions = Builder::new()
             .group(&mut branch_group)
@@ -401,10 +398,14 @@ impl HardwareMetrics {
                     }
                 }
 
-                let c = self.cycles.as_ref()
+                let c = self
+                    .cycles
+                    .as_ref()
                     .and_then(|ctr| counts.get(ctr).copied())
                     .unwrap_or(0);
-                let i = self.instructions.as_ref()
+                let i = self
+                    .instructions
+                    .as_ref()
                     .and_then(|ctr| counts.get(ctr).copied())
                     .unwrap_or(0);
                 (c, i)
@@ -418,10 +419,14 @@ impl HardwareMetrics {
         // ===== READ GROUP 2: CACHE METRICS (1 syscall for 2 counters) =====
         let (cache_refs, cache_misses) = if let Some(ref mut group) = self.cache_group {
             if let Ok(counts) = group.read() {
-                let cr = self.cache_references.as_ref()
+                let cr = self
+                    .cache_references
+                    .as_ref()
                     .and_then(|ctr| counts.get(ctr).copied())
                     .unwrap_or(0);
-                let cm = self.cache_misses.as_ref()
+                let cm = self
+                    .cache_misses
+                    .as_ref()
                     .and_then(|ctr| counts.get(ctr).copied())
                     .unwrap_or(0);
                 (cr, cm)
@@ -435,10 +440,14 @@ impl HardwareMetrics {
         // ===== READ GROUP 3: BRANCH METRICS (1 syscall for 2 counters) =====
         let (branch_instructions, branch_misses) = if let Some(ref mut group) = self.branch_group {
             if let Ok(counts) = group.read() {
-                let bi = self.branch_instructions.as_ref()
+                let bi = self
+                    .branch_instructions
+                    .as_ref()
                     .and_then(|ctr| counts.get(ctr).copied())
                     .unwrap_or(0);
-                let bm = self.branch_misses.as_ref()
+                let bm = self
+                    .branch_misses
+                    .as_ref()
                     .and_then(|ctr| counts.get(ctr).copied())
                     .unwrap_or(0);
                 (bi, bm)
@@ -450,12 +459,36 @@ impl HardwareMetrics {
         };
 
         // ===== READ SEPARATE OPTIONAL COUNTERS (7 individual syscalls) =====
-        let stalled_frontend = self.stalled_frontend.as_mut().and_then(|c| c.read().ok()).unwrap_or(0);
-        let stalled_backend = self.stalled_backend.as_mut().and_then(|c| c.read().ok()).unwrap_or(0);
-        let l1d_misses = self.l1d_misses.as_mut().and_then(|c| c.read().ok()).unwrap_or(0);
-        let l1d_accesses = self.l1d_accesses.as_mut().and_then(|c| c.read().ok()).unwrap_or(0);
-        let l1i_misses = self.l1i_misses.as_mut().and_then(|c| c.read().ok()).unwrap_or(0);
-        let l1i_accesses = self.l1i_accesses.as_mut().and_then(|c| c.read().ok()).unwrap_or(0);
+        let stalled_frontend = self
+            .stalled_frontend
+            .as_mut()
+            .and_then(|c| c.read().ok())
+            .unwrap_or(0);
+        let stalled_backend = self
+            .stalled_backend
+            .as_mut()
+            .and_then(|c| c.read().ok())
+            .unwrap_or(0);
+        let l1d_misses = self
+            .l1d_misses
+            .as_mut()
+            .and_then(|c| c.read().ok())
+            .unwrap_or(0);
+        let l1d_accesses = self
+            .l1d_accesses
+            .as_mut()
+            .and_then(|c| c.read().ok())
+            .unwrap_or(0);
+        let l1i_misses = self
+            .l1i_misses
+            .as_mut()
+            .and_then(|c| c.read().ok())
+            .unwrap_or(0);
+        let l1i_accesses = self
+            .l1i_accesses
+            .as_mut()
+            .and_then(|c| c.read().ok())
+            .unwrap_or(0);
 
         // Use wrapping_sub for proper wraparound handling (counters can overflow after ~52 hours at 3GHz)
         let cycles_delta = cycles.wrapping_sub(self.prev_cycles);
@@ -466,7 +499,8 @@ impl HardwareMetrics {
         let l1d_accesses_delta = l1d_accesses.wrapping_sub(self.prev_l1d_accesses);
         let l1i_misses_delta = l1i_misses.wrapping_sub(self.prev_l1i_misses);
         let l1i_accesses_delta = l1i_accesses.wrapping_sub(self.prev_l1i_accesses);
-        let branch_instructions_delta = branch_instructions.wrapping_sub(self.prev_branch_instructions);
+        let branch_instructions_delta =
+            branch_instructions.wrapping_sub(self.prev_branch_instructions);
         let branch_misses_delta = branch_misses.wrapping_sub(self.prev_branch_misses);
         let stalled_frontend_delta = stalled_frontend.wrapping_sub(self.prev_stalled_frontend);
         let stalled_backend_delta = stalled_backend.wrapping_sub(self.prev_stalled_backend);
@@ -549,28 +583,52 @@ impl HardwareMetrics {
 
     pub fn enable(&mut self) {
         // Enable all groups (counters within groups enabled automatically)
-        if let Some(ref mut group) = self.ipc_group { group.enable().ok(); }
-        if let Some(ref mut group) = self.cache_group { group.enable().ok(); }
-        if let Some(ref mut group) = self.branch_group { group.enable().ok(); }
+        if let Some(ref mut group) = self.ipc_group {
+            group.enable().ok();
+        }
+        if let Some(ref mut group) = self.cache_group {
+            group.enable().ok();
+        }
+        if let Some(ref mut group) = self.branch_group {
+            group.enable().ok();
+        }
 
         // Enable separate optional counters
-        if let Some(ref mut c) = self.l1i_misses { c.enable().ok(); }
-        if let Some(ref mut c) = self.l1i_accesses { c.enable().ok(); }
-        if let Some(ref mut c) = self.llc_misses { c.enable().ok(); }
+        if let Some(ref mut c) = self.l1i_misses {
+            c.enable().ok();
+        }
+        if let Some(ref mut c) = self.l1i_accesses {
+            c.enable().ok();
+        }
+        if let Some(ref mut c) = self.llc_misses {
+            c.enable().ok();
+        }
 
         self.enabled = true;
     }
 
     pub fn disable(&mut self) {
         // Disable all groups (counters within groups disabled automatically)
-        if let Some(ref mut group) = self.ipc_group { group.disable().ok(); }
-        if let Some(ref mut group) = self.cache_group { group.disable().ok(); }
-        if let Some(ref mut group) = self.branch_group { group.disable().ok(); }
+        if let Some(ref mut group) = self.ipc_group {
+            group.disable().ok();
+        }
+        if let Some(ref mut group) = self.cache_group {
+            group.disable().ok();
+        }
+        if let Some(ref mut group) = self.branch_group {
+            group.disable().ok();
+        }
 
         // Disable separate optional counters
-        if let Some(ref mut c) = self.l1i_misses { c.disable().ok(); }
-        if let Some(ref mut c) = self.l1i_accesses { c.disable().ok(); }
-        if let Some(ref mut c) = self.llc_misses { c.disable().ok(); }
+        if let Some(ref mut c) = self.l1i_misses {
+            c.disable().ok();
+        }
+        if let Some(ref mut c) = self.l1i_accesses {
+            c.disable().ok();
+        }
+        if let Some(ref mut c) = self.llc_misses {
+            c.disable().ok();
+        }
 
         self.enabled = false;
     }

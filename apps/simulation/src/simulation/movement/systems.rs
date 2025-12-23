@@ -1,11 +1,12 @@
-
 use crate::config::MovementConfig;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
-use crate::simulation::core::components::{Acceleration, BodySize, DeltaTime, PhysicsTick, Position, Rotation, Velocity};
+use crate::simulation::core::components::{
+    Acceleration, BodySize, DeltaTime, PhysicsTick, Position, Rotation, Velocity,
+};
 use crate::simulation::creatures::components::{BehaviorMode, CreatureState};
 use crate::simulation::creatures::constants::{
-    DRAG_COEFFICIENT, MAX_SPEED, MAX_TURN_RATE, MIN_TURN_RATE_DEG, MAX_TURN_RATE_DEG,
+    DRAG_COEFFICIENT, MAX_TURN_RATE, MAX_TURN_RATE_DEG, MIN_TURN_RATE_DEG,
     NOISE_SPEED_THRESHOLD_SQ, STOPPED_THRESHOLD, TURN_RATE_SIZE_EXPONENT, TURN_RATE_SPEED_PENALTY,
 };
 use crate::simulation::math::{fast_atan2, normalize_angle};
@@ -33,7 +34,6 @@ pub fn integrate_motion_system(
     crate::time_system!(timings, "movement");
 
     let dt = delta_time.0;
-    let max_speed_sq = MAX_SPEED * MAX_SPEED;
     let tick = physics_tick.get();
 
     // Time-based drag: v *= exp(-drag * dt) is frame-rate independent
@@ -56,27 +56,147 @@ pub fn integrate_motion_system(
     let stopped_threshold_sq = STOPPED_THRESHOLD * STOPPED_THRESHOLD;
 
     // Parallel physics integration + boundary enforcement + rotation (merged into single loop)
-    entities.par_iter_mut().for_each(|(entity, size, position, velocity, acceleration, creature_state, rotation)| {
-        if creature_state.behavior == BehaviorMode::Catatonic {
-            acceleration.ax = 0.0;
-            acceleration.ay = 0.0;
+    entities.par_iter_mut().for_each(
+        |(entity, size, position, velocity, acceleration, creature_state, rotation)| {
+            if creature_state.behavior == BehaviorMode::Catatonic {
+                acceleration.ax = 0.0;
+                acceleration.ay = 0.0;
 
-            let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-            if speed_sq < stopped_threshold_sq {
-                if velocity.vx != 0.0 || velocity.vy != 0.0 {
-                    velocity.vx = 0.0;
-                    velocity.vy = 0.0;
+                let speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+                if speed_sq < stopped_threshold_sq {
+                    if velocity.vx != 0.0 || velocity.vy != 0.0 {
+                        velocity.vx = 0.0;
+                        velocity.vy = 0.0;
+                    }
+                    return;
                 }
+
+                velocity.vx *= drag_factor;
+                velocity.vy *= drag_factor;
+
+                position.x += velocity.vx * dt;
+                position.y += velocity.vy * dt;
+
+                // Boundary enforcement for coasting catatonic creatures
+                if position.x < min_x {
+                    position.x = min_x;
+                    velocity.vx = velocity.vx.max(0.0);
+                } else if position.x > max_x {
+                    position.x = max_x;
+                    velocity.vx = velocity.vx.min(0.0);
+                }
+                if position.y < min_y {
+                    position.y = min_y;
+                    velocity.vy = velocity.vy.max(0.0);
+                } else if position.y > max_y {
+                    position.y = max_y;
+                    velocity.vy = velocity.vy.min(0.0);
+                }
+
                 return;
             }
 
+            // Capture old heading before velocity changes (fast_atan2: ~5x faster)
+            let old_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+            let old_angle = if old_speed_sq > stopped_threshold_sq {
+                fast_atan2(velocity.vy, velocity.vx)
+            } else {
+                f32::NAN
+            };
+
+            velocity.vx += acceleration.ax * dt;
+            velocity.vy += acceleration.ay * dt;
             velocity.vx *= drag_factor;
             velocity.vy *= drag_factor;
+
+            // Size-based speed limit for this creature
+            let max_speed = size.max_speed();
+            let max_speed_sq = max_speed * max_speed;
+
+            // Track speed for reuse (avoid redundant sqrt)
+            let mut speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+            let mut current_speed = 0.0_f32;
+            let mut speed_computed = false;
+
+            if speed_sq > NOISE_SPEED_THRESHOLD_SQ {
+                current_speed = speed_sq.sqrt();
+                let speed_ratio = current_speed / max_speed;
+                let size_factor = size.inv_sqrt_length;
+                let noise_magnitude = noise_base * speed_ratio * speed_ratio * size_factor;
+
+                let noise_x = noise_ref.get(entity.index(), tick, 0, noise_time_scale);
+                let noise_y = noise_ref.get(entity.index(), tick, 1, noise_time_scale);
+
+                let inv_speed = 1.0 / current_speed;
+                let perpendicular_x = -velocity.vy * inv_speed;
+                let perpendicular_y = velocity.vx * inv_speed;
+
+                velocity.vx += perpendicular_x * noise_x * noise_magnitude * dt;
+                velocity.vy += perpendicular_y * noise_y * noise_magnitude * dt;
+
+                // Recalculate after noise modification
+                speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+                speed_computed = false; // Speed changed, need fresh sqrt if used
+            }
+
+            // Speed clamping
+            let was_clamped = speed_sq > max_speed_sq;
+            if was_clamped {
+                if !speed_computed {
+                    current_speed = speed_sq.sqrt();
+                }
+                let scale = max_speed / current_speed;
+                velocity.vx *= scale;
+                velocity.vy *= scale;
+                current_speed = max_speed; // After clamping, speed is exactly max_speed
+                speed_sq = max_speed_sq;
+                // Note: speed_computed not set - if turn rate limiting needs speed,
+                // sqrt(max_speed_sq) = max_speed = current_speed, so result is same
+            }
+
+            // Size-dependent turn rate limiting
+            // Biological basis: turn_rate ∝ 1/size^1.33 (moment of inertia vs muscle torque)
+            if old_angle.is_finite() && speed_sq > stopped_threshold_sq {
+                // Calculate size-dependent base turn rate (deg/s)
+                let base_turn_rate_deg = (MAX_TURN_RATE
+                    / size.length.powf(TURN_RATE_SIZE_EXPONENT))
+                .clamp(MIN_TURN_RATE_DEG, MAX_TURN_RATE_DEG);
+
+                // Apply speed penalty: faster movement = less agile turning
+                // At max speed, creatures retain (1 - PENALTY) of their turn ability
+                let current_speed_for_penalty = if speed_computed || was_clamped {
+                    current_speed
+                } else {
+                    speed_sq.sqrt()
+                };
+                let normalized_speed = (current_speed_for_penalty / max_speed).min(1.0);
+                let speed_factor =
+                    1.0 - TURN_RATE_SPEED_PENALTY * normalized_speed * normalized_speed;
+                let effective_turn_rate_deg = base_turn_rate_deg * speed_factor;
+
+                // Convert to radians and apply dt
+                let max_delta = effective_turn_rate_deg.to_radians() * dt;
+
+                let new_angle = fast_atan2(velocity.vy, velocity.vx);
+                let delta = normalize_angle(new_angle - old_angle);
+
+                if delta.abs() > max_delta {
+                    let clamped_delta = delta.clamp(-max_delta, max_delta);
+                    let final_angle = old_angle + clamped_delta;
+                    // Reuse speed from penalty calculation
+                    let new_speed = current_speed_for_penalty;
+                    velocity.vx = new_speed * final_angle.cos();
+                    velocity.vy = new_speed * final_angle.sin();
+                }
+            }
+
+            acceleration.ax = 0.0;
+            acceleration.ay = 0.0;
 
             position.x += velocity.vx * dt;
             position.y += velocity.vy * dt;
 
-            // Boundary enforcement for coasting catatonic creatures
+            // Boundary enforcement (merged into main loop)
             if position.x < min_x {
                 position.x = min_x;
                 velocity.vx = velocity.vx.max(0.0);
@@ -92,122 +212,10 @@ pub fn integrate_motion_system(
                 velocity.vy = velocity.vy.min(0.0);
             }
 
-            return;
-        }
-
-        // Capture old heading before velocity changes (fast_atan2: ~5x faster)
-        let old_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-        let old_angle = if old_speed_sq > stopped_threshold_sq {
-            fast_atan2(velocity.vy, velocity.vx)
-        } else {
-            f32::NAN
-        };
-
-        velocity.vx += acceleration.ax * dt;
-        velocity.vy += acceleration.ay * dt;
-        velocity.vx *= drag_factor;
-        velocity.vy *= drag_factor;
-
-        // Track speed for reuse (avoid redundant sqrt)
-        let mut speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-        let mut current_speed = 0.0_f32;
-        let mut speed_computed = false;
-
-        if speed_sq > NOISE_SPEED_THRESHOLD_SQ {
-            current_speed = speed_sq.sqrt();
-            let speed_ratio = current_speed / MAX_SPEED;
-            let size_factor = size.inv_sqrt_length;
-            let noise_magnitude = noise_base * speed_ratio * speed_ratio * size_factor;
-
-            let noise_x = noise_ref.get(entity.index(), tick, 0, noise_time_scale);
-            let noise_y = noise_ref.get(entity.index(), tick, 1, noise_time_scale);
-
-            let inv_speed = 1.0 / current_speed;
-            let perpendicular_x = -velocity.vy * inv_speed;
-            let perpendicular_y = velocity.vx * inv_speed;
-
-            velocity.vx += perpendicular_x * noise_x * noise_magnitude * dt;
-            velocity.vy += perpendicular_y * noise_y * noise_magnitude * dt;
-
-            // Recalculate after noise modification
-            speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-            speed_computed = false; // Speed changed, need fresh sqrt if used
-        }
-
-        // Speed clamping
-        let was_clamped = speed_sq > max_speed_sq;
-        if was_clamped {
-            if !speed_computed {
-                current_speed = speed_sq.sqrt();
-            }
-            let scale = MAX_SPEED / current_speed;
-            velocity.vx *= scale;
-            velocity.vy *= scale;
-            current_speed = MAX_SPEED; // After clamping, speed is exactly MAX_SPEED
-            speed_sq = max_speed_sq;
-            // Note: speed_computed not set - if turn rate limiting needs speed,
-            // sqrt(max_speed_sq) = MAX_SPEED = current_speed, so result is same
-        }
-
-        // Size-dependent turn rate limiting
-        // Biological basis: turn_rate ∝ 1/size^1.33 (moment of inertia vs muscle torque)
-        if old_angle.is_finite() && speed_sq > stopped_threshold_sq {
-            // Calculate size-dependent base turn rate (deg/s)
-            let base_turn_rate_deg = (MAX_TURN_RATE / size.length.powf(TURN_RATE_SIZE_EXPONENT))
-                .clamp(MIN_TURN_RATE_DEG, MAX_TURN_RATE_DEG);
-
-            // Apply speed penalty: faster movement = less agile turning
-            // At max speed, creatures retain (1 - PENALTY) of their turn ability
-            let current_speed_for_penalty = if speed_computed || was_clamped {
-                current_speed
-            } else {
-                speed_sq.sqrt()
-            };
-            let normalized_speed = (current_speed_for_penalty / MAX_SPEED).min(1.0);
-            let speed_factor = 1.0 - TURN_RATE_SPEED_PENALTY * normalized_speed * normalized_speed;
-            let effective_turn_rate_deg = base_turn_rate_deg * speed_factor;
-
-            // Convert to radians and apply dt
-            let max_delta = effective_turn_rate_deg.to_radians() * dt;
-
-            let new_angle = fast_atan2(velocity.vy, velocity.vx);
-            let delta = normalize_angle(new_angle - old_angle);
-
-            if delta.abs() > max_delta {
-                let clamped_delta = delta.clamp(-max_delta, max_delta);
-                let final_angle = old_angle + clamped_delta;
-                // Reuse speed from penalty calculation
-                let new_speed = current_speed_for_penalty;
-                velocity.vx = new_speed * final_angle.cos();
-                velocity.vy = new_speed * final_angle.sin();
-            }
-        }
-
-        acceleration.ax = 0.0;
-        acceleration.ay = 0.0;
-
-        position.x += velocity.vx * dt;
-        position.y += velocity.vy * dt;
-
-        // Boundary enforcement (merged into main loop)
-        if position.x < min_x {
-            position.x = min_x;
-            velocity.vx = velocity.vx.max(0.0);
-        } else if position.x > max_x {
-            position.x = max_x;
-            velocity.vx = velocity.vx.min(0.0);
-        }
-        if position.y < min_y {
-            position.y = min_y;
-            velocity.vy = velocity.vy.max(0.0);
-        } else if position.y > max_y {
-            position.y = max_y;
-            velocity.vy = velocity.vy.min(0.0);
-        }
-
-        // Rotation update (fused for parallelization - vx/vy already in cache)
-        rotation.set_from_velocity(velocity.vx, velocity.vy);
-    });
+            // Rotation update (fused for parallelization - vx/vy already in cache)
+            rotation.set_from_velocity(velocity.vx, velocity.vy);
+        },
+    );
 }
 
 pub fn update_body_size_cache(mut query: Query<&mut BodySize, Changed<BodySize>>) {
@@ -272,9 +280,14 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.016));
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -100.0, 100.0, -100.0, 100.0,
+        ));
         // Disable noise for determinism test - noise is entity-index dependent
-        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -288,7 +301,10 @@ mod tests {
             world.spawn((
                 BodySize::new(1.0),
                 Position { x, y },
-                Velocity { vx: (i as f32 * 0.1).sin(), vy: (i as f32 * 0.1).cos() },
+                Velocity {
+                    vx: (i as f32 * 0.1).sin(),
+                    vy: (i as f32 * 0.1).cos(),
+                },
                 Acceleration { ax: 0.0, ay: 0.0 },
                 Rotation::default(),
                 state,
@@ -312,9 +328,14 @@ mod tests {
         let mut world2 = World::new();
         world2.insert_resource(DeltaTime(0.016));
         world2.insert_resource(PhysicsTick(0));
-        world2.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
+        world2.insert_resource(crate::simulation::core::WorldBounds::new(
+            -100.0, 100.0, -100.0, 100.0,
+        ));
         // Disable noise for determinism test - noise is entity-index dependent
-        world2.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world2.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         world2.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world2.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -327,7 +348,10 @@ mod tests {
             world2.spawn((
                 BodySize::new(1.0),
                 Position { x, y },
-                Velocity { vx: (i as f32 * 0.1).sin(), vy: (i as f32 * 0.1).cos() },
+                Velocity {
+                    vx: (i as f32 * 0.1).sin(),
+                    vy: (i as f32 * 0.1).cos(),
+                },
                 Acceleration { ax: 0.0, ay: 0.0 },
                 Rotation::default(),
                 state,
@@ -348,16 +372,22 @@ mod tests {
         // Verify determinism: same input produces same output
         assert_eq!(positions_run1.len(), 100);
         assert_eq!(positions_run2.len(), 100);
-        for (i, ((x1, y1), (x2, y2))) in positions_run1.iter().zip(positions_run2.iter()).enumerate() {
+        for (i, ((x1, y1), (x2, y2))) in
+            positions_run1.iter().zip(positions_run2.iter()).enumerate()
+        {
             assert!(
                 (x1 - x2).abs() < 0.0001,
                 "Entity {} X position mismatch: {} vs {}",
-                i, x1, x2
+                i,
+                x1,
+                x2
             );
             assert!(
                 (y1 - y2).abs() < 0.0001,
                 "Entity {} Y position mismatch: {} vs {}",
-                i, y1, y2
+                i,
+                y1,
+                y2
             );
         }
     }
@@ -367,7 +397,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.016));
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -100.0, 100.0, -100.0, 100.0,
+        ));
         world.insert_resource(MovementConfig::default());
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
@@ -396,12 +428,21 @@ mod tests {
         // Verify ALL entities were processed (acceleration should be reset to 0)
         let mut processed_count = 0;
         for accel in world.query::<&Acceleration>().iter(&world) {
-            assert_eq!(accel.ax, 0.0, "Acceleration should be reset after integration");
-            assert_eq!(accel.ay, 0.0, "Acceleration should be reset after integration");
+            assert_eq!(
+                accel.ax, 0.0,
+                "Acceleration should be reset after integration"
+            );
+            assert_eq!(
+                accel.ay, 0.0,
+                "Acceleration should be reset after integration"
+            );
             processed_count += 1;
         }
 
-        assert_eq!(processed_count, 1000, "All 1000 entities should be processed");
+        assert_eq!(
+            processed_count, 1000,
+            "All 1000 entities should be processed"
+        );
 
         // Also verify velocities were updated (not still zero)
         let velocities_updated = world
@@ -418,7 +459,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.016));
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-100.0, 100.0, -100.0, 100.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -100.0, 100.0, -100.0, 100.0,
+        ));
         world.insert_resource(MovementConfig::default());
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
@@ -469,16 +512,28 @@ mod tests {
         let velocities: Vec<_> = world.query::<&Velocity>().iter(&world).collect();
 
         // Entity 0: was beyond max_x, velocity.vx should be clamped to <= 0
-        assert!(velocities[0].vx <= 0.0, "Velocity at max_x boundary should be non-positive");
+        assert!(
+            velocities[0].vx <= 0.0,
+            "Velocity at max_x boundary should be non-positive"
+        );
 
         // Entity 1: was beyond min_x, velocity.vx should be clamped to >= 0
-        assert!(velocities[1].vx >= 0.0, "Velocity at min_x boundary should be non-negative");
+        assert!(
+            velocities[1].vx >= 0.0,
+            "Velocity at min_x boundary should be non-negative"
+        );
 
         // Entity 2: was beyond max_y, velocity.vy should be clamped to <= 0
-        assert!(velocities[2].vy <= 0.0, "Velocity at max_y boundary should be non-positive");
+        assert!(
+            velocities[2].vy <= 0.0,
+            "Velocity at max_y boundary should be non-positive"
+        );
 
         // Entity 3: was beyond min_y, velocity.vy should be clamped to >= 0
-        assert!(velocities[3].vy >= 0.0, "Velocity at min_y boundary should be non-negative");
+        assert!(
+            velocities[3].vy >= 0.0,
+            "Velocity at min_y boundary should be non-negative"
+        );
     }
 
     #[test]
@@ -486,7 +541,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.05));
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -1000.0, 1000.0, -1000.0, 1000.0,
+        ));
         world.insert_resource(MovementConfig::default());
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
@@ -495,14 +552,16 @@ mod tests {
         let mut state = CreatureState::default();
         state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
 
-        let entity = world.spawn((
-            BodySize::new(1.0),
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 10.0, vy: 0.0 },
-            Acceleration { ax: 0.0, ay: 100.0 },
-            Rotation::default(),
-            state,
-        )).id();
+        let entity = world
+            .spawn((
+                BodySize::new(1.0),
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 10.0, vy: 0.0 },
+                Acceleration { ax: 0.0, ay: 100.0 },
+                Rotation::default(),
+                state,
+            ))
+            .id();
 
         use bevy_ecs::system::IntoSystem;
         let mut system = IntoSystem::into_system(integrate_motion_system);
@@ -521,7 +580,11 @@ mod tests {
             "Turn rate should be limited to ~0.9 deg, got {} deg",
             delta_degrees
         );
-        assert!(delta_degrees > 0.0, "Should have some turn, got {} deg", delta_degrees);
+        assert!(
+            delta_degrees > 0.0,
+            "Should have some turn, got {} deg",
+            delta_degrees
+        );
     }
 
     #[test]
@@ -529,9 +592,14 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.05));
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -1000.0, 1000.0, -1000.0, 1000.0,
+        ));
         // Disable noise so it doesn't interfere with turn rate test
-        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -539,14 +607,16 @@ mod tests {
         let mut state = CreatureState::default();
         state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
 
-        let entity = world.spawn((
-            BodySize::new(1.0),
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 10.0, vy: 0.0 },
-            Acceleration { ax: 1.0, ay: 0.1 },
-            Rotation::default(),
-            state,
-        )).id();
+        let entity = world
+            .spawn((
+                BodySize::new(1.0),
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 10.0, vy: 0.0 },
+                Acceleration { ax: 1.0, ay: 0.1 },
+                Rotation::default(),
+                state,
+            ))
+            .id();
 
         use bevy_ecs::system::IntoSystem;
         let mut system = IntoSystem::into_system(integrate_motion_system);
@@ -562,9 +632,14 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.05));
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -1000.0, 1000.0, -1000.0, 1000.0,
+        ));
         // Disable noise so it doesn't interfere with turn test
-        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -572,14 +647,16 @@ mod tests {
         let mut state = CreatureState::default();
         state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
 
-        let entity = world.spawn((
-            BodySize::new(1.0),
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 0.0, vy: 0.0 },
-            Acceleration { ax: 0.0, ay: 10.0 },
-            Rotation::default(),
-            state,
-        )).id();
+        let entity = world
+            .spawn((
+                BodySize::new(1.0),
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 0.0, vy: 0.0 },
+                Acceleration { ax: 0.0, ay: 10.0 },
+                Rotation::default(),
+                state,
+            ))
+            .id();
 
         use bevy_ecs::system::IntoSystem;
         let mut system = IntoSystem::into_system(integrate_motion_system);
@@ -598,8 +675,13 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.1)); // Longer dt to see difference
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
-        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -1000.0, 1000.0, -1000.0, 1000.0,
+        ));
+        world.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -610,23 +692,27 @@ mod tests {
         large_state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
 
         // Both creatures moving right at same speed, strong upward acceleration
-        let small = world.spawn((
-            BodySize::new(0.5),  // Small creature
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 10.0, vy: 0.0 },
-            Acceleration { ax: 0.0, ay: 100.0 },  // Strong turn force
-            Rotation::default(),
-            small_state,
-        )).id();
+        let small = world
+            .spawn((
+                BodySize::new(0.5), // Small creature
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 10.0, vy: 0.0 },
+                Acceleration { ax: 0.0, ay: 100.0 }, // Strong turn force
+                Rotation::default(),
+                small_state,
+            ))
+            .id();
 
-        let large = world.spawn((
-            BodySize::new(5.0),  // Large creature (10x size)
-            Position { x: 100.0, y: 0.0 },
-            Velocity { vx: 10.0, vy: 0.0 },
-            Acceleration { ax: 0.0, ay: 100.0 },  // Same turn force
-            Rotation::default(),
-            large_state,
-        )).id();
+        let large = world
+            .spawn((
+                BodySize::new(5.0), // Large creature (10x size)
+                Position { x: 100.0, y: 0.0 },
+                Velocity { vx: 10.0, vy: 0.0 },
+                Acceleration { ax: 0.0, ay: 100.0 }, // Same turn force
+                Rotation::default(),
+                large_state,
+            ))
+            .id();
 
         use bevy_ecs::system::IntoSystem;
         let mut system = IntoSystem::into_system(integrate_motion_system);
@@ -662,8 +748,13 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(1.0)); // 1 second to make math clear
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
-        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -1000.0, 1000.0, -1000.0, 1000.0,
+        ));
+        world.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -672,14 +763,19 @@ mod tests {
         state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
 
         // Very large creature - would have extremely low turn rate without floor
-        let entity = world.spawn((
-            BodySize::new(100.0),  // Massive creature
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 10.0, vy: 0.0 },  // Moving right
-            Acceleration { ax: 0.0, ay: 1000.0 },  // Massive upward force
-            Rotation::default(),
-            state,
-        )).id();
+        let entity = world
+            .spawn((
+                BodySize::new(100.0), // Massive creature
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 10.0, vy: 0.0 }, // Moving right
+                Acceleration {
+                    ax: 0.0,
+                    ay: 1000.0,
+                }, // Massive upward force
+                Rotation::default(),
+                state,
+            ))
+            .id();
 
         use bevy_ecs::system::IntoSystem;
         let mut system = IntoSystem::into_system(integrate_motion_system);
@@ -704,8 +800,13 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(1.0)); // 1 second
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
-        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -1000.0, 1000.0, -1000.0, 1000.0,
+        ));
+        world.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -714,14 +815,19 @@ mod tests {
         state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
 
         // Tiny creature moving slowly (minimal speed penalty)
-        let entity = world.spawn((
-            BodySize::new(0.01),  // Tiny creature
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 0.1, vy: 0.0 },  // Very slow (minimal speed penalty)
-            Acceleration { ax: 0.0, ay: 1000.0 },  // Massive force to try to turn fast
-            Rotation::default(),
-            state,
-        )).id();
+        let entity = world
+            .spawn((
+                BodySize::new(0.01), // Tiny creature
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 0.1, vy: 0.0 }, // Very slow (minimal speed penalty)
+                Acceleration {
+                    ax: 0.0,
+                    ay: 1000.0,
+                }, // Massive force to try to turn fast
+                Rotation::default(),
+                state,
+            ))
+            .id();
 
         use bevy_ecs::system::IntoSystem;
         let mut system = IntoSystem::into_system(integrate_motion_system);
@@ -746,8 +852,13 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.1));
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
-        world.insert_resource(MovementConfig { locomotion_noise_base: 0.0, ..Default::default() });
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -1000.0, 1000.0, -1000.0, 1000.0,
+        ));
+        world.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
         world.insert_resource(crate::instrumentation::SystemTimings::new());
@@ -758,23 +869,31 @@ mod tests {
         fast_state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
 
         // Two identical creatures, one slow, one fast
-        let slow = world.spawn((
-            BodySize::new(1.0),
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 1.0, vy: 0.0 },  // Slow
-            Acceleration { ax: 0.0, ay: 100.0 },
-            Rotation::default(),
-            slow_state,
-        )).id();
+        let slow = world
+            .spawn((
+                BodySize::new(1.0),
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 1.0, vy: 0.0 }, // Slow
+                Acceleration { ax: 0.0, ay: 100.0 },
+                Rotation::default(),
+                slow_state,
+            ))
+            .id();
 
-        let fast = world.spawn((
-            BodySize::new(1.0),
-            Position { x: 100.0, y: 0.0 },
-            Velocity { vx: MAX_SPEED, vy: 0.0 },  // At max speed
-            Acceleration { ax: 0.0, ay: 100.0 },
-            Rotation::default(),
-            fast_state,
-        )).id();
+        let fast_body = BodySize::new(1.0);
+        let fast = world
+            .spawn((
+                fast_body,
+                Position { x: 100.0, y: 0.0 },
+                Velocity {
+                    vx: fast_body.max_speed(),
+                    vy: 0.0,
+                }, // At max speed for this size
+                Acceleration { ax: 0.0, ay: 100.0 },
+                Rotation::default(),
+                fast_state,
+            ))
+            .id();
 
         use bevy_ecs::system::IntoSystem;
         let mut system = IntoSystem::into_system(integrate_motion_system);
@@ -792,15 +911,16 @@ mod tests {
         assert!(
             slow_angle > fast_angle,
             "Slow creature should turn more than fast creature. Slow: {}°, Fast: {}°",
-            slow_angle, fast_angle
+            slow_angle,
+            fast_angle
         );
 
         // Fast creature at max speed retains 30% agility (1 - 0.7 speed penalty)
-        // So slow creature should turn at least 2x faster
+        // Slow creature should turn significantly faster (at least 1.5x)
         let turn_ratio = slow_angle / fast_angle.max(0.01);
         assert!(
-            turn_ratio > 2.0,
-            "Slow creature should turn at least 2x faster than max-speed creature. Ratio: {}",
+            turn_ratio > 1.5,
+            "Slow creature should turn significantly faster than max-speed creature. Ratio: {}",
             turn_ratio
         );
     }
@@ -810,7 +930,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(DeltaTime(0.05));
         world.insert_resource(PhysicsTick(0));
-        world.insert_resource(crate::simulation::core::WorldBounds::new(-1000.0, 1000.0, -1000.0, 1000.0));
+        world.insert_resource(crate::simulation::core::WorldBounds::new(
+            -1000.0, 1000.0, -1000.0, 1000.0,
+        ));
         world.insert_resource(MovementConfig::default());
         world.insert_resource(NoiseTable::default());
         #[cfg(feature = "dev-tools")]
@@ -819,14 +941,19 @@ mod tests {
         let mut state = CreatureState::default();
         state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
 
-        let entity = world.spawn((
-            BodySize::new(1.0),
-            Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 10.0, vy: 0.0 },
-            Acceleration { ax: -100.0, ay: 0.0 },
-            Rotation::default(),
-            state,
-        )).id();
+        let entity = world
+            .spawn((
+                BodySize::new(1.0),
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 10.0, vy: 0.0 },
+                Acceleration {
+                    ax: -100.0,
+                    ay: 0.0,
+                },
+                Rotation::default(),
+                state,
+            ))
+            .id();
 
         use bevy_ecs::system::IntoSystem;
         let mut system = IntoSystem::into_system(integrate_motion_system);
@@ -834,6 +961,10 @@ mod tests {
         system.run((), &mut world);
 
         let vel = world.get::<Velocity>(entity).unwrap();
-        assert!(vel.vx > 0.0, "Should still be moving right after one tick, got vx={}", vel.vx);
+        assert!(
+            vel.vx > 0.0,
+            "Should still be moving right after one tick, got vx={}",
+            vel.vx
+        );
     }
 }

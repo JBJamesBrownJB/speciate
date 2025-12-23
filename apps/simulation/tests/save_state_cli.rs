@@ -17,7 +17,9 @@ fn test_load_snapshot_creates_valid_latest_msgpack() {
 
     // Create a simulation and save snapshot to latest.msgpack
     let mut simulation = setup_test_simulation(50);
-    let snapshot = simulation.to_save_state().expect("Failed to create save state");
+    let snapshot = simulation
+        .to_save_state()
+        .expect("Failed to create save state");
 
     // Ensure save-states directory exists
     fs::create_dir_all("save-states").expect("Failed to create save-states directory");
@@ -48,7 +50,8 @@ fn test_load_snapshot_creates_valid_latest_msgpack() {
     );
 
     // Verify we can restore simulation from it
-    let restored_simulation = speciate::Simulation::from_save_state(loaded_snapshot).expect("Failed to restore from save state");
+    let restored_simulation = speciate::Simulation::from_save_state(loaded_snapshot)
+        .expect("Failed to restore from save state");
     assert_eq!(
         restored_simulation.creature_count(),
         50,
@@ -97,7 +100,9 @@ fn test_latest_msgpack_path_convention() {
 
     // Create a test snapshot
     let mut simulation = setup_test_simulation(25);
-    let snapshot = simulation.to_save_state().expect("Failed to create save state");
+    let snapshot = simulation
+        .to_save_state()
+        .expect("Failed to create save state");
 
     fs::create_dir_all("save-states").expect("Failed to create save-states directory");
 

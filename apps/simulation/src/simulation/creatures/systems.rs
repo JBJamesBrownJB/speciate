@@ -1,4 +1,3 @@
-
 use super::events::SpawnCreatureEvent;
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::Resource;
@@ -27,19 +26,15 @@ impl NextCreatureId {
     }
 }
 
-
 pub fn process_spawn_events(
     mut commands: Commands,
     mut events: EventReader<SpawnCreatureEvent>,
     mut next_id: ResMut<NextCreatureId>,
 ) {
     for event in events.read() {
-
         let id = next_id.generate();
 
-
         let bundle = event.builder.clone().build(id);
-
 
         commands.spawn(bundle);
 

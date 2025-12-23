@@ -47,10 +47,7 @@ fn test_l1d_miss_rate_uses_l1d_accesses_not_cache_refs() {
         0.0
     };
 
-    assert_eq!(
-        l1d_miss_rate, 5.0,
-        "L1D miss rate = (50 / 1000) * 100 = 5%"
-    );
+    assert_eq!(l1d_miss_rate, 5.0, "L1D miss rate = (50 / 1000) * 100 = 5%");
 
     let wrong_formula = if cache_refs_delta > 0 {
         (l1d_misses_delta as f64 / cache_refs_delta as f64) * 100.0
@@ -89,12 +86,10 @@ fn test_l1d_miss_rate_expected_ranges() {
     let poor_case = (700u64, 10000u64);
     let critical_case = (1200u64, 10000u64);
 
-    let excellent_rate =
-        (excellent_case.0 as f64 / excellent_case.1 as f64) * 100.0;
+    let excellent_rate = (excellent_case.0 as f64 / excellent_case.1 as f64) * 100.0;
     let good_rate = (good_case.0 as f64 / good_case.1 as f64) * 100.0;
     let poor_rate = (poor_case.0 as f64 / poor_case.1 as f64) * 100.0;
-    let critical_rate =
-        (critical_case.0 as f64 / critical_case.1 as f64) * 100.0;
+    let critical_rate = (critical_case.0 as f64 / critical_case.1 as f64) * 100.0;
 
     assert!(excellent_rate < 1.0, "Excellent: < 1%");
     assert!(good_rate >= 1.0 && good_rate < 5.0, "Good: 1-5%");
@@ -124,12 +119,11 @@ fn test_llc_miss_rate_zero_misses_is_valid() {
     let cache_misses_delta = 0u64;
     let cache_refs_delta = 10000u64;
 
-    let llc_miss_rate_overcautious =
-        if cache_refs_delta > 0 && cache_misses_delta > 0 {
-            (cache_misses_delta as f64 / cache_refs_delta as f64) * 100.0
-        } else {
-            0.0
-        };
+    let llc_miss_rate_overcautious = if cache_refs_delta > 0 && cache_misses_delta > 0 {
+        (cache_misses_delta as f64 / cache_refs_delta as f64) * 100.0
+    } else {
+        0.0
+    };
 
     let llc_miss_rate_simplified = if cache_refs_delta > 0 {
         (cache_misses_delta as f64 / cache_refs_delta as f64) * 100.0
@@ -174,8 +168,7 @@ fn test_branch_miss_rate_expected_ranges() {
     let good_case = (200u64, 10000u64);
     let poor_case = (600u64, 10000u64);
 
-    let excellent_rate =
-        (excellent_case.0 as f64 / excellent_case.1 as f64) * 100.0;
+    let excellent_rate = (excellent_case.0 as f64 / excellent_case.1 as f64) * 100.0;
     let good_rate = (good_case.0 as f64 / good_case.1 as f64) * 100.0;
     let poor_rate = (poor_case.0 as f64 / poor_case.1 as f64) * 100.0;
 
@@ -261,16 +254,11 @@ fn test_all_formulas_produce_reasonable_values() {
     let stalled_backend_delta = 600_000_000u64;
 
     let ipc = instructions_delta as f64 / cycles_delta as f64;
-    let l1d_miss_rate =
-        (l1d_misses_delta as f64 / l1d_accesses_delta as f64) * 100.0;
-    let llc_miss_rate =
-        (cache_misses_delta as f64 / cache_refs_delta as f64) * 100.0;
-    let branch_miss_rate =
-        (branch_misses_delta as f64 / branch_instructions_delta as f64) * 100.0;
-    let frontend_stall_ratio =
-        (stalled_frontend_delta as f64 / cycles_delta as f64) * 100.0;
-    let backend_stall_ratio =
-        (stalled_backend_delta as f64 / cycles_delta as f64) * 100.0;
+    let l1d_miss_rate = (l1d_misses_delta as f64 / l1d_accesses_delta as f64) * 100.0;
+    let llc_miss_rate = (cache_misses_delta as f64 / cache_refs_delta as f64) * 100.0;
+    let branch_miss_rate = (branch_misses_delta as f64 / branch_instructions_delta as f64) * 100.0;
+    let frontend_stall_ratio = (stalled_frontend_delta as f64 / cycles_delta as f64) * 100.0;
+    let backend_stall_ratio = (stalled_backend_delta as f64 / cycles_delta as f64) * 100.0;
 
     assert!(ipc >= 0.0 && ipc < 10.0, "IPC: {}", ipc);
     assert!(

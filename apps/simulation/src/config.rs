@@ -7,7 +7,11 @@ pub struct MovementConfig {
 impl Default for MovementConfig {
     fn default() -> Self {
         Self {
-            locomotion_noise_base: 99.5,
+            // Reduced from 99.5 to account for lower drag (0.5 vs 2.0).
+            // With old drag 2.0, noise quickly decayed. With drag 0.5,
+            // noise accumulates and causes wild veering.
+            // Target: ~5% of max_speed perpendicular drift per second.
+            locomotion_noise_base: 3.0,
             noise_time_scale: 0.01,
         }
     }

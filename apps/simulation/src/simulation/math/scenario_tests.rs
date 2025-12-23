@@ -6,8 +6,7 @@
 #[cfg(test)]
 mod tests {
     use crate::simulation::creatures::steering::{
-        calculate_arrival, calculate_avoidance_force, calculate_wander,
-        ArrivalParams, AvoidanceParams, NeighborObstacle, WanderParams,
+        calculate_arrival, calculate_wander, ArrivalParams, WanderParams,
     };
     use crate::simulation::math::{
         accumulate_steering, integrate_motion, IntegrationParams, SteeringContext,
@@ -51,8 +50,8 @@ mod tests {
     // ============================================================
 
     #[test]
-    fn wander_plus_avoidance_produces_valid_acceleration() {
-        // Simulate a wandering creature that encounters an obstacle
+    fn wander_produces_valid_acceleration() {
+        // Simulate a wandering creature
         let velocity = (5.0, 0.0);
         let ctx = default_steering_context(velocity);
 
@@ -65,115 +64,22 @@ mod tests {
         };
         let wander_result = calculate_wander(&ctx, &wander_params, 0.1);
 
-        // Avoidance contribution (obstacle to the side)
-        // Position is (0, 0), obstacle at (1.0, 1.5) relative = absolute (1.0, 1.5)
-        let position = (0.0, 0.0);
-        let avoidance_params = AvoidanceParams {
-            position,
-            self_radius: 0.5,
-            personal_space: 2.5,
-            emergency_distance: 0.25,
-        };
-        let obstacle = NeighborObstacle {
-            position: (position.0 + 1.0, position.1 + 1.5), // Absolute position
-            radius: 0.5,
-        };
-        let avoidance_accel = calculate_avoidance_force(&ctx, &avoidance_params, &[obstacle]);
-
-        // Combine accelerations
-        let combined = accumulate_steering(
-            &[wander_result.acceleration, avoidance_accel],
-            MAX_ACCEL,
-        );
+        // Verify wander produces valid acceleration
+        let combined = accumulate_steering(&[wander_result.acceleration], MAX_ACCEL);
 
         let mag = (combined.0.powi(2) + combined.1.powi(2)).sqrt();
 
         assert!(
             mag <= MAX_ACCEL + 0.01,
-            "Combined acceleration {} should be ≤ max_accel {}",
+            "Wander acceleration {} should be ≤ max_accel {}",
             mag,
             MAX_ACCEL
         );
         assert!(mag > 0.0, "Should produce some acceleration");
     }
 
-    #[test]
-    fn seek_plus_avoidance_navigates_around_obstacle() {
-        // Seeker approaching target with obstacle in the way
-        let mut position = (0.0, 0.0);
-        let mut velocity = (0.0, 0.0);
-        let target = (20.0, 0.0);
-        let obstacle_pos = (10.0, 0.0); // Directly in path
-
-        let mut reached_target = false;
-        let mut collided = false;
-
-        // Simulate 200 frames (10 seconds)
-        for _ in 0..200 {
-            // Seek contribution
-            let to_target = (target.0 - position.0, target.1 - position.1);
-            let arrival_params = ArrivalParams {
-                velocity,
-                to_target,
-                self_radius: 0.5,
-                target_radius: 0.5,
-                max_speed: MAX_SPEED,
-                max_force: MAX_FORCE,
-                mass: MASS,
-            };
-            let arrival_result = calculate_arrival(&arrival_params);
-
-            if arrival_result.arrived {
-                reached_target = true;
-                break;
-            }
-
-            // Avoidance contribution
-            let ctx = default_steering_context(velocity);
-            let avoidance_params = AvoidanceParams {
-                position,
-                self_radius: 0.5,
-                personal_space: 2.5,
-                emergency_distance: 0.25,
-            };
-            let obstacle = NeighborObstacle {
-                position: obstacle_pos,
-                radius: 0.5,
-            };
-            let avoidance_accel = calculate_avoidance_force(&ctx, &avoidance_params, &[obstacle]);
-
-            // Combine (seek is primary, avoidance modifies)
-            let combined = accumulate_steering(
-                &[arrival_result.acceleration, avoidance_accel],
-                MAX_ACCEL,
-            );
-
-            // Integrate motion
-            let integration = integrate_motion(&default_integration_params(
-                position, velocity, combined,
-            ));
-
-            position = integration.position;
-            velocity = integration.velocity;
-
-            // Check for collision
-            let dist_to_obstacle = ((position.0 - obstacle_pos.0).powi(2)
-                + (position.1 - obstacle_pos.1).powi(2))
-            .sqrt();
-            if dist_to_obstacle < 1.0 {
-                // self_radius + obstacle_radius
-                collided = true;
-            }
-        }
-
-        // Should navigate around obstacle to reach target
-        assert!(
-            !collided || reached_target,
-            "Should avoid collision or reach target. Collided: {}, Reached: {}",
-            collided,
-            reached_target
-        );
-    }
+    // NOTE: Avoidance scenario tests removed - will be rewritten in Stage 3 with TTC-based API
+    // See ABC-SUPER_SPRINT/4-better-avoid.md for the new avoidance implementation plan
 
     // ============================================================
     // Visualization mismatch detection tests
@@ -193,8 +99,8 @@ mod tests {
             velocity,
             acceleration,
             dt: DT,
-            drag_coefficient: 0.0, // No drag for clarity
-            max_speed: 100.0, // High so speed clamp doesn't interfere
+            drag_coefficient: 0.0,                   // No drag for clarity
+            max_speed: 100.0,                        // High so speed clamp doesn't interfere
             max_turn_rate_rad: std::f32::consts::PI, // 180 deg/s
             stopped_threshold: 0.05,
         });
@@ -242,7 +148,10 @@ mod tests {
         });
 
         // Velocity change direction
-        let dv = (result.velocity.0 - velocity.0, result.velocity.1 - velocity.1);
+        let dv = (
+            result.velocity.0 - velocity.0,
+            result.velocity.1 - velocity.1,
+        );
         let dv_angle = dv.1.atan2(dv.0);
 
         // Acceleration direction
@@ -457,79 +366,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn replay_avoidance_scenario_with_multiple_obstacles() {
-        // Replay a complex avoidance scenario
-        // Start further from obstacles so there's room to navigate
-        let mut position = (-10.0, 0.0);
-        let mut velocity = (5.0, 0.0);
-
-        // Place obstacles to the side, not directly blocking
-        let obstacles = vec![
-            (5.0, 2.0),   // Ahead and right
-            (5.0, -2.0),  // Ahead and left
-        ];
-
-        let mut trajectory = Vec::new();
-
-        for _ in 0..200 {
-            let ctx = default_steering_context(velocity);
-
-            let avoidance_params = AvoidanceParams {
-                position,
-                self_radius: 0.5,
-                personal_space: 2.0, // Smaller personal space
-                emergency_distance: 0.25,
-            };
-
-            let neighbor_obstacles: Vec<_> = obstacles
-                .iter()
-                .map(|&(ox, oy)| NeighborObstacle {
-                    position: (ox, oy),
-                    radius: 0.5,
-                })
-                .collect();
-
-            let avoidance_accel = calculate_avoidance_force(&ctx, &avoidance_params, &neighbor_obstacles);
-
-            // Add stronger forward acceleration (simulating seek behavior)
-            let base_accel = (4.0, 0.0);
-            let combined = accumulate_steering(
-                &[base_accel, avoidance_accel],
-                MAX_ACCEL,
-            );
-
-            let integration = integrate_motion(&default_integration_params(
-                position, velocity, combined,
-            ));
-
-            position = integration.position;
-            velocity = integration.velocity;
-            trajectory.push(position);
-        }
-
-        // Should make progress past the obstacles (started at -10, obstacles at 5)
-        let final_x = trajectory.last().unwrap().0;
-        assert!(
-            final_x > 0.0,
-            "Should make forward progress despite obstacles. Final X: {}",
-            final_x
-        );
-
-        // Should have some lateral movement from avoidance
-        let _max_y_deviation = trajectory
-            .iter()
-            .map(|(_, y)| y.abs())
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap_or(0.0);
-
-        // With obstacles to the sides, creature should stay mostly centered
-        // but still have some deflection
-        assert!(
-            trajectory.len() > 0,
-            "Should have trajectory data"
-        );
-    }
+    // NOTE: replay_avoidance_scenario_with_multiple_obstacles removed
+    // Will be rewritten in Stage 3 with TTC-based API
 
     // ============================================================
     // F=ma bug detection tests
@@ -577,7 +415,11 @@ mod tests {
         let velocity = (0.0, 0.0);
         let acceleration = (MAX_ACCEL, 0.0); // Max acceleration
 
-        let result = integrate_motion(&default_integration_params(position, velocity, acceleration));
+        let result = integrate_motion(&default_integration_params(
+            position,
+            velocity,
+            acceleration,
+        ));
 
         // v = a × t (ignoring drag for this check)
         // At max_accel = 6 m/s², dt = 0.05s, Δv = 0.3 m/s

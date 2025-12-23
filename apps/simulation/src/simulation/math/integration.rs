@@ -120,26 +120,27 @@ pub fn integrate_motion(params: &IntegrationParams) -> IntegrationResult {
         old_angle // Preserve old angle if now stopped
     };
 
-    let (pre_limit_angle, post_limit_angle) = if old_angle.is_finite() && new_speed_sq > stopped_threshold_sq {
-        let delta = normalize_angle(new_angle - old_angle);
-        let max_delta = params.max_turn_rate_rad * dt;
+    let (pre_limit_angle, post_limit_angle) =
+        if old_angle.is_finite() && new_speed_sq > stopped_threshold_sq {
+            let delta = normalize_angle(new_angle - old_angle);
+            let max_delta = params.max_turn_rate_rad * dt;
 
-        if delta.abs() > max_delta {
-            turn_limited = true;
-            let clamped_delta = delta.clamp(-max_delta, max_delta);
-            let final_angle = old_angle + clamped_delta;
+            if delta.abs() > max_delta {
+                turn_limited = true;
+                let clamped_delta = delta.clamp(-max_delta, max_delta);
+                let final_angle = old_angle + clamped_delta;
 
-            // Reconstruct velocity with limited angle
-            vx = current_speed * final_angle.cos();
-            vy = current_speed * final_angle.sin();
+                // Reconstruct velocity with limited angle
+                vx = current_speed * final_angle.cos();
+                vy = current_speed * final_angle.sin();
 
-            (new_angle, final_angle)
+                (new_angle, final_angle)
+            } else {
+                (new_angle, new_angle)
+            }
         } else {
             (new_angle, new_angle)
-        }
-    } else {
-        (new_angle, new_angle)
-    };
+        };
 
     // 6. Integrate position
     let new_px = px + vx * dt;
@@ -389,7 +390,7 @@ mod tests {
     #[test]
     fn large_turn_is_limited() {
         let params = IntegrationParams {
-            velocity: (10.0, 0.0), // Moving right
+            velocity: (10.0, 0.0),      // Moving right
             acceleration: (0.0, 100.0), // Strong upward acceleration
             dt: 0.05,
             drag_coefficient: 0.0,
@@ -436,7 +437,7 @@ mod tests {
     #[test]
     fn stopped_creature_can_turn_freely() {
         let params = IntegrationParams {
-            velocity: (0.0, 0.0), // Stopped
+            velocity: (0.0, 0.0),      // Stopped
             acceleration: (0.0, 10.0), // Accelerate upward
             dt: 0.05,
             drag_coefficient: 0.0,
@@ -450,7 +451,10 @@ mod tests {
 
         // Stopped creature should accelerate in direction of acceleration
         assert!(result.velocity.1 > 0.0, "Should move upward");
-        assert!(!result.turn_limited, "Stopped creature should not have turn limiting");
+        assert!(
+            !result.turn_limited,
+            "Stopped creature should not have turn limiting"
+        );
     }
 
     // ============================================================
@@ -515,7 +519,7 @@ mod tests {
         // Simulate a creature moving right and braking hard
         let mut params = IntegrationParams {
             position: (0.0, 0.0),
-            velocity: (10.0, 0.0), // Moving right
+            velocity: (10.0, 0.0),     // Moving right
             acceleration: (-6.0, 0.0), // Max braking (typical max_accel)
             dt: 0.05,
             drag_coefficient: 2.0,

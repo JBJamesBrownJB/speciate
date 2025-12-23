@@ -29,11 +29,7 @@ fn test_timing_guard_records_elapsed_time() {
         "Timer should record at least 100us, got {}us",
         elapsed
     );
-    assert!(
-        elapsed < 10000,
-        "Timer overhead too high: {}us",
-        elapsed
-    );
+    assert!(elapsed < 10000, "Timer overhead too high: {}us", elapsed);
 }
 
 #[test]
@@ -81,8 +77,17 @@ fn test_timing_overwrites_previous_value() {
 
     let second = timings.movement_us.load(Ordering::Relaxed);
 
-    assert!(second < first, "Second timing should overwrite: {}us vs {}us", second, first);
-    assert!(second >= 50, "Second timing should be at least 50us: {}us", second);
+    assert!(
+        second < first,
+        "Second timing should overwrite: {}us vs {}us",
+        second,
+        first
+    );
+    assert!(
+        second >= 50,
+        "Second timing should be at least 50us: {}us",
+        second
+    );
 }
 
 #[test]
@@ -136,8 +141,8 @@ fn test_time_system_macro_with_code_block() {
 
 #[test]
 fn test_gamestate_includes_timing_fields() {
-    use speciate::ipc::GameState;
     use speciate::instrumentation::SystemTimingsSnapshot;
+    use speciate::ipc::GameState;
 
     let state = GameState {
         protocol_version: 1,

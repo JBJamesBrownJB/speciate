@@ -40,11 +40,13 @@ pub const CELL_SECTION_OFFSET: usize = HEADER_SIZE + NEIGHBOR_SECTION_SIZE; // 2
 pub const CELL_HEADER_SIZE: usize = 4; // cell_size, num_cells, creature_x, creature_y
 pub const MAX_QUERIED_CELLS: usize = 100; // Up to 10x10 grid query
 
-pub const CHECKED_CELL_SECTION_OFFSET: usize = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 407
+pub const CHECKED_CELL_SECTION_OFFSET: usize =
+    CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 407
 pub const CHECKED_CELL_HEADER_SIZE: usize = 1; // num_checked_cells
 pub const MAX_CHECKED_CELLS: usize = 100;
 
-pub const BUFFER_SIZE: usize = CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE + MAX_CHECKED_CELLS * 2;
+pub const BUFFER_SIZE: usize =
+    CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE + MAX_CHECKED_CELLS * 2;
 
 pub trait NeighborFields {
     fn id(&self) -> u32;
@@ -53,9 +55,15 @@ pub trait NeighborFields {
 }
 
 impl NeighborFields for (u32, f32, f32) {
-    fn id(&self) -> u32 { self.0 }
-    fn x(&self) -> f32 { self.1 }
-    fn y(&self) -> f32 { self.2 }
+    fn id(&self) -> u32 {
+        self.0
+    }
+    fn x(&self) -> f32 {
+        self.1
+    }
+    fn y(&self) -> f32 {
+        self.2
+    }
 }
 
 pub trait CellFields {
@@ -64,21 +72,35 @@ pub trait CellFields {
 }
 
 impl CellFields for (i32, i32) {
-    fn x(&self) -> i32 { self.0 }
-    fn y(&self) -> i32 { self.1 }
+    fn x(&self) -> i32 {
+        self.0
+    }
+    fn y(&self) -> i32 {
+        self.1
+    }
 }
 
 use crate::simulation::perception::{NeighborDebugInfo, QueriedCell};
 
 impl NeighborFields for &NeighborDebugInfo {
-    fn id(&self) -> u32 { self.id }
-    fn x(&self) -> f32 { self.x }
-    fn y(&self) -> f32 { self.y }
+    fn id(&self) -> u32 {
+        self.id
+    }
+    fn x(&self) -> f32 {
+        self.x
+    }
+    fn y(&self) -> f32 {
+        self.y
+    }
 }
 
 impl CellFields for &QueriedCell {
-    fn x(&self) -> i32 { self.x }
-    fn y(&self) -> i32 { self.y }
+    fn x(&self) -> i32 {
+        self.x
+    }
+    fn y(&self) -> i32 {
+        self.y
+    }
 }
 
 pub struct PerceptionDebugBuffer {
@@ -112,8 +134,19 @@ impl PerceptionDebugBuffer {
         self.write[0] = 0.0; // has_data = false
     }
 
-    pub fn write_debug_data<N, F>(&mut self, target_id: u32, target_x: f32, target_y: f32, perception_range: f32, query_radius: f32, fov_angle: f32, rotation: f32, ax: f32, ay: f32, neighbors: N)
-    where
+    pub fn write_debug_data<N, F>(
+        &mut self,
+        target_id: u32,
+        target_x: f32,
+        target_y: f32,
+        perception_range: f32,
+        query_radius: f32,
+        fov_angle: f32,
+        rotation: f32,
+        ax: f32,
+        ay: f32,
+        neighbors: N,
+    ) where
         N: ExactSizeIterator<Item = F>,
         F: NeighborFields,
     {
@@ -142,8 +175,13 @@ impl PerceptionDebugBuffer {
         }
     }
 
-    pub fn write_cell_data<Q, C, QF, CF>(&mut self, cell_size: f32, creature_cell: (i32, i32), queried_cells: Q, checked_cells: C)
-    where
+    pub fn write_cell_data<Q, C, QF, CF>(
+        &mut self,
+        cell_size: f32,
+        creature_cell: (i32, i32),
+        queried_cells: Q,
+        checked_cells: C,
+    ) where
         Q: ExactSizeIterator<Item = QF>,
         C: ExactSizeIterator<Item = CF>,
         QF: CellFields,
@@ -197,7 +235,18 @@ mod tests {
 
         let neighbors: Vec<(u32, f32, f32)> = vec![(42, 10.0, 20.0), (43, 30.0, 40.0)];
 
-        buffer.write_debug_data(1, 100.0, 200.0, 50.0, 55.0, pi, 0.5, 1.5, -2.5, neighbors.iter().copied());
+        buffer.write_debug_data(
+            1,
+            100.0,
+            200.0,
+            50.0,
+            55.0,
+            pi,
+            0.5,
+            1.5,
+            -2.5,
+            neighbors.iter().copied(),
+        );
 
         assert!(!buffer.has_data());
 
@@ -224,7 +273,18 @@ mod tests {
         let mut buffer = PerceptionDebugBuffer::new();
         let pi = std::f32::consts::PI;
 
-        buffer.write_debug_data(1, 100.0, 200.0, 50.0, 55.0, pi, 0.0, 0.0, 0.0, std::iter::empty::<(u32, f32, f32)>());
+        buffer.write_debug_data(
+            1,
+            100.0,
+            200.0,
+            50.0,
+            55.0,
+            pi,
+            0.0,
+            0.0,
+            0.0,
+            std::iter::empty::<(u32, f32, f32)>(),
+        );
         buffer.swap();
         assert!(buffer.has_data());
 
@@ -240,7 +300,18 @@ mod tests {
 
         let neighbors: Vec<(u32, f32, f32)> = (0..100).map(|i| (i, i as f32, i as f32)).collect();
 
-        buffer.write_debug_data(1, 0.0, 0.0, 50.0, 55.0, pi, 0.0, 0.0, 0.0, neighbors.iter().copied());
+        buffer.write_debug_data(
+            1,
+            0.0,
+            0.0,
+            50.0,
+            55.0,
+            pi,
+            0.0,
+            0.0,
+            0.0,
+            neighbors.iter().copied(),
+        );
         buffer.swap();
 
         let slice = buffer.get_read_slice();

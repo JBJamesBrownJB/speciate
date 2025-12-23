@@ -20,7 +20,11 @@ pub fn fast_atan2(y: f32, x: f32) -> f32 {
     };
     // Polynomial approximation
     let angle = (0.1963 * r * r * r - 0.9817 * r) + base_angle;
-    if y < 0.0 { -angle } else { angle }
+    if y < 0.0 {
+        -angle
+    } else {
+        angle
+    }
 }
 
 /// Fast inverse square root using the Quake III algorithm.
@@ -176,7 +180,11 @@ mod tests {
     fn test_clamp_force_over_limit() {
         let (x, y) = clamp_force(6.0, 8.0, 5.0);
         let mag = magnitude(x, y);
-        assert!((mag - 5.0).abs() < 0.0001, "Magnitude should be 5.0, got {}", mag);
+        assert!(
+            (mag - 5.0).abs() < 0.0001,
+            "Magnitude should be 5.0, got {}",
+            mag
+        );
         assert!((x - 3.0).abs() < 0.0001, "X should be 3.0, got {}", x);
         assert!((y - 4.0).abs() < 0.0001, "Y should be 4.0, got {}", y);
     }
@@ -212,19 +220,31 @@ mod tests {
     #[test]
     fn test_normalize_angle_over_pi() {
         let result = normalize_angle(3.0 * PI / 2.0);
-        assert!((result - (-PI / 2.0)).abs() < 0.0001, "Expected -PI/2, got {}", result);
+        assert!(
+            (result - (-PI / 2.0)).abs() < 0.0001,
+            "Expected -PI/2, got {}",
+            result
+        );
     }
 
     #[test]
     fn test_normalize_angle_over_2pi() {
         let result = normalize_angle(2.5 * PI);
-        assert!((result - PI / 2.0).abs() < 0.0001, "Expected PI/2, got {}", result);
+        assert!(
+            (result - PI / 2.0).abs() < 0.0001,
+            "Expected PI/2, got {}",
+            result
+        );
     }
 
     #[test]
     fn test_normalize_angle_negative_wrap() {
         let result = normalize_angle(-3.0 * PI / 2.0);
-        assert!((result - PI / 2.0).abs() < 0.0001, "Expected PI/2, got {}", result);
+        assert!(
+            (result - PI / 2.0).abs() < 0.0001,
+            "Expected PI/2, got {}",
+            result
+        );
     }
 
     #[test]
@@ -274,7 +294,14 @@ mod tests {
             let fast = fast_inv_sqrt(x);
             let std = 1.0 / x.sqrt();
             let error = (fast - std).abs() / std;
-            assert!(error < 0.02, "x={}: fast={}, std={}, error={:.2}%", x, fast, std, error * 100.0);
+            assert!(
+                error < 0.02,
+                "x={}: fast={}, std={}, error={:.2}%",
+                x,
+                fast,
+                std,
+                error * 100.0
+            );
         }
     }
 
@@ -282,7 +309,11 @@ mod tests {
     fn test_normalize_fast_unit_vector() {
         let (x, y) = normalize_fast(3.0, 4.0);
         let mag = (x * x + y * y).sqrt();
-        assert!((mag - 1.0).abs() < 0.02, "Should be unit vector, mag={}", mag);
+        assert!(
+            (mag - 1.0).abs() < 0.02,
+            "Should be unit vector, mag={}",
+            mag
+        );
         assert!((x - 0.6).abs() < 0.02, "x should be ~0.6, got {}", x);
         assert!((y - 0.8).abs() < 0.02, "y should be ~0.8, got {}", y);
     }

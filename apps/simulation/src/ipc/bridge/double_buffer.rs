@@ -13,8 +13,6 @@
 //! - Cache-friendly (sequential memory access)
 //! - Validated in Phase 0.6 benchmark: 350 μs for 27.5K creatures
 
-
-
 pub struct DoubleBuffer {
     read: Vec<f32>,
     write: Vec<f32>,
@@ -65,7 +63,10 @@ mod tests {
 
         let read_slice = buffer.get_read_slice();
         assert_eq!(read_slice.len(), 1000);
-        assert!(read_slice.iter().all(|&x| x == 0.0), "Initial buffer should be zeroed");
+        assert!(
+            read_slice.iter().all(|&x| x == 0.0),
+            "Initial buffer should be zeroed"
+        );
     }
 
     #[test]

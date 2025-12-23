@@ -26,7 +26,10 @@ mod tests {
     #[test]
     fn test_target_below_threshold_not_perceived() {
         let result = should_perceive_entity(5.0, 4.0, 100.0, 10000.0, true);
-        assert!(!result, "Target below mass threshold should not be perceived");
+        assert!(
+            !result,
+            "Target below mass threshold should not be perceived"
+        );
     }
 
     #[test]

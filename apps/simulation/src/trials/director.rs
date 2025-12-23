@@ -185,7 +185,11 @@ impl TrialDirector {
     }
 
     /// Evaluate a single assertion against the trial snapshot
-    fn evaluate_assertion(&self, assertion: &Assertion, snapshot: &TrialSnapshot) -> AssertionResult {
+    fn evaluate_assertion(
+        &self,
+        assertion: &Assertion,
+        snapshot: &TrialSnapshot,
+    ) -> AssertionResult {
         match assertion {
             Assertion::NoOverlaps => {
                 let passed = self.max_overlap_count == 0;
@@ -265,7 +269,9 @@ impl TrialDirector {
                 let targets = snapshot.tagged_entities.targets.get(tag);
 
                 match (positions, targets) {
-                    (Some(positions), Some(targets)) if !positions.is_empty() && !targets.is_empty() => {
+                    (Some(positions), Some(targets))
+                        if !positions.is_empty() && !targets.is_empty() =>
+                    {
                         // Check if any tagged creature reached its target
                         // Threshold accounts for creature radius (~0.5m) + target radius (~1.0m)
                         // Creature "arrives" when its edge touches the target's arrival zone
@@ -317,9 +323,15 @@ impl TrialDirector {
                     assertion: assertion.clone(),
                     passed,
                     message: if passed {
-                        format!("Completed {} ticks (required: {})", snapshot.ticks_run, count)
+                        format!(
+                            "Completed {} ticks (required: {})",
+                            snapshot.ticks_run, count
+                        )
                     } else {
-                        format!("Only {} ticks completed (required: {})", snapshot.ticks_run, count)
+                        format!(
+                            "Only {} ticks completed (required: {})",
+                            snapshot.ticks_run, count
+                        )
                     },
                 }
             }
@@ -491,7 +503,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::CreatureCount { min: 5, max: 15 });
+        spec.assertions
+            .push(Assertion::CreatureCount { min: 5, max: 15 });
         director.start_trial(spec);
 
         let snapshot = TrialSnapshot {
@@ -514,7 +527,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::CreatureCount { min: 5, max: 15 });
+        spec.assertions
+            .push(Assertion::CreatureCount { min: 5, max: 15 });
         director.start_trial(spec);
 
         let snapshot = TrialSnapshot {
@@ -535,7 +549,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::TicksCompleted { count: 100 });
+        spec.assertions
+            .push(Assertion::TicksCompleted { count: 100 });
         director.start_trial(spec);
 
         let snapshot = TrialSnapshot {
@@ -556,7 +571,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::TicksCompleted { count: 100 });
+        spec.assertions
+            .push(Assertion::TicksCompleted { count: 100 });
         director.start_trial(spec);
 
         let snapshot = TrialSnapshot {
@@ -583,8 +599,12 @@ mod tests {
         director.start_trial(spec);
 
         let mut tagged = TaggedEntities::default();
-        tagged.positions.insert("seeker".to_string(), vec![(10.0, 10.0)]);
-        tagged.targets.insert("seeker".to_string(), vec![(10.5, 10.0)]); // Within threshold
+        tagged
+            .positions
+            .insert("seeker".to_string(), vec![(10.0, 10.0)]);
+        tagged
+            .targets
+            .insert("seeker".to_string(), vec![(10.5, 10.0)]); // Within threshold
 
         let snapshot = TrialSnapshot {
             ticks_run: 100,
@@ -610,8 +630,12 @@ mod tests {
         director.start_trial(spec);
 
         let mut tagged = TaggedEntities::default();
-        tagged.positions.insert("seeker".to_string(), vec![(0.0, 0.0)]);
-        tagged.targets.insert("seeker".to_string(), vec![(100.0, 100.0)]); // Far from target
+        tagged
+            .positions
+            .insert("seeker".to_string(), vec![(0.0, 0.0)]);
+        tagged
+            .targets
+            .insert("seeker".to_string(), vec![(100.0, 100.0)]); // Far from target
 
         let snapshot = TrialSnapshot {
             ticks_run: 100,
@@ -632,8 +656,10 @@ mod tests {
 
         let mut spec = minimal_spec("Test");
         spec.assertions.push(Assertion::NoOverlaps);
-        spec.assertions.push(Assertion::CreatureCount { min: 5, max: 15 });
-        spec.assertions.push(Assertion::TicksCompleted { count: 100 });
+        spec.assertions
+            .push(Assertion::CreatureCount { min: 5, max: 15 });
+        spec.assertions
+            .push(Assertion::TicksCompleted { count: 100 });
         director.start_trial(spec);
 
         // All assertions pass
@@ -660,7 +686,8 @@ mod tests {
 
         let mut spec = minimal_spec("Test");
         spec.assertions.push(Assertion::NoOverlaps);
-        spec.assertions.push(Assertion::CreatureCount { min: 5, max: 15 });
+        spec.assertions
+            .push(Assertion::CreatureCount { min: 5, max: 15 });
         director.start_trial(spec);
 
         // One assertion fails
@@ -776,7 +803,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::MaxOverlapDepth { depth: 1.0 });
+        spec.assertions
+            .push(Assertion::MaxOverlapDepth { depth: 1.0 });
         director.start_trial(spec);
 
         // Simulate tick with overlaps within depth limit
@@ -802,7 +830,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::MaxOverlapDepth { depth: 0.5 });
+        spec.assertions
+            .push(Assertion::MaxOverlapDepth { depth: 0.5 });
         director.start_trial(spec);
 
         // Simulate tick with overlap exceeding depth limit
@@ -828,7 +857,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::MaxTicksWithOverlaps { count: 10 });
+        spec.assertions
+            .push(Assertion::MaxTicksWithOverlaps { count: 10 });
         director.start_trial(spec);
 
         // Simulate 5 ticks with overlaps (within limit)
@@ -862,7 +892,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::MaxTicksWithOverlaps { count: 3 });
+        spec.assertions
+            .push(Assertion::MaxTicksWithOverlaps { count: 3 });
         director.start_trial(spec);
 
         // Simulate 5 ticks with overlaps (exceeds limit of 3)
@@ -891,8 +922,10 @@ mod tests {
 
         let mut spec = minimal_spec("Test");
         spec.assertions.push(Assertion::MaxOverlaps { count: 5 });
-        spec.assertions.push(Assertion::MaxOverlapDepth { depth: 2.0 });
-        spec.assertions.push(Assertion::MaxTicksWithOverlaps { count: 10 });
+        spec.assertions
+            .push(Assertion::MaxOverlapDepth { depth: 2.0 });
+        spec.assertions
+            .push(Assertion::MaxTicksWithOverlaps { count: 10 });
         director.start_trial(spec);
 
         // Tick 1: 2 overlaps, max depth 0.5
@@ -937,7 +970,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::MaxAvgTickLatency { microseconds: 1000 }); // 1ms limit
+        spec.assertions
+            .push(Assertion::MaxAvgTickLatency { microseconds: 1000 }); // 1ms limit
         director.start_trial(spec);
 
         // Run 100 warm-up ticks (excluded from latency calculation)
@@ -970,7 +1004,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::MaxAvgTickLatency { microseconds: 500 }); // 500us limit
+        spec.assertions
+            .push(Assertion::MaxAvgTickLatency { microseconds: 500 }); // 500us limit
         director.start_trial(spec);
 
         // Run 100 warm-up ticks (excluded from latency calculation)
@@ -1003,7 +1038,8 @@ mod tests {
         let mut director = TrialDirector::new();
 
         let mut spec = minimal_spec("Test");
-        spec.assertions.push(Assertion::MaxAvgTickLatency { microseconds: 600 }); // avg should be 500us
+        spec.assertions
+            .push(Assertion::MaxAvgTickLatency { microseconds: 600 }); // avg should be 500us
         director.start_trial(spec);
 
         // Run 100 warm-up ticks (excluded from latency calculation)
@@ -1044,7 +1080,8 @@ mod tests {
 
         let mut spec = minimal_spec("Test");
         // 1000us limit - should PASS if we exclude warm-up ticks
-        spec.assertions.push(Assertion::MaxAvgTickLatency { microseconds: 1000 });
+        spec.assertions
+            .push(Assertion::MaxAvgTickLatency { microseconds: 1000 });
         director.start_trial(spec);
 
         // First 100 ticks: high latency (10000us each) - should be EXCLUDED from average
@@ -1076,6 +1113,9 @@ mod tests {
         // Without exclusion: avg = (100*10000 + 50*500) / 150 = 6833us → FAIL
         assert_eq!(director.state(), TrialState::Completed);
         let result = director.result().unwrap();
-        assert!(result.passed, "Latency should exclude first 100 warm-up ticks");
+        assert!(
+            result.passed,
+            "Latency should exclude first 100 warm-up ticks"
+        );
     }
 }

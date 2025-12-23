@@ -7,20 +7,16 @@
 //! - Single Rayon sync barrier instead of 4
 //! - Better cache utilization (each entity's components loaded once)
 
-use super::avoidance::{calculate_avoidance_force, AvoidanceParams, NeighborObstacle};
 use super::seek::{calculate_arrival, ArrivalParams};
 use super::wander::{calculate_wander, WanderParams};
 use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
 use crate::simulation::creatures::components::{
-    BehaviorMode, CanAvoidObstacles, CanSeek, CanWander, CreatureState, HomePosition, Target,
-    WanderState,
+    BehaviorMode, Brain, CanAvoidObstacles, CanSeek, CanWander, CreatureState, HomePosition,
+    Target, WanderState,
 };
-use crate::simulation::creatures::constants::{
-    EMERGENCY_BRAKE_DISTANCE, MAX_SPEED, SEEK_FORCE_MULT, SEEKING_SPACE_REDUCTION,
-    WANDER_FORCE_MULT,
-};
+use crate::simulation::creatures::constants::{SEEK_FORCE_MULT, WANDER_FORCE_MULT};
 use crate::simulation::math::SteeringContext;
-use crate::simulation::perception::{AvoidanceBehavior, NeighborCache};
+use crate::simulation::perception::NeighborCache;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 
@@ -68,13 +64,18 @@ struct SeekOutput {
 }
 
 /// Apply seek behavior, returning acceleration and arrival status.
-fn apply_seek(position: &Position, velocity: &Velocity, target: &Target, size: &BodySize) -> SeekOutput {
+fn apply_seek(
+    position: &Position,
+    velocity: &Velocity,
+    target: &Target,
+    size: &BodySize,
+) -> SeekOutput {
     let params = ArrivalParams {
         velocity: (velocity.vx, velocity.vy),
         to_target: (target.x - position.x, target.y - position.y),
         self_radius: size.radius(),
         target_radius: target.radius.get(),
-        max_speed: MAX_SPEED,
+        max_speed: size.max_speed(),
         max_force: size.max_force() * SEEK_FORCE_MULT.get(),
         mass: size.mass(),
     };
@@ -86,30 +87,34 @@ fn apply_seek(position: &Position, velocity: &Velocity, target: &Target, size: &
     }
 }
 
-/// Apply avoidance behavior, returning acceleration to accumulate.
+/// Apply TTC-based avoidance behavior, returning acceleration to accumulate.
 fn apply_avoidance(
-    ctx: &SteeringContext,
-    position: &Position,
-    size: &BodySize,
     neighbor_cache: &NeighborCache,
-    effective_space: f32,
+    self_pos: (f32, f32),
+    self_vel: (f32, f32),
+    self_radius: f32,
+    max_accel: f32,
 ) -> (f32, f32) {
-    let avoidance_params = AvoidanceParams {
-        position: (position.x, position.y),
-        self_radius: size.radius(),
-        personal_space: effective_space,
-        emergency_distance: EMERGENCY_BRAKE_DISTANCE,
+    use super::avoidance::{calculate_avoidance, AvoidanceConfig, AvoidanceInput, Neighbor};
+
+    let input = AvoidanceInput {
+        self_pos,
+        self_vel,
+        self_radius,
+        max_accel,
     };
 
-    let obstacles: Vec<NeighborObstacle> = neighbor_cache
-        .iter_neighbors()
-        .map(|n| NeighborObstacle {
-            position: (n.x, n.y),
-            radius: n.radius,
-        })
-        .collect();
+    // Zero-allocation: lazy iterator conversion, no Vec
+    let neighbors = neighbor_cache.iter_neighbors().map(|n| Neighbor {
+        pos: (n.x, n.y),
+        vel: (n.vx, n.vy),
+        radius: n.radius,
+    });
 
-    calculate_avoidance_force(ctx, &avoidance_params, &obstacles)
+    let config = AvoidanceConfig::default();
+    let output = calculate_avoidance(&input, neighbors, &config);
+
+    output.accel
 }
 
 /// Fused steering system query - all components needed by any steering behavior.
@@ -124,6 +129,8 @@ pub type SteeringQuery<'w, 's> = Query<
         &'static BodySize,
         &'static mut Acceleration,
         &'static mut CreatureState,
+        // Brain for dormant check
+        &'static Brain,
         // Wander-specific (mutable state)
         &'static mut WanderState,
         &'static HomePosition,
@@ -131,7 +138,6 @@ pub type SteeringQuery<'w, 's> = Query<
         &'static Target,
         // Avoidance-specific
         &'static NeighborCache,
-        &'static AvoidanceBehavior,
         // Capability markers (zero-sized, no cache impact)
         Has<CanWander>,
         Has<CanSeek>,
@@ -166,19 +172,24 @@ pub fn update_steering_system(
             size,
             acceleration,
             creature_state,
+            brain,
             wander_state,
             _home,
             target,
             neighbor_cache,
-            avoidance_behavior,
             can_wander,
             can_seek,
             can_avoid,
         )| {
-            // Build steering context (shared by all behaviors)
-            let ctx = SteeringContext {
+            // Skip steering for dormant brains (used in tests for stationary creatures)
+            if !brain.mode.makes_decisions() {
+                return;
+            }
+
+            // Build steering context for wander behavior
+            let ctx = crate::simulation::math::SteeringContext {
                 velocity: (velocity.vx, velocity.vy),
-                max_speed: creature_state.max_speed,
+                max_speed: size.max_speed(),
                 max_force: size.max_force(),
                 mass: size.mass(),
             };
@@ -204,18 +215,20 @@ pub fn update_steering_system(
 
             // 2. Avoidance (additive with primary behavior)
             if *can_avoid && neighbor_cache.has_neighbors() {
-                let effective_space = if creature_state.behavior == BehaviorMode::Seeking {
-                    avoidance_behavior.personal_space() * SEEKING_SPACE_REDUCTION
-                } else {
-                    avoidance_behavior.effective_personal_space(creature_state.energy / 100.0)
-                };
-                let (ax, ay) = apply_avoidance(&ctx, position, size, neighbor_cache, effective_space);
+                let max_accel = size.max_force() / size.mass();
+                let (ax, ay) = apply_avoidance(
+                    neighbor_cache,
+                    (position.x, position.y),
+                    (velocity.vx, velocity.vy),
+                    size.radius(),
+                    max_accel,
+                );
                 acceleration.ax += ax;
                 acceleration.ay += ay;
             }
 
             // 3. Cap accumulated steering to creature's physical maximum
-            let max_accel = ctx.max_force / ctx.mass;
+            let max_accel = size.max_force() / size.mass();
             (acceleration.ax, acceleration.ay) =
                 cap_acceleration(acceleration.ax, acceleration.ay, max_accel);
         },
@@ -253,11 +266,11 @@ mod tests {
                 Velocity { vx: 1.0, vy: 0.0 },
                 Acceleration::default(),
                 BodySize::default(),
+                Brain::default(),
                 test_wander_state(),
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(0.0, 0.0),
                 NeighborCache::new(),
-                AvoidanceBehavior::default(),
                 CreatureState {
                     behavior: BehaviorMode::Wandering,
                     ..Default::default()
@@ -276,11 +289,11 @@ mod tests {
                 Velocity { vx: 0.0, vy: 0.0 },
                 Acceleration::default(),
                 BodySize::default(),
+                Brain::default(),
                 test_wander_state(),
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(target_x, target_y),
                 NeighborCache::new(),
-                AvoidanceBehavior::default(),
                 CreatureState {
                     behavior: BehaviorMode::Seeking,
                     ..Default::default()
@@ -327,14 +340,14 @@ mod tests {
         let entity = world
             .spawn((
                 Position { x: 0.95, y: 0.0 },  // Very close to target
-                Velocity { vx: 0.1, vy: 0.0 },  // Moving slowly
+                Velocity { vx: 0.1, vy: 0.0 }, // Moving slowly
                 Acceleration::default(),
-                BodySize::new(1.0),  // radius = 0.5
+                BodySize::new(1.0), // radius = 0.5
+                Brain::default(),
                 test_wander_state(),
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(1.0, 0.0),
                 NeighborCache::new(),
-                AvoidanceBehavior::default(),
                 CreatureState {
                     behavior: BehaviorMode::Seeking,
                     ..Default::default()
@@ -364,11 +377,11 @@ mod tests {
                 Velocity { vx: 0.0, vy: 0.0 },
                 Acceleration::default(),
                 BodySize::default(),
+                Brain::default(),
                 test_wander_state(),
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(0.0, 0.0),
                 NeighborCache::new(),
-                AvoidanceBehavior::default(),
                 CreatureState {
                     behavior: BehaviorMode::Catatonic,
                     ..Default::default()
@@ -382,58 +395,11 @@ mod tests {
         run_system(&mut world);
 
         let accel = world.get::<Acceleration>(entity).unwrap();
-        assert_eq!(accel.ax, 0.0, "Catatonic creature should have no acceleration");
-        assert_eq!(accel.ay, 0.0);
-    }
-
-    #[test]
-    fn avoidance_accumulates_with_primary_behavior() {
-        use crate::simulation::perception::NeighborData;
-
-        let mut world = World::new();
-        let obstacle = world.spawn(Position { x: 1.0, y: 0.0 }).id();
-
-        let entity = world
-            .spawn((
-                Position { x: 0.0, y: 0.0 },
-                Velocity { vx: 1.0, vy: 0.0 },
-                Acceleration::default(),
-                BodySize::default(),
-                test_wander_state(),
-                HomePosition::new(0.0, 0.0),
-                Target::at_point(0.0, 0.0),
-                NeighborCache::new(),
-                AvoidanceBehavior::new(1.25),
-                CreatureState {
-                    behavior: BehaviorMode::Wandering,
-                    ..Default::default()
-                },
-                CanWander,
-                CanSeek,
-                CanAvoidObstacles,
-            ))
-            .id();
-
-        // Add neighbor to cache
-        if let Some(mut cache) = world.get_mut::<NeighborCache>(entity) {
-            cache.add_neighbor(NeighborData {
-                entity: obstacle,
-                x: 1.0,
-                y: 0.0,
-                radius: 0.5,
-            });
-        }
-
-        run_system(&mut world);
-
-        let accel = world.get::<Acceleration>(entity).unwrap();
-        // Should have both wander and avoidance contributions
-        // Avoidance from obstacle ahead should produce negative X acceleration (braking)
-        let mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
-        assert!(
-            mag > 0.0,
-            "Should have combined wander + avoidance acceleration"
+        assert_eq!(
+            accel.ax, 0.0,
+            "Catatonic creature should have no acceleration"
         );
+        assert_eq!(accel.ay, 0.0);
     }
 
     #[test]
@@ -449,11 +415,11 @@ mod tests {
                 Velocity { vx: 1.0, vy: 0.0 },
                 Acceleration::default(),
                 BodySize::default(),
+                Brain::default(),
                 test_wander_state(),
                 HomePosition::new(x, y),
                 Target::at_point(0.0, 0.0),
                 NeighborCache::new(),
-                AvoidanceBehavior::default(),
                 CreatureState {
                     behavior: BehaviorMode::Wandering,
                     ..Default::default()
@@ -480,15 +446,8 @@ mod tests {
     }
 
     #[test]
-    fn steering_cap_integrated_in_fused_system() {
-        use crate::simulation::perception::NeighborData;
-
+    fn steering_cap_respects_max_accel() {
         let mut world = World::new();
-
-        // Create a scenario where forces would exceed max_accel without capping:
-        // - Wandering creature (produces wander force)
-        // - With very close neighbor (produces high avoidance force)
-        let obstacle = world.spawn(Position { x: 0.5, y: 0.0 }).id();
 
         let body = BodySize::default();
         let max_accel = body.max_force() / body.mass();
@@ -499,11 +458,11 @@ mod tests {
                 Velocity { vx: 1.0, vy: 0.0 },
                 Acceleration::default(),
                 body,
+                Brain::default(),
                 test_wander_state(),
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(0.0, 0.0),
                 NeighborCache::new(),
-                AvoidanceBehavior::new(5.0), // Large personal space for strong avoidance
                 CreatureState {
                     behavior: BehaviorMode::Wandering,
                     ..Default::default()
@@ -514,22 +473,12 @@ mod tests {
             ))
             .id();
 
-        // Add very close neighbor to trigger high avoidance force
-        if let Some(mut cache) = world.get_mut::<NeighborCache>(entity) {
-            cache.add_neighbor(NeighborData {
-                entity: obstacle,
-                x: 0.5,
-                y: 0.0,
-                radius: 0.5,
-            });
-        }
-
         run_system(&mut world);
 
         let accel = world.get::<Acceleration>(entity).unwrap();
         let mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
 
-        // The combined forces (wander + avoidance) should be capped to max_accel
+        // Acceleration should be capped to max_accel
         assert!(
             mag <= max_accel + 0.01,
             "Acceleration magnitude {} should be capped to max_accel {} (or below)",

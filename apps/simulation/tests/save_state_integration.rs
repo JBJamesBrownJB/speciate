@@ -9,9 +9,9 @@ mod common;
 
 use common::*;
 use speciate::config::SaveStateConfig;
-use speciate::simulation::Simulation;
 use speciate::persistence::WorldSaveState;
-use speciate::persistence::{SaveType, SaveStateWorker};
+use speciate::persistence::{SaveStateWorker, SaveType};
+use speciate::simulation::Simulation;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -50,7 +50,9 @@ fn test_snapshot_cleanup_keeps_last_n() {
         simulation.update(0.016);
 
         if last_snapshot.elapsed() >= interval {
-            let snapshot = simulation.to_save_state().expect("Failed to create save state");
+            let snapshot = simulation
+                .to_save_state()
+                .expect("Failed to create save state");
             worker.save_world_state(snapshot, SaveType::Periodic);
             last_snapshot = std::time::Instant::now();
             snapshot_count += 1;
@@ -98,14 +100,18 @@ fn test_periodic_and_shutdown_both_create_timestamped_files() {
     let mut simulation = setup_test_simulation(25);
 
     // Create one periodic save
-    let snapshot = simulation.to_save_state().expect("Failed to create save state");
+    let snapshot = simulation
+        .to_save_state()
+        .expect("Failed to create save state");
     worker.save_world_state(snapshot, SaveType::Periodic);
 
     // Sleep to ensure different timestamp (1+ second granularity)
     thread::sleep(Duration::from_millis(1100));
 
     // Create one shutdown save
-    let shutdown_snapshot = simulation.to_save_state().expect("Failed to create save state");
+    let shutdown_snapshot = simulation
+        .to_save_state()
+        .expect("Failed to create save state");
     worker.save_world_state(shutdown_snapshot, SaveType::Shutdown);
 
     // Give worker time to finish
@@ -140,7 +146,9 @@ fn test_snapshot_preserves_creature_count() {
 
     // Take snapshot
     let mut sim_clone = simulation;
-    let snapshot = sim_clone.to_save_state().expect("Failed to create save state");
+    let snapshot = sim_clone
+        .to_save_state()
+        .expect("Failed to create save state");
 
     // Save and reload
     worker.save_world_state(snapshot.clone(), SaveType::Periodic);
@@ -153,7 +161,8 @@ fn test_snapshot_preserves_creature_count() {
     );
 
     // Restore and verify
-    let restored = Simulation::from_save_state(snapshot).expect("Failed to restore from save state");
+    let restored =
+        Simulation::from_save_state(snapshot).expect("Failed to restore from save state");
     assert_eq!(
         restored.creature_count(),
         original_count,
@@ -198,7 +207,9 @@ fn test_graceful_shutdown_flag() {
     thread_handle.join().unwrap();
 
     // Create final snapshot (simulating shutdown behavior)
-    let final_snapshot = simulation.to_save_state().expect("Failed to create save state");
+    let final_snapshot = simulation
+        .to_save_state()
+        .expect("Failed to create save state");
     worker.save_world_state(final_snapshot, SaveType::Shutdown);
 
     // Wait for snapshot to be saved with retry loop (more robust than single sleep)
@@ -249,7 +260,9 @@ fn test_disabled_snapshots_creates_no_files() {
 
         // This check would normally trigger a save, but config.enabled is false
         if config.enabled && last_snapshot.elapsed() >= interval {
-            let snapshot = simulation.to_save_state().expect("Failed to create save state");
+            let snapshot = simulation
+                .to_save_state()
+                .expect("Failed to create save state");
             worker.save_world_state(snapshot, SaveType::Periodic);
             last_snapshot = std::time::Instant::now();
         }
@@ -261,10 +274,7 @@ fn test_disabled_snapshots_creates_no_files() {
 
     // No save states should have been created in our isolated temp dir
     let save_count = count_save_states_in_dir(&save_dir);
-    assert_eq!(
-        save_count, 0,
-        "Should have 0 save states when disabled"
-    );
+    assert_eq!(save_count, 0, "Should have 0 save states when disabled");
 
     worker.shutdown();
 }
@@ -282,7 +292,9 @@ fn test_most_recent_save_state_can_be_retrieved() {
     for _ in 0..3 {
         thread::sleep(Duration::from_secs(1));
         simulation.update(0.016);
-        let snapshot = simulation.to_save_state().expect("Failed to create save state");
+        let snapshot = simulation
+            .to_save_state()
+            .expect("Failed to create save state");
         worker.save_world_state(snapshot, SaveType::Periodic);
     }
 
@@ -301,7 +313,10 @@ fn test_most_recent_save_state_can_be_retrieved() {
 
     // Load most recent and verify it's valid
     let loaded = WorldSaveState::load_from_file(&most_recent.unwrap());
-    assert!(loaded.is_ok(), "Should be able to load most recent save state");
+    assert!(
+        loaded.is_ok(),
+        "Should be able to load most recent save state"
+    );
 
     worker.shutdown();
     cleanup_test_save_states();

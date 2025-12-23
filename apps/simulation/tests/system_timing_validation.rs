@@ -30,7 +30,10 @@ fn test_all_registered_systems_have_timing() {
         );
     }
 
-    println!("✅ All {} systems have timing instrumentation", registered_systems_count);
+    println!(
+        "✅ All {} systems have timing instrumentation",
+        registered_systems_count
+    );
 }
 
 #[cfg(feature = "dev-tools")]
@@ -43,7 +46,8 @@ fn count_registered_systems(source: &str) -> usize {
         let systems_block = &captures[1];
         let system_re = Regex::new(r"(\w+_system)").unwrap();
 
-        system_re.captures_iter(systems_block)
+        system_re
+            .captures_iter(systems_block)
             .filter(|cap| {
                 let name = &cap[1];
                 name != "command_executor_system"

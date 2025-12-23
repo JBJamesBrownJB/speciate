@@ -1,0 +1,1 @@
+crits of same species, can swap biosignature / L1 knowledge if they are nearby

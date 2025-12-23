@@ -91,7 +91,11 @@ fn benchmark_buffer_read_27_5k_creatures() {
     let buffer = create_buffer(CREATURE_COUNT);
 
     println!("\n=== BUFFER TRANSFER BENCHMARK: 27.5K CREATURES ===");
-    println!("Buffer size: {} f32s ({} KB)", buffer.len(), (buffer.len() * 4) / 1024);
+    println!(
+        "Buffer size: {} f32s ({} KB)",
+        buffer.len(),
+        (buffer.len() * 4) / 1024
+    );
     println!("Warmup iterations: {}", WARMUP_ITERATIONS);
     println!("Benchmark iterations: {}", BENCHMARK_ITERATIONS);
 
@@ -128,7 +132,10 @@ fn benchmark_buffer_read_27_5k_creatures() {
     println!("\nSequential memory scan (baseline):");
     println!("  Average: {} μs", seq_avg);
 
-    println!("\nOverhead (SoA vs sequential): {} μs", avg.saturating_sub(seq_avg));
+    println!(
+        "\nOverhead (SoA vs sequential): {} μs",
+        avg.saturating_sub(seq_avg)
+    );
     println!("=== END BENCHMARK ===\n");
 
     // Sanity check: buffer read should be < 1ms for 27.5K creatures
@@ -147,7 +154,11 @@ fn benchmark_buffer_read_100k_creatures() {
     let buffer = create_buffer(CREATURE_COUNT);
 
     println!("\n=== BUFFER TRANSFER BENCHMARK: 100K CREATURES ===");
-    println!("Buffer size: {} f32s ({} MB)", buffer.len(), (buffer.len() * 4) / (1024 * 1024));
+    println!(
+        "Buffer size: {} f32s ({} MB)",
+        buffer.len(),
+        (buffer.len() * 4) / (1024 * 1024)
+    );
 
     let mut timings = Vec::with_capacity(BENCHMARK_ITERATIONS);
     for _ in 0..BENCHMARK_ITERATIONS {
@@ -179,7 +190,11 @@ fn benchmark_buffer_read_150k_creatures() {
     let buffer = create_buffer(CREATURE_COUNT);
 
     println!("\n=== BUFFER TRANSFER BENCHMARK: 150K CREATURES (TARGET) ===");
-    println!("Buffer size: {} f32s ({} MB)", buffer.len(), (buffer.len() * 4) / (1024 * 1024));
+    println!(
+        "Buffer size: {} f32s ({} MB)",
+        buffer.len(),
+        (buffer.len() * 4) / (1024 * 1024)
+    );
 
     let mut timings = Vec::with_capacity(BENCHMARK_ITERATIONS);
     for _ in 0..BENCHMARK_ITERATIONS {
@@ -211,7 +226,11 @@ fn benchmark_buffer_read_200k_creatures() {
     let buffer = create_buffer(CREATURE_COUNT);
 
     println!("\n=== BUFFER TRANSFER BENCHMARK: 200K CREATURES (STRETCH) ===");
-    println!("Buffer size: {} f32s ({} MB)", buffer.len(), (buffer.len() * 4) / (1024 * 1024));
+    println!(
+        "Buffer size: {} f32s ({} MB)",
+        buffer.len(),
+        (buffer.len() * 4) / (1024 * 1024)
+    );
 
     let mut timings = Vec::with_capacity(BENCHMARK_ITERATIONS);
     for _ in 0..BENCHMARK_ITERATIONS {

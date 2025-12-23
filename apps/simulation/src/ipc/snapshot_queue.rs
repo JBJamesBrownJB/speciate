@@ -1,10 +1,9 @@
-
+#[cfg(feature = "dev-tools")]
+use crate::instrumentation::{HardwareSnapshot, ParallelizationSnapshot, SystemTimingsSnapshot};
+use bevy_ecs::system::Resource;
 use crossbeam::queue::ArrayQueue;
 use serde::{Deserialize, Serialize};
-use bevy_ecs::system::Resource;
 use std::sync::Arc;
-#[cfg(feature = "dev-tools")]
-use crate::instrumentation::{SystemTimingsSnapshot, HardwareSnapshot, ParallelizationSnapshot};
 
 #[derive(Clone, Resource)]
 pub struct SharedSnapshotQueue(pub Arc<SnapshotQueue>);
@@ -50,7 +49,6 @@ pub struct GameState {
     pub parallelization_metrics: Option<ParallelizationSnapshot>,
 }
 
-
 #[derive(Clone)]
 pub struct SnapshotQueue {
     queue: Arc<ArrayQueue<GameState>>,
@@ -64,11 +62,9 @@ impl SnapshotQueue {
     }
 
     pub fn push(&self, state: GameState) {
-
         if self.queue.is_full() {
             let _ = self.queue.pop();
         }
-
 
         let _ = self.queue.push(state);
     }

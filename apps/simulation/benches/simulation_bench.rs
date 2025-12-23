@@ -147,13 +147,21 @@ fn bench_perception(c: &mut Criterion) {
 
             entities_data.push((
                 Entity::from_raw(i as u32),
-                x, y, radius,
-                rotation.cos(), rotation.sin(),
-                range, cos_half_fov_sq
+                x,
+                y,
+                radius,
+                rotation.cos(),
+                rotation.sin(),
+                range,
+                cos_half_fov_sq,
             ));
         }
 
-        grid.rebuild(entities_data.iter().map(|(e, x, y, r, _, _, _, _)| (*e, *x, *y, *r)));
+        grid.rebuild(
+            entities_data
+                .iter()
+                .map(|(e, x, y, r, _, _, _, _)| (*e, *x, *y, *r)),
+        );
 
         const CAPACITY: usize = 8;
         const MAX_OTHER_RADIUS: f32 = 5.0;
@@ -166,12 +174,21 @@ fn bench_perception(c: &mut Criterion) {
                     let mut total_neighbors = 0usize;
                     let mut cells: Vec<(f32, usize)> = Vec::with_capacity(64);
 
-                    for (entity, x, y, self_radius, facing_x, facing_y, range, cos_half_fov_sq) in entities.iter() {
+                    for (entity, x, y, self_radius, facing_x, facing_y, range, cos_half_fov_sq) in
+                        entities.iter()
+                    {
                         let query_radius = range + self_radius + MAX_OTHER_RADIUS;
                         let mut neighbors: [Entity; CAPACITY] = [Entity::PLACEHOLDER; CAPACITY];
                         let mut count = 0usize;
 
-                        grid.collect_cells_sorted(*x, *y, query_radius, *facing_x, *facing_y, &mut cells);
+                        grid.collect_cells_sorted(
+                            *x,
+                            *y,
+                            query_radius,
+                            *facing_x,
+                            *facing_y,
+                            &mut cells,
+                        );
 
                         'cell_loop: for &(_, cell_idx) in cells.iter() {
                             for proxy in grid.get_cell_proxies(cell_idx) {
@@ -243,40 +260,39 @@ fn bench_export_sort(c: &mut Criterion) {
         data.shuffle(&mut rng);
 
         // Sequential sort
-        group.bench_with_input(
-            BenchmarkId::new("sequential", count),
-            &data,
-            |b, data| {
-                b.iter_batched(
-                    || data.clone(),
-                    |mut d| {
-                        d.sort_unstable_by_key(|(id, _, _, _)| *id);
-                        black_box(d)
-                    },
-                    criterion::BatchSize::LargeInput,
-                );
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("sequential", count), &data, |b, data| {
+            b.iter_batched(
+                || data.clone(),
+                |mut d| {
+                    d.sort_unstable_by_key(|(id, _, _, _)| *id);
+                    black_box(d)
+                },
+                criterion::BatchSize::LargeInput,
+            );
+        });
 
         // Parallel sort (Rayon)
-        group.bench_with_input(
-            BenchmarkId::new("parallel", count),
-            &data,
-            |b, data| {
-                b.iter_batched(
-                    || data.clone(),
-                    |mut d| {
-                        d.par_sort_unstable_by_key(|(id, _, _, _)| *id);
-                        black_box(d)
-                    },
-                    criterion::BatchSize::LargeInput,
-                );
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("parallel", count), &data, |b, data| {
+            b.iter_batched(
+                || data.clone(),
+                |mut d| {
+                    d.par_sort_unstable_by_key(|(id, _, _, _)| *id);
+                    black_box(d)
+                },
+                criterion::BatchSize::LargeInput,
+            );
+        });
     }
 
     group.finish();
 }
 
-criterion_group!(benches, bench_tick_scaling, bench_spawn, bench_vector_ops, bench_perception, bench_export_sort);
+criterion_group!(
+    benches,
+    bench_tick_scaling,
+    bench_spawn,
+    bench_vector_ops,
+    bench_perception,
+    bench_export_sort
+);
 criterion_main!(benches);

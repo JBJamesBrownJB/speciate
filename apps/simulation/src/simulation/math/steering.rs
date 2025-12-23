@@ -169,7 +169,11 @@ mod tests {
             mass: 0.0, // Zero mass
         };
 
-        assert_eq!(ctx.max_accel(), 0.0, "Zero mass should return zero max_accel");
+        assert_eq!(
+            ctx.max_accel(),
+            0.0,
+            "Zero mass should return zero max_accel"
+        );
     }
 
     #[test]
@@ -250,16 +254,8 @@ mod tests {
         let accels = vec![(1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
         let (ax, ay) = accumulate_steering(&accels, 100.0); // High max so no clamp
 
-        assert!(
-            (ax - 2.0).abs() < 0.001,
-            "Sum X should be 2.0, got {}",
-            ax
-        );
-        assert!(
-            (ay - 2.0).abs() < 0.001,
-            "Sum Y should be 2.0, got {}",
-            ay
-        );
+        assert!((ax - 2.0).abs() < 0.001, "Sum X should be 2.0, got {}", ax);
+        assert!((ay - 2.0).abs() < 0.001, "Sum Y should be 2.0, got {}", ay);
     }
 
     #[test]
@@ -325,11 +321,7 @@ mod tests {
             "Opposing forces should cancel, got {}",
             ax
         );
-        assert!(
-            ay.abs() < 0.001,
-            "Y should be zero, got {}",
-            ay
-        );
+        assert!(ay.abs() < 0.001, "Y should be zero, got {}", ay);
     }
 
     // ============================================================
@@ -398,7 +390,10 @@ mod tests {
         // Wander calculates: steer = desired_velocity - current_velocity
         // This is in m/s units, NOT Newtons
         let desired_vel = (15.0, 0.0); // max_speed in direction
-        let steer = (desired_vel.0 - ctx.velocity.0, desired_vel.1 - ctx.velocity.1);
+        let steer = (
+            desired_vel.0 - ctx.velocity.0,
+            desired_vel.1 - ctx.velocity.1,
+        );
         // steer = (5.0, 0.0) in m/s
 
         // CORRECT: Use steering_to_acceleration which clamps to max_accel

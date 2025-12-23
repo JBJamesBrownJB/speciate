@@ -21,13 +21,29 @@ pub const REFERENCE_BODY_LENGTH: f32 = 1.0;
 /// Coyote 7-20kg, Kangaroo 25-35kg. 35kg implies stocky/muscular build.
 pub const REFERENCE_MASS: f32 = 35.0;
 
-/// [FUTURE] Maximum sprint speed at reference size (m/s).
-/// VALIDATED: 15 m/s = 54 km/h matches empirical data perfectly.
+/// [ACTIVE] Base maximum speed at reference size (m/s).
 /// Real-world: Wolf 14-17 m/s, Deer 13-16 m/s, Lion 15-20 m/s.
+/// Scaled by size: max_speed = BASE × size^SPEED_SIZE_EXPONENT
+pub const BASE_MAX_SPEED: f32 = 12.0;
+
+/// [ACTIVE] Speed scaling exponent (larger creatures faster).
+/// Biological basis: max_speed ∝ mass^0.17 ≈ length^0.5, but capped conservatively.
+pub const SPEED_SIZE_EXPONENT: f32 = 0.25;
+
+/// [LEGACY] Old global speed cap - now derived from size.
 pub const REFERENCE_MAX_SPEED: f32 = 20.0;
 
-/// [FUTURE] Maximum acceleration at reference size (m/s²).
+/// [ACTIVE] Base maximum acceleration at reference size (m/s²).
 /// Real-world: Most quadrupeds 5-15 m/s², Dogs 6-9 m/s², Lions 7-10 m/s².
+/// Scaled by size: max_accel = BASE / size^ACCEL_SIZE_EXPONENT
+pub const BASE_ACCELERATION: f32 = 10.0;
+
+/// [ACTIVE] Acceleration scaling exponent (smaller creatures snappier).
+/// Biological basis: accel ∝ force/mass ∝ length²/length³ ∝ 1/length.
+/// Conservative 0.5 gives small creatures 3× more acceleration.
+pub const ACCEL_SIZE_EXPONENT: f32 = 0.5;
+
+/// [LEGACY] Old fixed acceleration - now derived from size.
 pub const REFERENCE_MAX_ACCEL: f32 = 10.0;
 
 /// [FUTURE] Turn rate at reference size (degrees/second).
@@ -63,14 +79,15 @@ pub const MAX_TURN_RATE_RAD: f32 = MAX_TURN_RATE * PI / 180.0;
 
 /// Allometric exponent for turn rate scaling.
 /// Biological basis: moment of inertia scales as size^5, muscle torque as size^2.
-/// Net effect: turn rate ∝ 1/size^1.33 (compromise between theoretical and empirical).
-pub const TURN_RATE_SIZE_EXPONENT: f32 = 1.33;
+/// Reduced from 1.33 to 1.0 for snappier small creature agility.
+pub const TURN_RATE_SIZE_EXPONENT: f32 = 1.0;
 
 /// Minimum turn rate floor (deg/s) - prevents very large creatures from being immobile.
 pub const MIN_TURN_RATE_DEG: f32 = 15.0;
 
-/// Maximum turn rate cap (deg/s) - prevents very small creatures from being impossibly agile.
-pub const MAX_TURN_RATE_DEG: f32 = 360.0;
+/// Maximum turn rate cap (deg/s) - allows small creatures insect-like agility.
+/// Raised from 360 to 900 for more dynamic small creature movement.
+pub const MAX_TURN_RATE_DEG: f32 = 900.0;
 
 /// Speed penalty coefficient - at max speed, creatures retain (1 - PENALTY) of turn ability.
 /// Value 0.7 means at max speed, creatures have 30% of their stationary turn rate.
@@ -82,7 +99,9 @@ pub const TURN_RATE_SPEED_PENALTY: f32 = 0.7;
 
 /// [ACTIVE] Velocity damping coefficient.
 /// Applied as: v *= exp(-DRAG * dt)
-pub const DRAG_COEFFICIENT: f32 = 2.0;
+/// Reduced from 2.0 to 0.5 for snappier stop/start dynamics.
+/// At 0.5: velocity decays to 60% after 1 second (was 13.5% at 2.0).
+pub const DRAG_COEFFICIENT: f32 = 0.5;
 
 /// [ACTIVE] Threshold below which creature is considered stationary.
 /// VALIDATED: 5 cm/s is imperceptible.

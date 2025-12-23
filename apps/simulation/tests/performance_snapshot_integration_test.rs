@@ -1,9 +1,7 @@
 #![cfg(feature = "dev-tools")]
 
-use speciate::instrumentation::{
-    HardwareSnapshot, PerformanceSnapshot, SystemTimingsSnapshot,
-};
 use serde_json;
+use speciate::instrumentation::{HardwareSnapshot, PerformanceSnapshot, SystemTimingsSnapshot};
 
 #[test]
 fn test_performance_snapshot_schema_completeness() {
@@ -51,7 +49,10 @@ fn test_performance_snapshot_schema_completeness() {
 
     assert_eq!(snapshot.label, "post-napi-migration");
     assert_eq!(snapshot.creature_count, 27500);
-    assert!(!snapshot.timestamp.is_empty(), "Timestamp should not be empty");
+    assert!(
+        !snapshot.timestamp.is_empty(),
+        "Timestamp should not be empty"
+    );
     assert!(
         !snapshot.git_commit.is_empty(),
         "Git commit should not be empty"
@@ -88,18 +89,29 @@ fn test_performance_snapshot_json_serialization_round_trip() {
         &sys_timings,
     );
 
-    let json = serde_json::to_string_pretty(&original)
-        .expect("Should serialize to JSON");
+    let json = serde_json::to_string_pretty(&original).expect("Should serialize to JSON");
 
-    assert!(json.contains("\"timestamp\""), "JSON should contain timestamp");
+    assert!(
+        json.contains("\"timestamp\""),
+        "JSON should contain timestamp"
+    );
     assert!(json.contains("\"label\""), "JSON should contain label");
     assert!(
         json.contains("\"description\""),
         "JSON should contain description"
     );
-    assert!(json.contains("\"gitCommit\""), "JSON should contain gitCommit (camelCase)");
-    assert!(json.contains("\"gitBranch\""), "JSON should contain gitBranch (camelCase)");
-    assert!(json.contains("\"gitDirty\""), "JSON should contain gitDirty (camelCase)");
+    assert!(
+        json.contains("\"gitCommit\""),
+        "JSON should contain gitCommit (camelCase)"
+    );
+    assert!(
+        json.contains("\"gitBranch\""),
+        "JSON should contain gitBranch (camelCase)"
+    );
+    assert!(
+        json.contains("\"gitDirty\""),
+        "JSON should contain gitDirty (camelCase)"
+    );
     assert!(
         json.contains("\"buildType\""),
         "JSON should contain buildType (camelCase)"
@@ -153,8 +165,7 @@ fn test_hardware_metrics_all_fields_present_in_json() {
         backend_stall_ratio: 7.5,
     };
 
-    let json =
-        serde_json::to_string_pretty(&hw_snapshot).expect("Should serialize");
+    let json = serde_json::to_string_pretty(&hw_snapshot).expect("Should serialize");
 
     let required_fields = vec![
         "cyclesDelta",
@@ -184,8 +195,7 @@ fn test_hardware_metrics_all_fields_present_in_json() {
         );
     }
 
-    let deserialized: HardwareSnapshot =
-        serde_json::from_str(&json).expect("Should deserialize");
+    let deserialized: HardwareSnapshot = serde_json::from_str(&json).expect("Should deserialize");
 
     assert_eq!(deserialized.cycles_delta, hw_snapshot.cycles_delta);
     assert_eq!(
@@ -195,10 +205,7 @@ fn test_hardware_metrics_all_fields_present_in_json() {
     assert_eq!(deserialized.ipc, hw_snapshot.ipc);
     assert_eq!(deserialized.l1d_miss_rate, hw_snapshot.l1d_miss_rate);
     assert_eq!(deserialized.llc_miss_rate, hw_snapshot.llc_miss_rate);
-    assert_eq!(
-        deserialized.branch_miss_rate,
-        hw_snapshot.branch_miss_rate
-    );
+    assert_eq!(deserialized.branch_miss_rate, hw_snapshot.branch_miss_rate);
 }
 
 #[test]
@@ -217,8 +224,7 @@ fn test_system_timings_snapshot_all_fields_present() {
         entity_count: 27500,
     };
 
-    let json =
-        serde_json::to_string_pretty(&sys_timings).expect("Should serialize");
+    let json = serde_json::to_string_pretty(&sys_timings).expect("Should serialize");
 
     let required_fields = vec![
         "totalTickUs",
@@ -293,8 +299,7 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
         &sys_timings,
     );
 
-    let json = serde_json::to_string_pretty(&snapshot)
-        .expect("Should serialize baseline snapshot");
+    let json = serde_json::to_string_pretty(&snapshot).expect("Should serialize baseline snapshot");
 
     println!("=== BASELINE SNAPSHOT SCHEMA ===");
     println!("{}", json);
@@ -311,8 +316,8 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
         "L1D miss rate should be in snapshot"
     );
 
-    let deserialized: PerformanceSnapshot = serde_json::from_str(&json)
-        .expect("Baseline snapshot should deserialize");
+    let deserialized: PerformanceSnapshot =
+        serde_json::from_str(&json).expect("Baseline snapshot should deserialize");
 
     assert_eq!(deserialized.label, "post-napi-migration");
     assert_eq!(deserialized.creature_count, 27500);
@@ -341,11 +346,11 @@ fn test_snapshot_preserves_precision() {
         backend_stall_ratio: 20.234567890123456,
     };
 
-    let json = serde_json::to_string_pretty(&hw_snapshot)
-        .expect("Should serialize with full precision");
+    let json =
+        serde_json::to_string_pretty(&hw_snapshot).expect("Should serialize with full precision");
 
-    let deserialized: HardwareSnapshot = serde_json::from_str(&json)
-        .expect("Should deserialize with full precision");
+    let deserialized: HardwareSnapshot =
+        serde_json::from_str(&json).expect("Should deserialize with full precision");
 
     assert_eq!(deserialized.cycles_delta, hw_snapshot.cycles_delta);
     assert_eq!(
@@ -359,8 +364,7 @@ fn test_snapshot_preserves_precision() {
         "IPC precision should be preserved"
     );
     assert!(
-        (deserialized.l1d_miss_rate - hw_snapshot.l1d_miss_rate).abs()
-            < epsilon,
+        (deserialized.l1d_miss_rate - hw_snapshot.l1d_miss_rate).abs() < epsilon,
         "L1D miss rate precision should be preserved"
     );
 }
@@ -391,10 +395,7 @@ fn test_git_info_extracted_correctly() {
     );
 
     if snapshot.git_branch.contains("sprint-13") {
-        println!(
-            "✓ Correctly on Sprint 13 branch: {}",
-            snapshot.git_branch
-        );
+        println!("✓ Correctly on Sprint 13 branch: {}", snapshot.git_branch);
     }
 
     println!("Git commit: {}", snapshot.git_commit);

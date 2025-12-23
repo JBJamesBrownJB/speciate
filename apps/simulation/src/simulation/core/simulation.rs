@@ -2,15 +2,16 @@ use super::components::{ActualTickRate, BoundaryConfig, DeltaTime, PhysicsTick};
 use super::world_bounds::WorldBounds;
 use crate::config::MovementConfig;
 use crate::simulation::creatures::behaviors::behavior_transition_system;
-use crate::simulation::creatures::steering::update_steering_system;
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::dna::Dna;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
+use crate::simulation::creatures::steering::update_steering_system;
 use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
 use crate::simulation::movement::{integrate_motion_system, update_body_size_cache};
 use crate::simulation::perception;
 use crate::simulation::spatial::{
-    aggregate_l1_system, rebuild_spatial_grid_system, swap_spatial_grid_buffers_system, HierarchicalGrid,
+    aggregate_l1_system, rebuild_spatial_grid_system, swap_spatial_grid_buffers_system,
+    HierarchicalGrid,
 };
 use bevy_ecs::prelude::*;
 
@@ -31,12 +32,13 @@ impl SimulationBuilder {
         let mut world = World::new();
         let mut schedule = Schedule::default();
 
-        use crate::simulation::core::components::{Acceleration, BodySize, Position, Rotation, Velocity};
+        use crate::simulation::core::components::{
+            Acceleration, BodySize, Position, Rotation, Velocity,
+        };
         use crate::simulation::creatures::components::{
             BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
             CreatureState, CritId, FleeState, HomePosition, Target, WanderState,
         };
-        use crate::simulation::perception::AvoidanceBehavior;
         use bevy_ecs::prelude::AppTypeRegistry;
 
         world.init_resource::<AppTypeRegistry>();
@@ -62,7 +64,6 @@ impl SimulationBuilder {
             type_registry.register::<CanWander>();
             type_registry.register::<CanAvoidObstacles>();
 
-            type_registry.register::<AvoidanceBehavior>();
             type_registry.register::<Target>();
 
             type_registry.register::<WanderState>();
@@ -135,6 +136,17 @@ impl SimulationBuilder {
             grid.set_world_bounds(-extent_x, extent_x, -extent_y, extent_y);
         }
 
+        self
+    }
+
+    /// Disable locomotion noise for deterministic tests.
+    /// Call this before build() when you need reproducible behavior.
+    #[cfg(any(test, feature = "test-helpers"))]
+    pub fn with_deterministic_movement(mut self) -> Self {
+        self.world.insert_resource(MovementConfig {
+            locomotion_noise_base: 0.0,
+            ..Default::default()
+        });
         self
     }
 
@@ -250,7 +262,8 @@ impl Simulation {
             }
         }
 
-        let entities: Vec<Entity> = self.world
+        let entities: Vec<Entity> = self
+            .world
             .query::<(Entity, &CritId)>()
             .iter(&self.world)
             .map(|(entity, _)| entity)
@@ -269,7 +282,12 @@ impl Simulation {
         self.spawn_crit_at_with_dna(x, y, None)
     }
 
-    pub fn spawn_crit_at_with_dna(&mut self, x: f32, y: f32, dna: Option<crate::simulation::creatures::dna::Dna>) -> u32 {
+    pub fn spawn_crit_at_with_dna(
+        &mut self,
+        x: f32,
+        y: f32,
+        dna: Option<crate::simulation::creatures::dna::Dna>,
+    ) -> u32 {
         use crate::simulation::creatures::builder::CritBuilder;
         use crate::simulation::creatures::components::state::BehaviorMode;
 
@@ -286,8 +304,13 @@ impl Simulation {
     }
 
     #[cfg_attr(not(feature = "dev-tools"), allow(unused_variables))]
-    pub fn load_trial<F>(&mut self, trial_name: &str, randomize_dna: bool, dna: Option<Dna>, callback: F)
-    where
+    pub fn load_trial<F>(
+        &mut self,
+        trial_name: &str,
+        randomize_dna: bool,
+        dna: Option<Dna>,
+        callback: F,
+    ) where
         F: FnOnce(LoadTrialResult) + 'static,
     {
         let Some(ref _assets_path) = self.assets_path else {
@@ -304,10 +327,19 @@ impl Simulation {
             use crate::trials;
             match trials::loader::load_trial(&mut self.world, trial_name, randomize_dna, dna) {
                 Ok(config) => {
-                    let dna_msg = if randomize_dna { " with randomized DNA" } else { "" };
+                    let dna_msg = if randomize_dna {
+                        " with randomized DNA"
+                    } else {
+                        ""
+                    };
                     callback(LoadTrialResult {
                         success: true,
-                        message: format!("Loaded trial '{}' ({} spawn patterns){}", config.name, config.spawns.len(), dna_msg),
+                        message: format!(
+                            "Loaded trial '{}' ({} spawn patterns){}",
+                            config.name,
+                            config.spawns.len(),
+                            dna_msg
+                        ),
                         command_type: "LoadTrial".to_string(),
                     });
                 }
@@ -336,7 +368,9 @@ impl Simulation {
     pub fn get_system_timings(&self) -> crate::instrumentation::SystemTimingsSnapshot {
         #[cfg(feature = "dev-tools")]
         {
-            self.world.resource::<crate::instrumentation::SystemTimings>().snapshot()
+            self.world
+                .resource::<crate::instrumentation::SystemTimings>()
+                .snapshot()
         }
 
         #[cfg(not(feature = "dev-tools"))]
@@ -355,8 +389,12 @@ impl Simulation {
     }
 
     #[cfg(feature = "dev-tools")]
-    pub fn get_parallelization_metrics(&mut self) -> crate::instrumentation::ParallelizationSnapshot {
-        self.world.resource_mut::<crate::instrumentation::ParallelizationMetrics>().read()
+    pub fn get_parallelization_metrics(
+        &mut self,
+    ) -> crate::instrumentation::ParallelizationSnapshot {
+        self.world
+            .resource_mut::<crate::instrumentation::ParallelizationMetrics>()
+            .read()
     }
 
     pub fn world(&self) -> &World {
@@ -454,12 +492,19 @@ mod tests {
             tx.send(result).unwrap();
         });
 
-        let result = rx.recv_timeout(Duration::from_secs(1))
+        let result = rx
+            .recv_timeout(Duration::from_secs(1))
             .expect("Trial load should complete within 1 second");
 
-        assert!(result.success, "Trial load should succeed: {}", result.message);
+        assert!(
+            result.success,
+            "Trial load should succeed: {}",
+            result.message
+        );
 
-        let count = sim.world_mut().query::<&CritId>()
+        let count = sim
+            .world_mut()
+            .query::<&CritId>()
             .iter(sim.world_mut())
             .count();
         assert_eq!(count, 3, "Should spawn 3 creatures from trial");
@@ -478,7 +523,9 @@ mod tests {
             sim.spawn_test_crit(0.0, 0.0);
         }
 
-        let count_before = sim.world_mut().query::<&CritId>()
+        let count_before = sim
+            .world_mut()
+            .query::<&CritId>()
             .iter(sim.world_mut())
             .count();
         assert_eq!(count_before, 10, "Should have 10 runtime-spawned creatures");
@@ -488,11 +535,18 @@ mod tests {
             tx.send(result).unwrap();
         });
 
-        let result = rx.recv_timeout(Duration::from_secs(1))
+        let result = rx
+            .recv_timeout(Duration::from_secs(1))
             .expect("Trial load should complete within 1 second");
-        assert!(result.success, "Trial load should succeed: {}", result.message);
+        assert!(
+            result.success,
+            "Trial load should succeed: {}",
+            result.message
+        );
 
-        let count_after = sim.world_mut().query::<&CritId>()
+        let count_after = sim
+            .world_mut()
+            .query::<&CritId>()
             .iter(sim.world_mut())
             .count();
         assert_eq!(count_after, 13, "Should have 13 total creatures (10 + 3)");
@@ -511,14 +565,18 @@ mod tests {
             sim.spawn_test_crit(x, y);
         }
 
-        let count_before = sim.world_mut().query::<&CritId>()
+        let count_before = sim
+            .world_mut()
+            .query::<&CritId>()
             .iter(sim.world_mut())
             .count();
         assert_eq!(count_before, 100, "Should have 100 spawned creatures");
 
         sim.despawn_all();
 
-        let count_after = sim.world_mut().query::<&CritId>()
+        let count_after = sim
+            .world_mut()
+            .query::<&CritId>()
             .iter(sim.world_mut())
             .count();
         assert_eq!(count_after, 0, "Should have 0 creatures after clear all");
@@ -534,14 +592,18 @@ mod tests {
             sim.spawn_test_crit(0.0, 0.0);
         }
 
-        let count_before = sim.world_mut().query::<&CritId>()
+        let count_before = sim
+            .world_mut()
+            .query::<&CritId>()
             .iter(sim.world_mut())
             .count();
         assert_eq!(count_before, 20, "Should have 20 creatures");
 
         sim.despawn_all();
 
-        let count_after = sim.world_mut().query::<&CritId>()
+        let count_after = sim
+            .world_mut()
+            .query::<&CritId>()
             .iter(sim.world_mut())
             .count();
         assert_eq!(count_after, 0, "Should have 0 creatures after despawn_all");
@@ -561,7 +623,9 @@ mod tests {
         sim.despawn_all();
         sim.despawn_all();
 
-        let count = sim.world_mut().query::<&CritId>()
+        let count = sim
+            .world_mut()
+            .query::<&CritId>()
             .iter(sim.world_mut())
             .count();
         assert_eq!(count, 0, "Should still be 0 after multiple clears");

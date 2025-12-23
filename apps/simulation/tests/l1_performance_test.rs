@@ -1,6 +1,6 @@
 #![cfg(feature = "dev-tools")]
 
-use speciate::{CritBuilder, SimulationBuilder, Simulation};
+use speciate::{CritBuilder, Simulation, SimulationBuilder};
 use std::time::Instant;
 
 const WARMUP_TICKS: usize = 10;
@@ -8,7 +8,14 @@ const MEASURE_TICKS: usize = 100;
 const DELTA_TIME: f32 = 0.045; // ~22Hz tick rate
 
 /// Spawn creatures in a grid pattern (matches spec spawn behavior)
-fn spawn_grid(sim: &mut Simulation, start_x: f32, start_y: f32, spacing: f32, rows: usize, cols: usize) -> usize {
+fn spawn_grid(
+    sim: &mut Simulation,
+    start_x: f32,
+    start_y: f32,
+    spacing: f32,
+    rows: usize,
+    cols: usize,
+) -> usize {
     let mut count = 0;
     for row in 0..rows {
         for col in 0..cols {
@@ -50,7 +57,10 @@ fn run_benchmark(sim: &mut Simulation, label: &str) -> f64 {
     let p50 = tick_times_ms[tick_times_ms.len() / 2];
     let p95 = tick_times_ms[(tick_times_ms.len() as f64 * 0.95) as usize];
 
-    println!("{}: avg={:.2}ms, p50={:.2}ms, p95={:.2}ms", label, avg, p50, p95);
+    println!(
+        "{}: avg={:.2}ms, p50={:.2}ms, p95={:.2}ms",
+        label, avg, p50, p95
+    );
     avg
 }
 
@@ -109,8 +119,13 @@ fn benchmark_360k_combined() {
     let spread_count = spawn_world_spread(&mut sim);
     let dense_count = spawn_medium_density(&mut sim);
     let total = spread_count + dense_count;
-    println!("Spawned {} creatures ({} spread + {} dense) in {:?}",
-             total, spread_count, dense_count, spawn_start.elapsed());
+    println!(
+        "Spawned {} creatures ({} spread + {} dense) in {:?}",
+        total,
+        spread_count,
+        dense_count,
+        spawn_start.elapsed()
+    );
 
     let avg = run_benchmark(&mut sim, "Combined");
 
@@ -162,16 +177,38 @@ fn benchmark_system_breakdown_combined() {
     }
 
     let n = MEASURE_TICKS as f64;
-    let total = total_perception + total_movement + total_grid_rebuild +
-                total_l1_aggregation + total_behavior + total_steering;
+    let total = total_perception
+        + total_movement
+        + total_grid_rebuild
+        + total_l1_aggregation
+        + total_behavior
+        + total_steering;
 
     println!("Average per-tick timing:");
-    println!("  Perception:     {:>8.2} ms", total_perception as f64 / n / 1000.0);
-    println!("  Steering:       {:>8.2} ms", total_steering as f64 / n / 1000.0);
-    println!("  Movement:       {:>8.2} ms", total_movement as f64 / n / 1000.0);
-    println!("  Grid rebuild:   {:>8.2} ms", total_grid_rebuild as f64 / n / 1000.0);
-    println!("  L1 aggregation: {:>8.2} ms", total_l1_aggregation as f64 / n / 1000.0);
-    println!("  Behavior:       {:>8.2} ms", total_behavior as f64 / n / 1000.0);
+    println!(
+        "  Perception:     {:>8.2} ms",
+        total_perception as f64 / n / 1000.0
+    );
+    println!(
+        "  Steering:       {:>8.2} ms",
+        total_steering as f64 / n / 1000.0
+    );
+    println!(
+        "  Movement:       {:>8.2} ms",
+        total_movement as f64 / n / 1000.0
+    );
+    println!(
+        "  Grid rebuild:   {:>8.2} ms",
+        total_grid_rebuild as f64 / n / 1000.0
+    );
+    println!(
+        "  L1 aggregation: {:>8.2} ms",
+        total_l1_aggregation as f64 / n / 1000.0
+    );
+    println!(
+        "  Behavior:       {:>8.2} ms",
+        total_behavior as f64 / n / 1000.0
+    );
     println!("  ─────────────────────────────");
     println!("  Total measured: {:>8.2} ms", total as f64 / n / 1000.0);
 

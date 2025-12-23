@@ -2,7 +2,9 @@ use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
-use crate::simulation::creatures::constants::{DEFAULT_MASS, MAX_ACCELERATION};
+use crate::simulation::creatures::constants::{
+    ACCEL_SIZE_EXPONENT, BASE_ACCELERATION, BASE_MAX_SPEED, DEFAULT_MASS, SPEED_SIZE_EXPONENT,
+};
 use crate::simulation::math::fast_atan2;
 
 #[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
@@ -82,8 +84,20 @@ impl BodySize {
         DEFAULT_MASS * self.length.powi(3)
     }
 
+    /// Size-scaled maximum acceleration (m/s²).
+    /// Smaller creatures accelerate faster: accel = BASE / size^0.5
+    pub fn max_acceleration(&self) -> f32 {
+        BASE_ACCELERATION / self.length.powf(ACCEL_SIZE_EXPONENT)
+    }
+
+    /// Size-scaled maximum speed (m/s).
+    /// Larger creatures have higher top speed: speed = BASE × size^0.25
+    pub fn max_speed(&self) -> f32 {
+        BASE_MAX_SPEED * self.length.powf(SPEED_SIZE_EXPONENT)
+    }
+
     pub fn max_force(&self) -> f32 {
-        self.mass() * MAX_ACCELERATION
+        self.mass() * self.max_acceleration()
     }
 }
 
@@ -329,11 +343,11 @@ mod tests {
     }
 
     #[test]
-    fn test_body_size_max_force_derives_from_mass() {
+    fn test_body_size_max_force_derives_from_mass_and_size() {
         let size = BodySize::new(1.0);
 
         let expected_mass = DEFAULT_MASS;
-        let expected_max_force = expected_mass * MAX_ACCELERATION;
+        let expected_max_force = expected_mass * size.max_acceleration();
 
         assert_eq!(size.mass(), expected_mass);
         assert_eq!(size.max_force(), expected_max_force);
@@ -348,9 +362,12 @@ mod tests {
         assert!(small.max_force() < medium.max_force());
         assert!(medium.max_force() < large.max_force());
 
-        // Force scales with mass (length^3)
+        // Force scales with length^2.5 (mass × size-scaled acceleration)
+        // mass ∝ length³, max_accel ∝ 1/length^0.5
+        // max_force ∝ length³ / length^0.5 = length^2.5
         let force_ratio = large.max_force() / small.max_force();
-        let length_ratio_cubed = (2.0_f32 / 0.5).powi(3); // 4^3 = 64
-        assert!((force_ratio - length_ratio_cubed).abs() < 0.001);
+        let length_ratio = 2.0_f32 / 0.5; // = 4
+        let expected_ratio = length_ratio.powf(2.5); // 4^2.5 = 32
+        assert!((force_ratio - expected_ratio).abs() < 0.001);
     }
 }

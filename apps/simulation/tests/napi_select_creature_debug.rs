@@ -201,7 +201,10 @@ fn test_acceleration_is_captured_for_active_creature() {
 
         if has_data && accel_magnitude > 0.001 {
             found_nonzero_accel = true;
-            eprintln!("Tick {} found non-zero acceleration: ax={:.4}, ay={:.4}, mag={:.4}", tick, ax, ay, accel_magnitude);
+            eprintln!(
+                "Tick {} found non-zero acceleration: ax={:.4}, ay={:.4}, mag={:.4}",
+                tick, ax, ay, accel_magnitude
+            );
             break;
         }
     }

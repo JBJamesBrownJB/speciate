@@ -39,8 +39,8 @@ pub struct ArrivalResult {
 const SNAP_EDGE_THRESHOLD: f32 = 0.1;
 
 /// Maximum speed at which snap-to-target can occur (m/s)
-/// Set high enough that terminal velocity doesn't prevent snapping
-const SNAP_MAX_SPEED: f32 = 5.0;
+/// With drag 0.5, coast distance = speed / drag, so SNAP_MAX_SPEED of 2.0 gives ~4m coast
+const SNAP_MAX_SPEED: f32 = 2.0;
 
 /// Calculate arrival/braking acceleration using correct F=ma physics.
 ///
@@ -377,8 +377,7 @@ mod tests {
 
         // Should have acceleration in both dimensions
         // Direction should be roughly toward target
-        let accel_mag =
-            (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
+        let accel_mag = (result.acceleration.0.powi(2) + result.acceleration.1.powi(2)).sqrt();
 
         assert!(
             accel_mag > 0.0 || result.arrived,

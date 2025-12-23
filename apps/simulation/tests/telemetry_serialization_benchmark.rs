@@ -93,8 +93,16 @@ fn benchmark_telemetry_json_serialization() {
     println!("JSON Size: {} bytes", json_size_bytes);
     println!("\n--- Serialization Performance (n={}) ---", ITERATIONS);
     println!("  Average: {:.2} µs ({} ns)", avg_time_us, avg_time_ns);
-    println!("  Min:     {:.2} µs ({} ns)", min_time_ns as f64 / 1_000.0, min_time_ns);
-    println!("  Max:     {:.2} µs ({} ns)", max_time_ns as f64 / 1_000.0, max_time_ns);
+    println!(
+        "  Min:     {:.2} µs ({} ns)",
+        min_time_ns as f64 / 1_000.0,
+        min_time_ns
+    );
+    println!(
+        "  Max:     {:.2} µs ({} ns)",
+        max_time_ns as f64 / 1_000.0,
+        max_time_ns
+    );
 
     println!("\n--- Polling Frequency Analysis ---");
 
@@ -111,10 +119,14 @@ fn benchmark_telemetry_json_serialization() {
         let overhead_per_sec = (overhead_ns as f64 * hz) / 1_000.0;
 
         println!("\n  {} polling:", label);
-        println!("    Per-tick overhead: {:.2} µs ({:.4}% of tick budget)",
-                 avg_time_us, overhead_pct);
-        println!("    Total overhead/sec: {:.2} µs ({} calls/sec)",
-                 overhead_per_sec, hz as u32);
+        println!(
+            "    Per-tick overhead: {:.2} µs ({:.4}% of tick budget)",
+            avg_time_us, overhead_pct
+        );
+        println!(
+            "    Total overhead/sec: {:.2} µs ({} calls/sec)",
+            overhead_per_sec, hz as u32
+        );
 
         if overhead_pct < 1.0 {
             println!("    Status: ✓ SAFE (< 1% tick budget)");
@@ -126,18 +138,29 @@ fn benchmark_telemetry_json_serialization() {
     }
 
     println!("\n--- Memory Characteristics ---");
-    println!("  Stack allocation: ~{} bytes (3 snapshot structs)",
-             std::mem::size_of::<TelemetryPayload>());
-    println!("  Heap allocation: ~{} bytes (serde_json temporary buffer)",
-             json_size_bytes * 2);
-    println!("  Total temporary footprint: ~{} KB",
-             (std::mem::size_of::<TelemetryPayload>() + json_size_bytes * 2) / 1024);
+    println!(
+        "  Stack allocation: ~{} bytes (3 snapshot structs)",
+        std::mem::size_of::<TelemetryPayload>()
+    );
+    println!(
+        "  Heap allocation: ~{} bytes (serde_json temporary buffer)",
+        json_size_bytes * 2
+    );
+    println!(
+        "  Total temporary footprint: ~{} KB",
+        (std::mem::size_of::<TelemetryPayload>() + json_size_bytes * 2) / 1024
+    );
 
     println!("\n--- Comparison: Polling vs Callback ---");
-    println!("  Polling (30Hz):   {:.2} µs/tick × 30 = {:.2} µs/sec total overhead",
-             avg_time_us, avg_time_us * 30.0);
-    println!("  Callback (push):  ~{:.2} µs/event (only when data changes)",
-             avg_time_us);
+    println!(
+        "  Polling (30Hz):   {:.2} µs/tick × 30 = {:.2} µs/sec total overhead",
+        avg_time_us,
+        avg_time_us * 30.0
+    );
+    println!(
+        "  Callback (push):  ~{:.2} µs/event (only when data changes)",
+        avg_time_us
+    );
     println!("  Note: Callback adds Arc clone + channel send (~50-100ns extra)");
 
     println!("\n=== RECOMMENDATION ===");
@@ -162,8 +185,11 @@ fn benchmark_telemetry_json_serialization() {
     println!("3. Binary Format: MessagePack/bincode (50-70% faster than JSON)");
     println!("4. Snapshot Throttling: Only emit when metrics change > threshold");
 
-    assert!(avg_time_us < 100.0,
-            "Serialization too slow: {:.2}µs exceeds 100µs budget", avg_time_us);
+    assert!(
+        avg_time_us < 100.0,
+        "Serialization too slow: {:.2}µs exceeds 100µs budget",
+        avg_time_us
+    );
 }
 
 #[test]
@@ -219,11 +245,22 @@ fn benchmark_individual_snapshot_serialization() {
         start.elapsed().as_nanos() / N as u128
     };
 
-    println!("HardwareSnapshot (17 fields):       {:.2} µs", hw_time as f64 / 1_000.0);
-    println!("SystemTimingsSnapshot (17 fields):  {:.2} µs", sys_time as f64 / 1_000.0);
-    println!("ParallelizationSnapshot (5 fields): {:.2} µs", para_time as f64 / 1_000.0);
-    println!("Total (sequential):                 {:.2} µs",
-             (hw_time + sys_time + para_time) as f64 / 1_000.0);
+    println!(
+        "HardwareSnapshot (17 fields):       {:.2} µs",
+        hw_time as f64 / 1_000.0
+    );
+    println!(
+        "SystemTimingsSnapshot (17 fields):  {:.2} µs",
+        sys_time as f64 / 1_000.0
+    );
+    println!(
+        "ParallelizationSnapshot (5 fields): {:.2} µs",
+        para_time as f64 / 1_000.0
+    );
+    println!(
+        "Total (sequential):                 {:.2} µs",
+        (hw_time + sys_time + para_time) as f64 / 1_000.0
+    );
 
     println!("\nOptimization: If parallelized, could reduce by ~40%");
 }

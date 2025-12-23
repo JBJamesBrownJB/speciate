@@ -32,7 +32,11 @@ pub fn test_save_state_config(interval_secs: u64, keep_last_n: usize) -> SaveSta
 }
 
 /// Create a save state config with custom save directory (for test isolation)
-pub fn test_save_state_config_with_dir(interval_secs: u64, keep_last_n: usize, save_dir: PathBuf) -> SaveStateConfig {
+pub fn test_save_state_config_with_dir(
+    interval_secs: u64,
+    keep_last_n: usize,
+    save_dir: PathBuf,
+) -> SaveStateConfig {
     SaveStateConfig {
         enabled: true,
         interval_secs,

@@ -1,4 +1,3 @@
-
 #[cfg(test)]
 mod simulation_tests {
     use super::super::*;
@@ -29,7 +28,6 @@ mod simulation_tests {
         let builder = CritBuilder::new().at(90.0, 65.0).with_all_capabilities();
         sim.spawn_crit(builder);
 
-
         sim.update(0.016);
     }
 
@@ -40,27 +38,22 @@ mod simulation_tests {
         let builder = CritBuilder::new().at(90.0, 65.0).with_all_capabilities();
         sim.spawn_crit(builder);
 
-
         for _ in 0..100 {
             sim.update(0.016);
         }
 
-
         assert_eq!(sim.creature_count(), 1);
     }
 
-
-
-
     //
-
-
 }
 
 #[cfg(test)]
 mod system_tests {
 
-    use crate::simulation::core::components::{Acceleration, DeltaTime, Position, Rotation, Velocity};
+    use crate::simulation::core::components::{
+        Acceleration, DeltaTime, Position, Rotation, Velocity,
+    };
     use crate::simulation::math::fast_atan2;
     use bevy_ecs::prelude::*;
 
@@ -73,16 +66,13 @@ mod system_tests {
             .spawn((Position { x: 0.0, y: 0.0 }, Velocity { vx: 10.0, vy: 5.0 }))
             .id();
 
-
         let dt = world.resource::<DeltaTime>().0;
-
 
         let mut query = world.query::<(&mut Position, &Velocity)>();
         for (mut pos, vel) in query.iter_mut(&mut world) {
             pos.x += vel.vx * dt;
             pos.y += vel.vy * dt;
         }
-
 
         let position = world.get::<Position>(entity).unwrap();
         assert_eq!(position.x, 1.0);
@@ -101,9 +91,7 @@ mod system_tests {
             ))
             .id();
 
-
         let dt = world.resource::<DeltaTime>().0;
-
 
         let mut query = world.query::<(&mut Velocity, &mut Acceleration)>();
         for (mut vel, mut acc) in query.iter_mut(&mut world) {
@@ -112,7 +100,6 @@ mod system_tests {
             acc.ax = 0.0;
             acc.ay = 0.0;
         }
-
 
         let velocity = world.get::<Velocity>(entity).unwrap();
         assert_eq!(velocity.vx, 1.0);
@@ -128,12 +115,8 @@ mod system_tests {
         let mut world = World::new();
 
         let entity = world
-            .spawn((
-                Rotation::default(),
-                Velocity { vx: 1.0, vy: 1.0 },
-            ))
+            .spawn((Rotation::default(), Velocity { vx: 1.0, vy: 1.0 }))
             .id();
-
 
         let mut query = world.query::<(&mut Rotation, &Velocity)>();
         for (mut rot, vel) in query.iter_mut(&mut world) {
@@ -152,9 +135,11 @@ mod system_tests {
 mod behavior_tests {
 
     use crate::simulation::core::components::{Position, Velocity};
-    use crate::simulation::creatures::components::{BehaviorMode, CreatureState, CritId};
-    use crate::simulation::creatures::constants::{DEFAULT_ENERGY, LOW_ENERGY_THRESHOLD, EXHAUSTED_THRESHOLD};
     use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::{BehaviorMode, CreatureState, CritId};
+    use crate::simulation::creatures::constants::{
+        DEFAULT_ENERGY, EXHAUSTED_THRESHOLD, LOW_ENERGY_THRESHOLD,
+    };
     use crate::simulation::SimulationBuilder;
 
     #[test]
@@ -162,13 +147,11 @@ mod behavior_tests {
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(100.0, 100.0);
 
-
         let builder = CritBuilder::new()
             .at(0.0, 0.0)
             .with_all_capabilities()
             .in_behavior(BehaviorMode::Catatonic);
         let entity_id = sim.spawn_crit(builder);
-
 
         let world = sim.world_mut();
         let mut query = world.query::<(&CritId, &Velocity, &CreatureState)>();
@@ -200,18 +183,15 @@ mod behavior_tests {
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(100.0, 100.0);
 
-
         let builder = CritBuilder::new()
             .at(50.0, 50.0)
             .with_all_capabilities()
             .in_behavior(BehaviorMode::Catatonic);
         let entity_id = sim.spawn_crit(builder);
 
-
         for _ in 0..100 {
             sim.update(0.05);
         }
-
 
         let world = sim.world_mut();
         let mut query = world.query::<(&CritId, &Position, &Velocity, &CreatureState)>();
@@ -257,7 +237,9 @@ mod behavior_tests {
             .with_all_capabilities();
         let entity_id = sim.spawn_crit(builder);
 
-        for _ in 0..200 {
+        // With lower drag (0.5 vs 2.0), creatures take longer to stop
+        // Allow more ticks for the seeker to reach target and transition
+        for _ in 0..500 {
             sim.update(0.05);
 
             let world = sim.world_mut();
@@ -304,7 +286,9 @@ mod behavior_tests {
         let initial_speed = 10.0;
         let mut prev_speed = initial_speed;
 
-        for _ in 0..100 {
+        // With drag coefficient 0.5, deceleration is slower (more realistic)
+        // Run 300 ticks to ensure sufficient deceleration time
+        for _ in 0..300 {
             sim.update(0.05);
 
             let world = sim.world_mut();
@@ -334,7 +318,7 @@ mod behavior_tests {
             if crit_id.0 == entity_id {
                 assert!(
                     velocity.vx.abs() < 0.1,
-                    "Should decelerate to near-zero after 100 ticks, got: {}",
+                    "Should decelerate to near-zero after 300 ticks, got: {}",
                     velocity.vx
                 );
             }
@@ -385,11 +369,12 @@ mod behavior_tests {
     fn test_seek_moves_toward_target() {
         use crate::simulation::creatures::spawner::spawn_seek_test_scenario;
 
-        let mut sim = SimulationBuilder::new().build();
+        let mut sim = SimulationBuilder::new()
+            .with_deterministic_movement() // Disable noise for stable seeking tests
+            .build();
         sim.set_boundaries(200.0, 200.0);
 
         let (seeker_id, _obstacle_id) = spawn_seek_test_scenario(&mut sim);
-
 
         let initial_x = {
             let world = sim.world_mut();
@@ -401,11 +386,9 @@ mod behavior_tests {
                 .unwrap()
         };
 
-
         for _ in 0..40 {
             sim.update(0.05);
         }
-
 
         let final_x = {
             let world = sim.world_mut();
@@ -434,16 +417,16 @@ mod behavior_tests {
     fn test_seek_slows_down_near_target() {
         use crate::simulation::creatures::spawner::spawn_seek_test_scenario;
 
-        let mut sim = SimulationBuilder::new().build();
+        let mut sim = SimulationBuilder::new()
+            .with_deterministic_movement() // Disable noise for stable seeking tests
+            .build();
         sim.set_boundaries(200.0, 200.0);
 
         let (seeker_id, _) = spawn_seek_test_scenario(&mut sim);
 
-
         for _ in 0..150 {
             sim.update(0.05);
         }
-
 
         let speed = {
             let world = sim.world_mut();
@@ -454,7 +437,6 @@ mod behavior_tests {
                 .map(|(_, vel)| vel.magnitude())
                 .unwrap()
         };
-
 
         const SEEK_MAX_SPEED: f32 = 50.0;
         assert!(
@@ -469,19 +451,18 @@ mod behavior_tests {
     fn test_seek_reaches_target_eventually() {
         use crate::simulation::creatures::spawner::spawn_seek_test_scenario;
 
-        let mut sim = SimulationBuilder::new().build();
+        let mut sim = SimulationBuilder::new()
+            .with_deterministic_movement() // Disable noise for stable seeking tests
+            .build();
         sim.set_boundaries(200.0, 200.0);
 
         let (seeker_id, _) = spawn_seek_test_scenario(&mut sim);
-
-
 
         // With correct F=ma physics (max_accel = 6 m/s²), creature needs more time
         // to cover 100m distance. 2000 ticks = 100 seconds simulation time.
         for _ in 0..2000 {
             sim.update(0.05);
         }
-
 
         let (final_x, final_y) = {
             let world = sim.world_mut();
@@ -492,8 +473,6 @@ mod behavior_tests {
                 .map(|(_, pos)| (pos.x, pos.y))
                 .unwrap()
         };
-
-
 
         assert!(
             (final_x - 100.0).abs() < 10.0,
@@ -514,13 +493,11 @@ mod behavior_tests {
         let mut sim = SimulationBuilder::new().build();
         sim.set_boundaries(200.0, 200.0);
 
-
         let builder = CritBuilder::new()
             .at(0.0, 0.0)
             .with_all_capabilities()
             .in_behavior(BehaviorMode::Catatonic);
         let crit_id = sim.spawn_crit(builder);
-
 
         {
             let world = sim.world_mut();
@@ -535,14 +512,11 @@ mod behavior_tests {
                 .entity_mut(entity)
                 .insert(CanSeek)
                 .insert(Target::at_point(100.0, 0.0));
-
         }
-
 
         for _ in 0..100 {
             sim.update(0.05);
         }
-
 
         let final_x = {
             let world = sim.world_mut();
@@ -565,9 +539,10 @@ mod behavior_tests {
     fn test_seeker_avoids_obstacle_in_path() {
         use crate::simulation::creatures::builder::CritBuilder;
 
-        let mut sim = SimulationBuilder::new().build();
+        let mut sim = SimulationBuilder::new()
+            .with_deterministic_movement() // Disable noise for stable seeking tests
+            .build();
         sim.set_boundaries(200.0, 200.0);
-
 
         let seeker_builder = CritBuilder::new()
             .at(0.0, 0.0)
@@ -575,25 +550,18 @@ mod behavior_tests {
             .with_all_capabilities();
         let seeker_id = sim.spawn_crit(seeker_builder);
 
-
         let obstacle_builder = CritBuilder::new()
             .at(15.0, 1.0)
             .in_behavior(BehaviorMode::Catatonic);
         let _obstacle_id = sim.spawn_crit(obstacle_builder);
 
-
         let mut min_distance = f32::MAX;
         let mut max_y_deviation = 0.0f32;
-
-
-
-
 
         // With correct F=ma physics (max_accel = 6 m/s² instead of incorrect 390 m/s²),
         // the creature accelerates more slowly and needs more simulation time
         for _tick in 0..2000 {
             sim.update(0.05);
-
 
             let world = sim.world_mut();
             let mut positions = world.query::<(&CritId, &Position)>();
@@ -610,18 +578,13 @@ mod behavior_tests {
                 .map(|(_, pos)| *pos)
                 .unwrap();
 
-
             let dx = seeker_pos.x - obstacle_pos.x;
             let dy = seeker_pos.y - obstacle_pos.y;
             let distance = (dx * dx + dy * dy).sqrt();
             min_distance = min_distance.min(distance);
 
-
             max_y_deviation = max_y_deviation.max(seeker_pos.y.abs());
-
-
         }
-
 
         let (final_x, final_y, final_behavior) = {
             let world = sim.world_mut();
@@ -633,20 +596,16 @@ mod behavior_tests {
                 .unwrap()
         };
 
-
         println!("\nTest Results:");
         println!("  Max Y deviation: {:.2}m", max_y_deviation);
         println!("  Min distance to obstacle: {:.2}m", min_distance);
         println!("  Final position: ({:.2}, {:.2})", final_x, final_y);
         println!("  Final behavior: {:?}", final_behavior);
 
-
         // The key behavioral test is below: seeker reaches target
         // If it reached target, avoidance worked (it navigated around obstacle)
         // We don't assert specific min_distance because body sizes and avoidance
         // parameters vary - creatures may brush past each other
-
-
 
         assert!(
             (final_x - 100.0).abs() < 10.0,
@@ -660,5 +619,4 @@ mod behavior_tests {
             final_y
         );
     }
-
 }

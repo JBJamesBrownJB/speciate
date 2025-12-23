@@ -13,9 +13,7 @@ pub enum Command {
     },
 
     #[cfg(feature = "dev-tools")]
-    DevLoadTrial {
-        template: String,
-    },
+    DevLoadTrial { template: String },
 
     #[cfg(feature = "dev-tools")]
     DevClearCreatures,
@@ -30,8 +28,7 @@ impl Command {
     }
 
     pub fn from_msgpack(bytes: &[u8]) -> io::Result<Self> {
-        rmp_serde::from_slice(bytes)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        rmp_serde::from_slice(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 }
 
@@ -103,8 +100,7 @@ mod tests {
         let command: Command = rmp_serde::from_slice(&msgpack).unwrap();
 
         match command {
-            Command::DevClearCreatures => {
-            }
+            Command::DevClearCreatures => {}
             _ => panic!("Expected DevClearCreatures"),
         }
     }
@@ -116,14 +112,20 @@ mod tests {
         let msgpack = rmp_serde::to_vec(&value).unwrap();
 
         let result: Result<Command, _> = rmp_serde::from_slice(&msgpack);
-        assert!(result.is_ok(), "Should deserialize with snake_case type field");
+        assert!(
+            result.is_ok(),
+            "Should deserialize with snake_case type field"
+        );
 
         let json_pascal = r#"{"type": "DevSpawnCreature", "x": 0.0, "y": 0.0}"#;
         let value_pascal: serde_json::Value = serde_json::from_str(json_pascal).unwrap();
         let msgpack_pascal = rmp_serde::to_vec(&value_pascal).unwrap();
 
         let result_pascal: Result<Command, _> = rmp_serde::from_slice(&msgpack_pascal);
-        assert!(result_pascal.is_err(), "Should fail with PascalCase type field");
+        assert!(
+            result_pascal.is_err(),
+            "Should fail with PascalCase type field"
+        );
     }
 
     #[test]
@@ -133,14 +135,20 @@ mod tests {
         let msgpack = rmp_serde::to_vec(&value).unwrap();
 
         let result: Result<Command, _> = rmp_serde::from_slice(&msgpack);
-        assert!(result.is_err(), "Should fail when missing required field 'y'");
+        assert!(
+            result.is_err(),
+            "Should fail when missing required field 'y'"
+        );
 
         let json_unknown = r#"{"type": "unknown_command", "data": "test"}"#;
         let value_unknown: serde_json::Value = serde_json::from_str(json_unknown).unwrap();
         let msgpack_unknown = rmp_serde::to_vec(&value_unknown).unwrap();
 
         let result_unknown: Result<Command, _> = rmp_serde::from_slice(&msgpack_unknown);
-        assert!(result_unknown.is_err(), "Should fail with unknown command type");
+        assert!(
+            result_unknown.is_err(),
+            "Should fail with unknown command type"
+        );
     }
 
     #[test]

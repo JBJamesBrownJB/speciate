@@ -26,6 +26,8 @@ impl<T> SyncPtr<T> {
 pub struct PerceptionProxy {
     pub x: f32,
     pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
     pub radius: f32,
     pub entity: Entity,
 }
@@ -35,6 +37,8 @@ impl Default for PerceptionProxy {
         Self {
             x: 0.0,
             y: 0.0,
+            vx: 0.0,
+            vy: 0.0,
             radius: 0.0,
             entity: Entity::PLACEHOLDER,
         }
@@ -57,7 +61,8 @@ pub struct SpatialGrid {
     cells: Vec<(u32, u32)>,
 
     // Reusable scratch buffer for rebuild (avoids allocation each tick)
-    entity_scratch: Vec<(Entity, f32, f32, f32)>,
+    // Format: (entity, x, y, vx, vy, radius)
+    entity_scratch: Vec<(Entity, f32, f32, f32, f32, f32)>,
 
     // Pre-allocated atomic counters for scatter phase (reused each tick)
     atomic_counters: Vec<AtomicU32>,
@@ -105,7 +110,13 @@ impl SpatialGrid {
     }
 
     /// Create grid with fixed world bounds (pre-allocated, no per-tick allocations).
-    pub fn with_fixed_bounds(cell_size: f32, min_x: f32, max_x: f32, min_y: f32, max_y: f32) -> Self {
+    pub fn with_fixed_bounds(
+        cell_size: f32,
+        min_x: f32,
+        max_x: f32,
+        min_y: f32,
+        max_y: f32,
+    ) -> Self {
         let mut grid = Self::new(cell_size);
         grid.set_world_bounds(min_x, max_x, min_y, max_y);
         grid
@@ -113,7 +124,13 @@ impl SpatialGrid {
 
     /// Create grid with default cell size and MAX_WORLD_SIZE bounds.
     pub fn with_default_bounds() -> Self {
-        Self::with_fixed_bounds(CELL_SIZE, -MAX_WORLD_SIZE, MAX_WORLD_SIZE, -MAX_WORLD_SIZE, MAX_WORLD_SIZE)
+        Self::with_fixed_bounds(
+            CELL_SIZE,
+            -MAX_WORLD_SIZE,
+            MAX_WORLD_SIZE,
+            -MAX_WORLD_SIZE,
+            MAX_WORLD_SIZE,
+        )
     }
 
     pub fn with_default_cell_size() -> Self {
@@ -160,8 +177,13 @@ impl SpatialGrid {
 
         log::info!(
             "SpatialGrid: {}x{} = {} cells for world ({:.0},{:.0}) to ({:.0},{:.0}) @ {:.1}m",
-            self.width, self.height, total_cells,
-            self.world_min_x, self.world_min_y, self.world_max_x, self.world_max_y,
+            self.width,
+            self.height,
+            total_cells,
+            self.world_min_x,
+            self.world_min_y,
+            self.world_max_x,
+            self.world_max_y,
             self.cell_size
         );
     }
@@ -198,7 +220,10 @@ impl SpatialGrid {
     }
 
     pub fn cell_to_world_min(&self, cell_x: i32, cell_y: i32) -> (f32, f32) {
-        (cell_x as f32 * self.cell_size, cell_y as f32 * self.cell_size)
+        (
+            cell_x as f32 * self.cell_size,
+            cell_y as f32 * self.cell_size,
+        )
     }
 
     #[inline(always)]
@@ -215,7 +240,7 @@ impl SpatialGrid {
     /// Phase 1: Count histogram (entities per cell)
     /// Phase 2: Prefix sum (compute offsets)
     /// Phase 3: Scatter (bin entities into contiguous buffer)
-    pub fn rebuild(&mut self, entities: impl Iterator<Item = (Entity, f32, f32, f32)>) {
+    pub fn rebuild(&mut self, entities: impl Iterator<Item = (Entity, f32, f32, f32, f32, f32)>) {
         // Phase 0: Collect into reusable scratch buffer (avoids allocation after first call)
         self.entity_scratch.clear();
         self.entity_scratch.extend(entities);
@@ -234,7 +259,7 @@ impl SpatialGrid {
         let mut min_cy = i32::MAX;
         let mut max_cy = i32::MIN;
 
-        for (_, x, y, _) in &self.entity_scratch {
+        for (_, x, y, _, _, _) in &self.entity_scratch {
             let (cx, cy) = self.world_to_cell(*x, *y);
             min_cx = min_cx.min(cx);
             max_cx = max_cx.max(cx);
@@ -251,14 +276,15 @@ impl SpatialGrid {
         // Resize arrays
         let total_cells = self.width * self.height;
         self.cells.resize(total_cells, (0, 0));
-        self.proxies.resize(self.entity_scratch.len(), PerceptionProxy::default());
+        self.proxies
+            .resize(self.entity_scratch.len(), PerceptionProxy::default());
 
         // Phase 1: Count histogram
         for cell in &mut self.cells {
             cell.1 = 0;
         }
 
-        for (_, x, y, _) in &self.entity_scratch {
+        for (_, x, y, _, _, _) in &self.entity_scratch {
             let idx = self.cell_index_unchecked(*x, *y);
             self.cells[idx].1 += 1;
         }
@@ -272,11 +298,18 @@ impl SpatialGrid {
         }
 
         // Phase 3: Scatter into contiguous buffer
-        for &(entity, x, y, radius) in &self.entity_scratch {
+        for &(entity, x, y, vx, vy, radius) in &self.entity_scratch {
             let idx = self.cell_index_unchecked(x, y);
             let (start, count) = &mut self.cells[idx];
             let write_pos = (*start + *count) as usize;
-            self.proxies[write_pos] = PerceptionProxy { x, y, radius, entity };
+            self.proxies[write_pos] = PerceptionProxy {
+                x,
+                y,
+                vx,
+                vy,
+                radius,
+                entity,
+            };
             *count += 1;
         }
     }
@@ -285,7 +318,10 @@ impl SpatialGrid {
     ///
     /// In fixed-bounds mode: Zero allocations per tick, uses pre-allocated buffers.
     /// In dynamic mode: Falls back to histogram-based approach (allocates per tick).
-    pub fn rebuild_parallel(&mut self, entities: impl Iterator<Item = (Entity, f32, f32, f32)>) {
+    pub fn rebuild_parallel(
+        &mut self,
+        entities: impl Iterator<Item = (Entity, f32, f32, f32, f32, f32)>,
+    ) {
         // Phase 0: Collect into scratch buffer
         self.entity_scratch.clear();
         self.entity_scratch.extend(entities);
@@ -333,12 +369,13 @@ impl SpatialGrid {
         // Phase 1: PARALLEL count entities per cell using atomics
         // Track newly populated cells during counting (avoids scanning all 1M atomics)
         let atomic_counters = &self.atomic_counters;
-        let newly_populated: Vec<usize> = self.entity_scratch
+        let newly_populated: Vec<usize> = self
+            .entity_scratch
             .par_chunks(4096)
             .flat_map(|chunk| {
                 // Thread-local buffer for newly populated cell indices
                 let mut local_new: Vec<usize> = Vec::with_capacity(chunk.len() / 4);
-                for &(_, x, y, _) in chunk {
+                for &(_, x, y, _, _, _) in chunk {
                     let cx = (x * inv_cell_size).floor() as i32;
                     let cy = (y * inv_cell_size).floor() as i32;
                     let lx = ((cx - min_cell_x) as usize).min(width - 1);
@@ -382,26 +419,38 @@ impl SpatialGrid {
         let height = self.height;
 
         // SAFETY: Each entity writes to a unique position via atomic increment
-        self.entity_scratch.par_iter().for_each(|&(entity, x, y, radius)| {
-            let cx = (x * inv_cell_size).floor() as i32;
-            let cy = (y * inv_cell_size).floor() as i32;
-            let lx = (cx - min_cell_x) as usize;
-            let ly = (cy - min_cell_y) as usize;
+        self.entity_scratch
+            .par_iter()
+            .for_each(|&(entity, x, y, vx, vy, radius)| {
+                let cx = (x * inv_cell_size).floor() as i32;
+                let cy = (y * inv_cell_size).floor() as i32;
+                let lx = (cx - min_cell_x) as usize;
+                let ly = (cy - min_cell_y) as usize;
 
-            // Bounds check (entities outside world are clamped to edge cells)
-            let lx = lx.min(width - 1);
-            let ly = ly.min(height - 1);
-            let idx = ly * width + lx;
+                // Bounds check (entities outside world are clamped to edge cells)
+                let lx = lx.min(width - 1);
+                let ly = ly.min(height - 1);
+                let idx = ly * width + lx;
 
-            let start = cells_ref[idx].0;
-            let local_offset = atomic_counters[idx].fetch_add(1, Ordering::Relaxed);
-            let write_pos = (start + local_offset) as usize;
+                let start = cells_ref[idx].0;
+                let local_offset = atomic_counters[idx].fetch_add(1, Ordering::Relaxed);
+                let write_pos = (start + local_offset) as usize;
 
-            // SAFETY: Unique write position guaranteed by atomic increment
-            unsafe {
-                proxies_ptr.write_at(write_pos, PerceptionProxy { x, y, radius, entity });
-            }
-        });
+                // SAFETY: Unique write position guaranteed by atomic increment
+                unsafe {
+                    proxies_ptr.write_at(
+                        write_pos,
+                        PerceptionProxy {
+                            x,
+                            y,
+                            vx,
+                            vy,
+                            radius,
+                            entity,
+                        },
+                    );
+                }
+            });
     }
 
     /// Slow path: Dynamic bounds (legacy, allocates per tick).
@@ -409,9 +458,10 @@ impl SpatialGrid {
         let inv_cell_size = self.inv_cell_size;
 
         // Find bounds (parallel reduction)
-        let (min_cx, max_cx, min_cy, max_cy) = self.entity_scratch
+        let (min_cx, max_cx, min_cy, max_cy) = self
+            .entity_scratch
             .par_iter()
-            .map(|(_, x, y, _)| {
+            .map(|(_, x, y, _, _, _)| {
                 let (cx, cy) = (
                     (*x * inv_cell_size).floor() as i32,
                     (*y * inv_cell_size).floor() as i32,
@@ -421,7 +471,12 @@ impl SpatialGrid {
             .reduce(
                 || (i32::MAX, i32::MIN, i32::MAX, i32::MIN),
                 |(min_x1, max_x1, min_y1, max_y1), (min_x2, max_x2, min_y2, max_y2)| {
-                    (min_x1.min(min_x2), max_x1.max(max_x2), min_y1.min(min_y2), max_y1.max(max_y2))
+                    (
+                        min_x1.min(min_x2),
+                        max_x1.max(max_x2),
+                        min_y1.min(min_y2),
+                        max_y1.max(max_y2),
+                    )
                 },
             );
 
@@ -441,11 +496,12 @@ impl SpatialGrid {
         let min_cell_y = self.min_cell_y;
         let width = self.width;
 
-        let local_histograms: Vec<Vec<u32>> = self.entity_scratch
+        let local_histograms: Vec<Vec<u32>> = self
+            .entity_scratch
             .par_chunks(CHUNK_SIZE)
             .map(|chunk| {
                 let mut local_counts = vec![0u32; total_cells];
-                for (_, x, y, _) in chunk {
+                for (_, x, y, _, _, _) in chunk {
                     let cx = (*x * inv_cell_size).floor() as i32;
                     let cy = (*y * inv_cell_size).floor() as i32;
                     let idx = ((cy - min_cell_y) as usize) * width + ((cx - min_cell_x) as usize);
@@ -473,29 +529,39 @@ impl SpatialGrid {
         }
 
         // Phase 3: Atomic scatter (allocates counters each time)
-        let atomic_counters: Vec<AtomicU32> = self.cells
-            .iter()
-            .map(|_| AtomicU32::new(0))
-            .collect();
+        let atomic_counters: Vec<AtomicU32> =
+            self.cells.iter().map(|_| AtomicU32::new(0)).collect();
 
         let proxies_ptr = SyncPtr(self.proxies.as_mut_ptr());
         let cells_ref = &self.cells;
 
         // SAFETY: Each entity writes to a unique position via atomic increment
-        self.entity_scratch.par_iter().for_each(move |&(entity, x, y, radius)| {
-            let cx = (x * inv_cell_size).floor() as i32;
-            let cy = (y * inv_cell_size).floor() as i32;
-            let idx = ((cy - min_cell_y) as usize) * width + ((cx - min_cell_x) as usize);
+        self.entity_scratch
+            .par_iter()
+            .for_each(move |&(entity, x, y, vx, vy, radius)| {
+                let cx = (x * inv_cell_size).floor() as i32;
+                let cy = (y * inv_cell_size).floor() as i32;
+                let idx = ((cy - min_cell_y) as usize) * width + ((cx - min_cell_x) as usize);
 
-            let start = cells_ref[idx].0;
-            let local_offset = atomic_counters[idx].fetch_add(1, Ordering::Relaxed);
-            let write_pos = (start + local_offset) as usize;
+                let start = cells_ref[idx].0;
+                let local_offset = atomic_counters[idx].fetch_add(1, Ordering::Relaxed);
+                let write_pos = (start + local_offset) as usize;
 
-            // SAFETY: Unique write position guaranteed by atomic increment
-            unsafe {
-                proxies_ptr.write_at(write_pos, PerceptionProxy { x, y, radius, entity });
-            }
-        });
+                // SAFETY: Unique write position guaranteed by atomic increment
+                unsafe {
+                    proxies_ptr.write_at(
+                        write_pos,
+                        PerceptionProxy {
+                            x,
+                            y,
+                            vx,
+                            vy,
+                            radius,
+                            entity,
+                        },
+                    );
+                }
+            });
     }
 
     /// Query entities within radius with cell-level FOV culling.
@@ -521,28 +587,32 @@ impl SpatialGrid {
         let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
 
         (min_qy..=max_qy).flat_map(move |cy| {
-            (min_qx..=max_qx).filter_map(move |cx| {
-                // Cell center in world coordinates
-                let cell_center_x = (cx as f32 * cell_size) + half_cell;
-                let cell_center_y = (cy as f32 * cell_size) + half_cell;
+            (min_qx..=max_qx)
+                .filter_map(move |cx| {
+                    // Cell center in world coordinates
+                    let cell_center_x = (cx as f32 * cell_size) + half_cell;
+                    let cell_center_y = (cy as f32 * cell_size) + half_cell;
 
-                // Check if cell is behind creature (conservative: use cell_size threshold)
-                let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
-                if cell_dir_dot < -cell_size {
-                    return None; // Entire cell is behind, skip
-                }
+                    // Check if cell is behind creature (conservative: use cell_size threshold)
+                    let cell_dir_dot =
+                        (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
+                    if cell_dir_dot < -cell_size {
+                        return None; // Entire cell is behind, skip
+                    }
 
-                let idx = ((cy - self.min_cell_y) as usize) * self.width
+                    let idx = ((cy - self.min_cell_y) as usize) * self.width
                         + ((cx - self.min_cell_x) as usize);
-                let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
-                if count == 0 {
-                    None
-                } else {
-                    Some(unsafe {
-                        self.proxies.get_unchecked(start as usize..(start + count) as usize)
-                    })
-                }
-            }).flatten()
+                    let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
+                    if count == 0 {
+                        None
+                    } else {
+                        Some(unsafe {
+                            self.proxies
+                                .get_unchecked(start as usize..(start + count) as usize)
+                        })
+                    }
+                })
+                .flatten()
         })
     }
 
@@ -583,14 +653,15 @@ impl SpatialGrid {
 
                 if !is_adjacent {
                     // Only apply FOV culling for distant cells
-                    let cell_dir_dot = (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
+                    let cell_dir_dot =
+                        (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
                     if cell_dir_dot < -cell_size {
                         continue;
                     }
                 }
 
                 let idx = ((cy - self.min_cell_y) as usize) * self.width
-                        + ((cx - self.min_cell_x) as usize);
+                    + ((cx - self.min_cell_x) as usize);
                 let (_, count) = unsafe { *self.cells.get_unchecked(idx) };
                 if count > 0 {
                     let dx = cell_center_x - x;
@@ -598,7 +669,11 @@ impl SpatialGrid {
                     let dist_sq = dx * dx + dy * dy;
 
                     // Adjacent cells get raw distance, non-adjacent get offset so they sort after
-                    let sort_key = if is_adjacent { dist_sq } else { dist_sq + NON_ADJACENT_OFFSET };
+                    let sort_key = if is_adjacent {
+                        dist_sq
+                    } else {
+                        dist_sq + NON_ADJACENT_OFFSET
+                    };
                     out.push((sort_key, idx));
                 }
             }
@@ -707,7 +782,10 @@ impl SpatialGrid {
     #[inline(always)]
     pub fn get_cell_proxies(&self, cell_idx: usize) -> &[PerceptionProxy] {
         let (start, count) = unsafe { *self.cells.get_unchecked(cell_idx) };
-        unsafe { self.proxies.get_unchecked(start as usize..(start + count) as usize) }
+        unsafe {
+            self.proxies
+                .get_unchecked(start as usize..(start + count) as usize)
+        }
     }
 
     /// Get cell coordinates (cx, cy) from a cell index.
@@ -723,7 +801,12 @@ impl SpatialGrid {
 
     /// Query entities within radius. Returns iterator over contiguous slices.
     #[inline(always)]
-    pub fn query_radius(&self, x: f32, y: f32, radius: f32) -> impl Iterator<Item = &PerceptionProxy> {
+    pub fn query_radius(
+        &self,
+        x: f32,
+        y: f32,
+        radius: f32,
+    ) -> impl Iterator<Item = &PerceptionProxy> {
         let (center_cx, center_cy) = self.world_to_cell(x, y);
         let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
 
@@ -736,24 +819,33 @@ impl SpatialGrid {
         // Row-major iteration for cache locality
         // SAFETY: min/max are pre-clamped to valid cell bounds above
         (min_qy..=max_qy).flat_map(move |cy| {
-            (min_qx..=max_qx).filter_map(move |cx| {
-                let idx = ((cy - self.min_cell_y) as usize) * self.width
+            (min_qx..=max_qx)
+                .filter_map(move |cx| {
+                    let idx = ((cy - self.min_cell_y) as usize) * self.width
                         + ((cx - self.min_cell_x) as usize);
-                let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
-                if count == 0 {
-                    None
-                } else {
-                    Some(unsafe {
-                        self.proxies.get_unchecked(start as usize..(start + count) as usize)
-                    })
-                }
-            }).flatten()
+                    let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
+                    if count == 0 {
+                        None
+                    } else {
+                        Some(unsafe {
+                            self.proxies
+                                .get_unchecked(start as usize..(start + count) as usize)
+                        })
+                    }
+                })
+                .flatten()
         })
     }
 
     /// Query entities into a pre-allocated buffer (for Rayon thread-local buffers).
     #[inline(always)]
-    pub fn query_radius_into(&self, x: f32, y: f32, radius: f32, results: &mut Vec<PerceptionProxy>) {
+    pub fn query_radius_into(
+        &self,
+        x: f32,
+        y: f32,
+        radius: f32,
+        results: &mut Vec<PerceptionProxy>,
+    ) {
         results.clear();
 
         let (center_cx, center_cy) = self.world_to_cell(x, y);
@@ -772,11 +864,12 @@ impl SpatialGrid {
         for cy in min_qy..=max_qy {
             for cx in min_qx..=max_qx {
                 let idx = ((cy - self.min_cell_y) as usize) * self.width
-                        + ((cx - self.min_cell_x) as usize);
+                    + ((cx - self.min_cell_x) as usize);
                 let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
                 if count > 0 {
                     let slice = unsafe {
-                        self.proxies.get_unchecked(start as usize..(start + count) as usize)
+                        self.proxies
+                            .get_unchecked(start as usize..(start + count) as usize)
                     };
                     results.extend_from_slice(slice);
                 }
@@ -837,7 +930,7 @@ impl SpatialGrid {
 
                 // Only include cells that have creatures in them
                 let idx = ((cy - self.min_cell_y) as usize) * self.width
-                        + ((cx - self.min_cell_x) as usize);
+                    + ((cx - self.min_cell_x) as usize);
                 if idx < self.cells.len() {
                     let (_, count) = self.cells[idx];
                     if count > 0 {
@@ -923,7 +1016,13 @@ impl DoubleBufferedSpatialGrid {
     }
 
     /// Create with fixed world bounds (pre-allocated, no per-tick allocations).
-    pub fn with_fixed_bounds(cell_size: f32, min_x: f32, max_x: f32, min_y: f32, max_y: f32) -> Self {
+    pub fn with_fixed_bounds(
+        cell_size: f32,
+        min_x: f32,
+        max_x: f32,
+        min_y: f32,
+        max_y: f32,
+    ) -> Self {
         Self {
             grids: [
                 SpatialGrid::with_fixed_bounds(cell_size, min_x, max_x, min_y, max_y),
@@ -935,7 +1034,13 @@ impl DoubleBufferedSpatialGrid {
 
     /// Create with default cell size and MAX_WORLD_SIZE bounds.
     pub fn with_default_bounds() -> Self {
-        Self::with_fixed_bounds(CELL_SIZE, -MAX_WORLD_SIZE, MAX_WORLD_SIZE, -MAX_WORLD_SIZE, MAX_WORLD_SIZE)
+        Self::with_fixed_bounds(
+            CELL_SIZE,
+            -MAX_WORLD_SIZE,
+            MAX_WORLD_SIZE,
+            -MAX_WORLD_SIZE,
+            MAX_WORLD_SIZE,
+        )
     }
 
     pub fn with_default_cell_size() -> Self {
@@ -1036,9 +1141,9 @@ mod tests {
         let entity3 = Entity::from_raw(3);
 
         let entities = vec![
-            (entity1, 25.0, 25.0, 1.0),
-            (entity2, 75.0, 25.0, 1.0),
-            (entity3, 25.0, 75.0, 1.0),
+            (entity1, 25.0, 25.0, 0.0, 0.0, 1.0),
+            (entity2, 75.0, 25.0, 0.0, 0.0, 1.0),
+            (entity3, 25.0, 75.0, 0.0, 0.0, 1.0),
         ];
 
         grid.rebuild(entities.into_iter());
@@ -1076,16 +1181,14 @@ mod tests {
 
         // First rebuild
         let entities1 = vec![
-            (Entity::from_raw(1), 25.0, 25.0, 1.0),
-            (Entity::from_raw(2), 75.0, 25.0, 1.0),
+            (Entity::from_raw(1), 25.0, 25.0, 0.0, 0.0, 1.0),
+            (Entity::from_raw(2), 75.0, 25.0, 0.0, 0.0, 1.0),
         ];
         grid.rebuild(entities1.into_iter());
         assert_eq!(grid.entity_count(), 2);
 
         // Second rebuild with different entities
-        let entities2 = vec![
-            (Entity::from_raw(3), 125.0, 125.0, 1.0),
-        ];
+        let entities2 = vec![(Entity::from_raw(3), 125.0, 125.0, 0.0, 0.0, 1.0)];
         grid.rebuild(entities2.into_iter());
         assert_eq!(grid.entity_count(), 1);
     }
@@ -1103,9 +1206,9 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let entities = vec![
-            (Entity::from_raw(1), 0.0, 0.0, 1.0),      // cell (0, 0)
-            (Entity::from_raw(2), 100.0, 100.0, 1.0), // cell (2, 2)
-            (Entity::from_raw(3), -50.0, -50.0, 1.0), // cell (-1, -1)
+            (Entity::from_raw(1), 0.0, 0.0, 0.0, 0.0, 1.0), // cell (0, 0)
+            (Entity::from_raw(2), 100.0, 100.0, 0.0, 0.0, 1.0), // cell (2, 2)
+            (Entity::from_raw(3), -50.0, -50.0, 0.0, 0.0, 1.0), // cell (-1, -1)
         ];
 
         grid.rebuild(entities.into_iter());
@@ -1118,9 +1221,7 @@ mod tests {
     fn test_query_respects_bounds() {
         let mut grid = SpatialGrid::new(50.0);
 
-        let entities = vec![
-            (Entity::from_raw(1), 25.0, 25.0, 1.0),
-        ];
+        let entities = vec![(Entity::from_raw(1), 25.0, 25.0, 0.0, 0.0, 1.0)];
 
         grid.rebuild(entities.into_iter());
 
@@ -1138,9 +1239,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         // First add some entities
-        let entities = vec![
-            (Entity::from_raw(1), 25.0, 25.0, 1.0),
-        ];
+        let entities = vec![(Entity::from_raw(1), 25.0, 25.0, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
         assert_eq!(grid.entity_count(), 1);
 
@@ -1151,10 +1250,10 @@ mod tests {
 
     #[test]
     fn test_perception_proxy_size() {
-        // Entity requires 8-byte alignment, so struct is 24 bytes
-        // (3 f32s = 12 bytes + Entity = 8 bytes + 4 bytes padding = 24)
-        // Still 2.66 proxies per cache line - key benefit is contiguous buffer
-        assert_eq!(std::mem::size_of::<PerceptionProxy>(), 24);
+        // Entity requires 8-byte alignment, so struct is 32 bytes
+        // (5 f32s = 20 bytes + Entity = 8 bytes + 4 bytes padding = 32)
+        // 2 proxies per cache line - key benefit is contiguous buffer
+        assert_eq!(std::mem::size_of::<PerceptionProxy>(), 32);
     }
 
     #[test]
@@ -1162,9 +1261,9 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let entities = vec![
-            (Entity::from_raw(1), 25.0, 25.0, 1.0),
-            (Entity::from_raw(2), 26.0, 26.0, 1.0), // Same cell
-            (Entity::from_raw(3), 27.0, 27.0, 1.0), // Same cell
+            (Entity::from_raw(1), 25.0, 25.0, 0.0, 0.0, 1.0),
+            (Entity::from_raw(2), 26.0, 26.0, 0.0, 0.0, 1.0), // Same cell
+            (Entity::from_raw(3), 27.0, 27.0, 0.0, 0.0, 1.0), // Same cell
         ];
 
         grid.rebuild(entities.into_iter());
@@ -1184,9 +1283,9 @@ mod tests {
         // Entity at origin facing right (+X direction)
         // Place targets in front (right) and behind (left)
         let entities = vec![
-            (Entity::from_raw(1), 100.0, 0.0, 1.0),  // In front (right)
-            (Entity::from_raw(2), -100.0, 0.0, 1.0), // Behind (left)
-            (Entity::from_raw(3), 0.0, 100.0, 1.0),  // To the side (up)
+            (Entity::from_raw(1), 100.0, 0.0, 0.0, 0.0, 1.0), // In front (right)
+            (Entity::from_raw(2), -100.0, 0.0, 0.0, 0.0, 1.0), // Behind (left)
+            (Entity::from_raw(3), 0.0, 100.0, 0.0, 0.0, 1.0), // To the side (up)
         ];
 
         grid.rebuild(entities.into_iter());
@@ -1194,13 +1293,18 @@ mod tests {
         // Query from origin, facing right (+X), large radius
         let facing_x = 1.0;
         let facing_y = 0.0;
-        let results: Vec<_> = grid.query_radius_fov(0.0, 0.0, 150.0, facing_x, facing_y).collect();
+        let results: Vec<_> = grid
+            .query_radius_fov(0.0, 0.0, 150.0, facing_x, facing_y)
+            .collect();
 
         // Should find entity in front and to the side, but NOT the one behind
         let found_ids: Vec<u32> = results.iter().map(|p| p.entity.index()).collect();
 
         assert!(found_ids.contains(&1), "Should find entity in front");
-        assert!(!found_ids.contains(&2), "Should NOT find entity behind (cell culled)");
+        assert!(
+            !found_ids.contains(&2),
+            "Should NOT find entity behind (cell culled)"
+        );
         assert!(found_ids.contains(&3), "Should find entity to the side");
     }
 
@@ -1209,10 +1313,10 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let entities = vec![
-            (Entity::from_raw(1), 75.0, 25.0, 1.0),   // Front-right
-            (Entity::from_raw(2), -75.0, 25.0, 1.0),  // Back-left
-            (Entity::from_raw(3), 75.0, -25.0, 1.0),  // Front-right
-            (Entity::from_raw(4), -75.0, -25.0, 1.0), // Back-left
+            (Entity::from_raw(1), 75.0, 25.0, 0.0, 0.0, 1.0), // Front-right
+            (Entity::from_raw(2), -75.0, 25.0, 0.0, 0.0, 1.0), // Back-left
+            (Entity::from_raw(3), 75.0, -25.0, 0.0, 0.0, 1.0), // Front-right
+            (Entity::from_raw(4), -75.0, -25.0, 0.0, 0.0, 1.0), // Back-left
         ];
 
         grid.rebuild(entities.into_iter());
@@ -1223,7 +1327,10 @@ mod tests {
 
         // FOV query facing right should find only front entities
         let fov_results: Vec<_> = grid.query_radius_fov(0.0, 0.0, 100.0, 1.0, 0.0).collect();
-        assert!(fov_results.len() < all_results.len(), "FOV query should return fewer results");
+        assert!(
+            fov_results.len() < all_results.len(),
+            "FOV query should return fewer results"
+        );
 
         // Entities 1 and 3 are in front, 2 and 4 are behind
         let found_ids: Vec<u32> = fov_results.iter().map(|p| p.entity.index()).collect();
@@ -1241,8 +1348,8 @@ mod tests {
         // Entity directly behind at (-25, 25) - center of cell (-1, 0) - ADJACENT cell
         // Entity far behind at (-125, 25) - center of cell (-3, 0) - NOT adjacent
         let entities = vec![
-            (Entity::from_raw(1), -25.0, 25.0, 1.0),  // Adjacent cell behind (-1, 0)
-            (Entity::from_raw(2), -125.0, 25.0, 1.0), // Far cell behind (-3, 0)
+            (Entity::from_raw(1), -25.0, 25.0, 0.0, 0.0, 1.0), // Adjacent cell behind (-1, 0)
+            (Entity::from_raw(2), -125.0, 25.0, 0.0, 0.0, 1.0), // Far cell behind (-3, 0)
         ];
 
         grid.rebuild(entities.into_iter());
@@ -1281,9 +1388,9 @@ mod tests {
         // This position makes cell (2, 0) closer than cell (-1, 0) by raw distance
         // But (-1, 0) is adjacent and should still be examined FIRST
         let entities = vec![
-            (Entity::from_raw(1), -25.0, 25.0, 1.0),  // Adjacent behind (-1, 0), dist ~73
-            (Entity::from_raw(2), 125.0, 25.0, 1.0),  // Non-adjacent in front (2, 0), dist ~77
-            (Entity::from_raw(3), 75.0, 25.0, 1.0),   // Adjacent in front (1, 0), dist ~27
+            (Entity::from_raw(1), -25.0, 25.0, 0.0, 0.0, 1.0), // Adjacent behind (-1, 0), dist ~73
+            (Entity::from_raw(2), 125.0, 25.0, 0.0, 0.0, 1.0), // Non-adjacent in front (2, 0), dist ~77
+            (Entity::from_raw(3), 75.0, 25.0, 0.0, 0.0, 1.0),  // Adjacent in front (1, 0), dist ~27
         ];
 
         grid.rebuild(entities.into_iter());
@@ -1302,9 +1409,18 @@ mod tests {
         let adjacent_front_pos = cell_coords.iter().position(|&c| c == (1, 0));
         let non_adjacent_pos = cell_coords.iter().position(|&c| c == (2, 0));
 
-        assert!(adjacent_behind_pos.is_some(), "Adjacent cell behind should be included");
-        assert!(adjacent_front_pos.is_some(), "Adjacent cell in front should be included");
-        assert!(non_adjacent_pos.is_some(), "Non-adjacent cell in front should be included");
+        assert!(
+            adjacent_behind_pos.is_some(),
+            "Adjacent cell behind should be included"
+        );
+        assert!(
+            adjacent_front_pos.is_some(),
+            "Adjacent cell in front should be included"
+        );
+        assert!(
+            non_adjacent_pos.is_some(),
+            "Non-adjacent cell in front should be included"
+        );
 
         // Adjacent cells should come BEFORE non-adjacent cells
         assert!(
@@ -1329,10 +1445,7 @@ mod tests {
     /// Helper: place entity at specific angle from origin, at given distance
     fn entity_at_angle(angle_deg: f32, distance: f32) -> (f32, f32) {
         let angle_rad = angle_deg.to_radians();
-        (
-            distance * angle_rad.cos(),
-            distance * angle_rad.sin(),
-        )
+        (distance * angle_rad.cos(), distance * angle_rad.sin())
     }
 
     /// Helper: compute cos(half_fov) from FOV in degrees
@@ -1348,7 +1461,7 @@ mod tests {
 
         // Entity at 60° from creature facing +X, at distance 150 (3 cells away)
         let (ex, ey) = entity_at_angle(60.0, 150.0);
-        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        let entities = vec![(Entity::from_raw(1), ex, ey, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1367,7 +1480,8 @@ mod tests {
         assert!(
             !cell_coords.contains(&entity_cell),
             "Cell at 60° ({:?}) should be culled for 45° FOV. Found cells: {:?}",
-            entity_cell, cell_coords
+            entity_cell,
+            cell_coords
         );
     }
 
@@ -1378,7 +1492,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let (ex, ey) = entity_at_angle(90.0, 150.0);
-        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        let entities = vec![(Entity::from_raw(1), ex, ey, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1395,7 +1509,8 @@ mod tests {
         assert!(
             !cell_coords.contains(&entity_cell),
             "Cell at 90° ({:?}) should be culled for 45° FOV. Found cells: {:?}",
-            entity_cell, cell_coords
+            entity_cell,
+            cell_coords
         );
     }
 
@@ -1406,7 +1521,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let (ex, ey) = entity_at_angle(20.0, 150.0);
-        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        let entities = vec![(Entity::from_raw(1), ex, ey, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1423,7 +1538,8 @@ mod tests {
         assert!(
             cell_coords.contains(&entity_cell),
             "Cell at 20° ({:?}) should be kept for 45° FOV. Found cells: {:?}",
-            entity_cell, cell_coords
+            entity_cell,
+            cell_coords
         );
     }
 
@@ -1434,7 +1550,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let (ex, ey) = entity_at_angle(80.0, 150.0);
-        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        let entities = vec![(Entity::from_raw(1), ex, ey, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1451,7 +1567,8 @@ mod tests {
         assert!(
             !cell_coords.contains(&entity_cell),
             "Cell at 80° ({:?}) should be culled for 90° FOV. Found cells: {:?}",
-            entity_cell, cell_coords
+            entity_cell,
+            cell_coords
         );
     }
 
@@ -1462,7 +1579,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let (ex, ey) = entity_at_angle(40.0, 150.0);
-        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        let entities = vec![(Entity::from_raw(1), ex, ey, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1479,7 +1596,8 @@ mod tests {
         assert!(
             cell_coords.contains(&entity_cell),
             "Cell at 40° ({:?}) should be kept for 90° FOV. Found cells: {:?}",
-            entity_cell, cell_coords
+            entity_cell,
+            cell_coords
         );
     }
 
@@ -1490,7 +1608,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         // Entity in adjacent cell BEHIND creature
-        let entities = vec![(Entity::from_raw(1), -25.0, 25.0, 1.0)]; // cell (-1, 0)
+        let entities = vec![(Entity::from_raw(1), -25.0, 25.0, 0.0, 0.0, 1.0)]; // cell (-1, 0)
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1508,7 +1626,8 @@ mod tests {
         assert!(
             cell_coords.contains(&(-1, 0)),
             "Adjacent cell behind ({:?}) should ALWAYS be kept regardless of FOV. Found: {:?}",
-            (-1, 0), cell_coords
+            (-1, 0),
+            cell_coords
         );
     }
 
@@ -1519,7 +1638,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let (ex, ey) = entity_at_angle(150.0, 150.0);
-        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        let entities = vec![(Entity::from_raw(1), ex, ey, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1536,7 +1655,8 @@ mod tests {
         assert!(
             cell_coords.contains(&entity_cell),
             "Cell at 150° ({:?}) should be kept for 340° FOV. Found cells: {:?}",
-            entity_cell, cell_coords
+            entity_cell,
+            cell_coords
         );
     }
 
@@ -1548,7 +1668,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let (ex, ey) = entity_at_angle(180.0, 150.0);
-        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        let entities = vec![(Entity::from_raw(1), ex, ey, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1578,7 +1698,7 @@ mod tests {
         let mut grid = SpatialGrid::new(50.0);
 
         let (ex, ey) = entity_at_angle(180.0, 150.0);
-        let entities = vec![(Entity::from_raw(1), ex, ey, 1.0)];
+        let entities = vec![(Entity::from_raw(1), ex, ey, 0.0, 0.0, 1.0)];
         grid.rebuild(entities.into_iter());
 
         let mut cells = Vec::new();
@@ -1595,7 +1715,8 @@ mod tests {
         assert!(
             !cell_coords.contains(&entity_cell),
             "Cell at 180° ({:?}) should be culled for 270° FOV. Found cells: {:?}",
-            entity_cell, cell_coords
+            entity_cell,
+            cell_coords
         );
     }
 
@@ -1609,17 +1730,25 @@ mod tests {
         let mut entities = Vec::new();
         for angle in (0..360).step_by(30) {
             let (x, y) = entity_at_angle(angle as f32, 150.0);
-            entities.push((Entity::from_raw(angle as u32), x, y, 1.0));
+            entities.push((Entity::from_raw(angle as u32), x, y, 0.0, 0.0, 1.0));
         }
         grid.rebuild(entities.into_iter());
 
         let mut narrow_cells = Vec::new();
         let mut wide_cells = Vec::new();
 
-        let cos_half_fov_45 = cos_half_fov_from_degrees(45.0);   // Narrow
+        let cos_half_fov_45 = cos_half_fov_from_degrees(45.0); // Narrow
         let cos_half_fov_340 = cos_half_fov_from_degrees(340.0); // Wide
 
-        grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov_45, &mut narrow_cells);
+        grid.collect_cells_sorted_fov(
+            0.0,
+            0.0,
+            200.0,
+            1.0,
+            0.0,
+            cos_half_fov_45,
+            &mut narrow_cells,
+        );
         grid.collect_cells_sorted_fov(0.0, 0.0, 200.0, 1.0, 0.0, cos_half_fov_340, &mut wide_cells);
 
         // Narrow FOV (45°) should collect fewer cells than wide FOV (340°)
@@ -1627,7 +1756,8 @@ mod tests {
             narrow_cells.len() < wide_cells.len(),
             "Narrow FOV (45°) should query fewer cells than wide FOV (340°). \
              Narrow: {}, Wide: {}. This test will FAIL until FOV culling is implemented.",
-            narrow_cells.len(), wide_cells.len()
+            narrow_cells.len(),
+            wide_cells.len()
         );
     }
 }

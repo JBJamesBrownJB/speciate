@@ -6,20 +6,20 @@
 //! - Position export to DoubleBuffer (SoA layout)
 //! - Telemetry collection and reporting
 
-use crate::simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
-use crate::simulation::core::components::{BodySize, Position, Rotation};
-use crate::simulation::creatures::components::{BehaviorMode, CritId};
-use crate::simulation::creatures::builder::CritBuilder;
-use super::{DoubleBuffer, TelemetrySnapshot};
 #[cfg(feature = "dev-tools")]
 use super::PerceptionDebugBuffer;
+use super::{DoubleBuffer, TelemetrySnapshot};
 use crate::ipc::SimCommand;
+use crate::simulation::core::components::{BodySize, Position, Rotation};
+use crate::simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
+use crate::simulation::creatures::builder::CritBuilder;
+use crate::simulation::creatures::components::{BehaviorMode, CritId};
 use bevy_ecs::prelude::Resource;
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::Arc;
 
 #[derive(Resource, Debug, Clone)]
 pub struct ViewportBounds {
@@ -85,9 +85,10 @@ impl NapiApp {
                 eprintln!("[NAPI] Loading save state from: {}", path_str);
                 match WorldSaveState::load_from_file(path) {
                     Ok(save_state) => {
-                        eprintln!("[NAPI] ✅ Loaded save state: {} creatures at tick {}",
-                            save_state.metadata.creature_count,
-                            save_state.metadata.tick_number);
+                        eprintln!(
+                            "[NAPI] ✅ Loaded save state: {} creatures at tick {}",
+                            save_state.metadata.creature_count, save_state.metadata.tick_number
+                        );
                         match Simulation::from_save_state(save_state) {
                             Ok(sim) => sim,
                             Err(e) => {
@@ -99,14 +100,20 @@ impl NapiApp {
                         }
                     }
                     Err(e) => {
-                        eprintln!("[NAPI] ⚠️  Failed to load save state: {}. Starting fresh.", e);
+                        eprintln!(
+                            "[NAPI] ⚠️  Failed to load save state: {}. Starting fresh.",
+                            e
+                        );
                         SimulationBuilder::new()
                             .set_boundaries(MAX_WORLD_SIZE, MAX_WORLD_SIZE)
                             .build()
                     }
                 }
             } else {
-                eprintln!("[NAPI] Save state not found at: {}. Starting fresh.", path_str);
+                eprintln!(
+                    "[NAPI] Save state not found at: {}. Starting fresh.",
+                    path_str
+                );
                 SimulationBuilder::new()
                     .set_boundaries(MAX_WORLD_SIZE, MAX_WORLD_SIZE)
                     .build()
@@ -122,10 +129,15 @@ impl NapiApp {
         simulation.set_assets_path(&assets_path);
 
         // Spawn initial creatures ONLY if save state was not loaded
-        if save_state_path.is_none() || !save_state_path.as_ref().map(|p| Path::new(p).exists()).unwrap_or(false) {
+        if save_state_path.is_none()
+            || !save_state_path
+                .as_ref()
+                .map(|p| Path::new(p).exists())
+                .unwrap_or(false)
+        {
             for _i in 0..initial_count {
-                let x = (rand::random::<f32>() - 0.5) * 1000.0;  // ±500 units
-                let y = (rand::random::<f32>() - 0.5) * 1000.0;  // ±500 units
+                let x = (rand::random::<f32>() - 0.5) * 1000.0; // ±500 units
+                let y = (rand::random::<f32>() - 0.5) * 1000.0; // ±500 units
 
                 let builder = CritBuilder::new()
                     .at(x, y)
@@ -165,8 +177,8 @@ impl NapiApp {
             match cmd {
                 SimCommand::Spawn(count) => {
                     for _ in 0..count {
-                        let x = (rand::random::<f32>() - 0.5) * 1000.0;  // ±500 units
-                        let y = (rand::random::<f32>() - 0.5) * 1000.0;  // ±500 units
+                        let x = (rand::random::<f32>() - 0.5) * 1000.0; // ±500 units
+                        let y = (rand::random::<f32>() - 0.5) * 1000.0; // ±500 units
 
                         let builder = CritBuilder::new()
                             .at(x, y)
@@ -188,14 +200,19 @@ impl NapiApp {
                     // Flush to ensure entities are removed from archetypes immediately
                     self.simulation.world.flush();
                 }
-                SimCommand::LoadTrial { trial_name, randomize_dna, dna } => {
-                    self.simulation.load_trial(&trial_name, randomize_dna, dna, |result| {
-                        if result.success {
-                            eprintln!("[NAPI] ✅ {}", result.message);
-                        } else {
-                            eprintln!("[NAPI] ❌ {}", result.message);
-                        }
-                    });
+                SimCommand::LoadTrial {
+                    trial_name,
+                    randomize_dna,
+                    dna,
+                } => {
+                    self.simulation
+                        .load_trial(&trial_name, randomize_dna, dna, |result| {
+                            if result.success {
+                                eprintln!("[NAPI] ✅ {}", result.message);
+                            } else {
+                                eprintln!("[NAPI] ❌ {}", result.message);
+                            }
+                        });
                     self.simulation.world.flush();
                 }
                 SimCommand::SelectCreatureDebug(creature_id) => {
@@ -205,14 +222,19 @@ impl NapiApp {
                         use bevy_ecs::prelude::Entity;
 
                         let entity: Option<Entity> = creature_id.and_then(|id| {
-                            self.simulation.world
+                            self.simulation
+                                .world
                                 .query::<(Entity, &CritId)>()
                                 .iter(&self.simulation.world)
                                 .find(|(_, crit_id)| crit_id.0 == id)
                                 .map(|(entity, _)| entity)
                         });
 
-                        if let Some(mut target) = self.simulation.world.get_resource_mut::<PerceptionDebugTarget>() {
+                        if let Some(mut target) = self
+                            .simulation
+                            .world
+                            .get_resource_mut::<PerceptionDebugTarget>()
+                        {
                             target.0 = entity;
                         }
                     }
@@ -224,7 +246,10 @@ impl NapiApp {
                 SimCommand::SetPaused(is_paused) => {
                     if let Some(paused_ref) = &self.paused {
                         paused_ref.store(is_paused, std::sync::atomic::Ordering::SeqCst);
-                        eprintln!("[NAPI] Simulation {}", if is_paused { "PAUSED" } else { "RESUMED" });
+                        eprintln!(
+                            "[NAPI] Simulation {}",
+                            if is_paused { "PAUSED" } else { "RESUMED" }
+                        );
                     }
                 }
                 SimCommand::SetTimeScale(scale) => {
@@ -233,8 +258,16 @@ impl NapiApp {
                         eprintln!("[NAPI] Time scale set to {}x", scale);
                     }
                 }
-                SimCommand::SetViewportBounds { min_x, min_y, max_x, max_y, margin } => {
-                    if let Some(mut bounds) = self.simulation.world.get_resource_mut::<ViewportBounds>() {
+                SimCommand::SetViewportBounds {
+                    min_x,
+                    min_y,
+                    max_x,
+                    max_y,
+                    margin,
+                } => {
+                    if let Some(mut bounds) =
+                        self.simulation.world.get_resource_mut::<ViewportBounds>()
+                    {
                         bounds.min_x = min_x;
                         bounds.min_y = min_y;
                         bounds.max_x = max_x;
@@ -244,10 +277,16 @@ impl NapiApp {
                     }
                 }
                 #[cfg(feature = "dev-tools")]
-                SimCommand::QueryL1Cell { world_x, world_y, response_tx } => {
+                SimCommand::QueryL1Cell {
+                    world_x,
+                    world_y,
+                    response_tx,
+                } => {
                     use crate::simulation::spatial::HierarchicalGrid;
 
-                    let result = if let Some(grid) = self.simulation.world.get_resource::<HierarchicalGrid>() {
+                    let result = if let Some(grid) =
+                        self.simulation.world.get_resource::<HierarchicalGrid>()
+                    {
                         let bio = grid.l1.get_biosignature_at(world_x, world_y);
                         let inv_cell_size = 1.0 / grid.l1.cell_size();
                         let cell_x = (world_x * inv_cell_size).floor() as i32;
@@ -403,7 +442,9 @@ impl NapiApp {
         use crate::simulation::spatial::HierarchicalGrid;
 
         // Query creature count directly (no EntityIdMap dependency)
-        let count = self.simulation.world
+        let count = self
+            .simulation
+            .world
             .query::<&CritId>()
             .iter(&self.simulation.world)
             .count();
@@ -461,7 +502,8 @@ impl NapiApp {
     /// Record total tick timing (for NAPI run loop)
     #[cfg(feature = "dev-tools")]
     pub fn record_total_tick_timing(&mut self, elapsed_us: u64) {
-        self.simulation.world()
+        self.simulation
+            .world()
             .resource::<crate::instrumentation::SystemTimings>()
             .total_tick_us
             .store(elapsed_us, std::sync::atomic::Ordering::Relaxed);
@@ -476,7 +518,8 @@ impl NapiApp {
     /// Record export_positions timing (for NAPI run loop)
     #[cfg(feature = "dev-tools")]
     pub fn record_export_positions_timing(&mut self, elapsed_us: u64) {
-        self.simulation.world()
+        self.simulation
+            .world()
             .resource::<crate::instrumentation::SystemTimings>()
             .export_positions_us
             .store(elapsed_us, std::sync::atomic::Ordering::Relaxed);
@@ -492,17 +535,22 @@ impl NapiApp {
     #[cfg(feature = "dev-tools")]
     pub fn read_hardware_counters(&mut self) {
         // Read hardware counters (they stay enabled continuously from initialization)
-        let hw_snapshot = self.simulation.world_mut()
+        let hw_snapshot = self
+            .simulation
+            .world_mut()
             .resource_mut::<crate::instrumentation::HardwareMetrics>()
             .read();
 
-        self.simulation.world_mut()
+        self.simulation
+            .world_mut()
             .resource_mut::<crate::instrumentation::HardwareSnapshotResource>()
             .0 = hw_snapshot;
     }
 
     /// Create save state from current simulation (for periodic/shutdown saves)
-    pub fn to_save_state(&mut self) -> Result<crate::persistence::WorldSaveState, crate::persistence::SaveStateError> {
+    pub fn to_save_state(
+        &mut self,
+    ) -> Result<crate::persistence::WorldSaveState, crate::persistence::SaveStateError> {
         self.simulation.to_save_state()
     }
 }
@@ -548,8 +596,8 @@ pub fn calculate_l1_cell_info(
 #[cfg(all(test, feature = "dev-tools"))]
 mod tests {
     use super::*;
-    use crate::simulation::spatial::BioSignature;
     use crate::simulation::creatures::constants::DEFAULT_MASS;
+    use crate::simulation::spatial::BioSignature;
 
     #[test]
     fn l1_cell_info_empty_returns_none() {

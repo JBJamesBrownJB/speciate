@@ -19,7 +19,10 @@ fn memory_leak_profile() {
 
     // Get initial memory
     let stats_start = dhat::HeapStats::get();
-    println!("Initial: {} bytes in {} blocks", stats_start.curr_bytes, stats_start.curr_blocks);
+    println!(
+        "Initial: {} bytes in {} blocks",
+        stats_start.curr_bytes, stats_start.curr_blocks
+    );
 
     // Run 1000 ticks (simulates ~50 seconds at 20Hz)
     println!("\nRunning 1000 ticks with 0 creatures...");
@@ -28,14 +31,22 @@ fn memory_leak_profile() {
 
         if tick % 100 == 0 {
             let stats = dhat::HeapStats::get();
-            println!("Tick {}: {} bytes ({} blocks), total allocs: {}",
-                tick, stats.curr_bytes, stats.curr_blocks, stats.total_blocks);
+            println!(
+                "Tick {}: {} bytes ({} blocks), total allocs: {}",
+                tick, stats.curr_bytes, stats.curr_blocks, stats.total_blocks
+            );
         }
     }
 
     let stats_end = dhat::HeapStats::get();
-    println!("\nFinal: {} bytes in {} blocks", stats_end.curr_bytes, stats_end.curr_blocks);
-    println!("Growth: {} bytes", stats_end.curr_bytes as i64 - stats_start.curr_bytes as i64);
+    println!(
+        "\nFinal: {} bytes in {} blocks",
+        stats_end.curr_bytes, stats_end.curr_blocks
+    );
+    println!(
+        "Growth: {} bytes",
+        stats_end.curr_bytes as i64 - stats_start.curr_bytes as i64
+    );
     println!("Total allocations: {}", stats_end.total_blocks);
 
     // If running with dhat, this will write dhat-heap.json

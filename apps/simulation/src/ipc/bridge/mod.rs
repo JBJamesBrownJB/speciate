@@ -1,4 +1,3 @@
-
 pub mod bevy_app;
 pub mod double_buffer;
 #[cfg(feature = "dev-tools")]

@@ -8,7 +8,6 @@
 ///
 /// NOTE: These tests verify trial files exist at the expected locations
 /// relative to the binary (../../trials/ from target/debug)
-
 use bevy_ecs::prelude::*;
 use speciate::simulation::core::components::Position;
 use speciate::simulation::creatures::components::{BehaviorMode, CreatureState};
@@ -30,7 +29,9 @@ fn trial_file_exists(name: &str) -> bool {
         "../../trials"
     };
 
-    let trial_path = exe_dir.join(trials_relative_path).join(format!("{}.toml", name));
+    let trial_path = exe_dir
+        .join(trials_relative_path)
+        .join(format!("{}.toml", name));
     trial_path.exists()
 }
 
@@ -123,14 +124,16 @@ fn test_load_crowd_navigation_trial() {
 
     // Verify catatonic count (10×10 grid = 100)
     let mut catatonic_query = world.query::<&CreatureState>();
-    let catatonic_count = catatonic_query.iter(&world)
+    let catatonic_count = catatonic_query
+        .iter(&world)
         .filter(|state| state.behavior == BehaviorMode::Catatonic)
         .count();
     assert_eq!(catatonic_count, 100, "Should have 100 static obstacles");
 
     // Verify seeker count (1 seeker with Seeking behavior)
     let mut seeker_query = world.query::<&CreatureState>();
-    let seeker_count = seeker_query.iter(&world)
+    let seeker_count = seeker_query
+        .iter(&world)
         .filter(|state| state.behavior == BehaviorMode::Seeking)
         .count();
     assert_eq!(seeker_count, 1, "Should have 1 mobile seeker");
@@ -167,7 +170,10 @@ fn test_trial_world_config_override() {
     // Trial doesn't define boundaries, so BoundaryConfig should NOT be present
     // (only trials with explicit boundary config will have this resource)
     let boundary = world.get_resource::<BoundaryConfig>();
-    assert!(boundary.is_none(), "BoundaryConfig should NOT be present for trials without boundary config");
+    assert!(
+        boundary.is_none(),
+        "BoundaryConfig should NOT be present for trials without boundary config"
+    );
 }
 
 #[test]
@@ -202,7 +208,8 @@ fn test_trial_seeker_starting_position() {
 
     // Get seeker positions (single seeker with Seeking behavior)
     let mut query = world.query::<(&Position, &CreatureState)>();
-    let seekers: Vec<_> = query.iter(&world)
+    let seekers: Vec<_> = query
+        .iter(&world)
         .filter(|(_, state)| state.behavior == BehaviorMode::Seeking)
         .collect();
 
@@ -228,13 +235,18 @@ fn test_trial_grid_staggered_pattern() {
 
     // Get only the catatonic grid positions (not the seeker)
     let mut query = world.query::<(&Position, &CreatureState)>();
-    let positions: Vec<_> = query.iter(&world)
+    let positions: Vec<_> = query
+        .iter(&world)
         .filter(|(_, state)| state.behavior == BehaviorMode::Catatonic)
         .map(|(pos, _)| (pos.x, pos.y))
         .collect();
 
     // Verify correct creature count (10x10 grid = 100 catatonic creatures)
-    assert_eq!(positions.len(), 100, "Should have 100 catatonic creatures in grid");
+    assert_eq!(
+        positions.len(),
+        100,
+        "Should have 100 catatonic creatures in grid"
+    );
 
     // Verify staggered pattern creates multiple distinct Y levels
     // With grid_offset_y = 1.0 and spacing = 2.0, we expect 20 distinct Y values
@@ -250,10 +262,22 @@ fn test_trial_grid_staggered_pattern() {
     );
 
     // Verify grid spans reasonable bounds (creatures spread across area)
-    let min_x = positions.iter().map(|(x, _)| *x).fold(f32::INFINITY, f32::min);
-    let max_x = positions.iter().map(|(x, _)| *x).fold(f32::NEG_INFINITY, f32::max);
-    let min_y = positions.iter().map(|(_, y)| *y).fold(f32::INFINITY, f32::min);
-    let max_y = positions.iter().map(|(_, y)| *y).fold(f32::NEG_INFINITY, f32::max);
+    let min_x = positions
+        .iter()
+        .map(|(x, _)| *x)
+        .fold(f32::INFINITY, f32::min);
+    let max_x = positions
+        .iter()
+        .map(|(x, _)| *x)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let min_y = positions
+        .iter()
+        .map(|(_, y)| *y)
+        .fold(f32::INFINITY, f32::min);
+    let max_y = positions
+        .iter()
+        .map(|(_, y)| *y)
+        .fold(f32::NEG_INFINITY, f32::max);
 
     // Grid should span a reasonable area (not all creatures at same point)
     assert!(max_x - min_x > 10.0, "Grid should span significant X range");

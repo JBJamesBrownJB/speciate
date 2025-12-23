@@ -24,12 +24,12 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub mod config;
-pub mod simulation;
-pub mod persistence;
 pub mod ipc;
-pub mod state;
 #[cfg(feature = "napi")]
 pub mod napi_addon;
+pub mod persistence;
+pub mod simulation;
+pub mod state;
 
 #[cfg(feature = "napi")]
 pub use napi_addon::*;
@@ -53,29 +53,25 @@ macro_rules! time_system {
     ($timings:expr, $name:expr) => {};
 }
 
-
 // Core simulation types
-pub use simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
 pub use simulation::core::components::{
-    Acceleration, BodySize, BoundaryConfig, DeltaTime,
-    PhysicsTick, Position, Velocity,
+    Acceleration, BodySize, BoundaryConfig, DeltaTime, PhysicsTick, Position, Velocity,
 };
+pub use simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
 
 // Creature components and capabilities
-pub use simulation::creatures::components::{
-    BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
-    CreatureState, CritId, EntityTag, FleeState, HomePosition, Target, WanderState,
-};
 pub use simulation::core::components::Rotation;
+pub use simulation::creatures::components::{
+    BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander, CreatureState,
+    CritId, EntityTag, FleeState, HomePosition, Target, WanderState,
+};
 
 // Perception
-pub use simulation::perception::{AvoidanceBehavior, Perception};
+pub use simulation::perception::Perception;
 
 // Creature spawning
 pub use simulation::creatures::builder::CritBuilder;
-pub use simulation::creatures::spawner::{
-    spawn_creature, CreatureSpawnRequest,
-};
+pub use simulation::creatures::spawner::{spawn_creature, CreatureSpawnRequest};
 
 // Systems (for custom schedules)
 pub use simulation::creatures::behaviors::behavior_transition_system;
@@ -88,4 +84,3 @@ pub use simulation::movement::integrate_motion_system;
 pub use ipc::{CreatureSnapshot, GameState, SharedSnapshotQueue, SnapshotQueue};
 
 // NAPI exports
-

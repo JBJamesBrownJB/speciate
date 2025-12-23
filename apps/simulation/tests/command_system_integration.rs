@@ -6,7 +6,6 @@
 /// 3. Command sent to queue via channel
 /// 4. command_executor_system drains queue and spawns creature
 /// 5. Creature appears in ECS World at correct position
-
 use std::io::Write;
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -80,14 +79,8 @@ fn test_end_to_end_spawn_command() {
     assert_eq!(results.len(), 1, "Should spawn exactly one creature");
 
     let (pos, body) = results[0];
-    assert_eq!(
-        pos.x, 456.78,
-        "Creature should spawn at correct X position"
-    );
-    assert_eq!(
-        pos.y, 901.23,
-        "Creature should spawn at correct Y position"
-    );
+    assert_eq!(pos.x, 456.78, "Creature should spawn at correct X position");
+    assert_eq!(pos.y, 901.23, "Creature should spawn at correct Y position");
     // Default DNA expresses to approximately 1.0m (within 5%)
     assert!(
         (body.length - 1.0).abs() < 0.05,

@@ -18,9 +18,9 @@ fn test_set_paused_command_variant_exists() {
 #[cfg(feature = "dev-tools")]
 use speciate::ipc::bridge::NapiApp;
 #[cfg(feature = "dev-tools")]
-use std::sync::Arc;
-#[cfg(feature = "dev-tools")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "dev-tools")]
+use std::sync::Arc;
 
 #[test]
 #[cfg(feature = "dev-tools")]
@@ -33,10 +33,14 @@ fn test_pause_command_sets_paused_flag() {
 
     assert!(!paused.load(Ordering::SeqCst), "Should start unpaused");
 
-    tx.send(SimCommand::SetPaused(true)).expect("Failed to send pause command");
+    tx.send(SimCommand::SetPaused(true))
+        .expect("Failed to send pause command");
     app.process_commands();
 
-    assert!(paused.load(Ordering::SeqCst), "Should be paused after SetPaused(true)");
+    assert!(
+        paused.load(Ordering::SeqCst),
+        "Should be paused after SetPaused(true)"
+    );
 }
 
 #[test]
@@ -48,14 +52,19 @@ fn test_resume_command_clears_paused_flag() {
     let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
     app.set_paused_flag(Arc::clone(&paused));
 
-    tx.send(SimCommand::SetPaused(true)).expect("Failed to send pause command");
+    tx.send(SimCommand::SetPaused(true))
+        .expect("Failed to send pause command");
     app.process_commands();
     assert!(paused.load(Ordering::SeqCst), "Should be paused");
 
-    tx.send(SimCommand::SetPaused(false)).expect("Failed to send resume command");
+    tx.send(SimCommand::SetPaused(false))
+        .expect("Failed to send resume command");
     app.process_commands();
 
-    assert!(!paused.load(Ordering::SeqCst), "Should be unpaused after SetPaused(false)");
+    assert!(
+        !paused.load(Ordering::SeqCst),
+        "Should be unpaused after SetPaused(false)"
+    );
 }
 
 #[test]
@@ -68,11 +77,13 @@ fn test_pause_toggle_multiple_times() {
     app.set_paused_flag(Arc::clone(&paused));
 
     for _ in 0..5 {
-        tx.send(SimCommand::SetPaused(true)).expect("Failed to send pause");
+        tx.send(SimCommand::SetPaused(true))
+            .expect("Failed to send pause");
         app.process_commands();
         assert!(paused.load(Ordering::SeqCst));
 
-        tx.send(SimCommand::SetPaused(false)).expect("Failed to send resume");
+        tx.send(SimCommand::SetPaused(false))
+            .expect("Failed to send resume");
         app.process_commands();
         assert!(!paused.load(Ordering::SeqCst));
     }

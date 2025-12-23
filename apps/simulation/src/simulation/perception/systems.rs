@@ -16,9 +16,12 @@ use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 use std::cell::RefCell;
 
-/// L0 scan radius: Always query 9 adjacent cells only (~14m coverage with 10m cells).
+/// L0 scan radius: Always query 9 adjacent cells only.
 /// This is FIXED regardless of creature's perception range - L1 provides long-range awareness.
-const L0_SCAN_RADIUS: f32 = CELL_SIZE * 1.5;  // 15m covers 3×3 cells
+/// Math: ceil(radius / cell_size) determines cells_radius in collect_cells_sorted_fov()
+///   - CELL_SIZE * 1.0 = 10m → ceil(1.0) = 1 → 3×3 = 9 cells ✓
+///   - CELL_SIZE * 1.5 = 15m → ceil(1.5) = 2 → 5×5 = 25 cells ✗
+const L0_SCAN_RADIUS: f32 = CELL_SIZE * 1.0;  // 10m → ceil(1.0) = 1 → 3×3 = 9 cells
 
 // Thread-local scratch buffer for sorted cell indices (avoids allocation per creature)
 thread_local! {

@@ -3,6 +3,7 @@ pub mod components;
 #[cfg(feature = "dev-tools")]
 pub mod debug;
 pub mod entity_filter;
+pub mod fov_patterns;
 pub mod systems;
 
 pub use classification::{classify_l1_cell, L1Classification, MAX_L1_PERCEPTIONS, PREY_SIZE_RATIO};

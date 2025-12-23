@@ -35,6 +35,7 @@ fn test_performance_snapshot_schema_completeness() {
         steering_us: 115,
         capture_debug_accel_us: 2,
         export_positions_us: 135,
+        cells_queried_total: 9000,
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -220,6 +221,7 @@ fn test_system_timings_snapshot_all_fields_present() {
         steering_us: 115,
         capture_debug_accel_us: 2,
         export_positions_us: 135,
+        cells_queried_total: 9000,
         archetype_count: 5,
         entity_count: 27500,
     };
@@ -235,6 +237,7 @@ fn test_system_timings_snapshot_all_fields_present() {
         "behaviorTransitionUs",
         "steeringUs",
         "captureDebugAccelUs",
+        "cellsQueriedTotal",
         "archetypeCount",
         "entityCount",
     ];
@@ -287,6 +290,7 @@ fn test_baseline_snapshot_27_5k_creatures_schema() {
         steering_us: 115,
         capture_debug_accel_us: 2,
         export_positions_us: 135,
+        cells_queried_total: 9000,
         archetype_count: 5,
         entity_count: 27500,
     };

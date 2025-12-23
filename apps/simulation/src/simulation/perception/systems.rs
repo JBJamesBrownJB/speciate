@@ -3,6 +3,7 @@ use super::components::*;
 #[cfg(feature = "dev-tools")]
 use super::debug::*;
 use super::entity_filter::should_perceive_entity;
+use super::fov_patterns;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 use crate::simulation::core::components::{BodySize, PhysicsTick, Position, Rotation};
@@ -123,6 +124,7 @@ pub fn update_perception_system(
             let threshold = perception.threshold;
             let cos_half_fov_sq = perception.cos_half_fov_sq;
             let cos_half_fov = perception.cos_half_fov;
+            let fov_angle = perception.fov_angle;
             // Use cached cos/sin from rotation (avoids 400K trig calls per tick)
             let facing_x = rot.cos_radians;
             let facing_y = rot.sin_radians;
@@ -144,6 +146,12 @@ pub fn update_perception_system(
                     let mut cells = scratch.borrow_mut();
                     let mut candidates = candidates_cell.borrow_mut();
                     candidates.clear();
+
+                    // Get creature's cell coordinates for FOV cell culling
+                    let (creature_cx, creature_cy) = grid_ref.world_to_cell(x, y);
+
+                    // Compute FOV cell pattern once per creature (precomputed lookup table)
+                    let cell_pattern = fov_patterns::get_cell_pattern(fov_angle, facing_x, facing_y);
 
                     grid_ref.collect_cells_sorted_fov(
                         x,
@@ -258,11 +266,24 @@ pub fn update_perception_system(
                             }
                         }
 
+                        // FOV CELL CULLING: Skip cells geometrically outside creature's FOV cone.
+                        // Uses precomputed lookup table with 50° safety margin (45° cell corner + 5° variance).
+                        let (cell_cx, cell_cy) = grid_ref.get_cell_coords_by_index(cell_idx);
+                        let cell_dx = cell_cx - creature_cx;
+                        let cell_dy = cell_cy - creature_cy;
+
+                        if !fov_patterns::should_query_cell(cell_dx, cell_dy, cell_pattern) {
+                            #[cfg(feature = "dev-tools")]
+                            if is_debug_target {
+                                debug_skipped.push((cell_cx, cell_cy));
+                            }
+                            continue;
+                        }
+
                         // DEV-TOOLS: Capture queried cell for debug target
                         #[cfg(feature = "dev-tools")]
                         if is_debug_target {
-                            let (cx, cy) = grid_ref.get_cell_coords_by_index(cell_idx);
-                            debug_queried.push((cx, cy));
+                            debug_queried.push((cell_cx, cell_cy));
                         }
 
                         // L1 CLASSIFICATION CHECK (size domination optimization):
@@ -1753,19 +1774,20 @@ mod tests {
         let world = sim.world();
         let snapshot = world.get_resource::<PerceptionDebugSnapshot>().unwrap();
 
-        // With 10m cells, 9 adjacent cells cover ~14m radius.
-        // query_radius should be ~CELL_SIZE * 1.5 = 15m, giving us 9 cells.
+        // With 10m cells, 9 adjacent cells cover a visible range of:
+        // L0_VISIBLE_RANGE = sqrt(2) × (1 + 0.5) × 10 ≈ 21.2m
+        // This is the distance to the corner of the furthest queried cell.
         let max_expected_cells = 9;
         let actual_cells = snapshot.queried_cells.len();
 
-        // CRITICAL: The query_radius is the bug indicator!
-        // Even if cells happen to be <= 9 due to FOV culling, the query_radius
-        // should be ~15m, not ~119m.
-        let expected_query_radius = CELL_SIZE * 1.5; // ~15m for 9 adjacent cells
+        // CRITICAL: query_radius in debug snapshot shows L0_VISIBLE_RANGE.
+        // For a giant with 119m perception, we used to show 119m (bug).
+        // Now fixed: L0 scan is capped at 9 cells, so query_radius ≈ 21.2m.
+        let expected_query_radius = L0_VISIBLE_RANGE;
         assert!(
-            snapshot.query_radius <= expected_query_radius + 5.0,  // Allow some margin
-            "BUG: query_radius should be ~{}m (for 9 adjacent cells), not {}m (perception range + body + MAX_OTHER). \
-             Current implementation uses perception range for L0 scan instead of fixed 9 cells.",
+            snapshot.query_radius <= expected_query_radius + 1.0,
+            "BUG: query_radius should be ~{:.1}m (L0_VISIBLE_RANGE), not {:.1}m. \
+             L0 scan should be limited to 9 adjacent cells.",
             expected_query_radius,
             snapshot.query_radius
         );
@@ -2096,4 +2118,5 @@ mod tests {
             "Giant should not perceive mouse (L1 Empty or size domination filter)"
         );
     }
+
 }

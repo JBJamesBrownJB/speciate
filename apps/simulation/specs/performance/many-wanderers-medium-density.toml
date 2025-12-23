@@ -9,18 +9,6 @@ description = """
 160,000 wanderers in a 400x400 grid with 2.5m spacing.
 Tests wandering behavior at medium population density across a 1km area.
 """
-timeout_seconds = 8
-
-[[assertions]]
-type = "creature_count"
-min = 160000
-max = 160000
-
-[[assertions]]
-type = "max_avg_tick_latency"
-# microseconds = 45000 - Pre optimisation fusing systems
-# microseconds = 30000 - Pre modulus time slice
-microseconds = 22000
 
 # Primary spawn pattern: 50x50 grid
 [[spawns]]

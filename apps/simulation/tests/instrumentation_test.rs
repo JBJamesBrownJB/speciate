@@ -160,6 +160,7 @@ fn test_gamestate_includes_timing_fields() {
             steering_us: 85,
             capture_debug_accel_us: 2,
             export_positions_us: 135,
+            cells_queried_total: 4500,
             archetype_count: 5,
             entity_count: 100,
         },

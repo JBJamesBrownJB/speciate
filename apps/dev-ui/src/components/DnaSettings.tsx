@@ -8,11 +8,11 @@
 import React from 'react';
 
 // Gene expression constants (must match Rust constants)
-const SIZE_MIN = 0.5;
-const SIZE_MAX = 5.0;
+const SIZE_MIN = 0.1;
+const SIZE_MAX = 10.0;
 const FOV_MIN = 45.0;
 const FOV_MAX = 340.0;
-export const DEFAULT_SIZE_GENE = 0.11;
+export const DEFAULT_SIZE_GENE = 0.09;
 export const DEFAULT_FOV_GENE = 0.46;
 
 function expressGene(gene: number, min: number, max: number): number {

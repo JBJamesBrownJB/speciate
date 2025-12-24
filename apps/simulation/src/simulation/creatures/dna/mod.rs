@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use super::constants::{MAX_FOV_DEGREES, MIN_FOV_DEGREES};
 
-pub const SIZE_MIN: f32 = 0.5;
-pub const SIZE_MAX: f32 = 5.0;
+pub const SIZE_MIN: f32 = 0.1;
+pub const SIZE_MAX: f32 = 10.0;
 
-pub const DEFAULT_SIZE_GENE: f32 = 0.11;
+pub const DEFAULT_SIZE_GENE: f32 = 0.09;
 pub const DEFAULT_FOV_GENE: f32 = 0.46;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Reflect)]

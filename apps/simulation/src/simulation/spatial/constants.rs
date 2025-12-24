@@ -1,4 +1,4 @@
-pub const CELL_SIZE: f32 = 10.0;
+pub const CELL_SIZE: f32 = 20.0;
 
 /// L1 (coarse) grid cell size in world units (L1 = 3×3 L0 cells, hardcoded in fov_patterns.rs).
 pub const L1_CELL_SIZE: f32 = CELL_SIZE * 3.0;

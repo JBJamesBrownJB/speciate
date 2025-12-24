@@ -1,5 +1,5 @@
 use super::biosignature::BioSignature;
-use super::constants::{L0_TO_L1_RATIO, L1_CELL_SIZE};
+use super::constants::L1_CELL_SIZE;
 
 /// Coarse spatial grid (L1) for aggregated bio-signatures.
 ///
@@ -124,9 +124,9 @@ impl CoarseGrid {
         let l0_cx = l0_cell_idx % l0_width;
         let l0_cy = l0_cell_idx / l0_width;
 
-        // L1 cell = L0 cell / 3 (integer division)
-        let l1_cx = l0_cx / L0_TO_L1_RATIO;
-        let l1_cy = l0_cy / L0_TO_L1_RATIO;
+        // L1 cell = L0 cell / 3 (hardcoded: fov_patterns.rs lookup tables assume 3×3)
+        let l1_cx = l0_cx / 3;
+        let l1_cy = l0_cy / 3;
 
         // Clamp to valid L1 range
         let l1_cx = l1_cx.min(self.width.saturating_sub(1));

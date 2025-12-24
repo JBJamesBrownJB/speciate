@@ -7,7 +7,7 @@ pub mod systems;
 
 pub use biosignature::BioSignature;
 pub use coarse_grid::CoarseGrid;
-pub use constants::{CELL_SIZE, L0_TO_L1_RATIO, L1_CELL_SIZE, NON_ADJACENT_OFFSET};
+pub use constants::{CELL_SIZE, L1_CELL_SIZE, NON_ADJACENT_OFFSET};
 pub use grid::{DoubleBufferedSpatialGrid, PerceptionProxy, SpatialGrid};
 pub use hierarchical::HierarchicalGrid;
 pub use systems::{

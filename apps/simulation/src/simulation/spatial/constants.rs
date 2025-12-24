@@ -1,7 +1,7 @@
 pub const CELL_SIZE: f32 = 10.0;
 
 /// Ratio of L1 to L0 cell size (L1 = L0_TO_L1_RATIO × L0).
-pub const L0_TO_L1_RATIO: usize = 3;
+pub const L0_TO_L1_RATIO: usize = 3; /// DO NOT CHANGE, it is already assumed to be 3 in pre-computed grid pattern tables!
 
 /// L1 (coarse) grid cell size in world units (derived from L0 × ratio).
 pub const L1_CELL_SIZE: f32 = CELL_SIZE * L0_TO_L1_RATIO as f32;

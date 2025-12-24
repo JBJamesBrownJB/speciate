@@ -89,6 +89,7 @@ describe('GameState Types', () => {
         ipcWriterThreadUs: 150,
         archetypeCount: 8,
         entityCount: 10000,
+        cellsQueriedTotal: 0,
       };
 
       expect(timings.archetypeCount).toBe(8);
@@ -123,6 +124,7 @@ describe('GameState Types', () => {
           ipcWriterThreadUs: 150,
           archetypeCount: 8,
           entityCount: 10000,
+          cellsQueriedTotal: 0,
         },
         hardwareMetrics: {
           cycles: 1000000000,
@@ -219,6 +221,7 @@ describe('GameState Types', () => {
         ipcWriterThreadUs: 50,
         archetypeCount: 5,
         entityCount: 1000,
+        cellsQueriedTotal: 0,
       };
 
       // These keys should match Rust's #[serde(rename_all = "camelCase")]

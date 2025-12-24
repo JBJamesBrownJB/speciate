@@ -7,10 +7,6 @@ const PERCEPTION_FILL_ALPHA = 0.15;
 const PERCEPTION_STROKE_WIDTH = 0.15;
 const PERCEPTION_STROKE_ALPHA = 0.6;
 
-const QUERY_RADIUS_COLOR = 0xff8800;
-const QUERY_RADIUS_ALPHA = 0.25;
-const QUERY_RADIUS_STROKE_WIDTH = 0.1;
-
 const NEIGHBOR_LINE_COLOR = 0xffffff;
 const NEIGHBOR_LINE_WIDTH = 0.1;
 const NEIGHBOR_LINE_ALPHA = 0.89;
@@ -80,28 +76,7 @@ export class PerceptionOverlay implements IOverlay {
     const startAngle = data.rotation - halfFov;
     const endAngle = data.rotation + halfFov;
 
-    // Draw query radius (outer, orange) - shows spatial query boundary
-    this.graphics.setFillStyle({
-      color: QUERY_RADIUS_COLOR,
-      alpha: QUERY_RADIUS_ALPHA,
-    });
-    this.graphics.moveTo(data.x, data.y);
-    this.graphics.arc(data.x, data.y, data.queryRadius, startAngle, endAngle);
-    this.graphics.lineTo(data.x, data.y);
-    this.graphics.fill();
-
-    // Draw query radius stroke
-    this.graphics.setStrokeStyle({
-      width: QUERY_RADIUS_STROKE_WIDTH,
-      color: QUERY_RADIUS_COLOR,
-      alpha: QUERY_RADIUS_ALPHA + 0.2,
-    });
-    this.graphics.moveTo(data.x, data.y);
-    this.graphics.arc(data.x, data.y, data.queryRadius, startAngle, endAngle);
-    this.graphics.lineTo(data.x, data.y);
-    this.graphics.stroke();
-
-    // Draw perception range (inner, cyan) - shows biological sensing distance
+    // Draw perception range (cyan) - shows biological sensing distance
     this.graphics.setFillStyle({
       color: PERCEPTION_WEDGE_COLOR,
       alpha: PERCEPTION_FILL_ALPHA,

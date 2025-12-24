@@ -2,7 +2,10 @@ use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use super::constants::{CELL_SIZE, NON_ADJACENT_OFFSET};
+use super::constants::{
+    CELL_SIZE, COS_15_DEG, DISTANCE_EPSILON, NON_ADJACENT_OFFSET, SIN_15_DEG, SMALL_SORT_THRESHOLD,
+    WIDE_FOV_THRESHOLD,
+};
 use crate::simulation::core::MAX_WORLD_SIZE;
 
 /// Wrapper to allow raw pointer in parallel iteration.
@@ -43,6 +46,18 @@ impl Default for PerceptionProxy {
             entity: Entity::PLACEHOLDER,
         }
     }
+}
+
+/// Cell query bounds for iteration.
+/// Returned by `query_bounds()` to avoid recalculating in each method.
+#[derive(Clone, Copy)]
+struct CellQueryBounds {
+    min_qx: i32,
+    max_qx: i32,
+    min_qy: i32,
+    max_qy: i32,
+    center_cx: i32,
+    center_cy: i32,
 }
 
 /// DOD Spatial Grid with contiguous buffer storage.
@@ -436,10 +451,12 @@ impl SpatialGrid {
 
                     let idx = ((cy - self.min_cell_y) as usize) * self.width
                         + ((cx - self.min_cell_x) as usize);
+                    // SAFETY: idx is within bounds because cx/cy are clamped to grid bounds
                     let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
                     if count == 0 {
                         None
                     } else {
+                        // SAFETY: (start, count) pair is valid because rebuild() maintains invariant
                         Some(unsafe {
                             self.proxies
                                 .get_unchecked(start as usize..(start + count) as usize)
@@ -449,6 +466,54 @@ impl SpatialGrid {
                 .flatten()
         })
     }
+
+    // ========================================================================
+    // Helper methods for cell queries (reduce duplication)
+    // ========================================================================
+
+    /// Calculate cell iteration bounds for a radius query.
+    #[inline(always)]
+    fn query_bounds(&self, x: f32, y: f32, radius: f32) -> CellQueryBounds {
+        let (center_cx, center_cy) = self.world_to_cell(x, y);
+        let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
+
+        CellQueryBounds {
+            min_qx: (center_cx - cells_radius).max(self.min_cell_x),
+            max_qx: (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1),
+            min_qy: (center_cy - cells_radius).max(self.min_cell_y),
+            max_qy: (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1),
+            center_cx,
+            center_cy,
+        }
+    }
+
+    /// Calculate cell index from cell coordinates.
+    /// SAFETY: Caller must ensure cx/cy are within grid bounds.
+    #[inline(always)]
+    fn cell_index_unchecked(&self, cx: i32, cy: i32) -> usize {
+        ((cy - self.min_cell_y) as usize) * self.width + ((cx - self.min_cell_x) as usize)
+    }
+
+    /// Calculate cell center in world coordinates.
+    #[inline(always)]
+    fn cell_center(&self, cx: i32, cy: i32) -> (f32, f32) {
+        let half_cell = self.cell_size * 0.5;
+        (
+            (cx as f32 * self.cell_size) + half_cell,
+            (cy as f32 * self.cell_size) + half_cell,
+        )
+    }
+
+    /// Get cell occupancy count (0 if empty).
+    /// SAFETY: Caller must ensure cell_idx is within bounds.
+    #[inline(always)]
+    unsafe fn cell_count_unchecked(&self, cell_idx: usize) -> u32 {
+        (*self.cells.get_unchecked(cell_idx)).1
+    }
+
+    // ========================================================================
+    // Cell collection methods
+    // ========================================================================
 
     /// Collect cell indices sorted with adjacent cells FIRST, then by distance.
     /// Output: Vec of (sort_key, cell_index) pairs.
@@ -467,36 +532,28 @@ impl SpatialGrid {
     ) {
         out.clear();
 
-        let (center_cx, center_cy) = self.world_to_cell(x, y);
-        let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
-        let cell_size = self.cell_size;
-        let half_cell = cell_size * 0.5;
+        let bounds = self.query_bounds(x, y, radius);
 
-        let min_qx = (center_cx - cells_radius).max(self.min_cell_x);
-        let max_qx = (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1);
-        let min_qy = (center_cy - cells_radius).max(self.min_cell_y);
-        let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
-
-        for cy in min_qy..=max_qy {
-            for cx in min_qx..=max_qx {
-                let cell_center_x = (cx as f32 * cell_size) + half_cell;
-                let cell_center_y = (cy as f32 * cell_size) + half_cell;
+        for cy in bounds.min_qy..=bounds.max_qy {
+            for cx in bounds.min_qx..=bounds.max_qx {
+                let (cell_center_x, cell_center_y) = self.cell_center(cx, cy);
 
                 // Adjacent cells (3x3 grid) - skip FOV check, always include, examine FIRST
-                let is_adjacent = (cx - center_cx).abs() <= 1 && (cy - center_cy).abs() <= 1;
+                let is_adjacent =
+                    (cx - bounds.center_cx).abs() <= 1 && (cy - bounds.center_cy).abs() <= 1;
 
                 if !is_adjacent {
                     // Only apply FOV culling for distant cells
                     let cell_dir_dot =
                         (cell_center_x - x) * facing_x + (cell_center_y - y) * facing_y;
-                    if cell_dir_dot < -cell_size {
+                    if cell_dir_dot < -self.cell_size {
                         continue;
                     }
                 }
 
-                let idx = ((cy - self.min_cell_y) as usize) * self.width
-                    + ((cx - self.min_cell_x) as usize);
-                let (_, count) = unsafe { *self.cells.get_unchecked(idx) };
+                let idx = self.cell_index_unchecked(cx, cy);
+                // SAFETY: idx is within bounds because cx/cy are clamped to grid bounds
+                let count = unsafe { self.cell_count_unchecked(idx) };
                 if count > 0 {
                     let dx = cell_center_x - x;
                     let dy = cell_center_y - y;
@@ -514,8 +571,8 @@ impl SpatialGrid {
         }
 
         // Sort by sort_key: adjacent cells first (by distance), then non-adjacent (by distance)
-        // Skip sort if 9 or fewer cells (all adjacent) - order doesn't matter for small sets
-        if out.len() > 9 {
+        // Skip sort for small sets (adjacent 3x3 grid) - order doesn't matter
+        if out.len() > SMALL_SORT_THRESHOLD {
             out.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         }
     }
@@ -537,38 +594,18 @@ impl SpatialGrid {
     ) {
         out.clear();
 
-        let (center_cx, center_cy) = self.world_to_cell(x, y);
-        let cells_radius = (radius * self.inv_cell_size).ceil() as i32;
-        let cell_size = self.cell_size;
-        let half_cell = cell_size * 0.5;
+        let bounds = self.query_bounds(x, y, radius);
+        let half_cell = self.cell_size * 0.5;
 
-        // Skip FOV culling for very wide FOVs (>= 300°, i.e., cos_half_fov <= -0.866)
-        // This avoids edge cases with the safety margin math
-        let skip_fov_culling = cos_half_fov <= -0.866;
+        // Skip FOV culling for very wide FOVs (>= 300°, cos_half_fov <= WIDE_FOV_THRESHOLD)
+        let adjusted_cos = Self::adjusted_fov_cos(cos_half_fov);
 
-        // 15° safety margin: expand FOV cone slightly to avoid edge cases
-        // cos(fov + 15°) = cos(fov)*cos(15°) - sin(fov)*sin(15°)
-        let adjusted_cos = if skip_fov_culling {
-            -2.0 // Effectively disables culling (no cos_angle can be < -2)
-        } else {
-            let sin_half_fov = (1.0 - cos_half_fov * cos_half_fov).sqrt();
-            const COS_15: f32 = 0.9659; // cos(15°)
-            const SIN_15: f32 = 0.2588; // sin(15°)
-            cos_half_fov * COS_15 - sin_half_fov * SIN_15
-        };
-
-        let min_qx = (center_cx - cells_radius).max(self.min_cell_x);
-        let max_qx = (center_cx + cells_radius).min(self.min_cell_x + self.width as i32 - 1);
-        let min_qy = (center_cy - cells_radius).max(self.min_cell_y);
-        let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
-
-        for cy in min_qy..=max_qy {
-            for cx in min_qx..=max_qx {
-                let cell_center_x = (cx as f32 * cell_size) + half_cell;
-                let cell_center_y = (cy as f32 * cell_size) + half_cell;
+        for cy in bounds.min_qy..=bounds.max_qy {
+            for cx in bounds.min_qx..=bounds.max_qx {
+                let (cell_center_x, cell_center_y) = self.cell_center(cx, cy);
 
                 // Own cell is ALWAYS included (can't skip where we are)
-                let is_own_cell = cx == center_cx && cy == center_cy;
+                let is_own_cell = cx == bounds.center_cx && cy == bounds.center_cy;
 
                 if !is_own_cell {
                     // FOV culling: skip cells outside FOV cone (applies to ALL cells except own)
@@ -576,10 +613,8 @@ impl SpatialGrid {
                     let dy = cell_center_y - y;
                     let dist = (dx * dx + dy * dy).sqrt();
 
-                    if dist > 0.001 {
-                        // Normalized dot product = cos(angle between facing and cell direction)
+                    if dist > DISTANCE_EPSILON {
                         let cos_angle = (dx * facing_x + dy * facing_y) / dist;
-                        // Skip if cell is outside FOV cone (with safety margin)
                         if cos_angle < adjusted_cos {
                             continue;
                         }
@@ -597,9 +632,9 @@ impl SpatialGrid {
                     continue;
                 }
 
-                let idx = ((cy - self.min_cell_y) as usize) * self.width
-                    + ((cx - self.min_cell_x) as usize);
-                let (_, count) = unsafe { *self.cells.get_unchecked(idx) };
+                let idx = self.cell_index_unchecked(cx, cy);
+                // SAFETY: idx is within bounds because cx/cy are clamped to grid bounds
+                let count = unsafe { self.cell_count_unchecked(idx) };
 
                 if count > 0 {
                     let dx = cell_center_x - x;
@@ -611,10 +646,29 @@ impl SpatialGrid {
         }
     }
 
+    /// Calculate adjusted FOV cosine with safety margin.
+    /// Returns -2.0 for wide FOVs (>= 300°) to effectively disable culling.
+    #[inline(always)]
+    fn adjusted_fov_cos(cos_half_fov: f32) -> f32 {
+        if cos_half_fov <= WIDE_FOV_THRESHOLD {
+            -2.0 // Effectively disables culling (no cos_angle can be < -2)
+        } else {
+            // 15° safety margin: expand FOV cone slightly to avoid edge cases
+            // cos(fov + 15°) = cos(fov)*cos(15°) - sin(fov)*sin(15°)
+            let sin_half_fov = (1.0 - cos_half_fov * cos_half_fov).sqrt();
+            cos_half_fov * COS_15_DEG - sin_half_fov * SIN_15_DEG
+        }
+    }
+
     /// Get proxies for a cell by index. Use after collect_cells_sorted.
+    ///
+    /// # Safety
+    /// Caller must ensure cell_idx came from collect_cells_sorted (valid index).
     #[inline(always)]
     pub fn get_cell_proxies(&self, cell_idx: usize) -> &[PerceptionProxy] {
+        // SAFETY: cell_idx is from collect_cells_sorted which only returns valid indices
         let (start, count) = unsafe { *self.cells.get_unchecked(cell_idx) };
+        // SAFETY: (start, count) pair is valid because rebuild() maintains this invariant
         unsafe {
             self.proxies
                 .get_unchecked(start as usize..(start + count) as usize)
@@ -650,16 +704,17 @@ impl SpatialGrid {
         let max_qy = (center_cy + cells_radius).min(self.min_cell_y + self.height as i32 - 1);
 
         // Row-major iteration for cache locality
-        // SAFETY: min/max are pre-clamped to valid cell bounds above
         (min_qy..=max_qy).flat_map(move |cy| {
             (min_qx..=max_qx)
                 .filter_map(move |cx| {
                     let idx = ((cy - self.min_cell_y) as usize) * self.width
                         + ((cx - self.min_cell_x) as usize);
+                    // SAFETY: idx is within bounds because cx/cy are clamped to grid bounds
                     let (start, count) = unsafe { *self.cells.get_unchecked(idx) };
                     if count == 0 {
                         None
                     } else {
+                        // SAFETY: (start, count) pair is valid because rebuild() maintains invariant
                         Some(unsafe {
                             self.proxies
                                 .get_unchecked(start as usize..(start + count) as usize)

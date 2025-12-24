@@ -1182,6 +1182,111 @@ fn test_fov_zero_velocity_maintains_facing() {
 // These tests document the bugs that need to be fixed.
 // ============================================================
 
+/// Verifies L0 scan is limited to 9 adjacent cells (~21m radius).
+///
+/// This test runs in BOTH production and dev-tools mode (no feature gate).
+/// It validates the invariant by checking neighbor perception, not debug snapshots.
+///
+/// Setup:
+/// - Giant at center with huge perception range (body_size=5.0 → range ~112m)
+/// - Nearby creature at ~15m (within L0 range, should be perceived)
+/// - Distant creature at ~50m (outside L0 range, should NOT be perceived)
+///
+/// If L0 scan was incorrectly unlimited, the giant would perceive the distant creature.
+#[test]
+fn test_l0_scan_limited_to_adjacent_cells() {
+    use crate::simulation::core::SimulationBuilder;
+    use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::CritId;
+    use crate::simulation::spatial::constants::CELL_SIZE;
+
+    // L0_VISIBLE_RANGE ≈ sqrt(2) × 1.5 × CELL_SIZE = 21.2m (for CELL_SIZE=10)
+    let l0_visible_range = 1.41421356 * 1.5 * CELL_SIZE;
+
+    let mut sim = SimulationBuilder::new().build();
+    sim.set_boundaries(200.0, 200.0);
+
+    // Giant at center with body_size=5.0 → perception range ~112m
+    // This is WAY beyond L0_VISIBLE_RANGE (~21m)
+    let giant_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(100.0, 100.0)
+            .with_size(5.0)
+            .facing(0.0) // face right so targets are in FOV
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Nearby creature at ~15m (within L0 visible range, should be perceived)
+    let nearby_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(115.0, 100.0) // 15m to the right
+            .with_size(3.0)   // Large enough to be perceived by giant
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Distant creature at ~50m (outside L0 visible range, should NOT be perceived)
+    // Even though giant's perception range is ~112m, L0 scan is limited to ~21m
+    let distant_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(150.0, 100.0) // 50m to the right
+            .with_size(3.0)   // Same size as nearby
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Find entities by CritId
+    let world = sim.world_mut();
+    let giant_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == giant_id)
+        .map(|(e, _)| e)
+        .expect("Giant should exist");
+    let nearby_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == nearby_id)
+        .map(|(e, _)| e)
+        .expect("Nearby should exist");
+    let distant_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == distant_id)
+        .map(|(e, _)| e)
+        .expect("Distant should exist");
+
+    // Run multiple ticks to ensure spatial grid is populated
+    // (first tick inserts creatures into grid, subsequent ticks do perception)
+    for _ in 0..3 {
+        sim.update(0.016);
+    }
+
+    // Check the giant's neighbor cache
+    let world = sim.world();
+    let cache = world
+        .get::<super::components::NeighborCache>(giant_entity)
+        .expect("Giant should have NeighborCache");
+
+    // CRITICAL ASSERTION: Nearby creature (15m) should be perceived
+    assert!(
+        cache.contains(nearby_entity),
+        "Giant should perceive nearby creature at ~15m (within L0_VISIBLE_RANGE of ~{:.1}m)",
+        l0_visible_range
+    );
+
+    // CRITICAL ASSERTION: Distant creature (50m) should NOT be perceived
+    // If this fails, it means L0 scan is not limited to 9 adjacent cells
+    assert!(
+        !cache.contains(distant_entity),
+        "BUG: Giant should NOT perceive distant creature at ~50m. \
+         L0 scan should be limited to 9 adjacent cells (~{:.1}m radius), \
+         not the full perception range (~112m).",
+        l0_visible_range
+    );
+}
+
 /// BUG TEST: Giant should NOT query L0 cells beyond 9 adjacent.
 /// Currently FAILS because query_radius uses perception range (119m for giant).
 ///

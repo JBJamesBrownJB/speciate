@@ -253,21 +253,15 @@ pub fn update_perception_system(
                         if is_non_adjacent && expanded_cutoff_dist_sq < f32::MAX {
                             let cell_center_dist_sq = sort_key - NON_ADJACENT_OFFSET;
                             if cell_center_dist_sq > expanded_cutoff_dist_sq {
-                                // DEV-TOOLS: Capture skipped cells for debug target
+                                // DEV-TOOLS: Capture this skipped cell before breaking
+                                // (remaining cells are beyond cutoff - no need to enumerate all)
                                 #[cfg(feature = "dev-tools")]
                                 if is_debug_target {
-                                    // This cell and remaining cells are skipped
                                     let (cx, cy) = grid_ref.get_cell_coords_by_index(cell_idx);
                                     debug_skipped.push((cx, cy));
                                 }
-                                #[cfg(not(feature = "dev-tools"))]
+                                // ALWAYS break - identical behavior with/without dev-tools
                                 break;
-                                #[cfg(feature = "dev-tools")]
-                                if !is_debug_target {
-                                    break;
-                                } else {
-                                    continue; // Keep iterating to capture ALL skipped cells
-                                }
                             }
                         }
 
@@ -433,13 +427,11 @@ pub fn update_perception_system(
 
         if let Some(target_entity) = debug_target_entity {
             // Find the debug target in our entities list and capture its state
-            if let Some((_, pos, rot, size, perception, neighbor_cache, state)) = entities
+            if let Some((_, pos, rot, _size, perception, neighbor_cache, state)) = entities
                 .iter()
                 .find(|(e, _, _, _, _, _, _)| *e == target_entity)
             {
                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
-                // L0 scan uses fixed radius (9 adjacent cells), not perception range
-                let query_radius = L0_SCAN_RADIUS;
 
                 // NOTE: Acceleration is captured LATER by capture_debug_acceleration_system
                 // (runs after behaviors). Set 0.0 here as placeholder - will be overwritten.

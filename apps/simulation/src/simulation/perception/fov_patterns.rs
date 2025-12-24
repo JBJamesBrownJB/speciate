@@ -10,8 +10,15 @@
 //! - FOV < 125°: cull 3 cells (rear diagonals at min 112.5° from octant edge)
 //! - 125° ≤ FOV < 215°: cull 1 cell (directly behind at min 157.5° from octant edge)
 //! - FOV ≥ 215°: query all 9 cells
+//!
+//! FOV-Tier Extended Cells (beyond base 3×3):
+//! - Narrow FOV (<120°): +2 cells FRONT (predator depth hunting)
+//! - Medium FOV (120-200°): No extra cells (generalist)
+//! - Wide FOV (>200°): +2 cells SIDES (prey panoramic awareness)
 
 use std::f32::consts::{FRAC_PI_4, FRAC_PI_8, TAU};
+
+use crate::simulation::creatures::constants::FovTier;
 
 /// Precomputed bitmasks: [bucket][octant] → 9-bit cell mask
 ///
@@ -85,6 +92,95 @@ pub fn should_query_cell(dx: i32, dy: i32, pattern: u16) -> bool {
     );
     let idx = ((dx + 1) * 3 + (dy + 1)) as usize;
     (pattern >> OFFSET_TO_BIT[idx]) & 1 == 1
+}
+
+// =============================================================================
+// FOV-Tier Extended Cells
+// =============================================================================
+// Precomputed cell offsets for specialized perception beyond base 3×3 grid.
+// Indexed by octant (0-7): E, NE, N, NW, W, SW, S, SE
+//
+// BIOLOGICAL BASIS:
+// - Narrow FOV (predators): Forward-facing eyes sacrifice peripheral vision for
+//   depth perception. Extended front cells model binocular hunting zone.
+// - Wide FOV (prey): Lateral eyes sacrifice depth for panoramic awareness.
+//   Extended side cells model peripheral threat detection.
+
+/// Narrow FOV extra cells: 2 cells extending forward in facing direction
+/// Used by predator archetypes (<120° FOV) for depth hunting
+///
+/// Grid visualization (East-facing example):
+/// ```text
+///     ┌─┬─┬─┐
+///     │ │ │ │
+///     ├─┼─┼─┼─┬─┐
+///     │ │●→│ │▓│▓│  ▓ = extra cells at (2,0) and (3,0)
+///     ├─┼─┼─┼─┴─┘
+///     │ │ │ │
+///     └─┴─┴─┘
+/// ```
+const NARROW_FRONT_CELLS: [[(i8, i8); 2]; 8] = [
+    [(2, 0), (3, 0)],     // Octant 0 (E):  extends +x
+    [(2, 2), (3, 3)],     // Octant 1 (NE): extends +x,+y diagonal
+    [(0, 2), (0, 3)],     // Octant 2 (N):  extends +y
+    [(-2, 2), (-3, 3)],   // Octant 3 (NW): extends -x,+y diagonal
+    [(-2, 0), (-3, 0)],   // Octant 4 (W):  extends -x
+    [(-2, -2), (-3, -3)], // Octant 5 (SW): extends -x,-y diagonal
+    [(0, -2), (0, -3)],   // Octant 6 (S):  extends -y
+    [(2, -2), (3, -3)],   // Octant 7 (SE): extends +x,-y diagonal
+];
+
+/// Wide FOV extra cells: 2 cells extending perpendicular to facing direction
+/// Used by prey archetypes (>200° FOV) for panoramic threat detection
+///
+/// Grid visualization (East-facing example):
+/// ```text
+///         ┌─┐
+///         │▓│  ▓ = extra cell at (0, 2)
+///     ┌─┬─┼─┼─┬─┐
+///     │ │ │ │ │ │
+///     ├─┼─┼─┼─┼─┤
+///     │ │ │●│ │ │  ● = creature facing East
+///     ├─┼─┼─┼─┼─┤
+///     │ │ │ │ │ │
+///     └─┴─┼─┼─┴─┘
+///         │▓│  ▓ = extra cell at (0, -2)
+///         └─┘
+/// ```
+const WIDE_SIDE_CELLS: [[(i8, i8); 2]; 8] = [
+    [(0, 2), (0, -2)],    // Octant 0 (E):  sides are ±y
+    [(-1, 2), (2, -1)],   // Octant 1 (NE): perpendicular is NW-SE axis
+    [(2, 0), (-2, 0)],    // Octant 2 (N):  sides are ±x
+    [(2, 1), (-1, -2)],   // Octant 3 (NW): perpendicular is NE-SW axis
+    [(0, 2), (0, -2)],    // Octant 4 (W):  sides are ±y
+    [(1, 2), (-2, -1)],   // Octant 5 (SW): perpendicular is NW-SE axis
+    [(2, 0), (-2, 0)],    // Octant 6 (S):  sides are ±x
+    [(-2, 1), (1, -2)],   // Octant 7 (SE): perpendicular is NE-SW axis
+];
+
+/// Get extra cell offsets for the given FOV tier and facing direction.
+/// Returns None for Medium tier (generalists have no extended perception).
+///
+/// # Arguments
+/// * `fov_tier` - The creature's FOV tier (determined at spawn from DNA)
+/// * `fx`, `fy` - Facing direction vector (normalized or unnormalized)
+///
+/// # Returns
+/// * `Some([(dx1, dy1), (dx2, dy2)])` - Two cell offsets to query
+/// * `None` - No extra cells (Medium tier generalist)
+#[inline]
+pub fn get_extra_cells(fov_tier: FovTier, fx: f32, fy: f32) -> Option<[(i8, i8); 2]> {
+    match fov_tier {
+        FovTier::Medium => None,
+        FovTier::Narrow => {
+            let octant = facing_to_octant(fx, fy);
+            Some(NARROW_FRONT_CELLS[octant])
+        }
+        FovTier::Wide => {
+            let octant = facing_to_octant(fx, fy);
+            Some(WIDE_SIDE_CELLS[octant])
+        }
+    }
 }
 
 #[cfg(test)]
@@ -206,6 +302,99 @@ mod tests {
         for octant in 0..8 {
             assert_eq!(FOV_CELL_PATTERNS[2][octant], 0x1FF);
         }
+    }
+
+    // ==========================================================================
+    // FOV Tier Extended Cells Tests
+    // ==========================================================================
+
+    #[test]
+    fn test_fov_tier_thresholds() {
+        assert_eq!(FovTier::from_fov_degrees(90.0), FovTier::Narrow);
+        assert_eq!(FovTier::from_fov_degrees(119.9), FovTier::Narrow);
+        assert_eq!(FovTier::from_fov_degrees(120.0), FovTier::Medium);
+        assert_eq!(FovTier::from_fov_degrees(180.0), FovTier::Medium);
+        assert_eq!(FovTier::from_fov_degrees(200.0), FovTier::Medium);
+        assert_eq!(FovTier::from_fov_degrees(200.1), FovTier::Wide);
+        assert_eq!(FovTier::from_fov_degrees(340.0), FovTier::Wide);
+    }
+
+    #[test]
+    fn test_fov_tier_has_extra_cells() {
+        assert!(FovTier::Narrow.has_extra_cells());
+        assert!(!FovTier::Medium.has_extra_cells());
+        assert!(FovTier::Wide.has_extra_cells());
+    }
+
+    #[test]
+    fn test_get_extra_cells_medium_returns_none() {
+        assert!(get_extra_cells(FovTier::Medium, 1.0, 0.0).is_none());
+        assert!(get_extra_cells(FovTier::Medium, 0.0, 1.0).is_none());
+        assert!(get_extra_cells(FovTier::Medium, -1.0, -1.0).is_none());
+    }
+
+    #[test]
+    fn test_get_extra_cells_narrow_facing_east() {
+        let cells = get_extra_cells(FovTier::Narrow, 1.0, 0.0).unwrap();
+        assert_eq!(cells, [(2, 0), (3, 0)]);
+    }
+
+    #[test]
+    fn test_get_extra_cells_narrow_facing_north() {
+        let cells = get_extra_cells(FovTier::Narrow, 0.0, 1.0).unwrap();
+        assert_eq!(cells, [(0, 2), (0, 3)]);
+    }
+
+    #[test]
+    fn test_get_extra_cells_narrow_facing_west() {
+        let cells = get_extra_cells(FovTier::Narrow, -1.0, 0.0).unwrap();
+        assert_eq!(cells, [(-2, 0), (-3, 0)]);
+    }
+
+    #[test]
+    fn test_get_extra_cells_narrow_facing_south() {
+        let cells = get_extra_cells(FovTier::Narrow, 0.0, -1.0).unwrap();
+        assert_eq!(cells, [(0, -2), (0, -3)]);
+    }
+
+    #[test]
+    fn test_get_extra_cells_narrow_facing_northeast() {
+        let cells = get_extra_cells(FovTier::Narrow, 1.0, 1.0).unwrap();
+        assert_eq!(cells, [(2, 2), (3, 3)]);
+    }
+
+    #[test]
+    fn test_get_extra_cells_wide_facing_east() {
+        let cells = get_extra_cells(FovTier::Wide, 1.0, 0.0).unwrap();
+        assert_eq!(cells, [(0, 2), (0, -2)]);
+    }
+
+    #[test]
+    fn test_get_extra_cells_wide_facing_north() {
+        let cells = get_extra_cells(FovTier::Wide, 0.0, 1.0).unwrap();
+        assert_eq!(cells, [(2, 0), (-2, 0)]);
+    }
+
+    #[test]
+    fn test_get_extra_cells_wide_perpendicular_pattern() {
+        let east = get_extra_cells(FovTier::Wide, 1.0, 0.0).unwrap();
+        let north = get_extra_cells(FovTier::Wide, 0.0, 1.0).unwrap();
+        assert_ne!(east, north);
+        assert_eq!(east[0].0, 0);
+        assert_eq!(north[0].1, 0);
+    }
+
+    #[test]
+    fn test_narrow_front_cells_symmetric() {
+        let e = get_extra_cells(FovTier::Narrow, 1.0, 0.0).unwrap();
+        let w = get_extra_cells(FovTier::Narrow, -1.0, 0.0).unwrap();
+        assert_eq!(e[0].0, -w[0].0);
+        assert_eq!(e[0].1, w[0].1);
+
+        let n = get_extra_cells(FovTier::Narrow, 0.0, 1.0).unwrap();
+        let s = get_extra_cells(FovTier::Narrow, 0.0, -1.0).unwrap();
+        assert_eq!(n[0].0, s[0].0);
+        assert_eq!(n[0].1, -s[0].1);
     }
 
 }

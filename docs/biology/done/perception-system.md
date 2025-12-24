@@ -17,7 +17,7 @@ Provides FOV-based neighbor detection using a hierarchical spatial grid (L0/L1).
 
 ### Perception Component
 
-**Location:** `perception/components.rs:43-49`
+**Location:** `perception/components.rs:47-55`
 
 **Fields:**
 - `fov_angle` - Field of view in radians
@@ -25,6 +25,7 @@ Provides FOV-based neighbor detection using a hierarchical spatial grid (L0/L1).
 - `cos_half_fov_sq` - Cached for sqrt-free FOV checks
 - `cos_half_fov` - Cached for wide FOV checks (sign matters)
 - `threshold` - L1 mass threshold for size domination filtering
+- `fov_tier` - FOV tier for extended cell patterns (Narrow/Medium/Wide, computed at spawn)
 
 **Scaling:**
 - `from_body_size(body_length)` - Range = body_length × PERCEPTION_MULTIPLIER (at 180° FOV)
@@ -63,6 +64,45 @@ Cold neighbor cache - written by perception, read by avoidance/steering.
 When the L1 cell's total mass is below the creature's perception threshold (5% of body mass), the entire L0 cell scan is skipped. This provides both:
 - **Performance win:** Skip entity iteration entirely
 - **Biological behavior:** Size domination (large creatures ignore insignificant small ones)
+
+### FOV-Tier Extended Cells
+
+**Location:** `perception/fov_patterns.rs`, `creatures/constants/perception.rs`
+
+**Golden Zone:** Generalists (120-200° FOV) query fewer cells = computationally cheaper AND biologically accurate.
+
+FOV tier determines the L0 grid pattern beyond the base 3×3:
+
+| FOV Range | Tier | Extra Cells | Total | Biological Analog |
+|-----------|------|-------------|-------|-------------------|
+| < 120° | Narrow | +2 front | 11 | Predator hunting zone |
+| 120-200° | Medium | None | 9 | Generalist balance |
+| > 200° | Wide | +2 sides | 11 | Prey panoramic vision |
+
+**Grid Patterns:**
+
+```
+NARROW (<120°):           MEDIUM (120-200°):        WIDE (>200°):
+    ┌─┬─┬─┐                   ┌─┬─┬─┐               ┌─┬─┬─┬─┬─┐
+    │ │ │ │                   │ │ │ │               │ │ │ │ │ │
+    ├─┼─┼─┼─┬─┐               ├─┼─┼─┤           ┌─┬─┼─┼─┼─┼─┼─┬─┐
+    │ │●→│ │▓│▓│              │ │●│ │           │▓│▓│ │●│ │▓│▓│
+    ├─┼─┼─┼─┴─┘               ├─┼─┼─┤           └─┴─┼─┼─┼─┼─┼─┴─┘
+    │ │ │ │                   │ │ │ │               │ │ │ │ │
+    └─┴─┴─┘                   └─┴─┴─┘               └─┴─┴─┴─┴─┘
+    (depth hunting)           (balanced)            (panoramic threat)
+```
+
+**Biological Basis:**
+- **Narrow FOV (predators):** Forward-facing eyes (owls, cats, raptors) sacrifice peripheral vision for binocular depth perception. Extended front cells model the hunting zone for precise strike distance estimation.
+- **Wide FOV (prey):** Lateral eyes (rabbits, horses, deer) sacrifice depth perception for panoramic threat detection. Extended side cells model early predator awareness.
+- **Medium FOV (generalists):** Balanced eyes (wolves, bears) have no extreme specialization, so no extended cells.
+
+**Implementation:**
+1. `FovTier` enum determines tier at spawn from FOV degrees
+2. `fov_tier` field stored in Perception component (1 byte, computed once)
+3. Per-tick: `get_extra_cells(fov_tier, facing_x, facing_y)` returns 2 cell offsets based on current facing octant
+4. Extra cells queried after base 3×3, same filtering applied (range, FOV, size domination)
 
 ### FOV Check
 
@@ -112,6 +152,7 @@ Large creatures don't perceive small entities below their threshold.
 | L1 early-exit | Skip entire L0 cells for sparse areas |
 | Size domination | Giants have smaller neighbor sets |
 | Fixed 9-cell scan | Consistent L0 query regardless of perception range |
+| FOV-tier patterns | Generalists (Medium) query 9 cells, specialists (Narrow/Wide) query 11 |
 | Topological sort | Only compute K closest (partial sort) |
 | Rayon parallel | Multi-core processing |
 
@@ -151,9 +192,11 @@ Runtime-adjustable Hz for perception system using entity-ID bucketing.
 ## References
 
 - `apps/simulation/src/simulation/perception/` - Implementation
+- `apps/simulation/src/simulation/perception/fov_patterns.rs` - FOV-tier extended cell patterns
+- `apps/simulation/src/simulation/creatures/constants/perception.rs` - FovTier enum and thresholds
 - `docs/biology/done/avoidance-behavior.md` - TTC-based avoidance
 - `ABC-SUPER_SPRINT/1-dual-grid.md` - L1 grid design
 
 ---
 
-**Last Updated:** 2025-12-23
+**Last Updated:** 2025-12-24

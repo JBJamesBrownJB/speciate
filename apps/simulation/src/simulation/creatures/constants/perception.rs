@@ -74,3 +74,56 @@ pub const SIZE_ALLOMETRY_REFERENCE: f32 = 0.5;
 /// Higher values = less sensitive (ignore small things).
 /// 0.05 means a creature ignores cells with mass less than 5% of its own.
 pub const PERCEPTION_THRESHOLD_FRACTION: f32 = 0.05;
+
+// =============================================================================
+// FOV-BASED GRID PATTERNS (L0 Extended Cells)
+// =============================================================================
+
+/// [ACTIVE] Narrow FOV threshold (degrees).
+/// Creatures with FOV below this get +2 front cells (predator depth perception).
+/// BIOLOGICAL BASIS: Forward-facing eyes (owls, cats, raptors) sacrifice peripheral
+/// vision for binocular depth perception, enabling precise strike distance estimation.
+pub const NARROW_FOV_THRESHOLD: f32 = 120.0;
+
+/// [ACTIVE] Wide FOV threshold (degrees).
+/// Creatures with FOV above this get +2 side cells (prey peripheral awareness).
+/// BIOLOGICAL BASIS: Lateral eyes (rabbits, horses, deer) sacrifice depth perception
+/// for panoramic threat detection, enabling early predator awareness.
+pub const WIDE_FOV_THRESHOLD: f32 = 200.0;
+
+/// FOV tier classification for L0 grid pattern selection.
+/// Determines which extra cells (if any) are queried beyond base 3×3.
+///
+/// GOLDEN ZONE: Medium-tier creatures (generalists) query FEWER cells than
+/// specialists, making them computationally cheaper AND biologically accurate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum FovTier {
+    /// Narrow FOV (<120°): +2 front cells for predator depth hunting
+    Narrow = 0,
+    /// Medium FOV (120-200°): Base 3×3 only (generalist, no specialization)
+    #[default]
+    Medium = 1,
+    /// Wide FOV (>200°): +2 side cells for prey panoramic awareness
+    Wide = 2,
+}
+
+impl FovTier {
+    /// Determine FOV tier from FOV in degrees
+    #[inline]
+    pub fn from_fov_degrees(fov: f32) -> Self {
+        if fov < NARROW_FOV_THRESHOLD {
+            FovTier::Narrow
+        } else if fov > WIDE_FOV_THRESHOLD {
+            FovTier::Wide
+        } else {
+            FovTier::Medium
+        }
+    }
+
+    /// Returns true if this tier has extra cells beyond base 3×3
+    #[inline]
+    pub fn has_extra_cells(&self) -> bool {
+        !matches!(self, FovTier::Medium)
+    }
+}

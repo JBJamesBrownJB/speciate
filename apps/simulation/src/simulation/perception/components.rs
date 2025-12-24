@@ -2,7 +2,7 @@ use bevy_ecs::prelude::*;
 
 use super::classification::{L1Classification, MAX_L1_PERCEPTIONS};
 use crate::simulation::creatures::constants::{
-    DEFAULT_FOV_DEGREES, DEFAULT_MASS, FOV_RANGE_EXPONENT, MAX_PERCEIVED_NEIGHBORS,
+    DEFAULT_FOV_DEGREES, DEFAULT_MASS, FOV_RANGE_EXPONENT, FovTier, MAX_PERCEIVED_NEIGHBORS,
     PERCEPTION_MULTIPLIER, PERCEPTION_THRESHOLD_FRACTION, SIZE_ALLOMETRY_EXPONENT,
     SIZE_ALLOMETRY_REFERENCE,
 };
@@ -42,7 +42,7 @@ impl Default for NeighborData {
     }
 }
 
-/// Hot perception data (~24 bytes) - read every tick for range/FOV checks
+/// Hot perception data (~28 bytes) - read every tick for range/FOV checks
 /// Split from NeighborCache for cache locality optimization
 #[derive(Component, Debug, Clone)]
 pub struct Perception {
@@ -51,6 +51,7 @@ pub struct Perception {
     pub cos_half_fov_sq: f32, // Cached cos²(fov_angle/2) for sqrt-free FOV checks
     pub cos_half_fov: f32, // Cached cos(fov_angle/2) for wide FOV checks (sign matters)
     pub threshold: f32, // L1 mass threshold: ignore cells with total_mass below this
+    pub fov_tier: FovTier, // FOV tier for extended cell patterns (determined at spawn)
 }
 
 /// Cold neighbor cache - written by perception, read by avoidance
@@ -65,17 +66,20 @@ impl Perception {
     /// Create perception with explicit FOV (in degrees) and body size
     /// Range is automatically derived using biological tradeoff formula
     /// Threshold is derived from body mass for L1 early-exit optimization
+    /// FovTier is determined at spawn for extended cell pattern selection
     pub fn new(fov_angle_degrees: f32, body_size: f32) -> Self {
         let fov_rad = fov_angle_degrees.to_radians();
         let range = Self::calculate_range(body_size, fov_angle_degrees);
         let cos_half_fov = (fov_rad / 2.0).cos();
         let threshold = Self::calculate_threshold(body_size);
+        let fov_tier = FovTier::from_fov_degrees(fov_angle_degrees);
         Self {
             fov_angle: fov_rad,
             range,
             cos_half_fov_sq: cos_half_fov * cos_half_fov,
             cos_half_fov,
             threshold,
+            fov_tier,
         }
     }
 

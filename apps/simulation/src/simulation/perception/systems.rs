@@ -230,6 +230,9 @@ pub fn update_perception_system(
                         Vec::new()
                     };
 
+                    // Get FOV tier for extended cell pattern lookup
+                    let fov_tier = perception.fov_tier;
+
                     for &(sort_key, cell_idx) in cells.iter() {
                         // Detect transition from adjacent to non-adjacent cells.
                         // Adjacent cells: sort_key = distance² (typically < 500 for ~22m diagonal)
@@ -351,6 +354,101 @@ pub fn update_perception_system(
                                 // Track max distance in adjacent cells (O(1) per candidate)
                                 if !is_non_adjacent && center_dist_sq > max_adjacent_dist_sq {
                                     max_adjacent_dist_sq = center_dist_sq;
+                                }
+                            }
+                        }
+                    }
+
+                    // =================================================================
+                    // FOV-TIER EXTENDED CELLS: Query extra cells for Narrow/Wide FOV
+                    // =================================================================
+                    // Narrow FOV (<120°): +2 cells FRONT (predator depth hunting)
+                    // Wide FOV (>200°): +2 cells SIDES (prey panoramic awareness)
+                    // Medium FOV (120-200°): No extra cells (generalist)
+                    //
+                    // GOLDEN ZONE: Generalists query fewer cells = cheaper AND biologically accurate
+                    if let Some(extra_offsets) =
+                        fov_patterns::get_extra_cells(fov_tier, facing_x, facing_y)
+                    {
+                        for (dx, dy) in extra_offsets {
+                            let extra_cx = creature_cx + dx as i32;
+                            let extra_cy = creature_cy + dy as i32;
+
+                            // Get cell index (None if outside grid bounds)
+                            let Some(extra_cell_idx) =
+                                grid_ref.get_cell_index_by_coords(extra_cx, extra_cy)
+                            else {
+                                continue;
+                            };
+
+                            // DEV-TOOLS: Track extra cells for debug visualization
+                            #[cfg(feature = "dev-tools")]
+                            if is_debug_target {
+                                debug_queried.push((extra_cx, extra_cy));
+                            }
+
+                            // L1 classification check (same as base cells)
+                            let parent_l1_idx =
+                                l1_grid_ref.l0_to_l1_cell_index(extra_cell_idx, l0_width);
+                            let classification = get_l1_classification(
+                                parent_l1_idx,
+                                &mut l1_cache,
+                                &mut l1_cache_count,
+                            );
+
+                            if classification == L1Classification::Empty {
+                                continue;
+                            }
+
+                            // Process entities in this extra cell
+                            for proxy in grid_ref.get_cell_proxies(extra_cell_idx) {
+                                if *entity == proxy.entity {
+                                    continue;
+                                }
+
+                                let dx = proxy.x - x;
+                                let dy = proxy.y - y;
+                                let center_dist_sq = dx * dx + dy * dy;
+
+                                // Range check
+                                let max_dist = base_dist + proxy.radius;
+                                if center_dist_sq > max_dist * max_dist {
+                                    continue;
+                                }
+
+                                // FOV check
+                                let rough_dot = dx * facing_x + dy * facing_y;
+                                let in_fov = is_in_fov(
+                                    rough_dot,
+                                    center_dist_sq,
+                                    cos_half_fov,
+                                    cos_half_fov_sq,
+                                );
+
+                                if in_fov {
+                                    // Size domination filter
+                                    let target_mass = BioSignature::mass_from_radius(proxy.radius);
+                                    if !should_perceive_entity(
+                                        threshold,
+                                        target_mass,
+                                        center_dist_sq,
+                                        range_sq,
+                                        in_fov,
+                                    ) {
+                                        continue;
+                                    }
+
+                                    candidates.push((
+                                        center_dist_sq,
+                                        NeighborData {
+                                            entity: proxy.entity,
+                                            x: proxy.x,
+                                            y: proxy.y,
+                                            vx: proxy.vx,
+                                            vy: proxy.vy,
+                                            radius: proxy.radius,
+                                        },
+                                    ));
                                 }
                             }
                         }

@@ -686,6 +686,24 @@ impl SpatialGrid {
         )
     }
 
+    /// Get cell index from cell coordinates (cx, cy).
+    /// Returns None if coordinates are outside grid bounds.
+    #[inline(always)]
+    pub fn get_cell_index_by_coords(&self, cx: i32, cy: i32) -> Option<usize> {
+        let local_x = cx - self.min_cell_x;
+        let local_y = cy - self.min_cell_y;
+
+        if local_x < 0
+            || local_y < 0
+            || local_x >= self.width as i32
+            || local_y >= self.height as i32
+        {
+            return None;
+        }
+
+        Some((local_y as usize) * self.width + (local_x as usize))
+    }
+
     /// Query entities within radius. Returns iterator over contiguous slices.
     #[inline(always)]
     pub fn query_radius(

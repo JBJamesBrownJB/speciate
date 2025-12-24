@@ -1,6 +1,9 @@
 pub mod noise;
 pub mod systems;
 
+#[cfg(test)]
+mod tests;
+
 pub use noise::*;
 pub use systems::*;
 

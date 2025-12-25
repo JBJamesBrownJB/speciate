@@ -156,6 +156,12 @@ This is lower priority since:
 2. Giants are typically detected from further away (seismic) before FOV matters
 3. Fix would require circle-cone intersection test (more complex)
 
+## Combine with gameplay features
+
+- Screen shake when they are near
+- Thumping sound
+- Chance to 'panic' crits..
+
 ## Prerequisites
 
 - L1 grid already tracks `max_size` per cell via `BioSignature`

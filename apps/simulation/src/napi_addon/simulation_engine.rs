@@ -627,6 +627,27 @@ impl SimulationEngine {
         f32::from_bits(self.time_scale.load(Ordering::SeqCst)) as f64
     }
 
+    /// Set frequency divisor for a cognitive system
+    ///
+    /// # Arguments
+    /// * `system` - System name: "perception", "behavior", or "steering"
+    /// * `divisor` - Frequency divisor (1 = every tick, 2 = every 2nd tick, etc.)
+    ///
+    /// # Errors
+    /// * Simulation not started
+    /// * Command queue full
+    #[napi]
+    pub fn set_system_frequency(&self, system: String, divisor: u8) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
+            .try_send(SimCommand::SetSystemFrequency { system, divisor })
+            .map_err(|e| {
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
+            })?;
+        Ok(())
+    }
+
     /// Set viewport bounds for culling
     ///
     /// When enabled, export_positions() only sends creatures within these bounds.

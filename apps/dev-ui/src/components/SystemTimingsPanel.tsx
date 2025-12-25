@@ -183,10 +183,37 @@ const NON_TIMING_METRICS = ['archetypeCount', 'entityCount', 'cellsQueriedTotal'
 // Count metrics that get their own sparkline section
 const COUNT_METRICS = ['cellsQueriedTotal'];
 
+// Systems with frequency control (maps timing key to system name for IPC)
+// Note: steering throttling removed - will revisit after drive-simplex (Phase B)
+const FREQUENCY_CONTROLLABLE: Record<string, string> = {
+  perceptionUs: 'perception',
+  behaviorTransitionUs: 'behavior',
+};
+
 // Convert camelCase to snake_case for display
 const toSnakeCase = (str: string): string => {
   return str.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
 };
+
+interface FrequencySliderProps {
+  systemName: string;
+  divisor: number;
+  onChange: (divisor: number) => void;
+}
+
+const FrequencySlider: React.FC<FrequencySliderProps> = ({ systemName, divisor, onChange }) => (
+  <div className="frequency-slider">
+    <input
+      type="range"
+      min="1"
+      max="10"
+      value={divisor}
+      onChange={(e) => onChange(Number(e.target.value))}
+      title={`${systemName} frequency divisor: ÷${divisor}`}
+    />
+    <span className="divisor-label">÷{divisor}</span>
+  </div>
+);
 
 export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
   // Dynamic refs and history storage
@@ -194,6 +221,17 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
   const historyRefs = useRef<Record<string, SparklineData>>({});
   const averageRefs = useRef<Record<string, number>>({});
   const [sortedKeys, setSortedKeys] = useState<string[]>([]);
+
+  // Frequency divisor state for controllable systems
+  const [divisors, setDivisors] = useState<Record<string, number>>({
+    perception: 1,
+    behavior: 1,
+  });
+
+  const handleDivisorChange = (systemName: string, divisor: number) => {
+    setDivisors(prev => ({ ...prev, [systemName]: divisor }));
+    window.electron?.setSystemFrequency?.(systemName, divisor);
+  };
 
   // Rolling average window: 1 second at ~30Hz = ~30 frames
   const ROLLING_WINDOW_FRAMES = 30;
@@ -314,6 +352,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
       name: toSnakeCase(key),
       valueUs: averageRefs.current[key] || (timings[key as keyof SystemTimingsSnapshot] as number),
       canvasRef: canvasRefs.current[key],
+      systemName: FREQUENCY_CONTROLLABLE[key] || null,
     }));
 
   // Count metrics (cells queried, etc.)
@@ -348,12 +387,20 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
       </div>
       <div className="timings-grid">
         {otherMetrics.map((entry) => (
-          <TimingRow
-            key={entry.key}
-            name={entry.name}
-            valueUs={entry.valueUs}
-            canvasRef={entry.canvasRef}
-          />
+          <div key={entry.key} className="timing-row-container">
+            <TimingRow
+              name={entry.name}
+              valueUs={entry.valueUs}
+              canvasRef={entry.canvasRef}
+            />
+            {entry.systemName && (
+              <FrequencySlider
+                systemName={entry.systemName}
+                divisor={divisors[entry.systemName]}
+                onChange={(divisor) => handleDivisorChange(entry.systemName!, divisor)}
+              />
+            )}
+          </div>
         ))}
       </div>
 

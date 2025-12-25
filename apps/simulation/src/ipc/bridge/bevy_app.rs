@@ -10,7 +10,7 @@
 use super::PerceptionDebugBuffer;
 use super::{DoubleBuffer, TelemetrySnapshot};
 use crate::ipc::SimCommand;
-use crate::simulation::core::components::{BodySize, Position, Rotation};
+use crate::simulation::core::components::{BodySize, FreqConfig, Position, Rotation};
 use crate::simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::components::{BehaviorMode, CritId};
@@ -256,6 +256,20 @@ impl NapiApp {
                     if let Some(time_scale_ref) = &self.time_scale {
                         time_scale_ref.store(scale.to_bits(), std::sync::atomic::Ordering::SeqCst);
                         eprintln!("[NAPI] Time scale set to {}x", scale);
+                    }
+                }
+                SimCommand::SetSystemFrequency { system, divisor } => {
+                    if let Some(mut config) =
+                        self.simulation.world.get_resource_mut::<FreqConfig>()
+                    {
+                        let divisor = divisor.max(1); // Ensure minimum of 1
+                        match system.as_str() {
+                            "perception" => config.perception_divisor = divisor,
+                            "behavior" => config.behavior_divisor = divisor,
+                            "steering" => config.steering_divisor = divisor,
+                            _ => eprintln!("[NAPI] Unknown system for frequency: {}", system),
+                        }
+                        eprintln!("[NAPI] Set {} frequency divisor to {}", system, divisor);
                     }
                 }
                 SimCommand::SetViewportBounds {

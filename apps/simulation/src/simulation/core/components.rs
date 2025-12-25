@@ -138,6 +138,26 @@ impl Default for ActualTickRate {
     }
 }
 
+/// Runtime-adjustable frequency divisors for cognitive systems.
+/// Divisor=1 means every tick (full rate), divisor=2 means every 2nd tick, etc.
+/// Uses entity-ID bucketing to distribute updates evenly across ticks.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct FreqConfig {
+    pub perception_divisor: u8,
+    pub behavior_divisor: u8,
+    pub steering_divisor: u8,
+}
+
+impl Default for FreqConfig {
+    fn default() -> Self {
+        Self {
+            perception_divisor: 1,
+            behavior_divisor: 1,
+            steering_divisor: 1,
+        }
+    }
+}
+
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct BoundaryConfig {
     pub min_x: f32,

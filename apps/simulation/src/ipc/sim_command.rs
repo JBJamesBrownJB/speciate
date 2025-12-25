@@ -36,6 +36,8 @@ pub enum SimCommand {
     SelectCreatureDebug(Option<u32>),
     SetPaused(bool),
     SetTimeScale(f32),
+    /// Set frequency divisor for a cognitive system (perception, behavior, steering)
+    SetSystemFrequency { system: String, divisor: u8 },
     SetViewportBounds {
         min_x: f32,
         min_y: f32,

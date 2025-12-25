@@ -1,4 +1,4 @@
-use super::components::{ActualTickRate, BoundaryConfig, DeltaTime, PhysicsTick};
+use super::components::{ActualTickRate, BoundaryConfig, DeltaTime, FreqConfig, PhysicsTick};
 use super::world_bounds::WorldBounds;
 use crate::config::MovementConfig;
 use crate::simulation::creatures::behaviors::behavior_transition_system;
@@ -106,6 +106,7 @@ impl SimulationBuilder {
         world.insert_resource(WorldBounds::default());
         world.insert_resource(PhysicsTick::default());
         world.insert_resource(ActualTickRate::default());
+        world.insert_resource(FreqConfig::default());
         world.insert_resource(MovementConfig::default());
         world.insert_resource(crate::simulation::movement::noise::NoiseTable::default());
 

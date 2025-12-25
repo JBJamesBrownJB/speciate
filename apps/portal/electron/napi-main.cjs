@@ -489,6 +489,26 @@ ipcMain.on('set-time-scale', (event, scale) => {
 });
 
 /**
+ * IPC handler: Set system frequency divisor (dev-ui)
+ *
+ * Controls update frequency for cognitive systems (perception, behavior, steering).
+ * divisor=1 means every tick, divisor=2 means every 2nd tick, etc.
+ */
+ipcMain.on('set-system-frequency', (event, { systemName, divisor }) => {
+  if (!simulationEngine) {
+    console.error('[Electron NAPI] Cannot set system frequency: simulation not running');
+    return;
+  }
+
+  try {
+    simulationEngine.setSystemFrequency(systemName, divisor);
+    console.log(`[Electron NAPI] Set ${systemName} frequency divisor to ${divisor}`);
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to set system frequency:', error);
+  }
+});
+
+/**
  * IPC handler: Set viewport bounds for culling (portal)
  *
  * When viewport bounds are set, the backend only exports creatures within

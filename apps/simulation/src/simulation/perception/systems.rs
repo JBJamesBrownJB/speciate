@@ -6,7 +6,7 @@ use super::entity_filter::should_perceive_entity;
 use super::fov_patterns;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
-use crate::simulation::core::components::{BodySize, PhysicsTick, Position, Rotation};
+use crate::simulation::core::components::{BodySize, FreqConfig, PhysicsTick, Position, Rotation};
 use crate::simulation::creatures::components::CreatureState;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
@@ -62,7 +62,8 @@ pub(crate) fn is_in_fov(rough_dot: f32, center_dist_sq: f32, cos_half_fov: f32, 
 }
 
 pub fn update_perception_system(
-    _physics_tick: Res<PhysicsTick>,
+    physics_tick: Res<PhysicsTick>,
+    freq: Res<FreqConfig>,
     grid: Res<HierarchicalGrid>,
     mut query: Query<(
         Entity,
@@ -98,6 +99,11 @@ pub fn update_perception_system(
     // Get L1 grid reference for early-exit optimization
     let l1_grid_ref = &grid.l1;
 
+    // Frequency throttling: entity-ID bucketing
+    // divisor=1 means every tick (no throttling), divisor=2 means every 2nd tick, etc.
+    let divisor = freq.perception_divisor.max(1) as usize;
+    let current_bucket = (physics_tick.get() as usize) % divisor;
+
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
@@ -107,11 +113,20 @@ pub fn update_perception_system(
             // Check if this entity is the debug target (dev-tools only)
             #[cfg(feature = "dev-tools")]
             let is_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
-            neighbor_cache.clear();
+
+            // Frequency throttling: skip if not in current bucket
+            // When divisor=1, all entities are in bucket 0 (no skip)
+            // IMPORTANT: Do NOT clear neighbor_cache when skipping - keep stale data
+            if (entity.index() as usize) % divisor != current_bucket {
+                return;
+            }
 
             if !state.behavior.is_active() {
                 return;
             }
+
+            // Clear neighbor cache only when we're actually updating perception
+            neighbor_cache.clear();
 
             let x = pos.x;
             let y = pos.y;

@@ -210,6 +210,25 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   /**
+   * Set cognitive system update frequency divisor (dev tools only)
+   *
+   * Controls how often perception, behavior, and steering systems run.
+   * divisor=1 means every tick (full rate), divisor=2 means every 2nd tick, etc.
+   *
+   * @param {string} systemName - 'perception', 'behavior', or 'steering'
+   * @param {number} divisor - frequency divisor (1-10)
+   */
+  setSystemFrequency: (systemName, divisor) => {
+    if (typeof systemName !== 'string') {
+      throw new Error('setSystemFrequency: systemName must be a string');
+    }
+    if (typeof divisor !== 'number') {
+      throw new Error('setSystemFrequency: divisor must be a number');
+    }
+    ipcRenderer.send('set-system-frequency', { systemName, divisor });
+  },
+
+  /**
    * Set viewport bounds for backend culling
    *
    * When set, the backend only exports creatures within these bounds,

@@ -1,4 +1,4 @@
-use crate::simulation::core::components::PhysicsTick;
+use crate::simulation::core::components::{FreqConfig, PhysicsTick};
 use crate::simulation::creatures::components::{BehaviorMode, Brain, BrainMode, CreatureState};
 use crate::simulation::creatures::constants::{
     AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING, TICK_INTERVAL_SECONDS,
@@ -8,7 +8,8 @@ use rayon::prelude::*;
 
 pub fn behavior_transition_system(
     physics_tick: Res<PhysicsTick>,
-    mut query: Query<(&mut CreatureState, &mut Brain)>,
+    freq: Res<FreqConfig>,
+    mut query: Query<(Entity, &mut CreatureState, &mut Brain)>,
     #[cfg(feature = "dev-tools")] timings: bevy_ecs::system::Res<
         crate::instrumentation::SystemTimings,
     >,
@@ -18,10 +19,19 @@ pub fn behavior_transition_system(
 
     let current_time = physics_tick.get() as f64 * TICK_INTERVAL_SECONDS;
 
+    // Frequency throttling: entity-ID bucketing
+    let divisor = freq.behavior_divisor.max(1) as usize;
+    let current_bucket = (physics_tick.get() as usize) % divisor;
+
     let mut entities: Vec<_> = query.iter_mut().collect();
 
     // Transitions: Light workload - moderate chunks
-    entities.par_iter_mut().with_min_len(256).for_each(|(creature_state, brain)| {
+    entities.par_iter_mut().with_min_len(256).for_each(|(entity, creature_state, brain)| {
+        // Frequency throttling: skip if not in current bucket
+        if (entity.index() as usize) % divisor != current_bucket {
+            return;
+        }
+
         creature_state.age += AGE_INCREMENT_PER_TICK;
 
         if creature_state.behavior == BehaviorMode::Wandering {

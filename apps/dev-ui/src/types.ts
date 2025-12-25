@@ -8,12 +8,14 @@ export interface DnaData {
 }
 
 export interface DevCommand {
-  type: 'dev_spawn_creature' | 'dev_load_trial' | 'dev_clear_creatures';
+  type: 'dev_spawn_creature' | 'dev_load_trial' | 'dev_clear_creatures' | 'dev_set_system_frequency';
   x?: number;
   y?: number;
   dna?: DnaData;
   template?: string;
   randomizeDna?: boolean;
+  systemName?: string;
+  divisor?: number;
 }
 
 export interface HardwareMetrics {
@@ -142,6 +144,7 @@ declare global {
   interface Window {
     electron?: {
       sendCommand?: (command: DevCommand) => void;
+      setSystemFrequency?: (systemName: string, divisor: number) => void;
       onStateUpdateBinary?: (callback: (binaryData: Uint8Array) => void) => void;
       onTelemetryUpdate?: (callback: (telemetry: TelemetryFrame) => void) => void;
       removeStateUpdateListener?: () => void;

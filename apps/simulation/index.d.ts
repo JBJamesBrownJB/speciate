@@ -192,6 +192,18 @@ export declare class SimulationEngine {
   /** Get current time scale */
   getTimeScale(): number
   /**
+   * Set frequency divisor for a cognitive system
+   *
+   * # Arguments
+   * * `system` - System name: "perception", "behavior", or "steering"
+   * * `divisor` - Frequency divisor (1 = every tick, 2 = every 2nd tick, etc.)
+   *
+   * # Errors
+   * * Simulation not started
+   * * Command queue full
+   */
+  setSystemFrequency(system: string, divisor: number): void
+  /**
    * Set viewport bounds for culling
    *
    * When enabled, export_positions() only sends creatures within these bounds.

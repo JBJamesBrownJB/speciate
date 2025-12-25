@@ -400,3 +400,35 @@ input[type='range']:disabled::-webkit-slider-thumb {
 .button-group button {
   flex: 1;
 }
+
+/* Frequency Control Sliders */
+.timing-row-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.frequency-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #2a2a2a;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.frequency-slider input[type='range'] {
+  flex: 1;
+  margin: 0;
+  height: 4px;
+}
+
+.frequency-slider .divisor-label {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  color: #4ec9b0;
+  font-weight: 600;
+  min-width: 28px;
+  text-align: right;
+}

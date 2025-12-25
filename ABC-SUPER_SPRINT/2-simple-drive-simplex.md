@@ -9,6 +9,7 @@ Remove behavior state machine. Everything becomes drive-based.
 **Note:** Phase A completed L0/L1 architecture fixes but DEFERRED L1Perceptions population to Phase B Step 0 (see Implementation Steps below).
 
 ---
+IMPORTANT,REMEMBER TO INCLUDE PORTAL PERCEPTION OVELAY SHOWING CRITS 'PERCIEVING' L1 CELLS like they percieve neighbours, but with a colour coded line where the colour indicates their assesment of that cell.
 
 ## Architecture: No Behavior States
 

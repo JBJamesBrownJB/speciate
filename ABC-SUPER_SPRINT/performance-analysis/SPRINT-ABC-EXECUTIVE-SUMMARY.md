@@ -430,12 +430,12 @@ cd apps/portal && npm run dev
 
 Before merging to main:
 
-**Phase A:**
-- [ ] L1 aggregation < 0.5ms at 360K
-- [ ] Early-exit reduces sparse perception by 50%+
-- [ ] IPC increases from 1.68 → 1.8+
-- [ ] Determinism test passes
-- [ ] Portal shows L1 heatmap correctly
+**Phase A:** ✅ COMPLETE
+- [x] L1 aggregation < 0.5ms at 360K
+- [x] Early-exit reduces sparse perception by 50%+
+- [x] IPC increases from 1.68 → 1.8+
+- [x] Determinism test passes
+- [x] Portal shows L1 heatmap correctly
 
 **Phase C:**
 - [ ] Divisor=1 within 2% of baseline

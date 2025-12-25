@@ -48,7 +48,7 @@ These are **post-ABC features** that build on the drive architecture.
 
 | Phase | Name | Complexity | Focus | Status |
 |-------|------|------------|-------|--------|
-| **A** | Dual Spatial Grid | Medium | Infrastructure + Size Domination | IN PROGRESS |
+| **A** | Dual Spatial Grid | Medium | Infrastructure + Size Domination | ✅ COMPLETE |
 | **4** | Better Avoidance | Small | TTC-Based Anti-Collision | ✅ COMPLETE |
 | **C** | System Update Frequency | Small | Runtime Hz Control | Pending |
 | **B** | Simple Drive Simplex | Large | Continuous Drives (Loner Behavior) | Pending |
@@ -57,7 +57,7 @@ These are **post-ABC features** that build on the drive architecture.
 
 ---
 
-## Phase A: Dual Spatial Grid (IN PROGRESS)
+## Phase A: Dual Spatial Grid (COMPLETE)
 
 **What:** Add L1 coarse grid (30m) on top of existing L0 fine grid (10m). Implement two-stage perception with size domination.
 
@@ -216,7 +216,7 @@ force = urgency² * max_accel
 
 ## Success Criteria
 
-- [ ] Phase A: L1 classification working, size domination visible
+- [x] Phase A: L1 classification working, size domination visible
 - [ ] Phase B: Drive computation < 2ms, visible loner behavior, no BehaviorMode
 - [ ] Phase C: Zero overhead at divisor=1, linear scaling with throttling
 - [ ] Overall: 500K creatures @ 10Hz viable

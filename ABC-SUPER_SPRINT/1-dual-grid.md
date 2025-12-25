@@ -1,8 +1,8 @@
 # Phase A: Dual Spatial Grid
 
-## Status: IN PROGRESS
+## Status: ✅ COMPLETE
 
-Infrastructure complete. Now implementing two-stage perception with size domination.
+L1 grid infrastructure, size domination, and FOV culling delivered. L1Perceptions population deferred to Phase B Step 0.
 
 ---
 
@@ -317,13 +317,13 @@ Test that perception system correctly:
 - [x] L1 aggregation < 1ms at 20K creatures
 - [x] Grid-level FOV culling restored (was accidentally removed in d1f354a)
 - [x] 360k creatures @ <50ms tick latency achieved (39.68ms avg)
-- [ ] L1 classifier unit tests pass
-- [ ] Entity filter unit tests pass
-- [ ] Size domination: Giant ignores mouse (doesn't perceive)
-- [ ] Size domination: Mouse perceives giant
-- [ ] L0 scan skips cells marked EMPTY by L1
-- [ ] L1Perceptions populated for Phase B
-- [ ] PREY classification working (predator sees prey-rich cells)
+- [x] L1 classifier unit tests pass
+- [x] Entity filter unit tests pass
+- [x] Size domination: Giant ignores mouse (doesn't perceive)
+- [x] Size domination: Mouse perceives giant
+- [x] L0 scan skips cells marked EMPTY by L1
+- [ ] L1Perceptions populated for Phase B (deferred to Phase B Step 0)
+- [x] PREY classification working (predator sees prey-rich cells)
 
 ---
 

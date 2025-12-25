@@ -159,8 +159,10 @@ impl Default for FreqConfig {
 }
 
 impl FreqConfig {
-    /// Clamp divisor to power-of-2: 2, 4, or 8 (minimum 2, no "off" option)
-    /// Required for bitwise AND optimization (divisor-1 must be valid mask)
+    /// Clamp divisor to power-of-2: 2, 4, or 8 (minimum 2, no "off" option).
+    ///
+    /// Power-of-2 required for bitwise AND optimization in FrequencyThrottle:
+    /// `entity.index() & (divisor-1)` is 1 CPU cycle vs 30 cycles for modulo.
     pub fn clamp_power_of_2(divisor: u8) -> u8 {
         match divisor {
             0..=2 => 2, // Minimum is 2
@@ -401,5 +403,30 @@ mod tests {
         let length_ratio = 2.0_f32 / 0.5; // = 4
         let expected_ratio = length_ratio.powf(2.5); // 4^2.5 = 32
         assert!((force_ratio - expected_ratio).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_clamp_power_of_2_minimum_is_2() {
+        assert_eq!(FreqConfig::clamp_power_of_2(0), 2);
+        assert_eq!(FreqConfig::clamp_power_of_2(1), 2);
+        assert_eq!(FreqConfig::clamp_power_of_2(2), 2);
+    }
+
+    #[test]
+    fn test_clamp_power_of_2_rounds_to_next_power() {
+        assert_eq!(FreqConfig::clamp_power_of_2(3), 4);
+        assert_eq!(FreqConfig::clamp_power_of_2(4), 4);
+        assert_eq!(FreqConfig::clamp_power_of_2(5), 8);
+        assert_eq!(FreqConfig::clamp_power_of_2(6), 8);
+        assert_eq!(FreqConfig::clamp_power_of_2(7), 8);
+        assert_eq!(FreqConfig::clamp_power_of_2(8), 8);
+    }
+
+    #[test]
+    fn test_clamp_power_of_2_maximum_is_8() {
+        assert_eq!(FreqConfig::clamp_power_of_2(9), 8);
+        assert_eq!(FreqConfig::clamp_power_of_2(16), 8);
+        assert_eq!(FreqConfig::clamp_power_of_2(100), 8);
+        assert_eq!(FreqConfig::clamp_power_of_2(255), 8);
     }
 }

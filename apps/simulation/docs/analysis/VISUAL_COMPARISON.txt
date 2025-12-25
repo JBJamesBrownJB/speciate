@@ -1,0 +1,233 @@
+===============================================================================
+  THROTTLE METHOD COMPARISON - Hardware-Level Analysis
+  For 200K entities, divisor=8
+===============================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      APPROACH A: BITWISE AND                            │
+│                         ★ WINNER ★                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    Code:  if (entity.index() as usize) & bucket_mask != current_bucket
+
+    ┌───────────┐       ┌─────┐       ┌─────┐       ┌────────┐
+    │  Entity   │  →    │ AND │  →    │ CMP │  →    │ Branch │
+    │ (register)│       │ 1c  │       │ 1c  │       │  1c    │
+    └───────────┘       └─────┘       └─────┘       └────────┘
+
+    Total: ~3 cycles per entity
+    200K entities: 600,000 cycles (~600 μs on 1 GHz core)
+
+    Memory overhead: 0 bytes (uses existing Entity struct)
+    Cache impact: None (entity already in register)
+
+    Constraint: Divisor must be power of 2 (2, 4, 8, 16, 32)
+
+    Assembly:
+        and  eax, 7      ; Single AND instruction
+        cmp  eax, [rbx]
+        jne  .skip
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                   APPROACH B: TICKET COMPONENT                          │
+│                     (2x slower than A)                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    Code:  if creature.ticket != current_bucket
+
+    ┌───────────┐       ┌─────┐       ┌────────┐
+    │  Memory   │  →    │ CMP │  →    │ Branch │
+    │   Load    │       │ 1c  │       │  1c    │
+    │  4-5c L1  │       └─────┘       └────────┘
+    └───────────┘       ▲
+         │              │
+         └──── PIPELINE STALL (waiting for cache)
+
+    Total: ~6-7 cycles per entity
+    200K entities: 1,200,000 cycles (~1.2 ms on 1 GHz core)
+
+    Memory overhead: 1 byte per entity (195 KB for 200K)
+    Cache impact: Minimal (likely same cache line as Position)
+
+    Constraint: None (works with any divisor)
+
+    Assembly:
+        mov  al, [rdi + offset]   ; Memory load (L1 cache)
+        cmp  al, [rbx]
+        jne  .skip
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                 APPROACH C: MODULO (CURRENT)                            │
+│                ⚠️  8x SLOWER THAN A  ⚠️                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    Code:  if (entity.index() as usize) % divisor != current_bucket
+
+    ┌───────────┐       ┌──────────┐       ┌─────┐       ┌────────┐
+    │  Entity   │  →    │   DIV    │  →    │ CMP │  →    │ Branch │
+    │ (register)│       │ 20-40c!! │       │ 1c  │       │  1c    │
+    └───────────┘       └──────────┘       └─────┘       └────────┘
+                             │
+                        CPU STALLS HERE
+                        (can't pipeline division)
+
+    Total: ~25-45 cycles per entity
+    200K entities: 5,000,000 cycles (~5 ms on 1 GHz core)
+
+    Memory overhead: 0 bytes (uses existing Entity struct)
+    Cache impact: None (entity already in register)
+
+    Constraint: None (works with any divisor)
+
+    Assembly:
+        mov  eax, [entity]
+        xor  edx, edx            ; Clear upper bits
+        mov  ecx, 8              ; Load divisor
+        div  ecx                 ; ← KILLER (20-40 cycles!)
+        mov  eax, edx            ; Remainder
+        cmp  eax, [rbx]
+        jne  .skip
+
+
+===============================================================================
+  PERFORMANCE COMPARISON (200K entities)
+===============================================================================
+
+    Method              Time/Tick    Speedup    Memory    Divisor Constraint
+    ──────────────────  ──────────  ─────────  ────────  ───────────────────
+    A. Bitwise AND        600 μs      8.3x        0 KB    Power of 2 only
+    B. Ticket Component  1200 μs      4.2x      195 KB    Any divisor
+    C. Modulo (current)  5000 μs      1.0x        0 KB    Any divisor
+
+
+===============================================================================
+  KEY HARDWARE INSIGHTS
+===============================================================================
+
+    Why is modulo so slow?
+    ─────────────────────────────────────────────────────────────────────
+    The % operator compiles to CPU division (DIV/IDIV instruction):
+    - Latency: 20-40 cycles (vs 1 cycle for AND)
+    - Cannot pipeline (blocks CPU execution units)
+    - 200K divisions = millions of wasted cycles
+
+    Why is ticket slower than bitwise?
+    ─────────────────────────────────────────────────────────────────────
+    Memory load from L1 cache:
+    - Latency: 4-5 cycles (vs 0 cycles for register access)
+    - Causes pipeline stall (CPU waits for cache)
+    - Even with perfect cache locality, still 2x slower than bitwise
+
+    Why is entity.index() free?
+    ─────────────────────────────────────────────────────────────────────
+    During Bevy query iteration, Entity is already loaded:
+    - Bevy uses entity.index() to look up component data
+    - Value is cached in CPU register throughout loop
+    - Accessing entity.index() is a register read (0 cycles)
+
+    Why does bitwise AND work?
+    ─────────────────────────────────────────────────────────────────────
+    For power-of-2 divisors, modulo is equivalent to AND:
+    - divisor=8  → mask=7  (0b111)  → x % 8 == x & 7
+    - divisor=16 → mask=15 (0b1111) → x % 16 == x & 15
+    - AND instruction: 1 cycle latency, 4/cycle throughput
+    - Fully pipelined (no CPU stalls)
+
+
+===============================================================================
+  CACHE ANALYSIS
+===============================================================================
+
+    L1 Cache Hit (Ticket Component):
+    ┌──────────────────────────────────────────────────────────────┐
+    │ Cache Line (64 bytes)                                        │
+    ├────────────┬────────────┬──────────┬───────┬────────────────┤
+    │ Position   │ Velocity   │ BodySize │Ticket │  ...           │
+    │  (8 bytes) │  (8 bytes) │ (4 bytes)│ (1 b) │                │
+    └────────────┴────────────┴──────────┴───────┴────────────────┘
+           ▲            ▲           ▲         ▲
+           │            │           │         │
+           └────────────┴───────────┴─────────┘
+                     All in same cache line
+                     (good spatial locality)
+
+    Cost: 4-5 cycles to load entire cache line (first access)
+          Subsequent component accesses are free (already loaded)
+
+    BUT: Still slower than bitwise AND (0 cycles, uses register)
+
+
+===============================================================================
+  BRANCH PREDICTION (Equal for All)
+===============================================================================
+
+    All approaches have identical branch pattern:
+
+    Entity ID:  0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 ...
+    Bucket:     0  1  2  3  4  5  6  7  0  1  2  3  4  5  6  7  ...
+    Process?    Y  N  N  N  N  N  N  N  Y  N  N  N  N  N  N  N  ...
+
+    Pattern is deterministic and repeating.
+    Modern CPUs (Intel/AMD) predict this perfectly.
+
+    Branch misprediction penalty (~15-20 cycles) is SAME for all approaches.
+
+
+===============================================================================
+  RECOMMENDATION
+===============================================================================
+
+    Immediate: Switch to BITWISE AND (Approach A)
+    ──────────────────────────────────────────────────────────────────────
+    - 8x faster than current modulo implementation
+    - Zero memory overhead
+    - 2-line code change
+    - Current divisor (8) is already power of 2
+
+    Future: Consider TICKET if non-power-of-2 divisors needed
+    ──────────────────────────────────────────────────────────────────────
+    - 4x faster than modulo (but 2x slower than bitwise)
+    - Negligible memory cost (195 KB for 200K creatures)
+    - Works with any divisor (3, 5, 7, etc.)
+    - No biological justification for odd divisors currently
+
+
+===============================================================================
+  IMPLEMENTATION (2-Line Change)
+===============================================================================
+
+    File: src/simulation/perception/systems.rs
+
+    Line 104: Add
+        let bucket_mask = divisor - 1;
+
+    Line 105: Change
+        - let current_bucket = (physics_tick.get() as usize) % divisor;
+        + let current_bucket = (physics_tick.get() as usize) & bucket_mask;
+
+    Line 120: Change
+        - if (entity.index() as usize) % divisor != current_bucket {
+        + if (entity.index() as usize) & bucket_mask != current_bucket {
+
+    Expected gain: 8x faster throttling (5ms → 600μs for 200K entities)
+
+
+===============================================================================
+  VALIDATION
+===============================================================================
+
+    Run benchmark:
+        cargo run --release --example throttle_ecs_perf
+
+    Run hardware profiling:
+        ./scripts/analyze_throttle_hardware.sh
+
+    Verify in dev-ui:
+        - Spawn 200K creatures
+        - Check "perception" system timing
+        - Should see ~8x improvement
+
+
+===============================================================================

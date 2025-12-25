@@ -401,34 +401,39 @@ input[type='range']:disabled::-webkit-slider-thumb {
   flex: 1;
 }
 
-/* Frequency Control Sliders */
+/* Frequency Control Dropdowns */
 .timing-row-container {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.frequency-slider {
+.frequency-control {
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 4px 12px;
   background: #2a2a2a;
   border-radius: 4px;
   margin-top: 4px;
 }
 
-.frequency-slider input[type='range'] {
-  flex: 1;
-  margin: 0;
-  height: 4px;
-}
-
-.frequency-slider .divisor-label {
+.divisor-select {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
   color: #4ec9b0;
   font-weight: 600;
-  min-width: 28px;
-  text-align: right;
+  background: #3c3c3c;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.divisor-select:hover {
+  border-color: #007acc;
+}
+
+.divisor-select:focus {
+  outline: none;
+  border-color: #007acc;
 }

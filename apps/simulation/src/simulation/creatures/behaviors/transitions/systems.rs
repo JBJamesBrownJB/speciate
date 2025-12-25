@@ -19,16 +19,20 @@ pub fn behavior_transition_system(
 
     let current_time = physics_tick.get() as f64 * TICK_INTERVAL_SECONDS;
 
-    // Frequency throttling: entity-ID bucketing
-    let divisor = freq.behavior_divisor.max(1) as usize;
-    let current_bucket = (physics_tick.get() as usize) % divisor;
+    // Frequency throttling: entity-ID bucketing with power-of-2 optimization
+    // Minimum divisor is 2, so throttling is always active (no "off" option)
+    // PERF: Bitwise AND (1 cycle) instead of modulo (30 cycles) - requires power-of-2 divisor
+    let divisor = freq.behavior_divisor as usize;
+    let bucket_mask = divisor - 1;
+    let current_bucket = (physics_tick.get() as usize) & bucket_mask;
 
     let mut entities: Vec<_> = query.iter_mut().collect();
 
     // Transitions: Light workload - moderate chunks
     entities.par_iter_mut().with_min_len(256).for_each(|(entity, creature_state, brain)| {
         // Frequency throttling: skip if not in current bucket
-        if (entity.index() as usize) % divisor != current_bucket {
+        // Power-of-2 bitwise AND: 1 cycle vs 30 cycles for modulo
+        if (entity.index() as usize) & bucket_mask != current_bucket {
             return;
         }
 

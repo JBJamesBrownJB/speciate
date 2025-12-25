@@ -262,7 +262,8 @@ impl NapiApp {
                     if let Some(mut config) =
                         self.simulation.world.get_resource_mut::<FreqConfig>()
                     {
-                        let divisor = divisor.max(1); // Ensure minimum of 1
+                        // Clamp to power-of-2 for bitwise AND optimization
+                        let divisor = FreqConfig::clamp_power_of_2(divisor);
                         match system.as_str() {
                             "perception" => config.perception_divisor = divisor,
                             "behavior" => config.behavior_divisor = divisor,

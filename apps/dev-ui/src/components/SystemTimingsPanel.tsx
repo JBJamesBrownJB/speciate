@@ -195,23 +195,27 @@ const toSnakeCase = (str: string): string => {
   return str.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
 };
 
-interface FrequencySliderProps {
+// Power-of-2 divisor options (minimum 2, no "off" option)
+const DIVISOR_OPTIONS = [2, 4, 8] as const;
+
+interface FrequencyControlProps {
   systemName: string;
   divisor: number;
   onChange: (divisor: number) => void;
 }
 
-const FrequencySlider: React.FC<FrequencySliderProps> = ({ systemName, divisor, onChange }) => (
-  <div className="frequency-slider">
-    <input
-      type="range"
-      min="1"
-      max="10"
+const FrequencyControl: React.FC<FrequencyControlProps> = ({ systemName, divisor, onChange }) => (
+  <div className="frequency-control">
+    <select
       value={divisor}
       onChange={(e) => onChange(Number(e.target.value))}
-      title={`${systemName} frequency divisor: ÷${divisor}`}
-    />
-    <span className="divisor-label">÷{divisor}</span>
+      title={`${systemName} frequency divisor`}
+      className="divisor-select"
+    >
+      {DIVISOR_OPTIONS.map(d => (
+        <option key={d} value={d}>÷{d}</option>
+      ))}
+    </select>
   </div>
 );
 
@@ -222,10 +226,10 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
   const averageRefs = useRef<Record<string, number>>({});
   const [sortedKeys, setSortedKeys] = useState<string[]>([]);
 
-  // Frequency divisor state for controllable systems
+  // Frequency divisor state for controllable systems (minimum 2)
   const [divisors, setDivisors] = useState<Record<string, number>>({
-    perception: 1,
-    behavior: 1,
+    perception: 2,
+    behavior: 2,
   });
 
   const handleDivisorChange = (systemName: string, divisor: number) => {
@@ -394,7 +398,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
               canvasRef={entry.canvasRef}
             />
             {entry.systemName && (
-              <FrequencySlider
+              <FrequencyControl
                 systemName={entry.systemName}
                 divisor={divisors[entry.systemName]}
                 onChange={(divisor) => handleDivisorChange(entry.systemName!, divisor)}

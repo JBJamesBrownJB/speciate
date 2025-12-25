@@ -151,9 +151,21 @@ pub struct FreqConfig {
 impl Default for FreqConfig {
     fn default() -> Self {
         Self {
-            perception_divisor: 1,
-            behavior_divisor: 1,
-            steering_divisor: 1,
+            perception_divisor: 2, // Minimum 2 - no "off" option
+            behavior_divisor: 2,   // Minimum 2 - no "off" option
+            steering_divisor: 1,   // Keep 1 (steering throttling removed)
+        }
+    }
+}
+
+impl FreqConfig {
+    /// Clamp divisor to power-of-2: 2, 4, or 8 (minimum 2, no "off" option)
+    /// Required for bitwise AND optimization (divisor-1 must be valid mask)
+    pub fn clamp_power_of_2(divisor: u8) -> u8 {
+        match divisor {
+            0..=2 => 2, // Minimum is 2
+            3..=4 => 4,
+            _ => 8,
         }
     }
 }

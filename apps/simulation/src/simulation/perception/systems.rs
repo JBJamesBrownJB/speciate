@@ -99,10 +99,12 @@ pub fn update_perception_system(
     // Get L1 grid reference for early-exit optimization
     let l1_grid_ref = &grid.l1;
 
-    // Frequency throttling: entity-ID bucketing
-    // divisor=1 means every tick (no throttling), divisor=2 means every 2nd tick, etc.
-    let divisor = freq.perception_divisor.max(1) as usize;
-    let current_bucket = (physics_tick.get() as usize) % divisor;
+    // Frequency throttling: entity-ID bucketing with power-of-2 optimization
+    // Minimum divisor is 2, so throttling is always active (no "off" option)
+    // PERF: Bitwise AND (1 cycle) instead of modulo (30 cycles) - requires power-of-2 divisor
+    let divisor = freq.perception_divisor as usize;
+    let bucket_mask = divisor - 1;
+    let current_bucket = (physics_tick.get() as usize) & bucket_mask;
 
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
@@ -115,9 +117,9 @@ pub fn update_perception_system(
             let is_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
 
             // Frequency throttling: skip if not in current bucket
-            // When divisor=1, all entities are in bucket 0 (no skip)
+            // Power-of-2 bitwise AND: 1 cycle vs 30 cycles for modulo
             // IMPORTANT: Do NOT clear neighbor_cache when skipping - keep stale data
-            if (entity.index() as usize) % divisor != current_bucket {
+            if (entity.index() as usize) & bucket_mask != current_bucket {
                 return;
             }
 

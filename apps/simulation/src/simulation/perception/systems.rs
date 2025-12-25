@@ -115,7 +115,13 @@ pub fn update_perception_system(
 
             // Frequency throttling: skip if not in current bucket
             // IMPORTANT: Do NOT clear neighbor_cache when skipping - keep stale data
-            if !throttle.should_process(entity.index()) {
+            // EXCEPTION: Always process debug target to prevent visualization flashing
+            #[cfg(feature = "dev-tools")]
+            let skip_throttle = is_debug_target;
+            #[cfg(not(feature = "dev-tools"))]
+            let skip_throttle = false;
+
+            if !skip_throttle && !throttle.should_process(entity.index()) {
                 return;
             }
 
@@ -467,52 +473,19 @@ pub fn update_perception_system(
                         }
                     }
 
-                    // Final selection: get K closest using bounded max-heap (predictable branches)
+                    // Final selection: get K closest using partial sort
+                    // select_nth_unstable_by(k-1) partitions so [0..k-1] are <= element at k-1
+                    // Then truncate(k) keeps [0..k), which are the k smallest
                     let k = MAX_PERCEIVED_NEIGHBORS.min(candidates.len());
                     if k > 0 {
-                        // Max-heap by distance: top = furthest of our K closest
-                        let mut heap: Vec<(f32, NeighborData)> = Vec::with_capacity(k);
-
-                        for candidate in candidates.drain(..) {
-                            if heap.len() < k {
-                                // Room in heap, push and sift up
-                                heap.push(candidate);
-                                let mut i = heap.len() - 1;
-                                while i > 0 {
-                                    let parent = (i - 1) / 2;
-                                    if heap[i].0 > heap[parent].0 {
-                                        heap.swap(i, parent);
-                                        i = parent;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            } else if candidate.0 < heap[0].0 {
-                                // Closer than furthest: replace root and sift down
-                                heap[0] = candidate;
-                                let mut i = 0;
-                                loop {
-                                    let left = 2 * i + 1;
-                                    let right = 2 * i + 2;
-                                    let mut largest = i;
-                                    if left < k && heap[left].0 > heap[largest].0 {
-                                        largest = left;
-                                    }
-                                    if right < k && heap[right].0 > heap[largest].0 {
-                                        largest = right;
-                                    }
-                                    if largest != i {
-                                        heap.swap(i, largest);
-                                        i = largest;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
+                        if candidates.len() > k {
+                            candidates.select_nth_unstable_by(k - 1, |a, b| {
+                                a.0.total_cmp(&b.0)
+                            });
+                            candidates.truncate(k);
                         }
 
-                        // Add all K neighbors
-                        for (_, neighbor) in heap {
+                        for (_, neighbor) in candidates.drain(..) {
                             neighbor_cache.add_neighbor(neighbor);
                         }
                     }

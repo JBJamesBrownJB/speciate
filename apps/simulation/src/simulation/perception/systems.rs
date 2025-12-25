@@ -48,17 +48,21 @@ thread_local! {
 }
 
 /// Check if a target is within the field of view.
-/// For narrow FOV (≤180°), uses fast squared comparison.
-/// For wide FOV (>180°), falls back to signed comparison with sqrt.
+/// Uses squared comparisons for both narrow and wide FOV (no sqrt).
 #[inline]
 pub(crate) fn is_in_fov(rough_dot: f32, center_dist_sq: f32, cos_half_fov: f32, cos_half_fov_sq: f32) -> bool {
     if cos_half_fov >= 0.0 {
         // Narrow FOV (≤180°): target must be in front
         rough_dot > 0.0 && rough_dot * rough_dot >= cos_half_fov_sq * center_dist_sq
     } else {
-        // Wide FOV (>180°): signed comparison
-        let dist = center_dist_sq.sqrt();
-        rough_dot >= cos_half_fov * dist
+        // Wide FOV (>180°): cos_half_fov is negative
+        if rough_dot >= 0.0 {
+            // In front/side: always visible (positive >= negative*positive)
+            true
+        } else {
+            // Behind: compare squared magnitudes (inequality flips for negatives)
+            rough_dot * rough_dot <= cos_half_fov_sq * center_dist_sq
+        }
     }
 }
 

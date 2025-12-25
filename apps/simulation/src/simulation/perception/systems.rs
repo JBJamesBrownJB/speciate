@@ -117,11 +117,11 @@ pub fn update_perception_system(
             // IMPORTANT: Do NOT clear neighbor_cache when skipping - keep stale data
             // EXCEPTION: Always process debug target to prevent visualization flashing
             #[cfg(feature = "dev-tools")]
-            let skip_throttle = is_debug_target;
+            let bypass_throttle = is_debug_target;
             #[cfg(not(feature = "dev-tools"))]
-            let skip_throttle = false;
+            let bypass_throttle = false;
 
-            if !skip_throttle && !throttle.should_process(entity.index()) {
+            if !bypass_throttle && !throttle.should_process(entity.index()) {
                 return;
             }
 

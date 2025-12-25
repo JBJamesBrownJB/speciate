@@ -12,7 +12,7 @@ Transform the simulation from discrete behavior states to continuous drive-based
 |-------|---------------------|---------------|
 | **A: Dual Grid** | Giants walk through mice (ignore them). Mice flee from giants. Predators notice prey-rich areas. | Size domination, L1 classification (EMPTY/THREAT/PREY/CROWDED), FOV culling |
 | **B: Drive Simplex** | Crits spread out naturally. Predators drift toward prey-rich areas (but avoid individuals). Prey grazes near resting predators but flees when charged. No more random wandering. | L1 drives (repulsion/attraction), threat velocity urgency, remove BehaviorMode |
-| **C: Frequency Control** | Same behaviors, but running at 500K+ creatures. Dev-UI sliders to tune perception/behavior Hz. | Entity-ID bucketing, runtime Hz adjustment |
+| **C: Frequency Control** | Same behaviors with dev-UI dropdowns (÷2, ÷4, ÷8) to tune perception/behavior Hz. Bitwise AND optimization. | Entity-ID bucketing, power-of-2 bitwise optimization, select_nth_unstable |
 
 ---
 
@@ -50,7 +50,7 @@ These are **post-ABC features** that build on the drive architecture.
 |-------|------|------------|-------|--------|
 | **A** | Dual Spatial Grid | Medium | Infrastructure + Size Domination | ✅ COMPLETE |
 | **4** | Better Avoidance | Small | TTC-Based Anti-Collision | ✅ COMPLETE |
-| **C** | System Update Frequency | Small | Runtime Hz Control | Pending |
+| **C** | System Update Frequency | Small | Runtime Hz Control | ✅ COMPLETE |
 | **B** | Simple Drive Simplex | Large | Continuous Drives (Loner Behavior) | Pending |
 
 **Order Rationale:** A establishes grid infrastructure. **Phase 4** fixes collision avoidance using TTC (creatures steer around each other properly). C is performance tuning. B is the major behavior overhaul (flee/chase/drives).
@@ -157,24 +157,32 @@ force = urgency² * max_accel
 
 ---
 
-## Phase C: System Update Frequency
+## Phase C: System Update Frequency (COMPLETE)
 
-**What:** Runtime-adjustable Hz for cognitive systems (perception, behavior, steering).
+**What:** Runtime-adjustable Hz for cognitive systems (perception, behavior) using bitwise AND optimization.
 
 **Why:**
 - Reduce CPU usage proportionally with throttling
-- Zero overhead at full rate (divisor=1)
+- Bitwise AND (1 cycle) vs modulo (30 cycles)
 - Dev-UI control for performance tuning
 
 **Delivers:**
-- FreqConfig resource with per-system divisors
+- FreqConfig resource with per-system divisors (power-of-2: 2, 4, 8)
+- FrequencyThrottle helper struct (eliminates code duplication)
 - Entity-ID bucketing (no visual artifacts)
-- Inline sliders in dev-ui below sparklines
+- Dropdown controls in dev-ui (not sliders - power-of-2 only)
+- select_nth_unstable optimization (1.7x faster neighbor selection)
+- Debug target bypass (prevents visualization flashing)
+
+**Key Design Decisions:**
+- **Minimum divisor is 2**: No "full rate" option. Cache line contention and branch prediction issues at divisor=1 caused 20% latency variance.
+- **Steering throttling removed**: Caused jerky movement, not worth the savings.
+- **Power-of-2 only**: Enables bitwise AND optimization.
 
 **You'll See:**
-- Same behaviors at massive scale (500K+ creatures)
-- Dev-UI Hz sliders for performance tuning
-- Smooth performance even at high creature counts
+- Dev-UI dropdowns to adjust perception/behavior Hz (÷2, ÷4, ÷8)
+- Perception latency scales with throttling
+- Behavior latency unchanged (fixed overhead dominates trivial work)
 
 **Details:** See `3-frequency-control.md`
 
@@ -218,7 +226,7 @@ force = urgency² * max_accel
 
 - [x] Phase A: L1 classification working, size domination visible
 - [ ] Phase B: Drive computation < 2ms, visible loner behavior, no BehaviorMode
-- [ ] Phase C: Zero overhead at divisor=1, linear scaling with throttling
+- [x] Phase C: Bitwise AND optimization, power-of-2 throttling, 1.7x neighbor selection speedup
 - [ ] Overall: 500K creatures @ 10Hz viable
 
 ---

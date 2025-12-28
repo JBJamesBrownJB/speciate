@@ -1,6 +1,6 @@
 # Field of View (FOV) Perception
 
-**Status:** TODO
+**Status:** ✅ Implemented (Phase A)
 **Location:** `apps/simulation/src/simulation/perception/`
 
 ## What It Does

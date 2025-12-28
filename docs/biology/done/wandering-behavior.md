@@ -2,7 +2,7 @@
 
 **Status:** ✅ 90% IMPLEMENTED (DNA genes pending)
 
-**Code:** `apps/simulation/src/simulation/creatures/behaviors/wander.rs`
+**Code:** `apps/simulation/src/simulation/creatures/steering/wander.rs`
 
 ---
 

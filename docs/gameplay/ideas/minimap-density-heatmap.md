@@ -1,16 +1,15 @@
-# Minimap Heatmap: Full-World Creature Density
+# Minimap Density Heatmap: Full-World Creature Visualization
 
-## Current State
-
-The minimap UI is implemented (`apps/portal/src/rendering/minimap/`):
-- 180x180px overlay, positioned bottom-right
-- Shows viewport rectangle (white border indicating current view)
-- Click-to-teleport camera functionality
-- Press **M** to toggle visibility
-
-**Limitation**: The heatmap only shows creatures within the current viewport.
+**Status:** Idea (not implemented)
+**Depends on:** Basic minimap (see `docs/gameplay/done/minimap.md` - ✅ Implemented)
 
 ## Problem
+
+The basic minimap shows viewport position but NOT creature density.
+
+**Limitation**: No creature distribution visualization - player can't see where creatures are concentrated across the world.
+
+## Technical Challenge
 
 The backend uses viewport culling for rendering performance:
 1. Frontend sends viewport bounds via `setViewportBounds()`

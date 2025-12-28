@@ -6,7 +6,7 @@ Automatically adjust per-system update frequencies at runtime based on performan
 
 ## Prerequisites
 
-Requires: `docs/performance/todo/system-update-frequency.md` (per-system configurable frequencies)
+Requires: `docs/performance/done/system-update-frequency.md` (per-system configurable frequencies) - ✅ Implemented in Phase C
 
 ## Important Constraints
 

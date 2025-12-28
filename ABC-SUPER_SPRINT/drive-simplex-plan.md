@@ -94,6 +94,19 @@ pub struct DriveContributions {
     pub disperse_count: u8,
 }
 
+impl DriveContributions {
+    /// Push contribution with bounds check - silently ignores if array full.
+    /// Phase B: ignore overflow (minor threats dropped). Future: replace weakest.
+    pub fn push_flee(&mut self, dir: (f32, f32), mag: f32) {
+        if (self.flee_count as usize) < self.flee.len() {
+            self.flee[self.flee_count as usize] = DriveContribution { direction: dir, magnitude: mag };
+            self.flee_count += 1;
+        }
+        // else: array full, silently ignore (acceptable for Phase B)
+    }
+    // Similar for push_approach, push_disperse...
+}
+
 // DEV-TOOLS ONLY: Simplex triangle visualization (cold path)
 #[cfg(feature = "dev-tools")]
 #[derive(Component, Clone, Copy, Default)]
@@ -345,11 +358,17 @@ pub fn drive_combine_system(
 
     entities.par_iter_mut().with_min_len(256).for_each(|(contributions, output, simplex)| {
         // 1. Weighted sum per category
-        let flee_vec = weighted_sum(&contributions.flee[..contributions.flee_count as usize]);
-        let approach_vec = weighted_sum(&contributions.approach[..contributions.approach_count as usize]);
-        let disperse_vec = weighted_sum(&contributions.disperse[..contributions.disperse_count as usize]);
+        let mut flee_vec = weighted_sum(&contributions.flee[..contributions.flee_count as usize]);
+        let mut approach_vec = weighted_sum(&contributions.approach[..contributions.approach_count as usize]);
+        let mut disperse_vec = weighted_sum(&contributions.disperse[..contributions.disperse_count as usize]);
 
-        // 2. Apply priority weights
+        // 2. CRITICAL: Clamp magnitude to 1.0 BEFORE weighting
+        // Prevents "Summation Overpower" - 10 prey items shouldn't override 1 predator
+        flee_vec = clamp_magnitude(flee_vec, 1.0);
+        approach_vec = clamp_magnitude(approach_vec, 1.0);
+        disperse_vec = clamp_magnitude(disperse_vec, 1.0);
+
+        // 3. Apply priority weights (now Flee always wins: 1.0 > 0.7 > 0.3)
         const FLEE_WEIGHT: f32 = 1.0;
         const APPROACH_WEIGHT: f32 = 0.7;
         const DISPERSE_WEIGHT: f32 = 0.3;
@@ -359,10 +378,10 @@ pub fn drive_combine_system(
             flee_vec.1 * FLEE_WEIGHT + approach_vec.1 * APPROACH_WEIGHT + disperse_vec.1 * DISPERSE_WEIGHT,
         );
 
-        // 3. Write to hot-path component (steering reads this)
+        // 4. Write to hot-path component (steering reads this)
         output.combined = combined;
 
-        // 4. Dev-tools: capture simplex for visualization
+        // 5. Dev-tools: capture simplex for visualization (clamped values)
         #[cfg(feature = "dev-tools")]
         if let Some(simplex) = simplex {
             simplex.flee = flee_vec;
@@ -370,11 +389,22 @@ pub fn drive_combine_system(
             simplex.disperse = disperse_vec;
         }
 
-        // 5. Clear contributions for next tick
+        // 6. Clear contributions for next tick
         contributions.flee_count = 0;
         contributions.approach_count = 0;
         contributions.disperse_count = 0;
     });
+}
+
+// Helper: Clamp vector magnitude to max without changing direction
+fn clamp_magnitude(v: (f32, f32), max: f32) -> (f32, f32) {
+    let mag_sq = v.0 * v.0 + v.1 * v.1;
+    if mag_sq > max * max && mag_sq > 0.0001 {
+        let scale = max / mag_sq.sqrt();
+        (v.0 * scale, v.1 * scale)
+    } else {
+        v
+    }
 }
 ```
 
@@ -676,6 +706,13 @@ Creature frozen too long (~4.5s) should trigger desperate escape burst.
 - **Watch:** After prolonged freeze, creature suddenly bolts in random direction
 - **Biological:** Prevents permanent freeze = certain death scenario
 
+### 5c. `drive-priority-flee-over-food.toml` (CRITICAL)
+Creature between 1 predator and 10 prey should flee, not approach.
+- **Assertion:** `distance_increased` from predator
+- **Failure Mode:** Without clamping, 10 prey vectors sum to override 1 predator
+- **Watch:** Creature flees predator despite abundant food
+- **Validates:** Magnitude clamping before priority weights
+
 ### 6. `drive-approach-prey.toml`
 Large creature near small creatures should drift toward them.
 - **Assertion:** `distance_decreased` toward cluster by min 15m
@@ -697,7 +734,7 @@ After clean swap, no creature should have BehaviorMode component.
 
 **Red Phase (Write Failing Tests First):**
 - [ ] Create `specs/behavior/drives/` folder
-- [ ] Write 9 new drive BDD specs (8 core + desperate-escape)
+- [ ] Write 10 new drive BDD specs (8 core + desperate-escape + priority-flee-over-food)
 - [ ] All new specs FAIL initially (drives not implemented)
 - [ ] Existing 44 seeker/catatonic specs still PASS (baseline)
 
@@ -705,7 +742,7 @@ After clean swap, no creature should have BehaviorMode component.
 - [ ] Step 0: L1Perceptions populated → new specs still fail
 - [ ] Step 1: Drive components added → new specs still fail
 - [ ] Step 2: VisionDriveSystem → some drive specs start passing
-- [ ] Step 3: DriveCombineSystem → drive specs pass
+- [ ] Step 3: DriveCombineSystem (with magnitude clamping) → drive specs pass
 - [ ] Step 4: Steering integration + freeze timeout → flee/disperse/rest/escape specs pass
 - [ ] Step 5: System ordering → all new drive specs pass
 - [ ] Step 6: BehaviorMode removal → `no-behavior-mode` spec passes
@@ -714,4 +751,4 @@ After clean swap, no creature should have BehaviorMode component.
 **Refactor Phase:**
 - [ ] Performance: < 2ms drive computation at 360K
 - [ ] Code cleanup: Remove dead code from old behavior system
-- [ ] All 53+ specs pass (44 existing + 9 new)
+- [ ] All 54+ specs pass (44 existing + 10 new)

@@ -70,33 +70,74 @@ pub struct DriveContribution {
 }
 ```
 
-### DriveState Component
+### Drive Components (ECS-Optimized Hot/Warm Split)
+
+**ecs-emma recommendation:** Split into hot/warm paths for cache efficiency at 500K scale.
 
 ```rust
-use smallvec::SmallVec;
+// HOT PATH: 8 bytes - read every tick by steering
+// Steering reads 4MB (split) vs 114MB (monolithic) at 500K creatures
+#[derive(Component, Clone, Copy, Default)]
+pub struct DriveOutput {
+    pub combined: (f32, f32),
+}
 
-#[derive(Component, Clone, Debug, Default)]
-pub struct DriveState {
-    // Category sums (O(1) access for visualization triangle)
-    pub flee: Vec2,
-    pub approach: Vec2,
-    pub disperse: Vec2,
+// WARM PATH: ~100 bytes - written by vision, read by combine
+#[derive(Component, Clone, Copy, Default)]
+pub struct DriveContributions {
+    // Fixed arrays prevent heap allocation at scale (not SmallVec)
+    pub flee: [DriveContribution; 4],
+    pub flee_count: u8,
+    pub approach: [DriveContribution; 4],
+    pub approach_count: u8,
+    pub disperse: [DriveContribution; 4],
+    pub disperse_count: u8,
+}
 
-    // Contribution arrays (cleared each tick after combine)
-    // SmallVec<[T; 4]> = stack-allocated for typical case (Vision + Sound + Scent + Seismic)
-    pub flee_contributions: SmallVec<[DriveContribution; 4]>,
-    pub approach_contributions: SmallVec<[DriveContribution; 4]>,
-    pub disperse_contributions: SmallVec<[DriveContribution; 4]>,
+// DEV-TOOLS ONLY: Simplex triangle visualization (cold path)
+#[cfg(feature = "dev-tools")]
+#[derive(Component, Clone, Copy, Default)]
+pub struct DriveSimplex {
+    pub flee: (f32, f32),
+    pub approach: (f32, f32),
+    pub disperse: (f32, f32),
+}
 
-    // Final output for steering
-    pub combined: Vec2,
+// FREEZE TIMEOUT: Tracks freeze duration for desperate escape
+#[derive(Component, Clone, Copy, Default)]
+pub struct FreezeState {
+    pub ticks_frozen: u16,           // Incremented when drives ≈ 0
+    pub escape_direction: (f32, f32), // Random direction for desperate escape
+}
+
+impl FreezeState {
+    const DESPERATE_THRESHOLD: u16 = 100;  // ~4.5 seconds at 22Hz
+
+    pub fn is_desperate(&self) -> bool {
+        self.ticks_frozen >= Self::DESPERATE_THRESHOLD
+    }
+
+    pub fn tick(&mut self) {
+        self.ticks_frozen = self.ticks_frozen.saturating_add(1);
+        if self.ticks_frozen == Self::DESPERATE_THRESHOLD {
+            use rand::Rng;
+            let angle = rand::thread_rng().gen_range(0.0..std::f32::consts::TAU);
+            self.escape_direction = (angle.cos(), angle.sin());
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.ticks_frozen = 0;
+        self.escape_direction = (0.0, 0.0);
+    }
 }
 ```
 
-**Why three arrays instead of one?**
-- Avoids O(n) filtering per frame to separate categories
-- At 10K creatures × 5 contributions = 50K filter operations saved per tick
-- Each array maps directly to a simplex triangle vertex
+**Why this split?** (ecs-emma review)
+- Hot/warm split: Steering reads 4MB vs 114MB at 500K creatures
+- Fixed arrays [T; 4]: No heap allocation (SmallVec spills at scale)
+- Three arrays: O(1) access for simplex triangle, avoids O(n) filtering
+- FreezeState: Prevents permanent freeze = certain death scenario
 
 ---
 
@@ -236,24 +277,52 @@ Create the core types:
 
 ```rust
 pub fn vision_drive_system(
-    mut query: Query<(&Position, &Velocity, &L1Perceptions, &NeighborCache, &mut DriveState)>,
+    mut query: Query<(&Position, &BodySize, &L1Perceptions, &NeighborCache, &mut DriveContributions)>,
 )
 ```
 
 **Algorithm:**
-1. For each L1 perception:
-   - THREAT → push to `flee_contributions` (with velocity urgency from L0 neighbors)
-   - PREY → push to `approach_contributions`
-   - CROWDED → push to `disperse_contributions` (repel direction)
-   - EMPTY → push to `disperse_contributions` (attract direction)
+```rust
+// Rayon parallel - HIGH VARIANCE workload, small chunks
+entities.par_iter_mut().with_min_len(64).for_each(|(l1_perceptions, contributions, size, ...)| {
+    let self_biomass = size.mass();
+
+    for perception in l1_perceptions.iter() {
+        match perception.classification {
+            THREAT => {
+                let urgency = calculate_threat_urgency(perception, neighbor_cache);
+                contributions.push_flee(perception.direction, urgency);
+            }
+            PREY => contributions.push_approach(perception.direction, 1.0),
+            CROWDED => {
+                // COMFORT ZONE: Skip disperse if crowding_ratio in 0.3-1.5 range
+                let crowding_ratio = perception.biomass / self_biomass;
+                if crowding_ratio < 0.3 || crowding_ratio > 1.5 {
+                    contributions.push_disperse(-perception.direction, 0.5);  // AWAY
+                }
+                // else: Comfortable density, no disperse needed
+            }
+            EMPTY => contributions.push_disperse(perception.direction, 0.3),  // TOWARD
+        }
+    }
+});
+```
+
+**Comfort Zone (zoologist-tom):**
+- `crowding_ratio` = neighbor biomass / self biomass
+- Range 0.3-1.5 = "comfortable" - no disperse drive generated
+- Below 0.3 = too sparse, seek company (mild disperse toward)
+- Above 1.5 = too crowded, disperse away
 
 **Threat velocity urgency:**
 - Check L0 neighbors in threat direction
-- Approaching (>2 m/s toward) → magnitude = 1.0
-- Retreating → magnitude = 0.2
+- Charging (>2 m/s toward) → magnitude = 1.0
 - Stationary → magnitude = 0.5
+- Retreating → magnitude = 0.2
 
-**Test:** Integration tests for contribution generation
+**Chunk Size:** 64-128 (not 256) due to high per-entity variance in L1 perception count.
+
+**Test:** Integration tests for contribution generation, comfort zone skipping
 
 ---
 
@@ -262,42 +331,63 @@ pub fn vision_drive_system(
 
 **New file:** `simulation/drives/combine.rs`
 
+**Drive Priority Weights (zoologist-tom):**
+- FLEE: 1.0 (survival dominates)
+- APPROACH: 0.6-0.8 (hunting is secondary)
+- DISPERSE: 0.2-0.4 (comfort is tertiary)
+
 ```rust
 pub fn drive_combine_system(
-    mut query: Query<(&mut DriveState, &Dna)>,
+    mut query: Query<(&mut DriveContributions, &mut DriveOutput, Option<&mut DriveSimplex>)>,
 ) {
-    // Rayon parallel - collect into Vec first (Sprint 15 pattern)
+    // Rayon parallel - LOW VARIANCE workload, larger chunks
     let mut entities: Vec<_> = query.iter_mut().collect();
 
-    entities.par_iter_mut().for_each(|(drive_state, dna)| {
-        // 1. Weighted sum per category (Phase B: uniform weights)
-        drive_state.flee = weighted_sum(&drive_state.flee_contributions);
-        drive_state.approach = weighted_sum(&drive_state.approach_contributions);
-        drive_state.disperse = weighted_sum(&drive_state.disperse_contributions);
+    entities.par_iter_mut().with_min_len(256).for_each(|(contributions, output, simplex)| {
+        // 1. Weighted sum per category
+        let flee_vec = weighted_sum(&contributions.flee[..contributions.flee_count as usize]);
+        let approach_vec = weighted_sum(&contributions.approach[..contributions.approach_count as usize]);
+        let disperse_vec = weighted_sum(&contributions.disperse[..contributions.disperse_count as usize]);
 
-        // 2. Blend into final combined vector
-        drive_state.combined = blend_categories(
-            drive_state.flee,
-            drive_state.approach,
-            drive_state.disperse,
+        // 2. Apply priority weights
+        const FLEE_WEIGHT: f32 = 1.0;
+        const APPROACH_WEIGHT: f32 = 0.7;
+        const DISPERSE_WEIGHT: f32 = 0.3;
+
+        let combined = (
+            flee_vec.0 * FLEE_WEIGHT + approach_vec.0 * APPROACH_WEIGHT + disperse_vec.0 * DISPERSE_WEIGHT,
+            flee_vec.1 * FLEE_WEIGHT + approach_vec.1 * APPROACH_WEIGHT + disperse_vec.1 * DISPERSE_WEIGHT,
         );
 
-        // 3. Clear for next tick
-        drive_state.flee_contributions.clear();
-        drive_state.approach_contributions.clear();
-        drive_state.disperse_contributions.clear();
+        // 3. Write to hot-path component (steering reads this)
+        output.combined = combined;
+
+        // 4. Dev-tools: capture simplex for visualization
+        #[cfg(feature = "dev-tools")]
+        if let Some(simplex) = simplex {
+            simplex.flee = flee_vec;
+            simplex.approach = approach_vec;
+            simplex.disperse = disperse_vec;
+        }
+
+        // 5. Clear contributions for next tick
+        contributions.flee_count = 0;
+        contributions.approach_count = 0;
+        contributions.disperse_count = 0;
     });
 }
 ```
 
-**Phase B simplification:** All weights = 1.0. DNA-modulated weights come in future sprint.
+**Chunk Size:** 256 (low variance - all entities do same simple math).
 
-**Test:** Unit tests for weighted sum math, blend logic
+**Phase B:** Fixed priority weights. DNA-modulated weights come in future sprint.
+
+**Test:** Unit tests for weighted sum math, priority hierarchy
 
 ---
 
-### Step 4: Modify Steering for Drives
-**Replace BehaviorMode switch with drive-based steering**
+### Step 4: Modify Steering for Drives (with Freeze Timeout)
+**Replace BehaviorMode switch with drive-based steering + desperate escape**
 
 **File:** `steering/system.rs`
 
@@ -309,23 +399,56 @@ match creature_state.behavior {
 }
 ```
 
-**After:**
+**After (with freeze timeout):**
 ```rust
-if let Some(target) = target {
-    // Target OVERRIDES drive (for testing/forced encounters)
-    accel += seek_toward(target)
-} else if drive_state.combined.length_squared() > DRIVE_THRESHOLD_SQ {
-    // Normal drive-based movement
-    let drive_force = drive_state.combined.normalize() * max_accel * DRIVE_MULT;
-    accel += drive_force;
+// Priority 1: Explicit target (for tests/trials)
+if target.has_explicit_target() {
+    let result = apply_seek(position, velocity, target, size);
+    if result.arrived {
+        target.clear();  // Clear target instead of setting Catatonic
+    } else {
+        acceleration.ax += result.acceleration.0;
+        acceleration.ay += result.acceleration.1;
+    }
 }
-// No drives = creature rests (emergent behavior)
+// Priority 2: Desperate escape (freeze timeout exceeded)
+else if freeze_state.is_desperate() {
+    // Pick random escape direction, burst acceleration
+    let escape_dir = freeze_state.escape_direction;
+    let burst_force = max_accel * DESPERATE_ESCAPE_MULT;  // 1.5-2.0x normal
+    acceleration.ax += escape_dir.0 * burst_force;
+    acceleration.ay += escape_dir.1 * burst_force;
+    freeze_state.reset();  // Clear freeze counter
+}
+// Priority 3: Drive-based steering (normal operation)
+else if magnitude_sq(drive_output.combined) > DRIVE_THRESHOLD_SQ {
+    let drive_dir = normalize(drive_output.combined);
+    let drive_force = (drive_dir.0 * max_accel * DRIVE_MULT,
+                       drive_dir.1 * max_accel * DRIVE_MULT);
+    acceleration.ax += drive_force.0;
+    acceleration.ay += drive_force.1;
+    freeze_state.reset();  // Clear freeze counter (not frozen)
+}
+// Priority 4: Frozen (drives cancel out)
+else {
+    // Track freeze duration
+    freeze_state.tick();  // Increment freeze counter
+    // No acceleration = creature rests/freezes
+}
 // Avoidance still additive after primary drive
 ```
+
+**Freeze Timeout (zoologist-tom recommendation):**
+- Real prey freeze when escape routes blocked (tonic immobility)
+- But prolonged freezing = certain death (predator will eventually reach)
+- Desperate escape burst = "last ditch" gamble to break through
+- Random direction because no good option exists (any direction equally risky)
+- ~4.5 seconds (100 ticks at 22Hz) before desperate escape triggers
 
 **Test scenario support:**
 - `CritBuilder.as_seeker(x, y)` still works for visual trials
 - Production crits spawn without Target → pure drive behavior
+- Freeze timeout ensures no creature freezes forever
 
 ---
 
@@ -418,16 +541,19 @@ apps/simulation/src/simulation/
 
 | File | Change |
 |------|--------|
-| `Cargo.toml` | Add `smallvec` dependency |
-| `perception/systems.rs` | Add L1Perceptions population |
+| `perception/systems.rs` | Add L1Perceptions population (Step 0) |
 | `perception/components.rs` | Verify L1Perceptions API |
-| `simulation/drives/mod.rs` | NEW - Core types and DriveState |
-| `simulation/drives/combine.rs` | NEW - DriveCombineSystem |
-| `simulation/drives/contributions/vision.rs` | NEW - VisionDriveSystem |
-| `creatures/components/state.rs` | Remove BehaviorMode |
-| `creatures/steering/system.rs` | Use DriveState.combined |
-| `creatures/builder.rs` | Add DriveState, remove BehaviorMode |
-| `core/simulation.rs` | Register new systems |
+| `simulation/drives/mod.rs` | NEW - DriveSource, DriveContribution types |
+| `simulation/drives/types.rs` | NEW - DriveOutput, DriveContributions, DriveSimplex, FreezeState |
+| `simulation/drives/vision.rs` | NEW - VisionDriveSystem (with comfort zone) |
+| `simulation/drives/combine.rs` | NEW - DriveCombineSystem (with priority weights) |
+| `creatures/components/state.rs` | REMOVE: BehaviorMode enum, behavior field |
+| `creatures/steering/system.rs` | Replace BehaviorMode match with drive+freeze steering |
+| `creatures/steering/wander.rs` | DELETE: Replaced by disperse drive |
+| `creatures/builder.rs` | Add DriveOutput, DriveContributions, FreezeState; remove `in_behavior()` |
+| `behaviors/transitions/systems.rs` | Remove behavior logic (keep age/energy) |
+| `core/simulation.rs` | Register new systems, update ordering |
+| `instrumentation/mod.rs` | Add `vision_drive_us`, `drive_combine_us` timing fields |
 
 ---
 
@@ -437,12 +563,14 @@ apps/simulation/src/simulation/
 |-----------|----------|-----|
 | Empty area, no neighbors | Rests | No contributions → combined ≈ zero |
 | Crowded area | Disperses to emptier cells | CROWDED → disperse contributions |
+| Comfortable density (0.3-1.5x) | Natural grouping | Comfort zone skips disperse |
 | Large crit nearby | Flees | THREAT → flee contributions |
 | Large crit charging | Explosive flee | velocity urgency = 1.0 |
 | Large crit resting | Cautious grazing | velocity urgency = 0.2 |
 | Prey-rich area | Drifts toward | PREY → approach contributions |
 | Path blocked | Weaves around | L0 avoidance still active |
 | Surrounded by threats | Freezes | Flee vectors cancel → zero output |
+| Frozen too long (~4.5s) | Desperate escape burst | FreezeState timeout → random bolt |
 
 ---
 
@@ -480,29 +608,11 @@ apps/simulation/src/simulation/
 
 **Rationale:** Cleaner codebase, no dual-path complexity.
 
-**Step 4 Update - Steering Integration (Clean Swap):**
-
-```rust
-// Priority 1: Explicit target (for tests/trials)
-if target.has_explicit_target() {
-    let result = apply_seek(position, velocity, target, size);
-    if result.arrived {
-        target.clear();  // Clear target instead of setting Catatonic
-    } else {
-        acceleration.ax += result.acceleration.0;
-        acceleration.ay += result.acceleration.1;
-    }
-}
-// Priority 2: Drive-based steering (normal operation)
-else if magnitude_sq(drive_state.combined) > DRIVE_THRESHOLD_SQ {
-    let drive_dir = normalize(drive_state.combined);
-    let drive_force = (drive_dir.0 * max_accel * DRIVE_MULT,
-                       drive_dir.1 * max_accel * DRIVE_MULT);
-    acceleration.ax += drive_force.0;
-    acceleration.ay += drive_force.1;
-}
-// No drives, no target = creature rests (emergent behavior)
-```
+**Implementation:** See Step 4 for full steering integration with:
+- Priority 1: Explicit target (tests/trials)
+- Priority 2: Desperate escape (freeze timeout)
+- Priority 3: Drive-based steering
+- Priority 4: Frozen state (tracks duration)
 
 **Files to Delete:**
 - `creatures/steering/wander.rs` - Disperse drive replaces wandering
@@ -560,6 +670,12 @@ Creature surrounded by threats should freeze (tonic immobility).
 - **Assertion:** `position_stable` with max_drift 3m
 - **Golden Zone:** Flee vectors cancel → zero output
 
+### 5b. `drive-desperate-escape.toml`
+Creature frozen too long (~4.5s) should trigger desperate escape burst.
+- **Assertion:** `position_changed` after 110 ticks, min_distance 10m
+- **Watch:** After prolonged freeze, creature suddenly bolts in random direction
+- **Biological:** Prevents permanent freeze = certain death scenario
+
 ### 6. `drive-approach-prey.toml`
 Large creature near small creatures should drift toward them.
 - **Assertion:** `distance_decreased` toward cluster by min 15m
@@ -581,16 +697,16 @@ After clean swap, no creature should have BehaviorMode component.
 
 **Red Phase (Write Failing Tests First):**
 - [ ] Create `specs/behavior/drives/` folder
-- [ ] Write 8 new drive BDD specs
+- [ ] Write 9 new drive BDD specs (8 core + desperate-escape)
 - [ ] All new specs FAIL initially (drives not implemented)
 - [ ] Existing 44 seeker/catatonic specs still PASS (baseline)
 
 **Green Phase (Make Tests Pass):**
 - [ ] Step 0: L1Perceptions populated → new specs still fail
-- [ ] Step 1: DriveState component added → new specs still fail
+- [ ] Step 1: Drive components added → new specs still fail
 - [ ] Step 2: VisionDriveSystem → some drive specs start passing
 - [ ] Step 3: DriveCombineSystem → drive specs pass
-- [ ] Step 4: Steering integration → flee/disperse/rest specs pass
+- [ ] Step 4: Steering integration + freeze timeout → flee/disperse/rest/escape specs pass
 - [ ] Step 5: System ordering → all new drive specs pass
 - [ ] Step 6: BehaviorMode removal → `no-behavior-mode` spec passes
 - [ ] Fix 7 wanderer specs → convert to drive-based creatures
@@ -598,4 +714,4 @@ After clean swap, no creature should have BehaviorMode component.
 **Refactor Phase:**
 - [ ] Performance: < 2ms drive computation at 360K
 - [ ] Code cleanup: Remove dead code from old behavior system
-- [ ] All 52+ specs pass (44 existing + 8 new)
+- [ ] All 53+ specs pass (44 existing + 9 new)

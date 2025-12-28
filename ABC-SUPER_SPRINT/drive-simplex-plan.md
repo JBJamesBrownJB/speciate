@@ -471,3 +471,131 @@ apps/simulation/src/simulation/
 - [ ] L1 perception overlay shows correct colors
 - [ ] Drive simplex triangle displays for selected creature
 - [ ] Adding new DriveSource requires no changes to DriveState struct
+
+---
+
+## Migration Strategy: CLEAN SWAP
+
+**Decision:** Remove `BehaviorMode` completely when drives are working (no coexistence period).
+
+**Rationale:** Cleaner codebase, no dual-path complexity.
+
+**Step 4 Update - Steering Integration (Clean Swap):**
+
+```rust
+// Priority 1: Explicit target (for tests/trials)
+if target.has_explicit_target() {
+    let result = apply_seek(position, velocity, target, size);
+    if result.arrived {
+        target.clear();  // Clear target instead of setting Catatonic
+    } else {
+        acceleration.ax += result.acceleration.0;
+        acceleration.ay += result.acceleration.1;
+    }
+}
+// Priority 2: Drive-based steering (normal operation)
+else if magnitude_sq(drive_state.combined) > DRIVE_THRESHOLD_SQ {
+    let drive_dir = normalize(drive_state.combined);
+    let drive_force = (drive_dir.0 * max_accel * DRIVE_MULT,
+                       drive_dir.1 * max_accel * DRIVE_MULT);
+    acceleration.ax += drive_force.0;
+    acceleration.ay += drive_force.1;
+}
+// No drives, no target = creature rests (emergent behavior)
+```
+
+**Files to Delete:**
+- `creatures/steering/wander.rs` - Disperse drive replaces wandering
+
+---
+
+## Existing Spec Migration
+
+**Key Insight:** 39 seeker specs work unchanged (Target override preserved).
+
+| Spec Type | Count | Status |
+|-----------|-------|--------|
+| Seeker-based | 39 | **Works unchanged** - Target override |
+| Catatonic-based | 5 | **Works unchanged** - Dormant brain |
+| Wanderer-based | 7 | **Fix required** - Convert to drive-based |
+
+**Wanderer specs to fix:**
+- `specs/behavior/size-variation-stability.toml` (1)
+- `specs/performance/100k_medium_sparse.toml`
+- `specs/performance/10k-wanderers-world-spread.toml`
+- `specs/performance/200k-wanderers-world-spread.toml`
+- `specs/performance/many-wanderers-dense.toml`
+- `specs/performance/many-wanderers-medium-density.toml`
+
+**Fix approach:** Replace `creature_type = "wanderer"` with drive-based creature (no Target → uses disperse drive).
+
+---
+
+## BDD Specifications (TOML Specs)
+
+Write these FIRST (Red phase). Location: `apps/simulation/specs/behavior/drives/`
+
+### 1. `drive-flee-from-threat.toml`
+Small creature (1m) near large creature (5m) should flee without explicit BehaviorMode.
+- **Assertion:** `distance_increased` from predator by min 20m
+- **Watch:** Small creature accelerates away from large creature
+
+### 2. `drive-flee-urgency-charging.toml`
+Small creature should flee MORE urgently when predator charges vs stationary.
+- **Assertion:** `flee_distance_greater` ratio > 1.5
+- **Watch:** Charging predator causes 2x+ flee distance
+
+### 3. `drive-disperse-from-crowded.toml`
+Creature in crowded area should drift toward empty cells.
+- **Assertion:** `distance_from_center_increased` by min 10m
+- **Watch:** Creature drifts away from dense cluster
+
+### 4. `drive-rest-when-isolated.toml`
+Isolated creature should remain stationary (no jitter).
+- **Assertion:** `position_stable` with max_drift 2m
+- **Critical:** Validates equilibrium state
+
+### 5. `drive-freeze-when-surrounded.toml`
+Creature surrounded by threats should freeze (tonic immobility).
+- **Assertion:** `position_stable` with max_drift 3m
+- **Golden Zone:** Flee vectors cancel → zero output
+
+### 6. `drive-approach-prey.toml`
+Large creature near small creatures should drift toward them.
+- **Assertion:** `distance_decreased` toward cluster by min 15m
+- **Watch:** Predator moves toward cluster but weaves around individuals
+
+### 7. `drive-target-override.toml`
+Explicit Target should override drive steering.
+- **Assertion:** `creature_reached_target`
+- **Regression:** Validates `.as_seeker()` still works
+
+### 8. `drive-no-behavior-mode.toml`
+After clean swap, no creature should have BehaviorMode component.
+- **Assertion:** `no_behavior_mode_component`
+- **Meta-test:** Validates architectural cleanup
+
+---
+
+## TDD Checklist
+
+**Red Phase (Write Failing Tests First):**
+- [ ] Create `specs/behavior/drives/` folder
+- [ ] Write 8 new drive BDD specs
+- [ ] All new specs FAIL initially (drives not implemented)
+- [ ] Existing 44 seeker/catatonic specs still PASS (baseline)
+
+**Green Phase (Make Tests Pass):**
+- [ ] Step 0: L1Perceptions populated → new specs still fail
+- [ ] Step 1: DriveState component added → new specs still fail
+- [ ] Step 2: VisionDriveSystem → some drive specs start passing
+- [ ] Step 3: DriveCombineSystem → drive specs pass
+- [ ] Step 4: Steering integration → flee/disperse/rest specs pass
+- [ ] Step 5: System ordering → all new drive specs pass
+- [ ] Step 6: BehaviorMode removal → `no-behavior-mode` spec passes
+- [ ] Fix 7 wanderer specs → convert to drive-based creatures
+
+**Refactor Phase:**
+- [ ] Performance: < 2ms drive computation at 360K
+- [ ] Code cleanup: Remove dead code from old behavior system
+- [ ] All 52+ specs pass (44 existing + 8 new)

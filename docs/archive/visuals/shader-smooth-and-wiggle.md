@@ -1,5 +1,11 @@
 # Project Brief: GPU-Accelerated Entity Rendering Pipeline
 
+> **ARCHIVED:** 2025-12-28
+> - **Phase 1 (Interpolation):** Implemented in Sprint 14 (zero-copy double-buffer architecture)
+> - **Phase 2 (Organic Wiggle):** Superseded by `docs/visuals/ideas/procedural-gait-synthesis.md` (comprehensive biological gait system with allometric scaling)
+>
+> Kept for historical reference.
+
 **To:** Development Team
 **From:** Technical Lead
 **Subject:** Implementation of Shader-Based Interpolation and Procedural Animation (Rust/PixiJS)

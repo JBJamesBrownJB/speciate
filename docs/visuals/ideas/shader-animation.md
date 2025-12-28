@@ -29,6 +29,12 @@ Replace static sprites with shader-driven organic movement (breathing, undulatio
 
 **Outcome:** Movement-synchronized body wave (walk cycle, slither, swim depending on locomotion)
 
+**Detailed Specification:** See `procedural-gait-synthesis.md` for comprehensive design including:
+- Allometric scaling (size^-0.33 frequency, biologically accurate)
+- Multiple gait styles (gallop, lumber, scuttle)
+- Fatigue/health modulation (gait irregularity = fitness signal)
+- Golden Zone: Emergent predator-prey signaling via gait patterns
+
 **Key Decisions:**
 - Velocity-driven wave frequency (faster movement = faster undulation)
 - Phase offset per creature for visual variety

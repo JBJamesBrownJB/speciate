@@ -11,9 +11,6 @@ const SKIPPED_CELL_COLOR = 0xaa4422;
 const SKIPPED_CELL_ALPHA = 0.25;
 const CREATURE_CELL_COLOR = 0xdddd22;
 const CREATURE_CELL_ALPHA = 0.35;
-const HOVER_CELL_COLOR = 0x00ffff;
-const HOVER_CELL_ALPHA = 0.4;
-const QUERY_THROTTLE_MS = 100;
 
 interface L1CellInfo {
   cellX: number;
@@ -47,7 +44,6 @@ export class SpatialGridOverlay implements IOverlay {
 
   private graphics: Graphics;
   private cellGraphics: Graphics;
-  private hoverGraphics: Graphics;
   private currentMode: GridMode = GridMode.Off;
   private l0CellSize: number = 10;
   private l1CellSize: number = 30;
@@ -59,34 +55,17 @@ export class SpatialGridOverlay implements IOverlay {
   private skippedCells: QueriedCell[] = [];
   private creatureCell: QueriedCell | null = null;
 
-  // Mouse tracking for L1 hover queries
-  private mouseWorldX: number = 0;
-  private mouseWorldY: number = 0;
-  private mouseInCanvas: boolean = false;
-  private canvas: HTMLCanvasElement | null = null;
-  private lastQueryTime: number = 0;
-  private pendingQuery: boolean = false;
-  private pendingQueryTimeout: ReturnType<typeof setTimeout> | null = null;
-  private currentCellInfo: L1CellInfo | null = null;
-  private hoveredCellX: number | null = null;
-  private hoveredCellY: number | null = null;
+  // Info panel for L1 hover
   private infoPanel: HTMLDivElement | null = null;
 
-  // Camera state (updated each frame)
-  private cameraX: number = 0;
-  private cameraY: number = 0;
-  private zoom: number = 1;
-  private viewportWidth: number = 0;
-  private viewportHeight: number = 0;
+  // L1 hover state (managed by InteractionManager)
+  private hoveredInfo: L1CellInfo | null = null;
+  private hoverPending: boolean = false;
 
   constructor(container: Container) {
     this.cellGraphics = new Graphics();
     this.cellGraphics.visible = false;
     container.addChild(this.cellGraphics);
-
-    this.hoverGraphics = new Graphics();
-    this.hoverGraphics.visible = false;
-    container.addChild(this.hoverGraphics);
 
     this.graphics = new Graphics();
     this.graphics.visible = false;
@@ -101,7 +80,7 @@ export class SpatialGridOverlay implements IOverlay {
     this.infoPanel.style.cssText = `
       position: fixed;
       top: 10px;
-      right: 10px;
+      right: 250px;
       background: rgba(0, 0, 0, 0.85);
       color: #00ffff;
       font-family: 'Consolas', 'Monaco', monospace;
@@ -117,91 +96,56 @@ export class SpatialGridOverlay implements IOverlay {
     document.body.appendChild(this.infoPanel);
   }
 
-  setCanvas(canvas: HTMLCanvasElement): void {
-    this.canvas = canvas;
+  handleHover(worldX: number, worldY: number): void {
+    if (this.currentMode !== GridMode.L1) return;
+    if (this.hoverPending) return;
 
-    canvas.addEventListener('mousemove', this.handleMouseMove);
-    canvas.addEventListener('mouseenter', this.handleMouseEnter);
-    canvas.addEventListener('mouseleave', this.handleMouseLeave);
-  }
+    this.hoverPending = true;
 
-  private handleMouseMove = (event: MouseEvent): void => {
-    if (!this.canvas) return;
-
-    const rect = this.canvas.getBoundingClientRect();
-    const screenX = event.clientX - rect.left;
-    const screenY = event.clientY - rect.top;
-
-    // Convert screen to world coordinates
-    this.mouseWorldX = this.cameraX + (screenX - this.viewportWidth / 2) / this.zoom;
-    this.mouseWorldY = this.cameraY + (screenY - this.viewportHeight / 2) / this.zoom;
-
-    // Trigger throttled query if L1 mode is active
-    if (this.currentMode === GridMode.L1 && this.mouseInCanvas) {
-      this.scheduleL1Query();
-    }
-  };
-
-  private handleMouseEnter = (): void => {
-    this.mouseInCanvas = true;
-  };
-
-  private handleMouseLeave = (): void => {
-    this.mouseInCanvas = false;
-    this.clearHoverState();
-  };
-
-  private scheduleL1Query(): void {
-    const now = Date.now();
-    if (now - this.lastQueryTime < QUERY_THROTTLE_MS) {
-      if (!this.pendingQuery) {
-        this.pendingQuery = true;
-        this.pendingQueryTimeout = setTimeout(() => {
-          this.pendingQueryTimeout = null;
-          this.pendingQuery = false;
-          if (this.currentMode === GridMode.L1 && this.mouseInCanvas) {
-            this.executeL1Query();
-          }
-        }, QUERY_THROTTLE_MS - (now - this.lastQueryTime));
+    requestAnimationFrame(async () => {
+      try {
+        const info = await window.electron?.queryL1Cell?.(worldX, worldY);
+        if (info) {
+          this.hoveredInfo = info;
+        } else {
+          // Backend returns null for empty cells - create minimal info
+          const cellX = Math.floor(worldX / this.l1CellSize);
+          const cellY = Math.floor(worldY / this.l1CellSize);
+          this.hoveredInfo = {
+            cellX,
+            cellY,
+            worldCenterX: (cellX + 0.5) * this.l1CellSize,
+            worldCenterY: (cellY + 0.5) * this.l1CellSize,
+            creatureCount: 0,
+            totalMass: 0,
+            maxSize: 0,
+            avgSize: 0,
+          };
+        }
+        this.updateInfoPanel();
+      } finally {
+        this.hoverPending = false;
       }
-      return;
-    }
-    this.executeL1Query();
+    });
   }
 
-  private async executeL1Query(): Promise<void> {
-    this.lastQueryTime = Date.now();
-
-    // Calculate which L1 cell the mouse is over
-    const cellX = Math.floor(this.mouseWorldX / this.l1CellSize);
-    const cellY = Math.floor(this.mouseWorldY / this.l1CellSize);
-
-    // Skip query if still on the same cell
-    if (cellX === this.hoveredCellX && cellY === this.hoveredCellY) {
-      return;
-    }
-
-    this.hoveredCellX = cellX;
-    this.hoveredCellY = cellY;
-
-    // Query the backend
-    if (window.electron?.queryL1Cell) {
-      const info = await window.electron.queryL1Cell(this.mouseWorldX, this.mouseWorldY);
-      this.currentCellInfo = info;
-      this.updateInfoPanel();
+  clearHover(): void {
+    this.hoveredInfo = null;
+    this.hoverPending = false;
+    if (this.infoPanel) {
+      this.infoPanel.style.display = 'none';
     }
   }
 
   private updateInfoPanel(): void {
     if (!this.infoPanel) return;
 
-    if (!this.currentCellInfo || this.currentMode !== GridMode.L1 || !this.mouseInCanvas) {
+    if (!this.hoveredInfo || this.currentMode !== GridMode.L1) {
       this.infoPanel.style.display = 'none';
       return;
     }
 
-    const info = this.currentCellInfo;
-
+    const info = this.hoveredInfo;
     this.infoPanel.innerHTML = `
       <div style="font-weight: bold; margin-bottom: 8px; color: #00aaff; border-bottom: 1px solid #00aaff40; padding-bottom: 6px;">
         L1 Cell (${info.cellX}, ${info.cellY})
@@ -220,16 +164,6 @@ export class SpatialGridOverlay implements IOverlay {
       </div>
     `;
     this.infoPanel.style.display = 'block';
-  }
-
-  private clearHoverState(): void {
-    this.hoveredCellX = null;
-    this.hoveredCellY = null;
-    this.currentCellInfo = null;
-    this.hoverGraphics.clear();
-    if (this.infoPanel) {
-      this.infoPanel.style.display = 'none';
-    }
   }
 
   setCellSize(cellSize: number): void {
@@ -268,11 +202,10 @@ export class SpatialGridOverlay implements IOverlay {
     const isVisible = mode !== GridMode.Off;
     this.graphics.visible = isVisible;
     this.cellGraphics.visible = isVisible;
-    this.hoverGraphics.visible = mode === GridMode.L1;
 
-    // Clear hover state when changing modes
+    // Clear hover state when leaving L1 mode
     if (mode !== GridMode.L1) {
-      this.clearHoverState();
+      this.clearHover();
     }
   }
 
@@ -313,13 +246,6 @@ export class SpatialGridOverlay implements IOverlay {
     viewportWidth: number,
     viewportHeight: number
   ): void {
-    // Store camera state for mouse-to-world conversion
-    this.cameraX = cameraX;
-    this.cameraY = cameraY;
-    this.zoom = zoom;
-    this.viewportWidth = viewportWidth;
-    this.viewportHeight = viewportHeight;
-
     if (this.currentMode === GridMode.Off) return;
 
     switch (this.currentMode) {
@@ -333,19 +259,6 @@ export class SpatialGridOverlay implements IOverlay {
   }
 
   destroy(): void {
-    // Clear pending query timeout
-    if (this.pendingQueryTimeout !== null) {
-      clearTimeout(this.pendingQueryTimeout);
-      this.pendingQueryTimeout = null;
-    }
-
-    // Remove event listeners
-    if (this.canvas) {
-      this.canvas.removeEventListener('mousemove', this.handleMouseMove);
-      this.canvas.removeEventListener('mouseenter', this.handleMouseEnter);
-      this.canvas.removeEventListener('mouseleave', this.handleMouseLeave);
-    }
-
     // Remove info panel
     if (this.infoPanel && this.infoPanel.parentNode) {
       this.infoPanel.parentNode.removeChild(this.infoPanel);
@@ -353,7 +266,6 @@ export class SpatialGridOverlay implements IOverlay {
 
     this.graphics.destroy();
     this.cellGraphics.destroy();
-    this.hoverGraphics.destroy();
   }
 
   private renderL0Grid(
@@ -419,7 +331,6 @@ export class SpatialGridOverlay implements IOverlay {
   ): void {
     this.graphics.clear();
     this.cellGraphics.clear();
-    this.hoverGraphics.clear();
 
     const cellSize = this.l1CellSize;
     const { worldLeft, worldRight, worldTop, worldBottom } = this.getViewBounds(
@@ -428,14 +339,6 @@ export class SpatialGridOverlay implements IOverlay {
 
     if (worldLeft >= worldRight || worldTop >= worldBottom) return;
     if (cellSize <= 0 || !isFinite(cellSize)) return;
-
-    // Render hover highlight for the cell under the mouse
-    if (this.hoveredCellX !== null && this.hoveredCellY !== null && this.mouseInCanvas) {
-      const worldX = this.hoveredCellX * cellSize;
-      const worldY = this.hoveredCellY * cellSize;
-      this.hoverGraphics.rect(worldX, worldY, cellSize, cellSize);
-      this.hoverGraphics.fill({ color: HOVER_CELL_COLOR, alpha: HOVER_CELL_ALPHA });
-    }
 
     this.renderGridLines(cellSize, worldLeft, worldRight, worldTop, worldBottom, zoom, L1_GRID_LINE_COLOR);
   }

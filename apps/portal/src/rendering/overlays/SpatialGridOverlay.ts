@@ -18,6 +18,8 @@ const QUERY_THROTTLE_MS = 100;
 interface L1CellInfo {
   cellX: number;
   cellY: number;
+  worldCenterX: number;
+  worldCenterY: number;
   creatureCount: number;
   totalMass: number;
   maxSize: number;
@@ -205,6 +207,8 @@ export class SpatialGridOverlay implements IOverlay {
         L1 Cell (${info.cellX}, ${info.cellY})
       </div>
       <div style="display: grid; grid-template-columns: auto auto; gap: 4px 12px;">
+        <span style="color: #888;">World Center:</span>
+        <span style="text-align: right;">(${info.worldCenterX.toFixed(1)}, ${info.worldCenterY.toFixed(1)})</span>
         <span style="color: #888;">Creatures:</span>
         <span style="text-align: right;">${info.creatureCount}</span>
         <span style="color: #888;">Total Mass:</span>

@@ -16,6 +16,10 @@ export interface L1CellInfoJs {
   cellX: number
   /** Cell Y coordinate (grid units) */
   cellY: number
+  /** World X coordinate of cell center (meters) */
+  worldCenterX: number
+  /** World Y coordinate of cell center (meters) */
+  worldCenterY: number
   /** Number of creatures in this cell */
   creatureCount: number
   /** Total mass of all creatures in this cell (kg) */

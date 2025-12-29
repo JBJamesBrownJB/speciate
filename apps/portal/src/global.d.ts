@@ -35,6 +35,8 @@ declare global {
       queryL1Cell: (worldX: number, worldY: number) => Promise<{
         cellX: number;
         cellY: number;
+        worldCenterX: number;
+        worldCenterY: number;
         creatureCount: number;
         totalMass: number;
         maxSize: number;

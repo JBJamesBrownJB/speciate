@@ -940,6 +940,10 @@ pub struct L1CellInfoJs {
     pub cell_x: i32,
     /// Cell Y coordinate (grid units)
     pub cell_y: i32,
+    /// World X coordinate of cell center (meters)
+    pub world_center_x: f64,
+    /// World Y coordinate of cell center (meters)
+    pub world_center_y: f64,
     /// Number of creatures in this cell
     pub creature_count: u32,
     /// Total mass of all creatures in this cell (kg)
@@ -1050,6 +1054,8 @@ impl SimulationEngine {
             Ok(Some(info)) => Some(L1CellInfoJs {
                 cell_x: info.cell_x,
                 cell_y: info.cell_y,
+                world_center_x: info.world_center_x as f64,
+                world_center_y: info.world_center_y as f64,
                 creature_count: info.creature_count,
                 total_mass: info.total_mass as f64,
                 max_size: info.max_size as f64,

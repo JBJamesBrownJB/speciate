@@ -303,11 +303,12 @@ impl NapiApp {
                         self.simulation.world.get_resource::<HierarchicalGrid>()
                     {
                         let bio = grid.l1.get_biosignature_at(world_x, world_y);
-                        let inv_cell_size = 1.0 / grid.l1.cell_size();
+                        let cell_size = grid.l1.cell_size();
+                        let inv_cell_size = 1.0 / cell_size;
                         let cell_x = (world_x * inv_cell_size).floor() as i32;
                         let cell_y = (world_y * inv_cell_size).floor() as i32;
 
-                        calculate_l1_cell_info(&bio, cell_x, cell_y)
+                        calculate_l1_cell_info(&bio, cell_x, cell_y, cell_size)
                     } else {
                         None
                     };
@@ -579,6 +580,7 @@ pub fn calculate_l1_cell_info(
     bio: &crate::simulation::spatial::BioSignature,
     cell_x: i32,
     cell_y: i32,
+    cell_size: f32,
 ) -> Option<crate::ipc::L1CellInfo> {
     use crate::simulation::creatures::constants::DEFAULT_MASS;
 
@@ -598,9 +600,15 @@ pub fn calculate_l1_cell_info(
         0.0
     };
 
+    // Compute world center from cell coordinates
+    let world_center_x = (cell_x as f32 + 0.5) * cell_size;
+    let world_center_y = (cell_y as f32 + 0.5) * cell_size;
+
     Some(crate::ipc::L1CellInfo {
         cell_x,
         cell_y,
+        world_center_x,
+        world_center_y,
         creature_count: bio.creature_count as u32,
         total_mass: bio.total_mass,
         max_size,
@@ -617,7 +625,7 @@ mod tests {
     #[test]
     fn l1_cell_info_empty_returns_none() {
         let bio = BioSignature::default();
-        let result = calculate_l1_cell_info(&bio, 0, 0);
+        let result = calculate_l1_cell_info(&bio, 0, 0, 60.0);
         assert!(result.is_none());
     }
 
@@ -631,7 +639,7 @@ mod tests {
             creature_count: 1,
         };
 
-        let result = calculate_l1_cell_info(&bio, 5, 10).unwrap();
+        let result = calculate_l1_cell_info(&bio, 5, 10, 60.0).unwrap();
 
         assert_eq!(result.max_size, radius * 2.0);
     }
@@ -648,7 +656,7 @@ mod tests {
             creature_count: 1,
         };
 
-        let result = calculate_l1_cell_info(&bio, 0, 0).unwrap();
+        let result = calculate_l1_cell_info(&bio, 0, 0, 60.0).unwrap();
 
         // avg_size = (mass / DEFAULT_MASS)^(1/3)
         let expected_avg_size = (expected_mass / DEFAULT_MASS).powf(1.0 / 3.0);
@@ -675,7 +683,7 @@ mod tests {
             creature_count: 3,
         };
 
-        let result = calculate_l1_cell_info(&bio, 0, 0).unwrap();
+        let result = calculate_l1_cell_info(&bio, 0, 0, 60.0).unwrap();
 
         // max_size should be diameter of largest creature
         assert_eq!(result.max_size, 3.0);
@@ -696,9 +704,30 @@ mod tests {
             creature_count: 1,
         };
 
-        let result = calculate_l1_cell_info(&bio, -5, 10).unwrap();
+        let result = calculate_l1_cell_info(&bio, -5, 10, 60.0).unwrap();
 
         assert_eq!(result.cell_x, -5);
         assert_eq!(result.cell_y, 10);
+    }
+
+    #[test]
+    fn l1_cell_info_world_center_computed_correctly() {
+        let bio = BioSignature {
+            total_mass: 100.0,
+            max_size: 1.0,
+            creature_count: 1,
+        };
+
+        // Cell (2, 3) with 60m cell size should have center at (2.5*60, 3.5*60) = (150, 210)
+        let result = calculate_l1_cell_info(&bio, 2, 3, 60.0).unwrap();
+
+        assert_eq!(result.world_center_x, 150.0);
+        assert_eq!(result.world_center_y, 210.0);
+
+        // Negative cell coords: Cell (-2, -1) should have center at (-1.5*60, -0.5*60) = (-90, -30)
+        let result_neg = calculate_l1_cell_info(&bio, -2, -1, 60.0).unwrap();
+
+        assert_eq!(result_neg.world_center_x, -90.0);
+        assert_eq!(result_neg.world_center_y, -30.0);
     }
 }

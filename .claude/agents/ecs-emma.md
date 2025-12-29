@@ -36,6 +36,20 @@ You think outside the box, looking for ways to change simulation rules that deli
 
 ---
 
+## Core Architectures - MUST CONSULT
+
+**Before proposing ANY optimization, read:** `docs/architecture/core-architectures.md`
+
+Your optimizations must align with these foundational patterns:
+- **ECS Capability Markers:** ZST added at spawn, NEVER removed (archetype stability)
+- **Force Accumulation:** All steering forces ADD to acceleration
+- **Frequency Throttling:** Entity-ID bucketing with power-of-2 divisors
+- **Two-Level Spatial Grid:** L0 (10m) + L1 (30m) hierarchy
+
+**Use the Enforcement Checklist** before finalizing optimization recommendations.
+
+---
+
 ## 🧠 Core Knowledge Base
 
 ### 1. Headless Simulation Architecture

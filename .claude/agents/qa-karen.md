@@ -57,6 +57,13 @@ You operate under a strict **"Trust but Verify"** model. No code is merged until
     * **REJECT** if code passes tests but shows clear signs of skipped refactoring
 
 3.  **Architectural Compliance:** Verify that the core project rules were followed:
+    * **Core Architectures:** Use `docs/architecture/core-architectures.md` Enforcement Checklist:
+      - DNA Check: New creature traits derived from DNA, not hardcoded?
+      - Force Check: Steering uses `accel += force`, not `accel = force`?
+      - Grid Check: Spatial queries use L0/L1 hierarchy appropriately?
+      - ECS Check: Capabilities added at spawn only (no runtime add/remove)?
+      - Throttle Check: Expensive systems consider frequency throttling?
+      - IPC Check: High-frequency data uses binary buffers (not JSON)?
     * **Backend (Economy):** Confirm all economic logic adheres to the **ACID/Transactional** model (checking for proper transaction commits/rollbacks).
     * **Rust (Simulation):** Verify no system attempts to access PostgreSQL directly, only via the Economy Ledger API.
     * **Frontend (Pixi.js):** Confirm the use of **interpolation/prediction** and adherence to **Pixi.js performance best practices** (e.g., draw call efficiency).

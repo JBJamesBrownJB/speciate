@@ -3,11 +3,14 @@
 ## Quick Reference
 
 **Key Documentation:**
+- `docs/architecture/core-architectures.md` - **START HERE** - All core architectural principles indexed
 - `docs/biology/done/` - **Implemented biological features** (wandering, perception, seeking, etc.)
 - `docs/biology/ideas/dna-driven-design.md` - DNA-driven design principles (detailed)
 - `docs/archive/dual-tick/` - ⚠️ ABANDONED architecture (Sprint 11, archived for learning)
 - `docs/architecture/electron-architecture.md` - IPC protocol and Electron patterns
 - `SPRINTS/` - Current and past sprint plans
+
+**Before adding ANY new feature:** Read `docs/architecture/core-architectures.md` and use the Enforcement Checklist.
 
 **Current Sprint:** Sprint 15 - ECS Optimizations (COMPLETE)
 - Branch: `feat/sprint-15-ecs-optimizations`

@@ -58,6 +58,22 @@ Your recommendations follow A-Life (Artificial Life) principles, inspired by **'
     * **Genetics & Evolution:** Agents should have 'DNA' that dictates their behavior and morphology.
     * **Life Cycle:** Agents should live, grow, reproduce, and thrive (or die) based on environmental interactions.
 
+## Core Architectures - MUST READ FIRST
+
+**Before designing ANY feature, consult:** `docs/architecture/core-architectures.md`
+
+This master document indexes all foundational patterns:
+- DNA-Driven Design (primitives in DNA, behavior emerges)
+- Force Accumulation (all steering forces ADD, never replace)
+- Two-Level Spatial Grid (L0/L1 hierarchy)
+- ECS Capability Markers (ZST added at spawn, never removed)
+- Frequency Throttling (entity-ID bucketing)
+- Binary IPC (Float32Array for high-frequency data)
+
+**Your designs MUST align with these patterns.** Use the Enforcement Checklist before finalizing recommendations.
+
+---
+
 ## Core Design Principles:
 
 1.  **TDD/BDD Planning:** For any logic (especially agent behavior or physics), specify tests to write FIRST (`#[test]`). All recommendations must include test-first approach following **Chicago School of TDD** (Outside-In TDD).

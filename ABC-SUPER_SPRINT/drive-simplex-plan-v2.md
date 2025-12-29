@@ -20,3 +20,27 @@ Replace discrete BehaviorMode enum with continuous drive-based behavior.
 - We will decide how to proceed at this point... it may be, that this just replaces 'wandering' with drive simplex, and we proceed with other things at this point...?
 
 ---
+
+## L1 Border Repulsion Integration
+
+**Goal:** Use L1 border cells to create natural avoidance zone at map edges.
+
+### Implementation Steps
+
+1. **Flag border cells at init** - Mark L1 cells at map edges as "border" category (static, compute once)
+2. **Add border repulsion force** - Creatures in border cells receive constant outward force toward map center
+3. **Integrate with L1 perception** - When crits scan L1 cells, border cells auto-categorize as "avoid" (red in dev overlay)
+4. **Wander target filtering** - Drive simplex excludes border cells from wander target candidates
+
+### Visual Overlay (--dev-tools)
+
+- Border cells rendered with distinct color (e.g., orange/red gradient)
+- When creature selected, show repulsion force vector if in border zone
+
+### Golden Zone Opportunity
+
+Predators feel weaker border repulsion than prey (scale by predator_score). Creates emergent "edge hunting" where predators can herd prey toward constrained edges - mirrors wolf/lion tactics.
+
+**See:** `docs/biology/ideas/l1-border-repulsion.md` for full design.
+
+---

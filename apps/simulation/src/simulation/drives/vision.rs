@@ -1,5 +1,5 @@
 use crate::simulation::core::components::{BodySize, Position, Velocity};
-use crate::simulation::perception::{L1Classification, L1Perceptions, NeighborCache};
+use crate::simulation::perception::{L1Classification, L1Vision, NeighborCache};
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 
@@ -8,9 +8,9 @@ use super::DriveContributions;
 #[cfg(feature = "dev-tools")]
 use crate::instrumentation::SystemTimings;
 
-/// Vision Drive System: Generates drive contributions from L1 perception data.
+/// Vision Drive System: Generates drive contributions from L1 vision data.
 ///
-/// For each creature, iterates L1Perceptions and:
+/// For each creature, iterates L1Vision and:
 /// - THREAT → push_flee (with velocity-based urgency)
 /// - PREY → push_approach
 /// - CROWDED → push_disperse (away from crowded areas)
@@ -20,7 +20,7 @@ pub fn vision_drive_system(
         &Position,
         &Velocity,
         &BodySize,
-        &L1Perceptions,
+        &L1Vision,
         &NeighborCache,
         &mut DriveContributions,
     )>,
@@ -34,8 +34,8 @@ pub fn vision_drive_system(
     entities
         .par_iter_mut()
         .with_min_len(64)
-        .for_each(|(pos, vel, size, l1_perceptions, neighbor_cache, contributions)| {
-            process_vision_drives(pos, vel, size, l1_perceptions, neighbor_cache, contributions);
+        .for_each(|(pos, vel, size, l1_vision, neighbor_cache, contributions)| {
+            process_vision_drives(pos, vel, size, l1_vision, neighbor_cache, contributions);
         });
 }
 
@@ -44,16 +44,16 @@ fn process_vision_drives(
     pos: &Position,
     _vel: &Velocity,
     size: &BodySize,
-    l1_perceptions: &L1Perceptions,
+    l1_vision: &L1Vision,
     neighbor_cache: &NeighborCache,
     contributions: &mut DriveContributions,
 ) {
     let _self_mass = size.mass();
 
-    for perception in l1_perceptions.iter() {
-        let dir = (perception.direction_x, perception.direction_y);
+    for entry in l1_vision.iter() {
+        let dir = (entry.direction_x, entry.direction_y);
 
-        match perception.classification {
+        match entry.classification {
             L1Classification::Threat => {
                 let urgency = calculate_threat_urgency(pos, dir, neighbor_cache);
                 contributions.push_flee(negate(dir), urgency);
@@ -130,7 +130,7 @@ fn negate(dir: (f32, f32)) -> (f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simulation::perception::{L1CellPerception, L1Classification};
+    use crate::simulation::perception::{L1Classification, L1VisionEntry};
 
     #[test]
     fn test_threat_generates_flee_contribution() {
@@ -140,8 +140,8 @@ mod tests {
         let size = BodySize::new(1.0);
         let neighbor_cache = NeighborCache::new();
 
-        let mut l1_perceptions = L1Perceptions::new();
-        l1_perceptions.push(L1CellPerception {
+        let mut l1_vision = L1Vision::new();
+        l1_vision.push(L1VisionEntry {
             cell_idx: 0,
             classification: L1Classification::Threat,
             _pad: [0; 3],
@@ -149,7 +149,7 @@ mod tests {
             direction_y: 0.0,
         });
 
-        process_vision_drives(&pos, &vel, &size, &l1_perceptions, &neighbor_cache, &mut contributions);
+        process_vision_drives(&pos, &vel, &size, &l1_vision, &neighbor_cache, &mut contributions);
 
         assert!(contributions.has_flee(), "Threat should generate flee contribution");
         assert_eq!(contributions.flee_count, 1);
@@ -166,8 +166,8 @@ mod tests {
         let size = BodySize::new(1.0);
         let neighbor_cache = NeighborCache::new();
 
-        let mut l1_perceptions = L1Perceptions::new();
-        l1_perceptions.push(L1CellPerception {
+        let mut l1_vision = L1Vision::new();
+        l1_vision.push(L1VisionEntry {
             cell_idx: 0,
             classification: L1Classification::Prey,
             _pad: [0; 3],
@@ -175,7 +175,7 @@ mod tests {
             direction_y: 0.0,
         });
 
-        process_vision_drives(&pos, &vel, &size, &l1_perceptions, &neighbor_cache, &mut contributions);
+        process_vision_drives(&pos, &vel, &size, &l1_vision, &neighbor_cache, &mut contributions);
 
         assert!(contributions.has_approach(), "Prey should generate approach contribution");
         assert_eq!(contributions.approach_count, 1);
@@ -192,8 +192,8 @@ mod tests {
         let size = BodySize::new(1.0);
         let neighbor_cache = NeighborCache::new();
 
-        let mut l1_perceptions = L1Perceptions::new();
-        l1_perceptions.push(L1CellPerception {
+        let mut l1_vision = L1Vision::new();
+        l1_vision.push(L1VisionEntry {
             cell_idx: 0,
             classification: L1Classification::Crowded,
             _pad: [0; 3],
@@ -201,7 +201,7 @@ mod tests {
             direction_y: 0.0,
         });
 
-        process_vision_drives(&pos, &vel, &size, &l1_perceptions, &neighbor_cache, &mut contributions);
+        process_vision_drives(&pos, &vel, &size, &l1_vision, &neighbor_cache, &mut contributions);
 
         assert!(contributions.has_disperse(), "Crowded should generate disperse");
         let disperse = contributions.iter_disperse().next().unwrap();
@@ -216,8 +216,8 @@ mod tests {
         let size = BodySize::new(1.0);
         let neighbor_cache = NeighborCache::new();
 
-        let mut l1_perceptions = L1Perceptions::new();
-        l1_perceptions.push(L1CellPerception {
+        let mut l1_vision = L1Vision::new();
+        l1_vision.push(L1VisionEntry {
             cell_idx: 0,
             classification: L1Classification::Empty,
             _pad: [0; 3],
@@ -225,7 +225,7 @@ mod tests {
             direction_y: 0.0,
         });
 
-        process_vision_drives(&pos, &vel, &size, &l1_perceptions, &neighbor_cache, &mut contributions);
+        process_vision_drives(&pos, &vel, &size, &l1_vision, &neighbor_cache, &mut contributions);
 
         assert!(contributions.has_disperse(), "Empty should generate disperse");
         let disperse = contributions.iter_disperse().next().unwrap();
@@ -240,22 +240,22 @@ mod tests {
         let size = BodySize::new(1.0);
         let neighbor_cache = NeighborCache::new();
 
-        let mut l1_perceptions = L1Perceptions::new();
-        l1_perceptions.push(L1CellPerception {
+        let mut l1_vision = L1Vision::new();
+        l1_vision.push(L1VisionEntry {
             cell_idx: 0,
             classification: L1Classification::Threat,
             _pad: [0; 3],
             direction_x: 1.0,
             direction_y: 0.0,
         });
-        l1_perceptions.push(L1CellPerception {
+        l1_vision.push(L1VisionEntry {
             cell_idx: 1,
             classification: L1Classification::Prey,
             _pad: [0; 3],
             direction_x: -1.0,
             direction_y: 0.0,
         });
-        l1_perceptions.push(L1CellPerception {
+        l1_vision.push(L1VisionEntry {
             cell_idx: 2,
             classification: L1Classification::Crowded,
             _pad: [0; 3],
@@ -263,7 +263,7 @@ mod tests {
             direction_y: 1.0,
         });
 
-        process_vision_drives(&pos, &vel, &size, &l1_perceptions, &neighbor_cache, &mut contributions);
+        process_vision_drives(&pos, &vel, &size, &l1_vision, &neighbor_cache, &mut contributions);
 
         assert_eq!(contributions.flee_count, 1);
         assert_eq!(contributions.approach_count, 1);

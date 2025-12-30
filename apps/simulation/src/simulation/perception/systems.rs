@@ -77,6 +77,7 @@ pub fn update_perception_system(
         &BodySize,
         &Perception,
         &mut NeighborCache,
+        &mut L1Vision,
         &CreatureState,
     )>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
@@ -112,7 +113,7 @@ pub fn update_perception_system(
     // ============================================================
     // Perception: Heavy, variable workload - smaller chunks for load balancing
     entities.par_iter_mut().with_min_len(128).for_each(
-        |(entity, pos, rot, size, perception, neighbor_cache, state)| {
+        |(entity, pos, rot, size, perception, neighbor_cache, l1_vision, state)| {
             // Check if this entity is the debug target (dev-tools only)
             #[cfg(feature = "dev-tools")]
             let is_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
@@ -133,8 +134,9 @@ pub fn update_perception_system(
                 return;
             }
 
-            // Clear neighbor cache only when we're actually updating perception
+            // Clear caches only when we're actually updating perception
             neighbor_cache.clear();
+            l1_vision.clear();
 
             let x = pos.x;
             let y = pos.y;
@@ -153,7 +155,7 @@ pub fn update_perception_system(
             let facing_x = rot.cos_radians;
             let facing_y = rot.sin_radians;
             // L0 scan: ALWAYS 9 adjacent cells only (fixed radius, not perception range)
-            // L1 provides long-range awareness via L1Perceptions component
+            // L1 provides long-range awareness via L1Vision component
             let query_radius = L0_SCAN_RADIUS;
 
             // Topological neighbor selection with smart early-exit:
@@ -327,6 +329,24 @@ pub fn update_perception_system(
                             continue;
                         }
 
+                        // L1 VISION: Record non-Empty L1 cells discovered during L0 scan.
+                        // The L0 cell passed FOV culling, so PART of this L1 cell is in FOV.
+                        // Don't check if L1 center is in FOV - creature may be at cell edge.
+                        if !l1_vision.contains_cell(parent_l1_idx as u32) {
+                            let (l1_center_x, l1_center_y) =
+                                l1_grid_ref.cell_center_from_index(parent_l1_idx);
+                            let l1_dx = l1_center_x - x;
+                            let l1_dy = l1_center_y - y;
+                            let l1_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().max(0.001);
+                            l1_vision.push(L1VisionEntry {
+                                cell_idx: parent_l1_idx as u32,
+                                classification,
+                                _pad: [0; 3],
+                                direction_x: l1_dx / l1_dist,
+                                direction_y: l1_dy / l1_dist,
+                            });
+                        }
+
                         // Process entities in this cell
                         for proxy in grid_ref.get_cell_proxies(cell_idx) {
                             if *entity == proxy.entity {
@@ -423,6 +443,22 @@ pub fn update_perception_system(
                                 continue;
                             }
 
+                            // L1 VISION: Record non-Empty L1 cells from extra cells too.
+                            if !l1_vision.contains_cell(parent_l1_idx as u32) {
+                                let (l1_center_x, l1_center_y) =
+                                    l1_grid_ref.cell_center_from_index(parent_l1_idx);
+                                let l1_dx = l1_center_x - x;
+                                let l1_dy = l1_center_y - y;
+                                let l1_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().max(0.001);
+                                l1_vision.push(L1VisionEntry {
+                                    cell_idx: parent_l1_idx as u32,
+                                    classification,
+                                    _pad: [0; 3],
+                                    direction_x: l1_dx / l1_dist,
+                                    direction_y: l1_dy / l1_dist,
+                                });
+                            }
+
                             // Process entities in this extra cell
                             for proxy in grid_ref.get_cell_proxies(extra_cell_idx) {
                                 if *entity == proxy.entity {
@@ -515,9 +551,10 @@ pub fn update_perception_system(
 
         if let Some(target_entity) = debug_target_entity {
             // Find the debug target in our entities list and capture its state
-            if let Some((_, pos, rot, _size, perception, neighbor_cache, state)) = entities
-                .iter()
-                .find(|(e, _, _, _, _, _, _)| *e == target_entity)
+            if let Some((_, pos, rot, _size, perception, neighbor_cache, l1_vision, state)) =
+                entities
+                    .iter()
+                    .find(|(e, _, _, _, _, _, _, _)| *e == target_entity)
             {
                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
 
@@ -559,6 +596,23 @@ pub fn update_perception_system(
                         })
                         .collect();
 
+                    // Build L1Vision debug entries with cell centers
+                    let l1_vision_debug: Vec<L1VisionDebugEntry> = l1_vision
+                        .iter()
+                        .map(|entry| {
+                            let (center_x, center_y) =
+                                l1_grid_ref.cell_center_from_index(entry.cell_idx as usize);
+                            L1VisionDebugEntry {
+                                cell_idx: entry.cell_idx,
+                                classification: entry.classification as u8,
+                                center_x,
+                                center_y,
+                                direction_x: entry.direction_x,
+                                direction_y: entry.direction_y,
+                            }
+                        })
+                        .collect();
+
                     let (creature_cx, creature_cy) = grid_ref.world_to_cell(x, y);
 
                     debug_snapshot.update(
@@ -578,6 +632,7 @@ pub fn update_perception_system(
                             x: creature_cx,
                             y: creature_cy,
                         },
+                        l1_vision_debug,
                     );
                 } else {
                     let (creature_cx, creature_cy) = grid_ref.world_to_cell(pos.x, pos.y);
@@ -598,10 +653,11 @@ pub fn update_perception_system(
                             x: creature_cx,
                             y: creature_cy,
                         },
+                        std::iter::empty::<L1VisionDebugEntry>(),
                     );
                 }
             }
-            // else: Entity not found in query results
+            // else: Entity not found in query results (may lack required components)
         } else {
             // No debug target set - this is normal
             debug_snapshot.clear();

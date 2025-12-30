@@ -1,5 +1,5 @@
 import { Graphics, Container } from 'pixi.js';
-import type { QueriedCell } from '@/types/GameState';
+import type { QueriedCell, L1VisionDebugEntry } from '@/types/GameState';
 import type { IOverlay, OverlayConfig } from './IOverlay';
 
 const L0_GRID_LINE_COLOR = 0x444444;
@@ -11,6 +11,8 @@ const SKIPPED_CELL_COLOR = 0xaa4422;
 const SKIPPED_CELL_ALPHA = 0.25;
 const CREATURE_CELL_COLOR = 0xdddd22;
 const CREATURE_CELL_ALPHA = 0.35;
+const L1_VISION_CELL_COLOR = 0x888888;
+const L1_VISION_CELL_ALPHA = 0.35;
 
 interface L1CellInfo {
   cellX: number;
@@ -54,6 +56,9 @@ export class SpatialGridOverlay implements IOverlay {
   private checkedCells: QueriedCell[] = [];
   private skippedCells: QueriedCell[] = [];
   private creatureCell: QueriedCell | null = null;
+
+  // L1 vision cells (creatures' perceived L1 cells)
+  private l1VisionCells: L1VisionDebugEntry[] = [];
 
   // Info panel for L1 hover
   private infoPanel: HTMLDivElement | null = null;
@@ -235,6 +240,14 @@ export class SpatialGridOverlay implements IOverlay {
     this.creatureCell = null;
   }
 
+  updateL1VisionCells(l1Vision: L1VisionDebugEntry[] | undefined): void {
+    this.l1VisionCells = l1Vision ?? [];
+  }
+
+  clearL1VisionCells(): void {
+    this.l1VisionCells = [];
+  }
+
   isVisible(): boolean {
     return this.currentMode !== GridMode.Off;
   }
@@ -339,6 +352,19 @@ export class SpatialGridOverlay implements IOverlay {
 
     if (worldLeft >= worldRight || worldTop >= worldBottom) return;
     if (cellSize <= 0 || !isFinite(cellSize)) return;
+
+    // Draw L1 vision cells (gray highlight showing perceived L1 cells)
+    if (this.l1VisionCells.length > 0) {
+      for (const entry of this.l1VisionCells) {
+        // Calculate cell world position from center coordinates
+        const cellX = Math.floor(entry.centerX / cellSize);
+        const cellY = Math.floor(entry.centerY / cellSize);
+        const worldX = cellX * cellSize;
+        const worldY = cellY * cellSize;
+        this.cellGraphics.rect(worldX, worldY, cellSize, cellSize);
+      }
+      this.cellGraphics.fill({ color: L1_VISION_CELL_COLOR, alpha: L1_VISION_CELL_ALPHA });
+    }
 
     this.renderGridLines(cellSize, worldLeft, worldRight, worldTop, worldBottom, zoom, L1_GRID_LINE_COLOR);
   }

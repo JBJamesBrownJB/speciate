@@ -58,6 +58,22 @@ export interface QueriedCell {
   y: number;
 }
 
+export enum L1Classification {
+  Empty = 0,
+  Threat = 1,
+  Prey = 2,
+  Crowded = 3,
+}
+
+export interface L1VisionDebugEntry {
+  cellIdx: number;
+  classification: L1Classification;
+  centerX: number;
+  centerY: number;
+  directionX: number;
+  directionY: number;
+}
+
 export interface PerceptionDebugData {
   entityId: number;
   x: number;
@@ -73,6 +89,7 @@ export interface PerceptionDebugData {
   creatureCell: QueriedCell;
   queriedCells: QueriedCell[];
   checkedCells: QueriedCell[];
+  l1Vision?: L1VisionDebugEntry[];
 }
 
 export interface GameState {

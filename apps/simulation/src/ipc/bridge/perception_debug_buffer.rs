@@ -45,8 +45,17 @@ pub const CHECKED_CELL_SECTION_OFFSET: usize =
 pub const CHECKED_CELL_HEADER_SIZE: usize = 1; // num_checked_cells
 pub const MAX_CHECKED_CELLS: usize = 100;
 
+// L1 Vision section (after checked cells)
+// Layout: [count, entries...] where each entry is 6 floats:
+//   cell_idx, classification, center_x, center_y, direction_x, direction_y
+pub const L1_VISION_SECTION_OFFSET: usize =
+    CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE + MAX_CHECKED_CELLS * 2; // 608
+pub const L1_VISION_HEADER_SIZE: usize = 1; // num_l1_vision_entries
+pub const MAX_L1_VISION_ENTRIES: usize = 48;
+pub const L1_VISION_ENTRY_SIZE: usize = 6; // cell_idx, classification, center_x, center_y, dir_x, dir_y
+
 pub const BUFFER_SIZE: usize =
-    CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE + MAX_CHECKED_CELLS * 2;
+    L1_VISION_SECTION_OFFSET + L1_VISION_HEADER_SIZE + MAX_L1_VISION_ENTRIES * L1_VISION_ENTRY_SIZE;
 
 pub trait NeighborFields {
     fn id(&self) -> u32;
@@ -214,6 +223,27 @@ impl PerceptionDebugBuffer {
 
     pub fn has_data(&self) -> bool {
         self.read[0] > 0.5
+    }
+
+    pub fn write_l1_vision_data<I>(&mut self, entries: I)
+    where
+        I: ExactSizeIterator<Item = (u32, u8, f32, f32, f32, f32)>,
+    {
+        let count = entries.len().min(MAX_L1_VISION_ENTRIES);
+        self.write[L1_VISION_SECTION_OFFSET] = count as f32;
+
+        let data_offset = L1_VISION_SECTION_OFFSET + L1_VISION_HEADER_SIZE;
+        for (i, (cell_idx, classification, center_x, center_y, dir_x, dir_y)) in
+            entries.take(count).enumerate()
+        {
+            let entry_offset = data_offset + i * L1_VISION_ENTRY_SIZE;
+            self.write[entry_offset] = cell_idx as f32;
+            self.write[entry_offset + 1] = classification as f32;
+            self.write[entry_offset + 2] = center_x;
+            self.write[entry_offset + 3] = center_y;
+            self.write[entry_offset + 4] = dir_x;
+            self.write[entry_offset + 5] = dir_y;
+        }
     }
 }
 

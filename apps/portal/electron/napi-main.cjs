@@ -181,10 +181,10 @@ function startSimulation() {
           }
 
           // Fill perception debug buffer (zero-allocation, dev-tools only)
+          // Always send so frontend can track selection state (buffer[0] = hasData flag)
           if (simulationEngine.fillPerceptionDebug) {
-            const hasData = simulationEngine.fillPerceptionDebug(perceptionBuffer);
-            // Only send if has_data flag is set (creature selected)
-            if (hasData && mainWindow && !mainWindow.isDestroyed()) {
+            simulationEngine.fillPerceptionDebug(perceptionBuffer);
+            if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('perception-debug-update', perceptionBuffer);
             }
           }

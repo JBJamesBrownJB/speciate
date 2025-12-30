@@ -1,7 +1,7 @@
 use crate::simulation::creatures::constants::PERCEPTION_THRESHOLD_FRACTION;
 use crate::simulation::spatial::biosignature::BioSignature;
 
-pub const MAX_L1_PERCEPTIONS: usize = 48;
+pub const MAX_L1_VISION: usize = 48;
 pub const PREY_SIZE_RATIO: f32 = 0.3;
 
 #[repr(u8)]

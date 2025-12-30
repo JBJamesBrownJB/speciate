@@ -9,7 +9,7 @@ pub mod systems;
 #[cfg(test)]
 mod tests;
 
-pub use classification::{classify_l1_cell, L1Classification, MAX_L1_PERCEPTIONS, PREY_SIZE_RATIO};
+pub use classification::{classify_l1_cell, L1Classification, MAX_L1_VISION, PREY_SIZE_RATIO};
 pub use components::*;
 #[cfg(feature = "dev-tools")]
 pub use debug::*;

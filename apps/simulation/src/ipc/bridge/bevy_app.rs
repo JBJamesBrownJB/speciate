@@ -445,6 +445,18 @@ impl NapiApp {
                     snapshot.queried_cells.iter(),
                     snapshot.checked_cells.iter(),
                 );
+
+                // Write L1 vision data
+                buffer_guard.write_l1_vision_data(snapshot.l1_vision.iter().map(|e| {
+                    (
+                        e.cell_idx,
+                        e.classification,
+                        e.center_x,
+                        e.center_y,
+                        e.direction_x,
+                        e.direction_y,
+                    )
+                }));
             } else {
                 buffer_guard.clear_write();
             }

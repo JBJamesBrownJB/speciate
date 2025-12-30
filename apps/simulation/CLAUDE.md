@@ -452,6 +452,69 @@ commands.spawn((
 
 ---
 
+## Save State Component Requirements (MANDATORY)
+
+**CRITICAL: When adding new components to `CritBundle`, you MUST handle save-state serialization.**
+
+### Two Patterns for Components
+
+**Pattern 1: Serializable Components**
+- Simple data types (scalars, small structs)
+- Register in type registry (`simulation/core/simulation.rs`)
+- Example: `Position`, `Velocity`, `CritId`, `BehaviorMode`
+
+```rust
+// In SimulationBuilder::new()
+type_registry.register::<NewComponent>();
+```
+
+**Pattern 2: Runtime-Reconstructed Components**
+- Fixed-size arrays (serialization issues)
+- Entity references (stale after deserialize)
+- Cache/computed data (not worth persisting)
+- Add reconstruction in `from_save_state()` (`persistence/snapshot.rs`)
+- Add a test in `persistence/snapshot.rs`
+- Example: `Perception`, `NeighborCache`, `L1Vision`
+
+```rust
+// In Simulation::from_save_state()
+use crate::simulation::perception::NewComponent;
+let entities_needing_component: Vec<Entity> = simulation
+    .world
+    .query_filtered::<Entity, Without<NewComponent>>()
+    .iter(&simulation.world)
+    .filter(|e| simulation.world.get::<CritId>(*e).is_some())
+    .collect();
+
+for entity in entities_needing_component {
+    simulation
+        .world
+        .entity_mut(entity)
+        .insert(NewComponent::new());
+}
+```
+
+### Checklist for New Components
+
+When adding a component to `CritBundle`:
+
+- [ ] **Decide pattern**: Serializable OR reconstructed?
+- [ ] **Serializable**: Add `type_registry.register::<T>()` in `simulation.rs`
+- [ ] **Reconstructed**: Add reconstruction code in `from_save_state()`
+- [ ] **Add test**: `test_save_state_reconstructs_<component>` in `snapshot.rs`
+- [ ] **Run tests**: `cargo test save_state`
+
+### Why This Matters
+
+Save-state enables:
+- Game save/load
+- Crash recovery
+- Testing (reproducible scenarios)
+
+Missing components = broken restore = frustrated users.
+
+---
+
 ## DNA Integration Strategy
 
 ### Current: Hardcoded Constants

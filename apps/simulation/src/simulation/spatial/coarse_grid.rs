@@ -168,6 +168,17 @@ impl CoarseGrid {
             (cx, cy, &self.cells[cell_idx])
         })
     }
+
+    /// Get world center coordinates for a cell by its index.
+    /// Returns (center_x, center_y) in world coordinates.
+    #[inline]
+    pub fn cell_center_from_index(&self, cell_idx: usize) -> (f32, f32) {
+        let cx = (cell_idx % self.width) as i32 + self.min_cell_x;
+        let cy = (cell_idx / self.width) as i32 + self.min_cell_y;
+        let center_x = (cx as f32 + 0.5) * self.cell_size;
+        let center_y = (cy as f32 + 0.5) * self.cell_size;
+        (center_x, center_y)
+    }
 }
 
 #[cfg(test)]

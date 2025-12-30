@@ -289,6 +289,8 @@ async function main(): Promise<void> {
               debugData.creatureCell
             );
           }
+          // Update L1 vision cells for L1 grid highlighting
+          spatialGridOverlay.updateL1VisionCells(debugData.l1Vision);
           // Update force overlay with acceleration from perception debug data
           const selected = selectionManager.getSelected();
           if (selected) {
@@ -304,6 +306,7 @@ async function main(): Promise<void> {
           perceptionOverlay.clear();
           creatureInfoPanel.updateDebugData(null);
           spatialGridOverlay.clearQueriedCells();
+          spatialGridOverlay.clearL1VisionCells();
           forceOverlay.update(undefined);
         }
       });

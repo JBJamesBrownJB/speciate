@@ -51,9 +51,12 @@ These are **post-ABC features** that build on the drive architecture.
 | **A** | Dual Spatial Grid | Medium | Infrastructure + Size Domination | ✅ COMPLETE |
 | **4** | Better Avoidance | Small | TTC-Based Anti-Collision | ✅ COMPLETE |
 | **C** | System Update Frequency | Small | Runtime Hz Control | ✅ COMPLETE |
-| **B** | Simple Drive Simplex | Large | Continuous Drives (Loner Behavior) | Pending |
+| **H** | Hierarchical Perception v2 | Medium | Multi-Level FOV + L2 Grid | 🔄 IN PROGRESS |
+| **B** | Simple Drive Simplex | Large | Continuous Drives (Loner Behavior) | ⏸️ ON HOLD |
 
-**Order Rationale:** A establishes grid infrastructure. **Phase 4** fixes collision avoidance using TTC (creatures steer around each other properly). C is performance tuning. B is the major behavior overhaul (flee/chase/drives).
+**Order Rationale:** A establishes grid infrastructure. **Phase 4** fixes collision avoidance using TTC. C is performance tuning. **Phase H** (hierarchical perception) is now the priority - it provides the multi-level early-exit cascade needed for 500K+ scale. Phase B (drive simplex) is **on hold** pending the hierarchical perception work, which may change how drives consume perception data.
+
+**Current Priority:** `hierarchical-perception-v2.md` - L2 grid infrastructure, FOV-tier patterns, early-exit cascade.
 
 ---
 

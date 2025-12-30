@@ -1,10 +1,13 @@
 # Sprint: Simple Drive Simplex (Phase B)
 
+**Status:** ⏸️ ON HOLD - Pending Hierarchical Perception v2
+
 ## Outcome
 
 Remove behavior state machine. Everything becomes drive-based.
 
 **Depends on:** Phase A (Dual Grid) - L1 BioSignatures ✓, L1 Classification ✓
+**Blocked By:** `hierarchical-perception-v2.md` - Multi-level FOV patterns and L2 grid infrastructure may change how drives consume perception data. Complete hierarchical perception first.
 
 **Note:** Phase A completed L0/L1 architecture fixes but DEFERRED L1Perceptions population to Phase B Step 0 (see Implementation Steps below).
 

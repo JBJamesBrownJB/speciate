@@ -1,7 +1,8 @@
 # Drive Simplex Implementation Plan v2
 
-**Status:** IN PROGRESS - Phase 1 (L1Vision)
+**Status:** ⏸️ ON HOLD - Pending Hierarchical Perception v2
 **Previous Attempt:** See `drive-simplex-plan-FAILED.md` for lessons learned
+**Blocked By:** `hierarchical-perception-v2.md` must complete first - the multi-level perception architecture may change how drives consume L1/L2 data
 
 ---
 

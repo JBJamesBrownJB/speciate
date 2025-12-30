@@ -1,8 +1,11 @@
 # Sprint A-B-C Performance Analysis - Executive Summary
 
-**Date:** 2025-12-21
+**Date:** 2025-12-21 (Updated: 2025-12-30)
 **Analyst:** claude-perf (Performance Telemetry Engineer)
-**Status:** APPROVED for implementation (A → C → B order)
+**Status:** APPROVED for implementation
+
+**Current Priority:** Phase H (Hierarchical Perception v2) - see `hierarchical-perception-v2.md`
+**Updated Order:** A ✅ → 4 ✅ → C ✅ → **H** 🔄 → B ⏸️
 
 ---
 
@@ -437,14 +440,22 @@ Before merging to main:
 - [x] Determinism test passes
 - [x] Portal shows L1 heatmap correctly
 
-**Phase C:**
-- [ ] Divisor=1 within 2% of baseline
-- [ ] Divisor=2 reduces perception by 50%
-- [ ] Divisor=4 reduces perception by 75%
-- [ ] Determinism passes at all divisors
-- [ ] Dev-UI sliders control frequency live
+**Phase C:** ✅ COMPLETE
+- [x] Divisor=1 within 2% of baseline
+- [x] Divisor=2 reduces perception by 50%
+- [x] Divisor=4 reduces perception by 75%
+- [x] Determinism passes at all divisors
+- [x] Dev-UI sliders control frequency live
 
-**Phase B:**
+**Phase H (Hierarchical Perception v2):** 🔄 IN PROGRESS
+- [ ] L2 grid infrastructure (90m cells)
+- [ ] Pattern iteration helper (cells_from_pattern)
+- [ ] L2 scan phase with biosig classification
+- [ ] Early-exit cascade (L2 → L1 → L0)
+- [ ] 70%+ L0 cell reduction in sparse scenarios
+- [ ] Determinism test passes
+
+**Phase B:** ⏸️ ON HOLD (pending Phase H)
 - [ ] Drive computation < 2ms at 360K
 - [ ] IPC > 1.8 (compute-bound)
 - [ ] L1D miss rate < 3%

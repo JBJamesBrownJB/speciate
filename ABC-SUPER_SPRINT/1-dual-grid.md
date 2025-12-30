@@ -4,6 +4,8 @@
 
 L1 grid infrastructure, size domination, and FOV culling delivered. L1Perceptions population deferred to Phase B Step 0.
 
+**Next:** `hierarchical-perception-v2.md` - Extends this work with L2 grid (90m cells), multi-level FOV patterns, and early-exit cascade for 500K+ scale.
+
 ---
 
 ## Prior Work (Complete)

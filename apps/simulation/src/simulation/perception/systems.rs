@@ -275,6 +275,9 @@ pub fn update_perception_system(
                     // Get FOV tier for extended cell pattern lookup
                     let fov_tier = perception.fov_tier;
 
+                    // Cache extra cells lookup ONCE (used for both L0 and L1 extended cells)
+                    let extra_offsets = fov_patterns::get_extra_cells_by_octant(fov_tier, octant);
+
                     for &(sort_key, cell_idx) in cells.iter() {
                         // Detect transition from adjacent to non-adjacent cells.
                         // Adjacent cells: sort_key = distance² (typically < 500 for ~22m diagonal)
@@ -412,11 +415,9 @@ pub fn update_perception_system(
                     // Medium FOV (120-200°): No extra cells (generalist)
                     //
                     // GOLDEN ZONE: Generalists query fewer cells = cheaper AND biologically accurate
-                    // Use pre-computed octant to avoid redundant atan2 call
-                    if let Some(extra_offsets) =
-                        fov_patterns::get_extra_cells_by_octant(fov_tier, octant)
-                    {
-                        for &(dx, dy) in extra_offsets {
+                    // Use cached extra_offsets (computed once at start)
+                    if let Some(offsets) = extra_offsets {
+                        for &(dx, dy) in offsets {
                             let extra_cx = creature_cx + dx as i32;
                             let extra_cy = creature_cy + dy as i32;
 
@@ -558,11 +559,9 @@ pub fn update_perception_system(
 
                         // EXTENDED L1 CELLS for specialists (Narrow: +2 front, Wide: +2 sides)
                         // These ARE direction-dependent (predators look further forward, prey look to sides)
-                        // Use pre-computed octant to avoid redundant atan2 call
-                        if let Some(extra_l1_offsets) =
-                            fov_patterns::get_extra_cells_by_octant(fov_tier, octant)
-                        {
-                            for &(dx, dy) in extra_l1_offsets {
+                        // Use cached extra_offsets (same as L0 extended cells)
+                        if let Some(offsets) = extra_offsets {
+                            for &(dx, dy) in offsets {
                                 let l1_cx = creature_l1_cx + dx as i32;
                                 let l1_cy = creature_l1_cy + dy as i32;
 

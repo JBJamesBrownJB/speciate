@@ -544,16 +544,17 @@ pub fn update_perception_system(
                                 classify_l1_cell(biosig, my_mass, self_radius, is_my_cell);
 
                             // Direction = base_offset + (dx, dy) * L1_CELL_SIZE
+                            // Note: l1_dist is always > 0 since ring cells are at least L1_CELL_SIZE away
                             let l1_dx = base_offset_x + dx as f32 * L1_CELL_SIZE;
                             let l1_dy = base_offset_y + dy as f32 * L1_CELL_SIZE;
-                            let l1_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().max(0.001);
+                            let inv_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().recip();
 
                             l1_vision.push(L1VisionEntry {
                                 cell_idx: l1_idx as u32,
                                 classification,
                                 _pad: [0; 3],
-                                direction_x: l1_dx / l1_dist,
-                                direction_y: l1_dy / l1_dist,
+                                direction_x: l1_dx * inv_dist,
+                                direction_y: l1_dy * inv_dist,
                             });
                         }
 
@@ -583,14 +584,14 @@ pub fn update_perception_system(
 
                                 let l1_dx = base_offset_x + dx as f32 * L1_CELL_SIZE;
                                 let l1_dy = base_offset_y + dy as f32 * L1_CELL_SIZE;
-                                let l1_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().max(0.001);
+                                let inv_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().recip();
 
                                 l1_vision.push(L1VisionEntry {
                                     cell_idx: l1_idx as u32,
                                     classification,
                                     _pad: [0; 3],
-                                    direction_x: l1_dx / l1_dist,
-                                    direction_y: l1_dy / l1_dist,
+                                    direction_x: l1_dx * inv_dist,
+                                    direction_y: l1_dy * inv_dist,
                                 });
                             }
                         }

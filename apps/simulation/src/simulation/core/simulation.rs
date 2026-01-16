@@ -10,8 +10,8 @@ use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId
 use crate::simulation::movement::{integrate_motion_system, update_body_size_cache};
 use crate::simulation::perception;
 use crate::simulation::spatial::{
-    aggregate_l1_system, rebuild_spatial_grid_system, swap_spatial_grid_buffers_system,
-    HierarchicalGrid,
+    aggregate_l1_system, aggregate_l2_system, rebuild_spatial_grid_system,
+    swap_spatial_grid_buffers_system, HierarchicalGrid,
 };
 use bevy_ecs::prelude::*;
 
@@ -76,8 +76,10 @@ impl SimulationBuilder {
             rebuild_spatial_grid_system,
             // L1 aggregation runs after L0 rebuild
             aggregate_l1_system.after(rebuild_spatial_grid_system),
-            // Perception MUST run after L1 aggregation for early-exit optimization
-            perception::update_perception_system.after(aggregate_l1_system),
+            // L2 aggregation runs after L1 aggregation
+            aggregate_l2_system.after(aggregate_l1_system),
+            // Perception MUST run after L2 aggregation for hierarchical early-exit
+            perception::update_perception_system.after(aggregate_l2_system),
             // Behavior transition runs after perception (may use perception data in future)
             behavior_transition_system.after(perception::update_perception_system),
             // FUSED STEERING: Single system replaces 4 separate systems (wander, seek, avoidance, flee)

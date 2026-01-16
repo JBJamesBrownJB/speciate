@@ -11,5 +11,6 @@ pub use constants::{CELL_SIZE, L1_CELL_SIZE, NON_ADJACENT_OFFSET};
 pub use grid::{DoubleBufferedSpatialGrid, PerceptionProxy, SpatialGrid};
 pub use hierarchical::HierarchicalGrid;
 pub use systems::{
-    aggregate_l1_system, rebuild_spatial_grid_system, swap_spatial_grid_buffers_system,
+    aggregate_l1_system, aggregate_l2_system, rebuild_spatial_grid_system,
+    swap_spatial_grid_buffers_system,
 };

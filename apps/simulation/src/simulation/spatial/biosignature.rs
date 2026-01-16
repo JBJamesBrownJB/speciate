@@ -22,6 +22,13 @@ impl BioSignature {
         self.creature_count += 1;
     }
 
+    /// Merge another BioSignature into this one (used for L1→L2 aggregation).
+    pub fn merge(&mut self, other: &BioSignature) {
+        self.total_mass += other.total_mass;
+        self.max_size = self.max_size.max(other.max_size);
+        self.creature_count += other.creature_count;
+    }
+
     /// Derive mass from radius using the same formula as BodySize::mass()
     /// mass = DEFAULT_MASS * length^3 where length = radius * 2
     pub fn mass_from_radius(radius: f32) -> f32 {
@@ -87,5 +94,34 @@ mod tests {
         // radius = 1.0 -> length = 2.0 -> mass = DEFAULT_MASS * 8.0
         let mass = BioSignature::mass_from_radius(1.0);
         assert_eq!(mass, DEFAULT_MASS * 8.0);
+    }
+
+    #[test]
+    fn merge_combines_biosignatures() {
+        let mut l2_sig = BioSignature::default();
+
+        // First L1 cell: 3 creatures, total 30.0 mass, max size 2.0
+        let l1_a = BioSignature {
+            total_mass: 30.0,
+            max_size: 2.0,
+            creature_count: 3,
+        };
+
+        // Second L1 cell: 5 creatures, total 50.0 mass, max size 1.5
+        let l1_b = BioSignature {
+            total_mass: 50.0,
+            max_size: 1.5,
+            creature_count: 5,
+        };
+
+        l2_sig.merge(&l1_a);
+        assert_eq!(l2_sig.total_mass, 30.0);
+        assert_eq!(l2_sig.max_size, 2.0);
+        assert_eq!(l2_sig.creature_count, 3);
+
+        l2_sig.merge(&l1_b);
+        assert_eq!(l2_sig.total_mass, 80.0); // 30 + 50
+        assert_eq!(l2_sig.max_size, 2.0); // max(2.0, 1.5)
+        assert_eq!(l2_sig.creature_count, 8); // 3 + 5
     }
 }

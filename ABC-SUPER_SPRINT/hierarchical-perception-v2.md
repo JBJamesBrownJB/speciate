@@ -1,14 +1,127 @@
-# Hierarchical Perception v2: Multi-Level FOV Patterns
+# Hierarchical Perception v2: Range-Band FOV Model
 
 **Status**: 🔄 IN PROGRESS - Current Priority
 **Builds On:** Phase A (Dual Grid) - L0/L1 infrastructure complete
-**Enables:** 500K+ creatures via early-exit cascade, multi-level FOV patterns
+**Enables:** 500K+ creatures via range-appropriate resolution
+
+---
+
+## ✅ Progress Log
+
+### Phase 1: L2 Grid Infrastructure - COMPLETE (2025-12-30)
+
+**Implemented:**
+- `L2_CELL_SIZE = 180.0` constant (3× L1, following the hierarchy pattern)
+- Extended `CoarseGrid` with L2 storage (`l2_cells`, `l2_prev_non_empty`, etc.)
+- Added L2 methods: `clear_l2()`, `position_to_l2_cell_index()`, `l1_to_l2_cell_index()`
+- Added `BioSignature::merge()` for proper L1→L2 aggregation
+- Added `merge_to_l2_cell()` for aggregation
+- Added `aggregate_l2()` to `HierarchicalGrid`
+- Added `aggregate_l2_system()` with `l2_aggregation` timing instrumentation
+- System registered in schedule: L0 rebuild → L1 agg → **L2 agg** → perception
+- All 45 spatial tests pass
+
+**Files Modified:**
+- `src/simulation/spatial/constants.rs` - L2_CELL_SIZE constant
+- `src/simulation/spatial/biosignature.rs` - merge() method
+- `src/simulation/spatial/coarse_grid.rs` - L2 storage and methods
+- `src/simulation/spatial/hierarchical.rs` - aggregate_l2()
+- `src/simulation/spatial/systems.rs` - aggregate_l2_system()
+- `src/simulation/spatial/mod.rs` - exports
+- `src/simulation/core/simulation.rs` - schedule registration
+- `src/instrumentation/mod.rs` - l2_aggregation_us timing
+
+**Next:** Phase 2 - L2Vision component
+
+---
+
+## Core Concept: Range Bands (Not Nested Early-Exit)
+
+Each grid level handles a **specific range band**, not nested areas:
+
+```
+                         ┌─────────────────────────────────────────────┐
+                         │              L2 OUTER RING                  │
+                         │    (180m+ range, strategic directions)      │
+                         │        ┌─────────────────────────┐          │
+                         │        │       L1 MID RING       │          │
+                         │        │  (60-180m, cell-level)  │          │
+                         │        │     ┌─────────────┐     │          │
+                         │        │     │  L0 CORE    │     │          │
+                         │        │     │  (0-60m,    │     │          │
+                         │        │     │  entities)  │     │          │
+                         │        │     └─────────────┘     │          │
+                         │        └─────────────────────────┘          │
+                         └─────────────────────────────────────────────┘
+```
+
+**Why range bands instead of nested early-exit?**
+- You don't need entity-level detail at 200m
+- "Threat in that direction" is sufficient for strategic navigation
+- Each level has one clear job
+- Matches biological perception (detail near, blur far)
+
+---
+
+## Level Specifications
+
+| Level | Cell Size | Range Band | Returns | Purpose |
+|-------|-----------|------------|---------|---------|
+| **L0** | 20m | 0-60m | **Entities** → NeighborCache | Collision avoidance, immediate threats |
+| **L1** | 60m | 60-180m | **Cell classifications** → L1Vision | Mid-range awareness, flee/approach decisions |
+| **L2** | 180m | 180m+ | **Strategic directions** → L2Vision | Long-range navigation, herd detection |
+
+### What Each Level Provides
+
+```
+L0 (Entity Detail, 0-60m):
+  - Individual neighbor positions, velocities, sizes
+  - Used by: Steering, TTC avoidance, targeting
+  - Output: NeighborCache (max 7 entities)
+
+L1 (Cell Awareness, 60-180m):
+  - Classification per cell: Empty, Threat, Prey, Crowded
+  - Direction to cell center
+  - Used by: Drive system, flee/hunt decisions
+  - Output: L1Vision (classifications + directions)
+
+L2 (Strategic, 180m+):
+  - Aggregate threat/prey mass in direction
+  - Used by: Long-range navigation, migration
+  - Output: L2Vision (strategic directions only)
+```
+
+---
+
+## Grid Hierarchy (Physical Layout)
+
+```
+L2 (180m cells)
+┌─────────────────────────────────────────────────────────────────┐
+│                           L2 Cell                               │
+│  ┌───────────────────┬───────────────────┬───────────────────┐  │
+│  │   L1 Cell (60m)   │   L1 Cell (60m)   │   L1 Cell (60m)   │  │
+│  │  ┌─────┬─────┬─────┐  ┌─────┬─────┬─────┐  ...             │  │
+│  │  │ L0  │ L0  │ L0  │  │ L0  │ L0  │ L0  │                  │  │
+│  │  ├─────┼─────┼─────┤  ├─────┼─────┼─────┤  (L0 = 20m)      │  │
+│  │  │ L0  │ L0  │ L0  │  │ L0  │ L0  │ L0  │                  │  │
+│  │  ├─────┼─────┼─────┤  ├─────┼─────┼─────┤                  │  │
+│  │  │ L0  │ L0  │ L0  │  │ L0  │ L0  │ L0  │                  │  │
+│  │  └─────┴─────┴─────┘  └─────┴─────┴─────┘                  │  │
+│  └───────────────────┴───────────────────┴───────────────────┘  │
+│                                                                  │
+│  (3×3 L1 cells = 9 L1 cells per L2 cell)                       │
+│  (3×3 L0 cells per L1 cell = 81 L0 cells per L2 cell)          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
 
 ## Cell Polling Patterns
 
 ### Base 3×3 Grid (All Levels)
 
-Every level uses the same 3×3 grid pattern, indexed by the creature's current cell:
+Every level uses the same 3×3 grid pattern, indexed by the creature's current cell at that level:
 
 ```
      -1    0    +1
@@ -92,221 +205,90 @@ WIDE FOV (Prey) - +2 cells PERPENDICULAR:
               ↓ Panoramic threat detection
 ```
 
-### Extended Cells by Octant
+---
 
-The extended cells rotate with the creature's facing direction:
+## Execution Flow (Range-Band Model)
 
-```
-NARROW (Predator) - Front Extension:
-
-Octant 0 (E):   (2,0), (3,0)      ─→
-Octant 1 (NE):  (2,2), (3,3)      ╱
-Octant 2 (N):   (0,2), (0,3)      │
-Octant 3 (NW): (-2,2),(-3,3)      ╲
-Octant 4 (W):  (-2,0),(-3,0)      ←─
-Octant 5 (SW):(-2,-2),(-3,-3)     ╱
-Octant 6 (S):  (0,-2),(0,-3)      │
-Octant 7 (SE): (2,-2),(3,-3)      ╲
-
-
-WIDE (Prey) - Side Extension:
-
-Octant 0 (E):   (0,+2), (0,-2)    ↑ ↓ (perpendicular to E)
-Octant 2 (N):   (+2,0), (-2,0)    ← → (perpendicular to N)
-Octant 4 (W):   (0,+2), (0,-2)    ↑ ↓ (perpendicular to W)
-Octant 6 (S):   (+2,0), (-2,0)    ← → (perpendicular to S)
-(diagonals use rotated perpendiculars)
-```
-
-## Multi-Level Grid System
-
-### Grid Hierarchy
+### Overview
 
 ```
-L2 (90m cells)
-┌─────────────────────────────────────────────────────────────────┐
-│                           L2 Cell                               │
-│  ┌───────────────────┬───────────────────┬───────────────────┐  │
-│  │      L1 Cell      │      L1 Cell      │      L1 Cell      │  │
-│  │  ┌─────┬─────┬─────┐  ┌─────┬─────┬─────┐  ...             │  │
-│  │  │ L0  │ L0  │ L0  │  │ L0  │ L0  │ L0  │                  │  │
-│  │  ├─────┼─────┼─────┤  ├─────┼─────┼─────┤                  │  │
-│  │  │ L0  │ L0  │ L0  │  │ L0  │ L0  │ L0  │                  │  │
-│  │  ├─────┼─────┼─────┤  ├─────┼─────┼─────┤                  │  │
-│  │  │ L0  │ L0  │ L0  │  │ L0  │ L0  │ L0  │                  │  │
-│  │  └─────┴─────┴─────┘  └─────┴─────┴─────┘                  │  │
-│  └───────────────────┴───────────────────┴───────────────────┘  │
-│                                                                  │
-│  (3×3 L1 cells = 9 L1 cells per L2 cell)                       │
-│  (3×3 L0 cells per L1 cell = 81 L0 cells per L2 cell)          │
-└─────────────────────────────────────────────────────────────────┘
+Creature with perception_range = 250m
+
+┌──────────────────────────────────────────────────────────────────┐
+│  STEP 1: L0 SCAN (always, 0-60m)                                 │
+│    - 3×3 L0 cells + FOV culling                                  │
+│    - Entity iteration with size domination                       │
+│    - Output: NeighborCache (max 7 entities)                      │
+├──────────────────────────────────────────────────────────────────┤
+│  STEP 2: L1 SCAN (if perception > 60m, covers 60-180m ring)      │
+│    - 3×3 L1 cells + FOV culling                                  │
+│    - EXCLUDE L1 cells already covered by L0 (center cell)        │
+│    - BioSignature classification per cell                        │
+│    - Output: L1Vision (classifications + directions)             │
+├──────────────────────────────────────────────────────────────────┤
+│  STEP 3: L2 SCAN (if perception > 180m, covers 180m+ ring)       │
+│    - 3×3 L2 cells + FOV culling + extended cells                 │
+│    - EXCLUDE L2 cells already covered by L1 (center cell)        │
+│    - BioSignature classification per cell                        │
+│    - Output: L2Vision (strategic directions)                     │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-### Level Specifications
+### Step 1: L0 Scan (Always, 0-60m)
 
 ```
-┌────────┬────────────┬────────────────┬────────────────────────┐
-│ Level  │ Cell Size  │ 3×3 Reach      │ +Extended Reach        │
-├────────┼────────────┼────────────────┼────────────────────────┤
-│ L0     │ 10m        │ ~30m           │ ~50m                   │
-│ L1     │ 30m        │ ~90m           │ ~150m                  │
-│ L2     │ 90m        │ ~270m          │ ~450m                  │
-└────────┴────────────┴────────────────┴────────────────────────┘
-```
-
-## Execution Flow
-
-### Phase 1: Level Selection
-
-```
-perception_range = creature.perception.range
-
-         ┌──────────────────────────────────────────────────────┐
-         │              Level Selection Logic                   │
-         └──────────────────────────────────────────────────────┘
-                                │
-                                ▼
-                  ┌─────────────────────────────┐
-                  │ perception_range > 90m ?    │
-                  └─────────────┬───────────────┘
-                        yes     │     no
-                   ┌────────────┴────────────┐
-                   ▼                         ▼
-           ┌──────────────┐         ┌──────────────────────┐
-           │ scan_l2 = ✓  │         │ scan_l2 = ✗          │
-           └──────────────┘         └──────────────────────┘
-                   │                         │
-                   ▼                         ▼
-                  ┌─────────────────────────────┐
-                  │ perception_range > 30m ?    │
-                  └─────────────┬───────────────┘
-                        yes     │     no
-                   ┌────────────┴────────────┐
-                   ▼                         ▼
-           ┌──────────────┐         ┌──────────────────────┐
-           │ scan_l1 = ✓  │         │ scan_l1 = ✗          │
-           └──────────────┘         └──────────────────────┘
-                   │                         │
-                   └─────────────┬───────────┘
-                                 ▼
-                   ┌──────────────────────────┐
-                   │ scan_l0 = ✓ (always)     │
-                   └──────────────────────────┘
-```
-
-### Phase 2: L2 Scan (if scan_l2)
-
-```
-For each L2 cell in FOV pattern:
+For each L0 cell in FOV pattern (3×3 around creature):
 ┌────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│   1. Get L2 cell indices from pattern                          │
-│      pattern = get_cell_pattern(fov_rad, fx, fy)               │
-│      extra = get_extra_cells(fov_tier, fx, fy)                 │
+│   For each entity in L0 cell:                                   │
+│      - Skip if entity == self                                   │
+│      - Skip if outside FOV cone                                 │
+│      - Skip if entity.mass < my_threshold (size domination)     │
+│      - Add to neighbor candidates                               │
 │                                                                 │
-│   2. For each L2 cell:                                         │
-│      ┌───────────────────────────────────────────────────────┐ │
-│      │ L2 BioSignature = aggregate of 9 child L1 biosigs     │ │
-│      │                                                        │ │
-│      │ classification = classify_l2(biosig, my_mass)         │ │
-│      │                                                        │ │
-│      │ if classification == Empty:                           │ │
-│      │    └──> mark L2 cell as EMPTY (for L1 early-exit)     │ │
-│      │         SKIP: 9 L1 children + 81 L0 grandchildren     │ │
-│      │ else:                                                  │ │
-│      │    └──> record in L2Vision (strategic awareness)       │ │
-│      └───────────────────────────────────────────────────────┘ │
+│   After all L0 cells:                                           │
+│      Select K=7 closest neighbors → NeighborCache               │
 │                                                                 │
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 3: L1 Scan (if scan_l1)
+### Step 2: L1 Scan (60-180m Ring)
 
 ```
-For each L1 cell in FOV pattern:
+If perception_range > 60m:
 ┌────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│   1. Same pattern functions as L2, just at L1 scale            │
+│   Get L1 cells in FOV pattern (3×3 around creature's L1 cell)   │
+│   EXCLUDE: center L1 cell (already covered by L0 scan)          │
 │                                                                 │
-│   2. For each L1 cell:                                         │
-│      ┌───────────────────────────────────────────────────────┐ │
-│      │ EARLY-EXIT CHECK (if we scanned L2):                  │ │
-│      │    parent_l2 = l1_to_l2(l1_cell_idx)                  │ │
-│      │    if l2_is_empty(parent_l2):                         │ │
-│      │       └──> SKIP this L1 cell entirely                 │ │
-│      │                                                        │ │
-│      │ L1 BioSignature = aggregate of entities in L1 cell    │ │
-│      │                                                        │ │
-│      │ classification = classify_l1(biosig, my_mass, my_size)│ │
-│      │                                                        │ │
-│      │ if classification == Empty:                           │ │
-│      │    └──> mark L1 cell as EMPTY (for L0 early-exit)     │ │
-│      │         SKIP: 9 L0 children                           │ │
-│      │ else:                                                  │ │
-│      │    └──> record in L1Vision (mid-range awareness)       │ │
-│      └───────────────────────────────────────────────────────┘ │
+│   For each L1 cell in ring:                                     │
+│      - Get BioSignature                                         │
+│      - Classify: Empty, Threat, Prey, Crowded                   │
+│      - Calculate direction to cell center                       │
+│      - Store in L1Vision                                        │
 │                                                                 │
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 4: L0 Scan (always)
+### Step 3: L2 Scan (180m+ Ring)
 
 ```
-For each L0 cell in FOV pattern:
+If perception_range > 180m:
 ┌────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│   1. Same pattern functions as L1/L2, just at L0 scale         │
+│   Get L2 cells in FOV pattern (3×3 + extended cells)            │
+│   EXCLUDE: center L2 cell (already covered by L1 scan)          │
 │                                                                 │
-│   2. For each L0 cell:                                         │
-│      ┌───────────────────────────────────────────────────────┐ │
-│      │ EARLY-EXIT CHECK (if we scanned L1):                  │ │
-│      │    parent_l1 = l0_to_l1(l0_cell_idx)                  │ │
-│      │    if l1_is_empty(parent_l1):                         │ │
-│      │       └──> SKIP this L0 cell entirely                 │ │
-│      │                                                        │ │
-│      │ If NOT skipping:                                       │ │
-│      │    for each entity in L0 cell:                        │ │
-│      │       - FOV check (is entity in my FOV cone?)         │ │
-│      │       - Size domination (can I perceive this size?)   │ │
-│      │       - Add to neighbor candidates                     │ │
-│      │                                                        │ │
-│      │ After all L0 cells:                                    │ │
-│      │    Select K=7 closest neighbors → NeighborCache       │ │
-│      └───────────────────────────────────────────────────────┘ │
+│   For each L2 cell in ring:                                     │
+│      - Get BioSignature (aggregate of child L1 cells)           │
+│      - Classify: Empty, Threat, Prey, Crowded                   │
+│      - Calculate direction to cell center                       │
+│      - Store in L2Vision                                        │
 │                                                                 │
 └────────────────────────────────────────────────────────────────┘
 ```
 
-## Early-Exit Cascade Savings
-
-### Example: Giant Creature (100m perception) in Sparse Area
-
-```
-Without hierarchical perception:
-┌─────────────────────────────────────────────────────────────┐
-│  L0 cells to scan: ~11 × 11 = ~121 cells                    │
-│  Entity iterations: 121 × avg_entities_per_cell             │
-└─────────────────────────────────────────────────────────────┘
-
-With hierarchical perception:
-┌─────────────────────────────────────────────────────────────┐
-│  L2 scan: 11 cells (cheap biosig check)                     │
-│     → 6 marked Empty (sparse area)                          │
-│     → 5 non-Empty                                           │
-│                                                              │
-│  L1 scan: 11 cells per L2 = 55 theoretical                  │
-│     → 6 L2 Empty × 9 L1 children = 54 L1 SKIPPED           │
-│     → Only ~11 L1 actually checked                          │
-│     → 7 marked Empty                                         │
-│     → 4 non-Empty                                           │
-│                                                              │
-│  L0 scan: 9 cells per L1 neighbor = ~99 theoretical         │
-│     → 7 L1 Empty × 9 L0 children = 63 L0 SKIPPED           │
-│     → Only ~36 L0 actually checked                          │
-│                                                              │
-│  SAVINGS: 121 → 36 L0 cells (70% reduction)                 │
-└─────────────────────────────────────────────────────────────┘
-```
+---
 
 ## BioSignature Aggregation
 
@@ -332,49 +314,215 @@ For each L1 child:
   l2_biosig.min_mass = min(l2_biosig.min_mass, l1_biosig.min_mass)
 ```
 
-### Size Domination (Empty Classification)
+### Classification Logic (All Levels)
 
-At any level, a cell is "Empty" if:
+```rust
+fn classify_cell(biosig: &BioSignature, my_mass: f32, my_size: f32) -> Classification {
+    let threshold = my_mass * PERCEPTION_THRESHOLD_FRACTION; // 0.05
+
+    if biosig.count == 0 || biosig.total_mass < threshold {
+        Classification::Empty
+    } else if biosig.max_size > my_size {
+        Classification::Threat
+    } else if biosig.max_size < my_size * PREY_SIZE_RATIO { // 0.3
+        Classification::Prey
+    } else {
+        Classification::Crowded
+    }
+}
 ```
-effective_mass = biosig.total_mass - (masses I can't perceive due to size domination)
 
-threshold = my_mass × PERCEPTION_THRESHOLD_FRACTION (0.05)
+---
 
-if effective_mass < threshold:
-    classification = Empty  // Nothing here I can perceive!
+## Portal Overlay Updates
+
+### Grid Visualization (G Key Cycling)
+
+Extend current G key cycling to include L2:
+
 ```
+Current:  Off → L0 → L1 → (back to Off)
+New:      Off → L0 → L1 → L2 → (back to Off)
+```
+
+| Mode | What's Displayed |
+|------|------------------|
+| Off | No grid overlay |
+| L0 | 20m grid lines, entity dots |
+| L1 | 60m grid lines, cell heatmap (total_mass) |
+| L2 | 180m grid lines, cell heatmap (total_mass) |
+
+### L2 Grid Rendering
+
+**File:** `apps/portal/src/rendering/overlays/SpatialGridOverlay.ts`
+
+```typescript
+// Add L2 grid mode
+enum GridOverlayMode {
+  Off = 0,
+  L0 = 1,
+  L1 = 2,
+  L2 = 3,  // NEW
+}
+
+// L2 cell rendering (same pattern as L1, just larger)
+if (mode === GridOverlayMode.L2) {
+  const L2_CELL_SIZE = 180;
+  // Draw 180m grid lines
+  // Color cells by biosig.total_mass (heatmap)
+}
+```
+
+### L1/L2 Vision Lines (Selected Creature)
+
+When a creature is selected AND grid overlay is L1 or L2:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Selected creature draws lines to perceived cells:              │
+│                                                                  │
+│  L1 Mode (G pressed twice):                                     │
+│    - Lines from creature → L1 cell centers (60-180m ring)       │
+│    - Color by classification:                                    │
+│        Red    = Threat                                          │
+│        Orange = Prey                                            │
+│        Yellow = Crowded                                         │
+│        Green  = Empty                                           │
+│                                                                  │
+│  L2 Mode (G pressed three times):                               │
+│    - Lines from creature → L2 cell centers (180m+ ring)         │
+│    - Same color coding as L1                                    │
+│    - Thicker/longer lines (strategic range)                     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Hover Info Panel Updates
+
+Extend existing L1 hover to support L2:
+
+**L1 Hover (existing):**
+```
+L1 Cell (3, 5)
+─────────────
+Creatures: 12
+Total Mass: 847.3
+Max Size: 4.2m
+```
+
+**L2 Hover (new):**
+```
+L2 Cell (1, 2)
+─────────────
+Creatures: 89
+Total Mass: 6,234.7
+Max Size: 8.1m
+L1 Children: 9
+```
+
+---
+
+## IPC Updates
+
+### New Buffer: L2 Grid Data
+
+Similar to existing L1 buffer pattern:
+
+**Rust (simulation_engine.rs):**
+```rust
+#[napi]
+pub fn fill_l2_grid_buffer(&self, mut buffer: Float32Array) -> i32 {
+    // For each L2 cell: [total_mass, max_size, creature_count]
+    // Same pattern as L1 buffer
+}
+```
+
+### Selected Creature Vision Data
+
+Extend existing selected creature IPC to include L1Vision and L2Vision:
+
+```rust
+#[napi]
+pub fn get_selected_creature_vision(&self) -> Option<CreatureVisionData> {
+    // Returns:
+    // - neighbors: Vec<NeighborData> (existing)
+    // - l1_vision: Vec<L1VisionEntry> (cell_idx, classification, direction)
+    // - l2_vision: Vec<L2VisionEntry> (cell_idx, classification, direction)
+}
+```
+
+---
 
 ## Implementation Checklist
 
-### Step 1: Add L2 Grid Infrastructure
-- [ ] Add `L2_CELL_SIZE = 90.0`, `L2_GRID_SIZE = 12` constants
-- [ ] Add `l2_biosigs: Vec<BioSignature>` to `CoarseGrid`
-- [ ] Add `l1_to_l2(l1_idx)` and `l2_to_l1s(l2_idx)` mapping functions
-- [ ] Update entity insert/remove to maintain L2 biosigs
+### Step 1: L2 Grid Infrastructure (Rust) ✅ COMPLETE
+- [x] Add `L2_CELL_SIZE = 180.0` constant
+- [x] Add `l2_cells: Vec<BioSignature>` to `CoarseGrid`
+- [x] Add `l1_to_l2_cell_index()` mapping function
+- [x] Add `aggregate_l2()` to reduce L1 → L2
+- [x] Add `aggregate_l2_system()` with timing instrumentation
+- [x] Register system in schedule (after L1 agg, before perception)
+- [ ] Add `fill_l2_grid_buffer()` NAPI function (Phase 4)
 
-### Step 2: Add Pattern Iteration Helper
-- [ ] Create `cells_from_pattern(base_idx, pattern, extra, grid_width)` iterator
-- [ ] Returns cell indices matching FOV pattern
-- [ ] Works identically at L0, L1, L2 (parameterized by grid geometry)
+### Step 2: Range-Band Perception (Rust)
+- [ ] Add L2Vision component
+- [ ] Refactor perception to use range-band model
+- [ ] L0: 0-60m entity scan (existing, unchanged)
+- [ ] L1: 60-180m ring scan (exclude center L1 cell)
+- [ ] L2: 180m+ ring scan (exclude center L2 cell)
+- [ ] Populate L1Vision component
+- [ ] Populate L2Vision component
+- [ ] Add `get_selected_creature_vision()` NAPI function
 
-### Step 3: Restructure Perception System
-- [ ] Add level selection logic (scan_l2, scan_l1 flags)
-- [ ] Add L2 scan phase with biosig classification
-- [ ] Add L1 scan phase with L2 early-exit check
-- [ ] Modify L0 scan to use L1 early-exit from hierarchical scan
+### Step 3: Portal Grid Overlay (TypeScript)
+- [ ] Add L2 mode to `GridOverlayMode` enum
+- [ ] Extend G key cycling: Off → L0 → L1 → L2 → Off
+- [ ] Render L2 grid lines (180m spacing)
+- [ ] Render L2 heatmap (same pattern as L1)
+- [ ] Add L2 hover info panel
 
-### Step 4: Early-Exit Tracking
-- [ ] Add `l2_empty_mask: u64` for L1 early-exit
-- [ ] Add `l1_empty_mask: u64` for L0 early-exit
-- [ ] Map cell indices to mask bits efficiently
+### Step 4: Portal Vision Lines (TypeScript)
+- [ ] Add L1Vision line rendering (selected creature + L1 mode)
+- [ ] Add L2Vision line rendering (selected creature + L2 mode)
+- [ ] Color-code lines by classification
+- [ ] Only render for selected creature (performance)
 
-### Step 5: Add L2Vision Component (if needed)
-- [ ] Decide if L2Vision is needed for strategic awareness
-- [ ] Or: just use L2 for early-exit, L1Vision for strategic data
+### Step 5: IPC Integration
+- [ ] Add `onL2GridUpdate` handler in preload
+- [ ] Add `onCreatureVisionUpdate` handler in preload
+- [ ] Wire up main process to send L2 data
+- [ ] Wire up main process to send vision data for selected creature
 
 ### Step 6: Tests
-- [ ] Test pattern produces correct cells at each level
-- [ ] Test early-exit cascade skips correct cells
-- [ ] Test L1Vision/L2Vision populated correctly
-- [ ] Test neighbors still found (avoidance MUST work!)
-- [ ] Benchmark: verify performance improvement
+- [x] Unit tests: L2 biosig aggregation (hierarchical.rs)
+- [ ] Unit tests: Range-band cell selection (exclude center)
+- [ ] Unit tests: Classification at each level
+- [ ] Integration: Neighbors still found (avoidance MUST work!)
+- [ ] Integration: Vision lines render correctly
+- [ ] Benchmark: Verify performance improvement at scale
+
+---
+
+## Validation Checklist
+
+### Infrastructure
+- [ ] L2 grid displays correctly (G key → L2 mode)
+- [ ] L2 heatmap shows mass distribution
+- [ ] L2 hover shows correct aggregate data
+
+### Perception
+- [ ] L0 still finds neighbors for steering (critical!)
+- [ ] L1 ring excludes center cell (no double-counting)
+- [ ] L2 ring excludes center cell (no double-counting)
+- [ ] Classification correct at all levels
+
+### Visualization
+- [ ] Selected creature shows L1 vision lines (L1 mode)
+- [ ] Selected creature shows L2 vision lines (L2 mode)
+- [ ] Line colors match classification
+- [ ] No performance regression with vision lines
+
+### Performance
+- [ ] 360K creatures stable
+- [ ] L2 aggregation < 0.5ms
+- [ ] No IPC bottleneck from new buffers

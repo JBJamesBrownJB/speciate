@@ -41,6 +41,20 @@ pub fn aggregate_l1_system(
     grid.aggregate_l1();
 }
 
+/// Aggregate L1 grid data into L2 strategic grid.
+///
+/// Runs after L1 aggregation, before perception.
+/// Delegates to HierarchicalGrid::aggregate_l2() for the actual work.
+pub fn aggregate_l2_system(
+    mut grid: ResMut<HierarchicalGrid>,
+    #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
+) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "l2_aggregation");
+
+    grid.aggregate_l2();
+}
+
 /// Swap L0 front/back buffers at end of tick.
 /// After this, perception will see the newly rebuilt grid.
 pub fn swap_spatial_grid_buffers_system(mut grid: ResMut<HierarchicalGrid>) {

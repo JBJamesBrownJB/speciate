@@ -56,7 +56,13 @@ These are **post-ABC features** that build on the drive architecture.
 
 **Order Rationale:** A establishes grid infrastructure. **Phase 4** fixes collision avoidance using TTC. C is performance tuning. **Phase H** (hierarchical perception) is now the priority - it provides the multi-level early-exit cascade needed for 500K+ scale. Phase B (drive simplex) is **on hold** pending the hierarchical perception work, which may change how drives consume perception data.
 
-**Current Priority:** `hierarchical-perception-v2.md` - L2 grid infrastructure, FOV-tier patterns, early-exit cascade.
+**Current Priority:** `hierarchical-perception-v2.md` - Range-band perception model (L0/L1/L2).
+
+### Phase H Progress (2025-12-30)
+- ✅ **Step 1 COMPLETE:** L2 grid infrastructure (180m cells, 3× L1)
+  - `L2_CELL_SIZE` constant, `CoarseGrid` L2 storage, `aggregate_l2()`, system registered
+  - All 45 spatial tests pass
+- ⏳ **Next:** L2Vision component, range-band perception logic, Portal L2 overlay
 
 ---
 

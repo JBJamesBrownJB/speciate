@@ -448,11 +448,12 @@ Before merging to main:
 - [x] Dev-UI sliders control frequency live
 
 **Phase H (Hierarchical Perception v2):** 🔄 IN PROGRESS
-- [ ] L2 grid infrastructure (90m cells)
-- [ ] Pattern iteration helper (cells_from_pattern)
+- [x] L2 grid infrastructure (180m cells) - COMPLETE 2025-12-30
+  - L2_CELL_SIZE constant, CoarseGrid L2 storage, aggregate_l2(), system registered
+- [ ] L2Vision component
 - [ ] L2 scan phase with biosig classification
-- [ ] Early-exit cascade (L2 → L1 → L0)
-- [ ] 70%+ L0 cell reduction in sparse scenarios
+- [ ] Range-band perception (L0: 0-60m, L1: 60-180m, L2: 180m+)
+- [ ] Portal L2 overlay (G key cycles to L2 mode)
 - [ ] Determinism test passes
 
 **Phase B:** ⏸️ ON HOLD (pending Phase H)

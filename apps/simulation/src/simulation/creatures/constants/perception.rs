@@ -79,45 +79,72 @@ pub const PERCEPTION_THRESHOLD_FRACTION: f32 = 0.05;
 // FOV-BASED GRID PATTERNS (L0 Extended Cells)
 // =============================================================================
 
+/// [ACTIVE] Ultra-narrow FOV threshold (degrees).
+/// Creatures with FOV below this get +4 front cells (apex predator tunnel vision).
+/// BIOLOGICAL BASIS: Apex predators (owls ~55°, sharks ~60°, eagles ~45°) have
+/// extreme binocular vision with near-zero peripheral awareness.
+pub const ULTRA_NARROW_FOV_THRESHOLD: f32 = 75.0;
+
 /// [ACTIVE] Narrow FOV threshold (degrees).
 /// Creatures with FOV below this get +2 front cells (predator depth perception).
-/// BIOLOGICAL BASIS: Forward-facing eyes (owls, cats, raptors) sacrifice peripheral
+/// BIOLOGICAL BASIS: Forward-facing eyes (wolves, cats) sacrifice peripheral
 /// vision for binocular depth perception, enabling precise strike distance estimation.
 pub const NARROW_FOV_THRESHOLD: f32 = 120.0;
 
 /// [ACTIVE] Wide FOV threshold (degrees).
 /// Creatures with FOV above this get +2 side cells (prey peripheral awareness).
-/// BIOLOGICAL BASIS: Lateral eyes (rabbits, horses, deer) sacrifice depth perception
+/// BIOLOGICAL BASIS: Lateral eyes (deer) sacrifice depth perception
 /// for panoramic threat detection, enabling early predator awareness.
 pub const WIDE_FOV_THRESHOLD: f32 = 200.0;
 
+/// [ACTIVE] Ultra-wide FOV threshold (degrees).
+/// Creatures with FOV above this get +4 side cells (paranoid prey panoramic).
+/// BIOLOGICAL BASIS: Small prey (mice ~360°, rabbits ~360°) have almost complete
+/// spherical vision, sacrificing all depth perception for maximum threat detection.
+pub const ULTRA_WIDE_FOV_THRESHOLD: f32 = 280.0;
+
 /// FOV tier classification for L0 grid pattern selection.
 /// Determines which extra cells (if any) are queried beyond base 3×3.
+///
+/// 5-Tier System:
+/// - UltraNarrow (<75°): +4 front cells (apex predator)
+/// - Narrow (75-120°): +2 front cells (predator)
+/// - Medium (120-200°): Base 3×3 only (generalist)
+/// - Wide (200-280°): +2 side cells (alert prey)
+/// - UltraWide (>280°): +4 side cells (paranoid prey)
 ///
 /// GOLDEN ZONE: Medium-tier creatures (generalists) query FEWER cells than
 /// specialists, making them computationally cheaper AND biologically accurate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum FovTier {
-    /// Narrow FOV (<120°): +2 front cells for predator depth hunting
-    Narrow = 0,
+    /// UltraNarrow FOV (<75°): +4 front cells (apex predator tunnel vision)
+    UltraNarrow = 0,
+    /// Narrow FOV (75-120°): +2 front cells for predator depth hunting
+    Narrow = 1,
     /// Medium FOV (120-200°): Base 3×3 only (generalist, no specialization)
     #[default]
-    Medium = 1,
-    /// Wide FOV (>200°): +2 side cells for prey panoramic awareness
-    Wide = 2,
+    Medium = 2,
+    /// Wide FOV (200-280°): +2 side cells for prey panoramic awareness
+    Wide = 3,
+    /// UltraWide FOV (>280°): +4 side cells (paranoid prey 360° awareness)
+    UltraWide = 4,
 }
 
 impl FovTier {
     /// Determine FOV tier from FOV in degrees
     #[inline]
     pub fn from_fov_degrees(fov: f32) -> Self {
-        if fov < NARROW_FOV_THRESHOLD {
+        if fov < ULTRA_NARROW_FOV_THRESHOLD {
+            FovTier::UltraNarrow
+        } else if fov < NARROW_FOV_THRESHOLD {
             FovTier::Narrow
-        } else if fov > WIDE_FOV_THRESHOLD {
+        } else if fov <= WIDE_FOV_THRESHOLD {
+            FovTier::Medium
+        } else if fov < ULTRA_WIDE_FOV_THRESHOLD {
             FovTier::Wide
         } else {
-            FovTier::Medium
+            FovTier::UltraWide
         }
     }
 

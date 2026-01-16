@@ -12,8 +12,21 @@ use crate::simulation::creatures::components::CreatureState;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
 use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
-use crate::simulation::spatial::constants::CELL_SIZE;
+use crate::simulation::spatial::constants::{CELL_SIZE, L1_CELL_SIZE};
 use crate::simulation::spatial::{BioSignature, HierarchicalGrid};
+
+/// All 8 L1 ring cell offsets (no center, no FOV culling).
+/// L1 is "area awareness" - creatures should know about all surrounding cells.
+const RING_OFFSETS: [(i32, i32); 8] = [
+    (1, 0),   // E
+    (1, 1),   // NE
+    (0, 1),   // N
+    (-1, 1),  // NW
+    (-1, 0),  // W
+    (-1, -1), // SW
+    (0, -1),  // S
+    (1, -1),  // SE
+];
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 use std::cell::RefCell;
@@ -329,23 +342,8 @@ pub fn update_perception_system(
                             continue;
                         }
 
-                        // L1 VISION: Record non-Empty L1 cells discovered during L0 scan.
-                        // The L0 cell passed FOV culling, so PART of this L1 cell is in FOV.
-                        // Don't check if L1 center is in FOV - creature may be at cell edge.
-                        if !l1_vision.contains_cell(parent_l1_idx as u32) {
-                            let (l1_center_x, l1_center_y) =
-                                l1_grid_ref.cell_center_from_index(parent_l1_idx);
-                            let l1_dx = l1_center_x - x;
-                            let l1_dy = l1_center_y - y;
-                            let l1_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().max(0.001);
-                            l1_vision.push(L1VisionEntry {
-                                cell_idx: parent_l1_idx as u32,
-                                classification,
-                                _pad: [0; 3],
-                                direction_x: l1_dx / l1_dist,
-                                direction_y: l1_dy / l1_dist,
-                            });
-                        }
+                        // NOTE: L1Vision is populated by the separate L1 ring scan below,
+                        // NOT as a byproduct of L0 scanning. This keeps the L0 loop lean.
 
                         // Process entities in this cell
                         for proxy in grid_ref.get_cell_proxies(cell_idx) {
@@ -413,7 +411,7 @@ pub fn update_perception_system(
                     if let Some(extra_offsets) =
                         fov_patterns::get_extra_cells(fov_tier, facing_x, facing_y)
                     {
-                        for (dx, dy) in extra_offsets {
+                        for &(dx, dy) in extra_offsets {
                             let extra_cx = creature_cx + dx as i32;
                             let extra_cy = creature_cy + dy as i32;
 
@@ -443,21 +441,8 @@ pub fn update_perception_system(
                                 continue;
                             }
 
-                            // L1 VISION: Record non-Empty L1 cells from extra cells too.
-                            if !l1_vision.contains_cell(parent_l1_idx as u32) {
-                                let (l1_center_x, l1_center_y) =
-                                    l1_grid_ref.cell_center_from_index(parent_l1_idx);
-                                let l1_dx = l1_center_x - x;
-                                let l1_dy = l1_center_y - y;
-                                let l1_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().max(0.001);
-                                l1_vision.push(L1VisionEntry {
-                                    cell_idx: parent_l1_idx as u32,
-                                    classification,
-                                    _pad: [0; 3],
-                                    direction_x: l1_dx / l1_dist,
-                                    direction_y: l1_dy / l1_dist,
-                                });
-                            }
+                            // NOTE: L1Vision is populated by the separate L1 ring scan below,
+                            // NOT as a byproduct of L0 extended cell scanning.
 
                             // Process entities in this extra cell
                             for proxy in grid_ref.get_cell_proxies(extra_cell_idx) {
@@ -509,6 +494,99 @@ pub fn update_perception_system(
                                         },
                                     ));
                                 }
+                            }
+                        }
+                    }
+
+                    // =================================================================
+                    // L1 RING SCAN: Poll ALL 8 surrounding L1 cells (60-180m range band)
+                    // =================================================================
+                    // RANGE GATE: Only creatures with perception >= L1_CELL_SIZE benefit
+                    // from strategic L1 awareness. Myopic creatures skip this entirely.
+                    // GOLDEN ZONE: The performance win IS the biological feature -
+                    // creatures that can't see 60m+ don't have strategic area awareness.
+                    if range >= L1_CELL_SIZE {
+                        // NO FOV CULLING: L1 is "area awareness" - creature should know about
+                        // all surrounding cells including behind (escape routes, threats).
+                        // This is simpler AND faster for most creatures.
+
+                        // OPTIMIZATION: Precompute creature's offset from its L1 cell center (ONCE)
+                        let (my_l1_center_x, my_l1_center_y) =
+                            l1_grid_ref.cell_center_from_index(my_l1_cell_idx);
+                        let base_offset_x = my_l1_center_x - x;
+                        let base_offset_y = my_l1_center_y - y;
+
+                        // Get creature's L1 cell coordinates for ring neighbor lookup
+                        let (creature_l1_cx, creature_l1_cy) =
+                            l1_grid_ref.index_to_cell_coords(my_l1_cell_idx);
+
+                        // BASE RING: Scan all 8 surrounding L1 cells (no FOV culling)
+                        for (dx, dy) in RING_OFFSETS {
+                            let l1_cx = creature_l1_cx + dx;
+                            let l1_cy = creature_l1_cy + dy;
+
+                            // Bounds check (skip cells outside world)
+                            let Some(l1_idx) = l1_grid_ref.get_cell_index_by_coords(l1_cx, l1_cy)
+                            else {
+                                continue;
+                            };
+
+                            // Get biosignature and classify (ALL cells, including Empty)
+                            let biosig = l1_grid_ref.get_biosignature(l1_idx);
+                            let is_my_cell = l1_idx == my_l1_cell_idx;
+                            let classification =
+                                classify_l1_cell(biosig, my_mass, self_radius, is_my_cell);
+
+                            // Direction = base_offset + (dx, dy) * L1_CELL_SIZE
+                            let l1_dx = base_offset_x + dx as f32 * L1_CELL_SIZE;
+                            let l1_dy = base_offset_y + dy as f32 * L1_CELL_SIZE;
+                            let l1_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().max(0.001);
+
+                            l1_vision.push(L1VisionEntry {
+                                cell_idx: l1_idx as u32,
+                                classification,
+                                _pad: [0; 3],
+                                direction_x: l1_dx / l1_dist,
+                                direction_y: l1_dy / l1_dist,
+                            });
+                        }
+
+                        // EXTENDED L1 CELLS for specialists (Narrow: +2 front, Wide: +2 sides)
+                        // These ARE direction-dependent (predators look further forward, prey look to sides)
+                        if let Some(extra_l1_offsets) =
+                            fov_patterns::get_extra_cells(fov_tier, facing_x, facing_y)
+                        {
+                            for &(dx, dy) in extra_l1_offsets {
+                                let l1_cx = creature_l1_cx + dx as i32;
+                                let l1_cy = creature_l1_cy + dy as i32;
+
+                                let Some(l1_idx) =
+                                    l1_grid_ref.get_cell_index_by_coords(l1_cx, l1_cy)
+                                else {
+                                    continue;
+                                };
+
+                                // Skip if already in L1Vision (extended may overlap with ring)
+                                if l1_vision.contains_cell(l1_idx as u32) {
+                                    continue;
+                                }
+
+                                let biosig = l1_grid_ref.get_biosignature(l1_idx);
+                                let is_my_cell = l1_idx == my_l1_cell_idx;
+                                let classification =
+                                    classify_l1_cell(biosig, my_mass, self_radius, is_my_cell);
+
+                                let l1_dx = base_offset_x + dx as f32 * L1_CELL_SIZE;
+                                let l1_dy = base_offset_y + dy as f32 * L1_CELL_SIZE;
+                                let l1_dist = (l1_dx * l1_dx + l1_dy * l1_dy).sqrt().max(0.001);
+
+                                l1_vision.push(L1VisionEntry {
+                                    cell_idx: l1_idx as u32,
+                                    classification,
+                                    _pad: [0; 3],
+                                    direction_x: l1_dx / l1_dist,
+                                    direction_y: l1_dy / l1_dist,
+                                });
                             }
                         }
                     }

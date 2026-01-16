@@ -100,14 +100,48 @@ pub fn should_query_cell(dx: i32, dy: i32, pattern: u16) -> bool {
 // Precomputed cell offsets for specialized perception beyond base 3×3 grid.
 // Indexed by octant (0-7): E, NE, N, NW, W, SW, S, SE
 //
+// 5-TIER SYSTEM:
+// - UltraNarrow (<75°): +4 front cells (apex predator tunnel vision)
+// - Narrow (75-120°): +2 front cells (predator depth hunting)
+// - Medium (120-200°): No extra cells (generalist)
+// - Wide (200-280°): +2 side cells (alert prey peripheral)
+// - UltraWide (>280°): +4 side cells (paranoid prey panoramic)
+//
 // BIOLOGICAL BASIS:
-// - Narrow FOV (predators): Forward-facing eyes sacrifice peripheral vision for
-//   depth perception. Extended front cells model binocular hunting zone.
-// - Wide FOV (prey): Lateral eyes sacrifice depth for panoramic awareness.
-//   Extended side cells model peripheral threat detection.
+// - UltraNarrow (apex predators): Owls, sharks, eagles have extreme binocular
+//   vision with near-zero peripheral awareness - they commit fully to forward
+//   depth perception for precise strike distance estimation.
+// - Narrow (predators): Wolves, cats sacrifice peripheral vision for depth.
+// - Wide (alert prey): Deer, horses have wide peripheral awareness.
+// - UltraWide (paranoid prey): Mice, rabbits have almost 360° vision,
+//   sacrificing all depth perception for maximum threat detection.
+
+/// UltraNarrow FOV extra cells: 4 cells extending deep forward (apex predator)
+/// Used by apex predator archetypes (<75° FOV) for extreme tunnel vision hunting
+///
+/// Grid visualization (East-facing example):
+/// ```text
+///     ┌─┬─┬─┐
+///     │ │ │ │
+///     ├─┼─┼─┼─┬─┬─┬─┐
+///     │ │●→│ │▓│▓│▓│▓│  ▓ = extra cells at (2,0), (3,0), (4,0), (5,0)
+///     ├─┼─┼─┼─┴─┴─┴─┘
+///     │ │ │ │
+///     └─┴─┴─┘
+/// ```
+const ULTRA_NARROW_FRONT_CELLS: [[(i8, i8); 4]; 8] = [
+    [(2, 0), (3, 0), (4, 0), (5, 0)],         // Octant 0 (E):  extends +x
+    [(2, 2), (3, 3), (4, 4), (5, 5)],         // Octant 1 (NE): extends +x,+y diagonal
+    [(0, 2), (0, 3), (0, 4), (0, 5)],         // Octant 2 (N):  extends +y
+    [(-2, 2), (-3, 3), (-4, 4), (-5, 5)],     // Octant 3 (NW): extends -x,+y diagonal
+    [(-2, 0), (-3, 0), (-4, 0), (-5, 0)],     // Octant 4 (W):  extends -x
+    [(-2, -2), (-3, -3), (-4, -4), (-5, -5)], // Octant 5 (SW): extends -x,-y diagonal
+    [(0, -2), (0, -3), (0, -4), (0, -5)],     // Octant 6 (S):  extends -y
+    [(2, -2), (3, -3), (4, -4), (5, -5)],     // Octant 7 (SE): extends +x,-y diagonal
+];
 
 /// Narrow FOV extra cells: 2 cells extending forward in facing direction
-/// Used by predator archetypes (<120° FOV) for depth hunting
+/// Used by predator archetypes (75-120° FOV) for depth hunting
 ///
 /// Grid visualization (East-facing example):
 /// ```text
@@ -131,7 +165,7 @@ const NARROW_FRONT_CELLS: [[(i8, i8); 2]; 8] = [
 ];
 
 /// Wide FOV extra cells: 2 cells extending perpendicular to facing direction
-/// Used by prey archetypes (>200° FOV) for panoramic threat detection
+/// Used by prey archetypes (200-280° FOV) for panoramic threat detection
 ///
 /// Grid visualization (East-facing example):
 /// ```text
@@ -158,6 +192,34 @@ const WIDE_SIDE_CELLS: [[(i8, i8); 2]; 8] = [
     [(-2, 1), (1, -2)],   // Octant 7 (SE): perpendicular is NE-SW axis
 ];
 
+/// UltraWide FOV extra cells: 4 cells extending on sides (paranoid prey panoramic)
+/// Used by paranoid prey archetypes (>280° FOV) for extreme peripheral awareness
+///
+/// Grid visualization (East-facing example):
+/// ```text
+///         ┌─┬─┐
+///         │▓│▓│  ▓ = extra cells at (0,2) and (1,2)
+///     ┌─┬─┼─┼─┼─┐
+///     │ │ │ │ │ │
+///     ├─┼─┼─┼─┼─┤
+///     │ │ │●│ │ │  ● = creature facing East
+///     ├─┼─┼─┼─┼─┤
+///     │ │ │ │ │ │
+///     └─┴─┼─┼─┼─┘
+///         │▓│▓│  ▓ = extra cells at (0,-2) and (1,-2)
+///         └─┴─┘
+/// ```
+const ULTRA_WIDE_SIDE_CELLS: [[(i8, i8); 4]; 8] = [
+    [(0, 2), (0, -2), (1, 2), (1, -2)],       // Octant 0 (E):  sides ±y plus forward extension
+    [(-1, 2), (2, -1), (-2, 1), (1, -2)],     // Octant 1 (NE): extended perpendicular
+    [(2, 0), (-2, 0), (2, 1), (-2, 1)],       // Octant 2 (N):  sides ±x plus forward extension
+    [(2, 1), (-1, -2), (1, 2), (-2, -1)],     // Octant 3 (NW): extended perpendicular
+    [(0, 2), (0, -2), (-1, 2), (-1, -2)],     // Octant 4 (W):  sides ±y plus forward extension
+    [(1, 2), (-2, -1), (2, 1), (-1, -2)],     // Octant 5 (SW): extended perpendicular
+    [(2, 0), (-2, 0), (2, -1), (-2, -1)],     // Octant 6 (S):  sides ±x plus forward extension
+    [(-2, 1), (1, -2), (-1, 2), (2, -1)],     // Octant 7 (SE): extended perpendicular
+];
+
 /// Get extra cell offsets for the given FOV tier and facing direction.
 /// Returns None for Medium tier (generalists have no extended perception).
 ///
@@ -166,20 +228,24 @@ const WIDE_SIDE_CELLS: [[(i8, i8); 2]; 8] = [
 /// * `fx`, `fy` - Facing direction vector (normalized or unnormalized)
 ///
 /// # Returns
-/// * `Some([(dx1, dy1), (dx2, dy2)])` - Two cell offsets to query
+/// * `Some(&[(i8, i8)])` - Slice of cell offsets to query (2 or 4 depending on tier)
 /// * `None` - No extra cells (Medium tier generalist)
+///
+/// # Cell counts by tier
+/// * UltraNarrow: 4 cells (deep forward tunnel vision)
+/// * Narrow: 2 cells (forward depth perception)
+/// * Medium: 0 cells (no extra cells)
+/// * Wide: 2 cells (perpendicular sides)
+/// * UltraWide: 4 cells (extended sides panoramic)
 #[inline]
-pub fn get_extra_cells(fov_tier: FovTier, fx: f32, fy: f32) -> Option<[(i8, i8); 2]> {
+pub fn get_extra_cells(fov_tier: FovTier, fx: f32, fy: f32) -> Option<&'static [(i8, i8)]> {
+    let octant = facing_to_octant(fx, fy);
     match fov_tier {
+        FovTier::UltraNarrow => Some(&ULTRA_NARROW_FRONT_CELLS[octant]),
+        FovTier::Narrow => Some(&NARROW_FRONT_CELLS[octant]),
         FovTier::Medium => None,
-        FovTier::Narrow => {
-            let octant = facing_to_octant(fx, fy);
-            Some(NARROW_FRONT_CELLS[octant])
-        }
-        FovTier::Wide => {
-            let octant = facing_to_octant(fx, fy);
-            Some(WIDE_SIDE_CELLS[octant])
-        }
+        FovTier::Wide => Some(&WIDE_SIDE_CELLS[octant]),
+        FovTier::UltraWide => Some(&ULTRA_WIDE_SIDE_CELLS[octant]),
     }
 }
 
@@ -310,20 +376,31 @@ mod tests {
 
     #[test]
     fn test_fov_tier_thresholds() {
+        // Updated for 5-tier system:
+        // UltraNarrow: <75°, Narrow: 75-120°, Medium: 120-200°, Wide: 200-280°, UltraWide: >280°
+        assert_eq!(FovTier::from_fov_degrees(45.0), FovTier::UltraNarrow);
+        assert_eq!(FovTier::from_fov_degrees(74.9), FovTier::UltraNarrow);
+        assert_eq!(FovTier::from_fov_degrees(75.0), FovTier::Narrow);
         assert_eq!(FovTier::from_fov_degrees(90.0), FovTier::Narrow);
         assert_eq!(FovTier::from_fov_degrees(119.9), FovTier::Narrow);
         assert_eq!(FovTier::from_fov_degrees(120.0), FovTier::Medium);
         assert_eq!(FovTier::from_fov_degrees(180.0), FovTier::Medium);
         assert_eq!(FovTier::from_fov_degrees(200.0), FovTier::Medium);
         assert_eq!(FovTier::from_fov_degrees(200.1), FovTier::Wide);
-        assert_eq!(FovTier::from_fov_degrees(340.0), FovTier::Wide);
+        assert_eq!(FovTier::from_fov_degrees(250.0), FovTier::Wide);
+        assert_eq!(FovTier::from_fov_degrees(279.9), FovTier::Wide);
+        assert_eq!(FovTier::from_fov_degrees(280.0), FovTier::UltraWide);
+        assert_eq!(FovTier::from_fov_degrees(340.0), FovTier::UltraWide);
     }
 
     #[test]
     fn test_fov_tier_has_extra_cells() {
+        // All tiers except Medium have extra cells
+        assert!(FovTier::UltraNarrow.has_extra_cells());
         assert!(FovTier::Narrow.has_extra_cells());
         assert!(!FovTier::Medium.has_extra_cells());
         assert!(FovTier::Wide.has_extra_cells());
+        assert!(FovTier::UltraWide.has_extra_cells());
     }
 
     #[test]
@@ -395,6 +472,115 @@ mod tests {
         let s = get_extra_cells(FovTier::Narrow, 0.0, -1.0).unwrap();
         assert_eq!(n[0].0, s[0].0);
         assert_eq!(n[0].1, -s[0].1);
+    }
+
+    // ==========================================================================
+    // 5-Tier FOV System Tests
+    // ==========================================================================
+
+    #[test]
+    fn test_fov_tier_5_tier_thresholds() {
+        // 5-tier system boundary tests:
+        // UltraNarrow: <75°
+        assert_eq!(FovTier::from_fov_degrees(45.0), FovTier::UltraNarrow);
+        assert_eq!(FovTier::from_fov_degrees(74.9), FovTier::UltraNarrow);
+
+        // Narrow: 75-120°
+        assert_eq!(FovTier::from_fov_degrees(75.0), FovTier::Narrow);
+        assert_eq!(FovTier::from_fov_degrees(90.0), FovTier::Narrow);
+        assert_eq!(FovTier::from_fov_degrees(119.9), FovTier::Narrow);
+
+        // Medium: 120-200°
+        assert_eq!(FovTier::from_fov_degrees(120.0), FovTier::Medium);
+        assert_eq!(FovTier::from_fov_degrees(180.0), FovTier::Medium);
+        assert_eq!(FovTier::from_fov_degrees(200.0), FovTier::Medium);
+
+        // Wide: 200-280°
+        assert_eq!(FovTier::from_fov_degrees(200.1), FovTier::Wide);
+        assert_eq!(FovTier::from_fov_degrees(250.0), FovTier::Wide);
+        assert_eq!(FovTier::from_fov_degrees(279.9), FovTier::Wide);
+
+        // UltraWide: >280°
+        assert_eq!(FovTier::from_fov_degrees(280.0), FovTier::UltraWide);
+        assert_eq!(FovTier::from_fov_degrees(320.0), FovTier::UltraWide);
+        assert_eq!(FovTier::from_fov_degrees(340.0), FovTier::UltraWide);
+    }
+
+    #[test]
+    fn test_ultra_narrow_extra_cells_facing_east() {
+        let cells = get_extra_cells(FovTier::UltraNarrow, 1.0, 0.0).unwrap();
+        assert_eq!(cells.len(), 4, "UltraNarrow should have 4 extra cells");
+        assert_eq!(cells[0], (2, 0));
+        assert_eq!(cells[1], (3, 0));
+        assert_eq!(cells[2], (4, 0));
+        assert_eq!(cells[3], (5, 0));
+    }
+
+    #[test]
+    fn test_ultra_narrow_extra_cells_facing_north() {
+        let cells = get_extra_cells(FovTier::UltraNarrow, 0.0, 1.0).unwrap();
+        assert_eq!(cells.len(), 4, "UltraNarrow should have 4 extra cells");
+        assert_eq!(cells[0], (0, 2));
+        assert_eq!(cells[1], (0, 3));
+        assert_eq!(cells[2], (0, 4));
+        assert_eq!(cells[3], (0, 5));
+    }
+
+    #[test]
+    fn test_ultra_narrow_extra_cells_facing_northeast() {
+        let cells = get_extra_cells(FovTier::UltraNarrow, 1.0, 1.0).unwrap();
+        assert_eq!(cells.len(), 4, "UltraNarrow should have 4 extra cells");
+        assert_eq!(cells[0], (2, 2));
+        assert_eq!(cells[1], (3, 3));
+        assert_eq!(cells[2], (4, 4));
+        assert_eq!(cells[3], (5, 5));
+    }
+
+    #[test]
+    fn test_ultra_wide_extra_cells_facing_east() {
+        let cells = get_extra_cells(FovTier::UltraWide, 1.0, 0.0).unwrap();
+        assert_eq!(cells.len(), 4, "UltraWide should have 4 extra cells");
+        // East facing: sides are ±y plus diagonal extensions
+        assert_eq!(cells[0], (0, 2));
+        assert_eq!(cells[1], (0, -2));
+        assert_eq!(cells[2], (1, 2));
+        assert_eq!(cells[3], (1, -2));
+    }
+
+    #[test]
+    fn test_ultra_wide_extra_cells_facing_north() {
+        let cells = get_extra_cells(FovTier::UltraWide, 0.0, 1.0).unwrap();
+        assert_eq!(cells.len(), 4, "UltraWide should have 4 extra cells");
+        // North facing: sides are ±x plus diagonal extensions
+        assert_eq!(cells[0], (2, 0));
+        assert_eq!(cells[1], (-2, 0));
+        assert_eq!(cells[2], (2, 1));
+        assert_eq!(cells[3], (-2, 1));
+    }
+
+    #[test]
+    fn test_narrow_returns_2_cells_as_slice() {
+        let cells = get_extra_cells(FovTier::Narrow, 1.0, 0.0).unwrap();
+        assert_eq!(cells.len(), 2, "Narrow should have 2 extra cells");
+        assert_eq!(cells[0], (2, 0));
+        assert_eq!(cells[1], (3, 0));
+    }
+
+    #[test]
+    fn test_wide_returns_2_cells_as_slice() {
+        let cells = get_extra_cells(FovTier::Wide, 1.0, 0.0).unwrap();
+        assert_eq!(cells.len(), 2, "Wide should have 2 extra cells");
+        assert_eq!(cells[0], (0, 2));
+        assert_eq!(cells[1], (0, -2));
+    }
+
+    #[test]
+    fn test_all_tiers_have_extra_cells_except_medium() {
+        assert!(FovTier::UltraNarrow.has_extra_cells());
+        assert!(FovTier::Narrow.has_extra_cells());
+        assert!(!FovTier::Medium.has_extra_cells());
+        assert!(FovTier::Wide.has_extra_cells());
+        assert!(FovTier::UltraWide.has_extra_cells());
     }
 
 }

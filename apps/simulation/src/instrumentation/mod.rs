@@ -117,6 +117,7 @@ pub struct SystemTimings {
     pub perception_us: AtomicU64,
     pub spatial_grid_rebuild_us: AtomicU64,
     pub l1_aggregation_us: AtomicU64, // L1 coarse grid aggregation (Phase A)
+    pub l2_aggregation_us: AtomicU64, // L2 strategic grid aggregation (Phase H)
     pub behavior_transition_us: AtomicU64,
     pub steering_us: AtomicU64, // Fused steering system (Sprint 20)
     pub capture_debug_accel_us: AtomicU64,
@@ -133,6 +134,7 @@ impl SystemTimings {
             perception_us: AtomicU64::new(0),
             spatial_grid_rebuild_us: AtomicU64::new(0),
             l1_aggregation_us: AtomicU64::new(0),
+            l2_aggregation_us: AtomicU64::new(0),
             behavior_transition_us: AtomicU64::new(0),
             steering_us: AtomicU64::new(0),
             capture_debug_accel_us: AtomicU64::new(0),
@@ -148,6 +150,7 @@ impl SystemTimings {
             "perception" => &self.perception_us,
             "spatial_grid_rebuild" => &self.spatial_grid_rebuild_us,
             "l1_aggregation" => &self.l1_aggregation_us,
+            "l2_aggregation" => &self.l2_aggregation_us,
             "behavior_transition" => &self.behavior_transition_us,
             "steering" => &self.steering_us,
             "capture_debug_accel" => &self.capture_debug_accel_us,
@@ -164,6 +167,7 @@ impl SystemTimings {
             perception_us: self.perception_us.load(Ordering::Relaxed),
             spatial_grid_rebuild_us: self.spatial_grid_rebuild_us.load(Ordering::Relaxed),
             l1_aggregation_us: self.l1_aggregation_us.load(Ordering::Relaxed),
+            l2_aggregation_us: self.l2_aggregation_us.load(Ordering::Relaxed),
             behavior_transition_us: self.behavior_transition_us.load(Ordering::Relaxed),
             steering_us: self.steering_us.load(Ordering::Relaxed),
             capture_debug_accel_us: self.capture_debug_accel_us.load(Ordering::Relaxed),
@@ -210,6 +214,7 @@ pub struct SystemTimingsSnapshot {
     pub perception_us: u64,
     pub spatial_grid_rebuild_us: u64,
     pub l1_aggregation_us: u64,
+    pub l2_aggregation_us: u64,
     pub behavior_transition_us: u64,
     pub steering_us: u64,
     pub capture_debug_accel_us: u64,

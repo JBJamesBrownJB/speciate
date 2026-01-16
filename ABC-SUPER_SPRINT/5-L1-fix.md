@@ -1173,6 +1173,16 @@ The 5-tier FOV system is implemented and tests pass, but visual inspection revea
 
 2. **Medium FOV coverage gaps:** Creatures with medium FOV (~120-200°) don't seem to cover the L1 grid spread near their actual FOV range. The extended cells may not be reaching far enough, or the base ring pattern needs tuning.
 
+### Bugs Spotted (2025-01-16)
+
+3. **L1 cell crit count mis-reporting:** Some L1 cell grids appear to be showing incorrect creature counts. Need to investigate biosignature aggregation or display logic.
+
+4. **L1 cell query timeout errors:** Console showing warnings like:
+   ```
+   ⚠️ L1 cell query timed out at (4183.561794321702, -4279.882610917395)
+   ```
+   Likely an issue with the Portal's L1 cell hover query or IPC timeout. May be related to coordinates near world boundaries.
+
 ### Action Items
 
 - [ ] Review L1 ring pattern - consider adding FOV culling back for rear cells

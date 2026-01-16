@@ -66,6 +66,12 @@ pub fn get_cell_pattern(fov_rad: f32, fx: f32, fy: f32) -> u16 {
     FOV_CELL_PATTERNS[fov_to_bucket(fov_rad)][facing_to_octant(fx, fy)]
 }
 
+/// Get bitmask using pre-computed bucket and octant (avoids redundant atan2).
+#[inline]
+pub fn get_cell_pattern_by_octant(bucket: usize, octant: usize) -> u16 {
+    FOV_CELL_PATTERNS[bucket][octant]
+}
+
 /// Maps (dx+1)*3 + (dy+1) → bit position in pattern (branchless lookup)
 /// Layout: [-1,-1]=0, [-1,0]=1, [-1,1]=2, [0,-1]=3, [0,0]=4, [0,1]=5, [1,-1]=6, [1,0]=7, [1,1]=8
 const OFFSET_TO_BIT: [u8; 9] = [
@@ -239,7 +245,13 @@ const ULTRA_WIDE_SIDE_CELLS: [[(i8, i8); 4]; 8] = [
 /// * UltraWide: 4 cells (extended sides panoramic)
 #[inline]
 pub fn get_extra_cells(fov_tier: FovTier, fx: f32, fy: f32) -> Option<&'static [(i8, i8)]> {
-    let octant = facing_to_octant(fx, fy);
+    get_extra_cells_by_octant(fov_tier, facing_to_octant(fx, fy))
+}
+
+/// Get extra cell offsets using pre-computed octant (avoids redundant atan2).
+/// Use this when octant has already been calculated for FOV pattern lookup.
+#[inline]
+pub fn get_extra_cells_by_octant(fov_tier: FovTier, octant: usize) -> Option<&'static [(i8, i8)]> {
     match fov_tier {
         FovTier::UltraNarrow => Some(&ULTRA_NARROW_FRONT_CELLS[octant]),
         FovTier::Narrow => Some(&NARROW_FRONT_CELLS[octant]),

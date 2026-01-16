@@ -189,8 +189,12 @@ pub fn update_perception_system(
                     // Get creature's cell coordinates for FOV cell culling
                     let (creature_cx, creature_cy) = grid_ref.world_to_cell(x, y);
 
-                    // Compute FOV cell pattern once per creature (precomputed lookup table)
-                    let cell_pattern = fov_patterns::get_cell_pattern(fov_angle, facing_x, facing_y);
+                    // Compute octant ONCE (atan2 is expensive, reuse for all pattern lookups)
+                    let octant = fov_patterns::facing_to_octant(facing_x, facing_y);
+                    let fov_bucket = fov_patterns::fov_to_bucket(fov_angle);
+
+                    // Compute FOV cell pattern using pre-computed octant (avoids redundant atan2)
+                    let cell_pattern = fov_patterns::get_cell_pattern_by_octant(fov_bucket, octant);
 
                     // Use pre-computed cos_half_fov from perception component for grid-level FOV culling
                     grid_ref.collect_cells_sorted_fov(
@@ -408,8 +412,9 @@ pub fn update_perception_system(
                     // Medium FOV (120-200°): No extra cells (generalist)
                     //
                     // GOLDEN ZONE: Generalists query fewer cells = cheaper AND biologically accurate
+                    // Use pre-computed octant to avoid redundant atan2 call
                     if let Some(extra_offsets) =
-                        fov_patterns::get_extra_cells(fov_tier, facing_x, facing_y)
+                        fov_patterns::get_extra_cells_by_octant(fov_tier, octant)
                     {
                         for &(dx, dy) in extra_offsets {
                             let extra_cx = creature_cx + dx as i32;
@@ -553,8 +558,9 @@ pub fn update_perception_system(
 
                         // EXTENDED L1 CELLS for specialists (Narrow: +2 front, Wide: +2 sides)
                         // These ARE direction-dependent (predators look further forward, prey look to sides)
+                        // Use pre-computed octant to avoid redundant atan2 call
                         if let Some(extra_l1_offsets) =
-                            fov_patterns::get_extra_cells(fov_tier, facing_x, facing_y)
+                            fov_patterns::get_extra_cells_by_octant(fov_tier, octant)
                         {
                             for &(dx, dy) in extra_l1_offsets {
                                 let l1_cx = creature_l1_cx + dx as i32;

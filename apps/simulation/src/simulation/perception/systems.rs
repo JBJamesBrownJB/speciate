@@ -124,8 +124,8 @@ pub fn update_perception_system(
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
-    // Perception: Heavy, variable workload - smaller chunks for load balancing
-    entities.par_iter_mut().with_min_len(128).for_each(
+    // Perception: Heavy, variable workload - smaller chunks for better load balancing
+    entities.par_iter_mut().with_min_len(64).for_each(
         |(entity, pos, rot, size, perception, neighbor_cache, l1_vision, state)| {
             // Check if this entity is the debug target (dev-tools only)
             #[cfg(feature = "dev-tools")]

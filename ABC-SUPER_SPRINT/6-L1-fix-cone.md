@@ -1,8 +1,66 @@
 # Phase 6: L1 Cone-to-Grid Intersection
 
-**Status:** PLANNING
+**Status:** ✅ COMPLETE
+**Completed:** 2026-01-18
 **Prerequisite:** Phase 5 (L1 Ring Perception) complete
 **Related:** `5-L1-fix.md`
+
+---
+
+## Implementation Summary
+
+### Changes Made
+
+**`apps/simulation/src/simulation/perception/systems.rs`** (lines 507-562):
+- Replaced fixed 8-cell ring scan with cone-based scan
+- Now checks ALL L1 cells within perception range (not just 8 neighbors)
+- Applies FOV check using existing `is_in_fov()` function
+- Removed extended L1 cells section (cone naturally includes cells at any distance)
+- Removed unused `RING_OFFSETS` constant
+
+**`apps/simulation/src/simulation/perception/tests.rs`** (3 test updates):
+- Updated `test_l1_vision_records_discovered_cells` - expects > 0 cells (not >= 8)
+- Updated `test_l1_vision_classifies_tiny_creatures_as_empty` - expects > 0 cells
+- Updated `test_l1_scan_range_gate_skips_myopic_creatures` - expects > 0 cells
+
+### Algorithm
+
+```rust
+if range >= L1_CELL_SIZE {
+    let range_sq = range * range;
+    let max_cell_dist = (range / L1_CELL_SIZE).ceil() as i32;
+
+    for dx in -max_cell_dist..=max_cell_dist {
+        for dy in -max_cell_dist..=max_cell_dist {
+            if dx == 0 && dy == 0 { continue; }  // Skip own cell
+
+            // Get cell center in world coords
+            let (cell_center_x, cell_center_y) = l1_grid.cell_center_from_index(l1_idx);
+
+            // Vector from creature to cell
+            let to_cell_x = cell_center_x - creature_x;
+            let to_cell_y = cell_center_y - creature_y;
+            let dist_sq = to_cell_x * to_cell_x + to_cell_y * to_cell_y;
+
+            // Range check
+            if dist_sq > range_sq { continue; }
+
+            // FOV check (reuses existing is_in_fov)
+            let rough_dot = to_cell_x * facing_x + to_cell_y * facing_y;
+            if !is_in_fov(rough_dot, dist_sq, cos_half_fov, cos_half_fov_sq) {
+                continue;
+            }
+
+            // Cell is within cone - add to L1Vision
+            l1_vision.push(...);
+        }
+    }
+}
+```
+
+### Test Results
+
+All 108 perception tests pass. Full test suite passes.
 
 ---
 

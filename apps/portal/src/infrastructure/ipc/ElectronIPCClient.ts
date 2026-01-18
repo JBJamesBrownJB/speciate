@@ -1,5 +1,5 @@
 import type { IPCClient } from './IPCClient';
-import type { GameState, CreatureData, PerceptionDebugData, NeighborDebugInfo, QueriedCell } from '../../types/GameState';
+import type { GameState, CreatureData, PerceptionDebugData, NeighborDebugInfo, QueriedCell, L1VisionDebugEntry, L1Classification } from '../../types/GameState';
 import type { TelemetryFrame } from '../../types/TelemetryFrame';
 import { getBufferOffsets } from '../../types/BufferLayout';
 
@@ -11,6 +11,10 @@ const MAX_QUERIED_CELLS = 100;
 const CHECKED_CELL_SECTION_OFFSET = CELL_SECTION_OFFSET + CELL_HEADER_SIZE + MAX_QUERIED_CELLS * 2; // 407
 const CHECKED_CELL_HEADER_SIZE = 1;
 const MAX_CHECKED_CELLS = 100;
+const L1_VISION_SECTION_OFFSET = CHECKED_CELL_SECTION_OFFSET + CHECKED_CELL_HEADER_SIZE + MAX_CHECKED_CELLS * 2; // 608
+const L1_VISION_HEADER_SIZE = 1;
+const MAX_L1_VISION_ENTRIES = 48;
+const L1_VISION_ENTRY_SIZE = 6;
 
 export class ElectronIPCClient implements IPCClient {
   private static readonly MAX_CREATURES = 250_000;
@@ -167,6 +171,22 @@ export class ElectronIPCClient implements IPCClient {
           });
         }
 
+        // Parse L1 vision section
+        const numL1Vision = Math.min(buffer[L1_VISION_SECTION_OFFSET], MAX_L1_VISION_ENTRIES);
+        const l1Vision: L1VisionDebugEntry[] = [];
+        const l1VisionDataOffset = L1_VISION_SECTION_OFFSET + L1_VISION_HEADER_SIZE;
+        for (let i = 0; i < numL1Vision; i++) {
+          const entryOffset = l1VisionDataOffset + i * L1_VISION_ENTRY_SIZE;
+          l1Vision.push({
+            cellIdx: buffer[entryOffset],
+            classification: buffer[entryOffset + 1] as L1Classification,
+            centerX: buffer[entryOffset + 2],
+            centerY: buffer[entryOffset + 3],
+            directionX: buffer[entryOffset + 4],
+            directionY: buffer[entryOffset + 5],
+          });
+        }
+
         const debugData: PerceptionDebugData = {
           entityId: buffer[1],
           x: buffer[2],
@@ -182,6 +202,7 @@ export class ElectronIPCClient implements IPCClient {
           creatureCell,
           queriedCells,
           checkedCells,
+          l1Vision: l1Vision.length > 0 ? l1Vision : undefined,
         };
 
         this.perceptionDebugCallbacks.forEach(callback => {

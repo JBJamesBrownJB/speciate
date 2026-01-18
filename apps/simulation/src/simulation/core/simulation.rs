@@ -76,7 +76,7 @@ impl SimulationBuilder {
             rebuild_spatial_grid_system,
             // L1 aggregation runs after L0 rebuild
             aggregate_l1_system.after(rebuild_spatial_grid_system),
-            // Perception MUST run after L1 aggregation for early-exit optimization
+            // Perception runs after L1 aggregation for hierarchical early-exit
             perception::update_perception_system.after(aggregate_l1_system),
             // Behavior transition runs after perception (may use perception data in future)
             behavior_transition_system.after(perception::update_perception_system),

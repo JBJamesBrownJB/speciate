@@ -208,6 +208,7 @@ mod tests {
             perception_us: 500,
             spatial_grid_rebuild_us: 100,
             l1_aggregation_us: 50,
+            l2_aggregation_us: 25,
             behavior_transition_us: 100,
             steering_us: 230,
             capture_debug_accel_us: 5,

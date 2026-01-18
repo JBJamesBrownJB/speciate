@@ -3,7 +3,8 @@ use super::constants::L1_CELL_SIZE;
 
 /// Coarse spatial grid (L1) for aggregated bio-signatures.
 ///
-/// Each L1 cell covers a 3×3 block of L0 cells (30m × 30m).
+/// L1: Each L1 cell covers a 3×3 block of L0 cells (60m × 60m).
+///
 /// Stores aggregated BioSignature data for efficient early-exit
 /// optimization and size domination checks.
 #[derive(Debug)]
@@ -167,6 +168,44 @@ impl CoarseGrid {
             let cy = (cell_idx / self.width) as i32 + self.min_cell_y;
             (cx, cy, &self.cells[cell_idx])
         })
+    }
+
+    /// Get world center coordinates for a cell by its index.
+    /// Returns (center_x, center_y) in world coordinates.
+    #[inline]
+    pub fn cell_center_from_index(&self, cell_idx: usize) -> (f32, f32) {
+        let cx = (cell_idx % self.width) as i32 + self.min_cell_x;
+        let cy = (cell_idx / self.width) as i32 + self.min_cell_y;
+        let center_x = (cx as f32 + 0.5) * self.cell_size;
+        let center_y = (cy as f32 + 0.5) * self.cell_size;
+        (center_x, center_y)
+    }
+
+    /// Convert L1 cell index to cell coordinates.
+    /// Returns (cx, cy) in grid coordinates (not world coordinates).
+    #[inline]
+    pub fn index_to_cell_coords(&self, cell_idx: usize) -> (i32, i32) {
+        let cx = (cell_idx % self.width) as i32 + self.min_cell_x;
+        let cy = (cell_idx / self.width) as i32 + self.min_cell_y;
+        (cx, cy)
+    }
+
+    /// Convert cell coordinates to L1 cell index.
+    /// Returns None if coordinates are outside the grid bounds.
+    #[inline]
+    pub fn get_cell_index_by_coords(&self, cx: i32, cy: i32) -> Option<usize> {
+        let local_cx = cx - self.min_cell_x;
+        let local_cy = cy - self.min_cell_y;
+
+        if local_cx < 0
+            || local_cy < 0
+            || local_cx >= self.width as i32
+            || local_cy >= self.height as i32
+        {
+            return None;
+        }
+
+        Some(local_cy as usize * self.width + local_cx as usize)
     }
 }
 

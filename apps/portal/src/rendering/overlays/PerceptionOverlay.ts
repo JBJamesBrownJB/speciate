@@ -11,6 +11,10 @@ const NEIGHBOR_LINE_COLOR = 0xffffff;
 const NEIGHBOR_LINE_WIDTH = 0.1;
 const NEIGHBOR_LINE_ALPHA = 0.89;
 
+const L1_VISION_LINE_COLOR = 0x888888;
+const L1_VISION_LINE_WIDTH = 0.15;
+const L1_VISION_LINE_ALPHA = 0.6;
+
 export class PerceptionOverlay implements IOverlay {
   readonly config: OverlayConfig = {
     name: 'perception',
@@ -108,6 +112,21 @@ export class PerceptionOverlay implements IOverlay {
       for (const neighbor of data.neighbors) {
         this.graphics.moveTo(data.x, data.y);
         this.graphics.lineTo(neighbor.x, neighbor.y);
+      }
+      this.graphics.stroke();
+    }
+
+    // Draw L1 vision lines to L1 cell centers (gray for now - not used for behavior yet)
+    if (data.l1Vision && data.l1Vision.length > 0) {
+      this.graphics.setStrokeStyle({
+        width: L1_VISION_LINE_WIDTH,
+        color: L1_VISION_LINE_COLOR,
+        alpha: L1_VISION_LINE_ALPHA,
+      });
+
+      for (const entry of data.l1Vision) {
+        this.graphics.moveTo(data.x, data.y);
+        this.graphics.lineTo(entry.centerX, entry.centerY);
       }
       this.graphics.stroke();
     }

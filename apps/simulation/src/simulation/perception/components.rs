@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use super::classification::{L1Classification, MAX_L1_PERCEPTIONS};
+use super::classification::{L1Classification, MAX_L1_VISION};
 use crate::simulation::creatures::constants::{
     DEFAULT_FOV_DEGREES, DEFAULT_MASS, FOV_RANGE_EXPONENT, FovTier, MAX_PERCEIVED_NEIGHBORS,
     PERCEPTION_MULTIPLIER, PERCEPTION_THRESHOLD_FRACTION, SIZE_ALLOMETRY_EXPONENT,
@@ -166,11 +166,11 @@ impl Default for NeighborCache {
     }
 }
 
-/// Single L1 cell perception data.
+/// Single L1 cell vision entry.
 /// Fixed 16 bytes for cache-line friendly access.
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
-pub struct L1CellPerception {
+pub struct L1VisionEntry {
     pub cell_idx: u32,
     pub classification: L1Classification,
     pub _pad: [u8; 3],
@@ -178,7 +178,7 @@ pub struct L1CellPerception {
     pub direction_y: f32,
 }
 
-impl L1CellPerception {
+impl L1VisionEntry {
     pub const EMPTY: Self = Self {
         cell_idx: 0,
         classification: L1Classification::Empty,
@@ -188,26 +188,26 @@ impl L1CellPerception {
     };
 }
 
-impl Default for L1CellPerception {
+impl Default for L1VisionEntry {
     fn default() -> Self {
         Self::EMPTY
     }
 }
 
-/// L1 perception results - stores classifications of L1 cells in perception range.
+/// L1 vision results - stores classifications of L1 cells in creature's FOV.
 /// Fixed-size array (not Vec) for cache efficiency at 500K creatures.
-/// Used by Phase B drive system to compute navigation gradients.
+/// Used by drive system to compute navigation gradients.
 #[derive(Component, Clone)]
-pub struct L1Perceptions {
+pub struct L1Vision {
     count: u8,
-    cells: [L1CellPerception; MAX_L1_PERCEPTIONS],
+    entries: [L1VisionEntry; MAX_L1_VISION],
 }
 
-impl L1Perceptions {
+impl L1Vision {
     pub fn new() -> Self {
         Self {
             count: 0,
-            cells: [L1CellPerception::EMPTY; MAX_L1_PERCEPTIONS],
+            entries: [L1VisionEntry::EMPTY; MAX_L1_VISION],
         }
     }
 
@@ -219,29 +219,37 @@ impl L1Perceptions {
         self.count as usize
     }
 
-    pub fn push(&mut self, cell: L1CellPerception) {
-        if (self.count as usize) < MAX_L1_PERCEPTIONS {
-            self.cells[self.count as usize] = cell;
+    pub fn push(&mut self, entry: L1VisionEntry) {
+        if (self.count as usize) < MAX_L1_VISION {
+            self.entries[self.count as usize] = entry;
             self.count += 1;
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &L1CellPerception> {
-        self.cells[..self.count as usize].iter()
+    pub fn iter(&self) -> impl Iterator<Item = &L1VisionEntry> {
+        self.entries[..self.count as usize].iter()
     }
 
     pub fn has_threat(&self) -> bool {
         self.iter()
-            .any(|c| c.classification == L1Classification::Threat)
+            .any(|e| e.classification == L1Classification::Threat)
     }
 
     pub fn has_prey(&self) -> bool {
         self.iter()
-            .any(|c| c.classification == L1Classification::Prey)
+            .any(|e| e.classification == L1Classification::Prey)
+    }
+
+    /// Check if a cell index is already in the vision cache.
+    /// Used to avoid duplicate entries when multiple L0 cells share the same L1 parent.
+    pub fn contains_cell(&self, cell_idx: u32) -> bool {
+        self.entries[..self.count as usize]
+            .iter()
+            .any(|e| e.cell_idx == cell_idx)
     }
 }
 
-impl Default for L1Perceptions {
+impl Default for L1Vision {
     fn default() -> Self {
         Self::new()
     }

@@ -3,11 +3,14 @@
 ## Quick Reference
 
 **Key Documentation:**
+- `docs/architecture/core-architectures.md` - **START HERE** - All core architectural principles indexed
 - `docs/biology/done/` - **Implemented biological features** (wandering, perception, seeking, etc.)
 - `docs/biology/ideas/dna-driven-design.md` - DNA-driven design principles (detailed)
 - `docs/archive/dual-tick/` - ⚠️ ABANDONED architecture (Sprint 11, archived for learning)
 - `docs/architecture/electron-architecture.md` - IPC protocol and Electron patterns
 - `SPRINTS/` - Current and past sprint plans
+
+**Before adding ANY new feature:** Read `docs/architecture/core-architectures.md` and use the Enforcement Checklist.
 
 **Current Sprint:** Sprint 15 - ECS Optimizations (COMPLETE)
 - Branch: `feat/sprint-15-ecs-optimizations`
@@ -303,6 +306,50 @@ npm run build && npm run package
 - Domain layer: Pure TypeScript
 - Rendering layer: PixiJS integration
 - Infrastructure: External services
+
+### PixiJS Interaction - MANDATORY
+
+**CRITICAL: All pointer interactions in Portal MUST use PixiJS's event system, NOT raw DOM events.**
+
+#### Why This Matters
+
+PixiJS manages its own coordinate system. Using DOM events requires manual coordinate conversion which is error-prone and creates race conditions between DOM events and PixiJS's render loop.
+
+#### Correct Pattern (InteractionManager)
+
+```typescript
+import { FederatedPointerEvent } from 'pixi.js';
+
+// Enable interaction on a display object
+container.eventMode = 'static';
+container.on('pointerdown', (event: FederatedPointerEvent) => {
+  // Use getLocalPosition for world coordinates
+  const localPos = event.getLocalPosition(worldContainer);
+  const worldX = localPos.x;
+  const worldY = localPos.y;
+});
+```
+
+#### Wrong Pattern (DO NOT USE)
+
+```typescript
+// BAD - bypasses PixiJS coordinate system
+canvas.addEventListener('click', (event: MouseEvent) => {
+  const rect = canvas.getBoundingClientRect();
+  const screenX = event.clientX - rect.left;
+  // ... manual conversion that often fails
+});
+```
+
+#### Key Files
+
+- `apps/portal/src/interaction/InteractionManager.ts` - Centralized interaction handler
+- Uses PixiJS `pointerdown`, `pointermove`, `pointerout` events
+- `getLocalPosition(worldContainer)` for world coordinates
+
+#### Reference
+
+Always consult [PixiJS v8 Events Documentation](https://pixijs.com/8.x/guides/components/events) when implementing interaction features.
 
 ### Parallelization (Sprint 15)
 

@@ -12,8 +12,9 @@ use crate::simulation::creatures::components::CreatureState;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
 use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
-use crate::simulation::spatial::constants::CELL_SIZE;
+use crate::simulation::spatial::constants::{CELL_SIZE, L1_CELL_SIZE};
 use crate::simulation::spatial::{BioSignature, HierarchicalGrid};
+
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 use std::cell::RefCell;
@@ -77,6 +78,7 @@ pub fn update_perception_system(
         &BodySize,
         &Perception,
         &mut NeighborCache,
+        &mut L1Vision,
         &CreatureState,
     )>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
@@ -110,9 +112,9 @@ pub fn update_perception_system(
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
-    // Perception: Heavy, variable workload - smaller chunks for load balancing
-    entities.par_iter_mut().with_min_len(128).for_each(
-        |(entity, pos, rot, size, perception, neighbor_cache, state)| {
+    // Perception: Heavy, variable workload - smaller chunks for better load balancing
+    entities.par_iter_mut().with_min_len(64).for_each(
+        |(entity, pos, rot, size, perception, neighbor_cache, l1_vision, state)| {
             // Check if this entity is the debug target (dev-tools only)
             #[cfg(feature = "dev-tools")]
             let is_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
@@ -133,8 +135,9 @@ pub fn update_perception_system(
                 return;
             }
 
-            // Clear neighbor cache only when we're actually updating perception
+            // Clear caches only when we're actually updating perception
             neighbor_cache.clear();
+            l1_vision.clear();
 
             let x = pos.x;
             let y = pos.y;
@@ -153,7 +156,7 @@ pub fn update_perception_system(
             let facing_x = rot.cos_radians;
             let facing_y = rot.sin_radians;
             // L0 scan: ALWAYS 9 adjacent cells only (fixed radius, not perception range)
-            // L1 provides long-range awareness via L1Perceptions component
+            // L1 provides long-range awareness via L1Vision component
             let query_radius = L0_SCAN_RADIUS;
 
             // Topological neighbor selection with smart early-exit:
@@ -174,8 +177,12 @@ pub fn update_perception_system(
                     // Get creature's cell coordinates for FOV cell culling
                     let (creature_cx, creature_cy) = grid_ref.world_to_cell(x, y);
 
-                    // Compute FOV cell pattern once per creature (precomputed lookup table)
-                    let cell_pattern = fov_patterns::get_cell_pattern(fov_angle, facing_x, facing_y);
+                    // Compute octant ONCE (atan2 is expensive, reuse for all pattern lookups)
+                    let octant = fov_patterns::facing_to_octant(facing_x, facing_y);
+                    let fov_bucket = fov_patterns::fov_to_bucket(fov_angle);
+
+                    // Compute FOV cell pattern using pre-computed octant (avoids redundant atan2)
+                    let cell_pattern = fov_patterns::get_cell_pattern_by_octant(fov_bucket, octant);
 
                     // Use pre-computed cos_half_fov from perception component for grid-level FOV culling
                     grid_ref.collect_cells_sorted_fov(
@@ -256,6 +263,9 @@ pub fn update_perception_system(
                     // Get FOV tier for extended cell pattern lookup
                     let fov_tier = perception.fov_tier;
 
+                    // Cache extra cells lookup ONCE (used for both L0 and L1 extended cells)
+                    let extra_offsets = fov_patterns::get_extra_cells_by_octant(fov_tier, octant);
+
                     for &(sort_key, cell_idx) in cells.iter() {
                         // Detect transition from adjacent to non-adjacent cells.
                         // Adjacent cells: sort_key = distance² (typically < 500 for ~22m diagonal)
@@ -327,6 +337,9 @@ pub fn update_perception_system(
                             continue;
                         }
 
+                        // NOTE: L1Vision is populated by the separate L1 ring scan below,
+                        // NOT as a byproduct of L0 scanning. This keeps the L0 loop lean.
+
                         // Process entities in this cell
                         for proxy in grid_ref.get_cell_proxies(cell_idx) {
                             if *entity == proxy.entity {
@@ -390,10 +403,9 @@ pub fn update_perception_system(
                     // Medium FOV (120-200°): No extra cells (generalist)
                     //
                     // GOLDEN ZONE: Generalists query fewer cells = cheaper AND biologically accurate
-                    if let Some(extra_offsets) =
-                        fov_patterns::get_extra_cells(fov_tier, facing_x, facing_y)
-                    {
-                        for (dx, dy) in extra_offsets {
+                    // Use cached extra_offsets (computed once at start)
+                    if let Some(offsets) = extra_offsets {
+                        for &(dx, dy) in offsets {
                             let extra_cx = creature_cx + dx as i32;
                             let extra_cy = creature_cy + dy as i32;
 
@@ -422,6 +434,9 @@ pub fn update_perception_system(
                             if classification == L1Classification::Empty {
                                 continue;
                             }
+
+                            // NOTE: L1Vision is populated by the separate L1 ring scan below,
+                            // NOT as a byproduct of L0 extended cell scanning.
 
                             // Process entities in this extra cell
                             for proxy in grid_ref.get_cell_proxies(extra_cell_idx) {
@@ -477,6 +492,68 @@ pub fn update_perception_system(
                         }
                     }
 
+                    // =================================================================
+                    // L1 CONE SCAN: Check all L1 cells within perception cone
+                    // =================================================================
+                    // RANGE GATE: Only creatures with perception >= L1_CELL_SIZE benefit
+                    // from strategic L1 awareness. Myopic creatures skip this entirely.
+                    // GOLDEN ZONE: The performance win IS the biological feature -
+                    // creatures that can't see 60m+ don't have strategic area awareness.
+                    if range >= L1_CELL_SIZE {
+                        let range_sq = range * range;
+                        let max_cell_dist = (range / L1_CELL_SIZE).ceil() as i32;
+
+                        let (creature_l1_cx, creature_l1_cy) =
+                            l1_grid_ref.index_to_cell_coords(my_l1_cell_idx);
+
+                        for dx in -max_cell_dist..=max_cell_dist {
+                            for dy in -max_cell_dist..=max_cell_dist {
+                                if dx == 0 && dy == 0 {
+                                    continue;
+                                }
+
+                                let l1_cx = creature_l1_cx + dx;
+                                let l1_cy = creature_l1_cy + dy;
+
+                                let Some(l1_idx) =
+                                    l1_grid_ref.get_cell_index_by_coords(l1_cx, l1_cy)
+                                else {
+                                    continue;
+                                };
+
+                                let (cell_center_x, cell_center_y) =
+                                    l1_grid_ref.cell_center_from_index(l1_idx);
+
+                                let to_cell_x = cell_center_x - x;
+                                let to_cell_y = cell_center_y - y;
+                                let dist_sq = to_cell_x * to_cell_x + to_cell_y * to_cell_y;
+
+                                if dist_sq > range_sq {
+                                    continue;
+                                }
+
+                                let rough_dot = to_cell_x * facing_x + to_cell_y * facing_y;
+                                if !is_in_fov(rough_dot, dist_sq, cos_half_fov, cos_half_fov_sq) {
+                                    continue;
+                                }
+
+                                let biosig = l1_grid_ref.get_biosignature(l1_idx);
+                                let is_my_cell = l1_idx == my_l1_cell_idx;
+                                let classification =
+                                    classify_l1_cell(biosig, my_mass, self_radius, is_my_cell);
+
+                                let inv_dist = dist_sq.sqrt().recip();
+                                l1_vision.push(L1VisionEntry {
+                                    cell_idx: l1_idx as u32,
+                                    classification,
+                                    _pad: [0; 3],
+                                    direction_x: to_cell_x * inv_dist,
+                                    direction_y: to_cell_y * inv_dist,
+                                });
+                            }
+                        }
+                    }
+
                     // Final selection: get K closest using partial sort
                     // select_nth_unstable_by(k-1) partitions so [0..k-1] are <= element at k-1
                     // Then truncate(k) keeps [0..k), which are the k smallest
@@ -515,9 +592,10 @@ pub fn update_perception_system(
 
         if let Some(target_entity) = debug_target_entity {
             // Find the debug target in our entities list and capture its state
-            if let Some((_, pos, rot, _size, perception, neighbor_cache, state)) = entities
-                .iter()
-                .find(|(e, _, _, _, _, _, _)| *e == target_entity)
+            if let Some((_, pos, rot, _size, perception, neighbor_cache, l1_vision, state)) =
+                entities
+                    .iter()
+                    .find(|(e, _, _, _, _, _, _, _)| *e == target_entity)
             {
                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
 
@@ -559,6 +637,23 @@ pub fn update_perception_system(
                         })
                         .collect();
 
+                    // Build L1Vision debug entries with cell centers
+                    let l1_vision_debug: Vec<L1VisionDebugEntry> = l1_vision
+                        .iter()
+                        .map(|entry| {
+                            let (center_x, center_y) =
+                                l1_grid_ref.cell_center_from_index(entry.cell_idx as usize);
+                            L1VisionDebugEntry {
+                                cell_idx: entry.cell_idx,
+                                classification: entry.classification as u8,
+                                center_x,
+                                center_y,
+                                direction_x: entry.direction_x,
+                                direction_y: entry.direction_y,
+                            }
+                        })
+                        .collect();
+
                     let (creature_cx, creature_cy) = grid_ref.world_to_cell(x, y);
 
                     debug_snapshot.update(
@@ -578,6 +673,7 @@ pub fn update_perception_system(
                             x: creature_cx,
                             y: creature_cy,
                         },
+                        l1_vision_debug,
                     );
                 } else {
                     let (creature_cx, creature_cy) = grid_ref.world_to_cell(pos.x, pos.y);
@@ -598,10 +694,11 @@ pub fn update_perception_system(
                             x: creature_cx,
                             y: creature_cy,
                         },
+                        std::iter::empty::<L1VisionDebugEntry>(),
                     );
                 }
             }
-            // else: Entity not found in query results
+            // else: Entity not found in query results (may lack required components)
         } else {
             // No debug target set - this is normal
             debug_snapshot.clear();

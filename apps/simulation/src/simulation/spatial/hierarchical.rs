@@ -5,13 +5,13 @@ use super::constants::CELL_SIZE;
 use super::grid::DoubleBufferedSpatialGrid;
 use crate::simulation::core::MAX_WORLD_SIZE;
 
-/// Hierarchical spatial grid combining L0 (fine) and L1 (coarse) grids.
+/// Hierarchical spatial grid combining L0 and L1 grids.
 ///
-/// - L0: 10m cells, stores entity IDs (PerceptionProxy)
-/// - L1: 30m cells (3×3 L0), stores aggregated BioSignatures
+/// - L0: 20m cells, stores entity IDs (PerceptionProxy)
+/// - L1: 60m cells (3×3 L0), stores aggregated BioSignatures
 ///
 /// L0 is double-buffered (perception reads front while rebuild writes back).
-/// L1 is single-buffered (rebuilt from L0 data each tick).
+/// L1 is single-buffered (rebuilt from L0 each tick).
 #[derive(Resource)]
 pub struct HierarchicalGrid {
     pub l0: DoubleBufferedSpatialGrid,
@@ -98,6 +98,7 @@ impl HierarchicalGrid {
             }
         }
     }
+
 }
 
 #[cfg(test)]

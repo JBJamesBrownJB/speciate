@@ -31,6 +31,7 @@ fn benchmark_telemetry_json_serialization() {
         perception_us: 3456,
         spatial_grid_rebuild_us: 789,
         l1_aggregation_us: 100,
+        l2_aggregation_us: 50,
         behavior_transition_us: 567,
         steering_us: 880,
         capture_debug_accel_us: 5,

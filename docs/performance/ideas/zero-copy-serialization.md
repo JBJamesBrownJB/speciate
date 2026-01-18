@@ -1,6 +1,8 @@
 # Zero-Copy Serialization (FlatBuffers/Cap'n Proto)
 
-**Status:** Idea (deferred to release)
+**Status:** Superseded - Zero-copy achieved via NAPI Float32Array (Sprint 13)
+
+**Note:** This FlatBuffers approach was not implemented. Instead, NAPI-RS with direct Float32Array buffer sharing achieved zero-copy IPC. See `docs/performance/done/buffer-transfer-baseline.md` and `docs/architecture/electron-architecture.md`.
 **Category:** IPC Optimizations
 
 ## Problem

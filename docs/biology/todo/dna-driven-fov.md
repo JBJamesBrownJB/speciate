@@ -1,8 +1,16 @@
 # Vision System - DNA-Driven Perception
 
-**Status:** ⏳ PLANNED (stochastic-vision)
+**Status:** ⏳ PARTIAL - Basic FOV implemented, DNA genes pending
 
-**Current Implementation:** Hardcoded 10× perception range, 360° awareness, no FOV
+**Current Implementation:**
+- ✅ FOV cone filtering (implemented in Phase A)
+- ✅ FOV-range trade-off formula
+- ✅ Perception range scales by body size
+- ❌ DNA vision genes (visual_range_multiplier, visual_arc, neural_speed)
+- ❌ Stochastic vision timing
+- ❌ Metabolic costs
+
+See `docs/biology/done/fov-perception.md` for implemented FOV mechanics.
 
 ---
 

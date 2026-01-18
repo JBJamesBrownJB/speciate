@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use speciate::{CritBuilder, Simulation, SimulationBuilder};
+use speciate::simulation::creatures::dna::Dna;
 
 // 22.2Hz tick rate → ~45ms per tick (matches TARGET_SIMULATION_HZ in napi_addon)
 const TICK_DELTA: f32 = 0.045;
@@ -11,9 +12,15 @@ const SCALING_COUNTS: [usize; 5] = [1_000, 10_000, 50_000, 100_000, 200_000];
 // Spawn extent matching NAPI spawn_creatures (±500 = 1000×1000 area)
 const SPAWN_EXTENT: f32 = 500.0;
 
+// Large spawn extent for 100K+ random DNA benchmarks (~5km x 4km realistic gameplay)
+const LARGE_SPAWN_EXTENT_X: f32 = 2500.0;
+const LARGE_SPAWN_EXTENT_Y: f32 = 2000.0;
+
 fn create_simulation_with_creatures(count: usize) -> Simulation {
     use rand::Rng;
-    let mut sim = SimulationBuilder::new().build();
+    let mut sim = SimulationBuilder::new()
+        .set_boundaries(SPAWN_EXTENT * 2.0, SPAWN_EXTENT * 2.0)
+        .build();
     let mut rng = rand::thread_rng();
 
     // Random spawn matching NAPI: (rand - 0.5) * 1000 = ±500 units
@@ -24,6 +31,34 @@ fn create_simulation_with_creatures(count: usize) -> Simulation {
 
         let builder = CritBuilder::new()
             .at(x, y)
+            .with_all_capabilities()
+            .in_behavior(speciate::BehaviorMode::Wandering);
+        sim.spawn_crit(builder);
+    }
+
+    sim
+}
+
+/// Create simulation with randomized DNA (size 0.1-10m, FOV narrow/medium/wide)
+/// Uses larger spawn extent (~5km x 4km) matching realistic 100K gameplay scenarios
+fn create_simulation_with_random_dna(count: usize) -> Simulation {
+    use rand::Rng;
+    let mut sim = SimulationBuilder::new()
+        .set_boundaries(LARGE_SPAWN_EXTENT_X * 2.0, LARGE_SPAWN_EXTENT_Y * 2.0)
+        .build();
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..count {
+        let x = (rng.gen::<f32>() - 0.5) * (LARGE_SPAWN_EXTENT_X * 2.0);
+        let y = (rng.gen::<f32>() - 0.5) * (LARGE_SPAWN_EXTENT_Y * 2.0);
+
+        // Random DNA: size gene and FOV gene both 0.0-1.0
+        // This exercises the full range of creature sizes and perception configs
+        let dna = Dna::random();
+
+        let builder = CritBuilder::new()
+            .at(x, y)
+            .with_dna(dna)
             .with_all_capabilities()
             .in_behavior(speciate::BehaviorMode::Wandering);
         sim.spawn_crit(builder);
@@ -157,10 +192,11 @@ fn bench_perception(c: &mut Criterion) {
             ));
         }
 
-        grid.rebuild(
+        // Use rebuild_parallel with fixed bounds (rebuild is cfg(test) only)
+        grid.rebuild_parallel(
             entities_data
                 .iter()
-                .map(|(e, x, y, r, _, _, _, _)| (*e, *x, *y, *r)),
+                .map(|(e, x, y, r, _, _, _, _)| (*e, *x, *y, 0.0, 0.0, *r)),
         );
 
         const CAPACITY: usize = 8;
@@ -287,12 +323,63 @@ fn bench_export_sort(c: &mut Criterion) {
     group.finish();
 }
 
+/// 100K creatures with randomized DNA - primary optimization target
+/// Uses realistic creature distribution (size 0.1-10m, varied FOV)
+/// and large world (~5km x 4km) matching production scenarios
+fn bench_100k_random_dna(c: &mut Criterion) {
+    let mut group = c.benchmark_group("random_dna_100k");
+
+    // Configure for heavy benchmark
+    group.sample_size(20);
+    group.measurement_time(std::time::Duration::from_secs(30));
+
+    let mut sim = create_simulation_with_random_dna(100_000);
+
+    // Warm-up: stabilize ECS archetypes and spatial grid
+    for _ in 0..10 {
+        sim.update(TICK_DELTA);
+    }
+
+    group.bench_function("tick", |b| {
+        b.iter(|| {
+            sim.update(black_box(TICK_DELTA));
+        });
+    });
+
+    group.finish();
+}
+
+/// Per-system breakdown at 100K for optimization hunting
+/// Run with: cargo bench --bench simulation_bench -- random_dna_scaling
+fn bench_random_dna_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("random_dna_scaling");
+
+    for count in [50_000, 100_000, 150_000] {
+        let mut sim = create_simulation_with_random_dna(count);
+
+        // Warm-up
+        for _ in 0..10 {
+            sim.update(TICK_DELTA);
+        }
+
+        group.bench_with_input(BenchmarkId::new("creatures", count), &count, |b, _| {
+            b.iter(|| {
+                sim.update(black_box(TICK_DELTA));
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_tick_scaling,
     bench_spawn,
     bench_vector_ops,
     bench_perception,
-    bench_export_sort
+    bench_export_sort,
+    bench_100k_random_dna,
+    bench_random_dna_scaling
 );
 criterion_main!(benches);

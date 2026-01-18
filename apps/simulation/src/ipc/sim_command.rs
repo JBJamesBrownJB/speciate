@@ -9,6 +9,10 @@ pub struct L1CellInfo {
     pub cell_x: i32,
     /// Cell Y coordinate (grid units, not world units)
     pub cell_y: i32,
+    /// World X coordinate of cell center (meters)
+    pub world_center_x: f32,
+    /// World Y coordinate of cell center (meters)
+    pub world_center_y: f32,
     /// Number of creatures in this cell
     pub creature_count: u32,
     /// Total mass of all creatures in this cell

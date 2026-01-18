@@ -1,5 +1,8 @@
 # Critter Collision System (ECS)
 
+**Status:** Idea (detailed design, not implemented)
+**Blocked by:** Health component does not exist yet
+
 Technical specification for reactive physics collisions between creature entities.
 
 ---

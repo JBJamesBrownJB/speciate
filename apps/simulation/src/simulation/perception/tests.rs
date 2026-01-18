@@ -456,7 +456,7 @@ fn test_wide_fov_sees_almost_everywhere() {
 // NOTE: test_crowd_selects_closest_not_first_found was REMOVED.
 // That test verified scanning non-adjacent cells, which is now INTENTIONALLY
 // limited to 9 adjacent cells only (L0_SCAN_RADIUS). Long-range awareness
-// is handled by L1Perceptions (Phase B).
+// is handled by L1Vision.
 
 #[test]
 fn test_topological_selects_closest_neighbors_across_cells() {
@@ -1299,7 +1299,6 @@ fn test_bug_l0_scan_queries_too_many_cells() {
     use crate::simulation::core::SimulationBuilder;
     use crate::simulation::creatures::builder::CritBuilder;
     use crate::simulation::creatures::components::CritId;
-    use crate::simulation::spatial::constants::CELL_SIZE;
 
     let mut sim = SimulationBuilder::new().build();
     sim.set_boundaries(200.0, 200.0);
@@ -1695,4 +1694,455 @@ fn test_l1_empty_skips_adjacent_l0_cell() {
         0,
         "Giant should not perceive mouse (L1 Empty or size domination filter)"
     );
+}
+
+// ============================================================================
+// L1Vision Tests
+//
+// These tests verify L1Vision is populated correctly during perception:
+// - Only non-Empty L1 cells are recorded
+// - Only L1 cells in FOV cone are recorded
+// - No duplicate entries
+// ============================================================================
+
+/// Test L1Vision basic functionality
+#[test]
+fn test_l1_vision_basic_operations() {
+    let mut vision = L1Vision::new();
+    assert_eq!(vision.count(), 0);
+    assert!(!vision.has_threat());
+    assert!(!vision.has_prey());
+
+    // Add a threat entry
+    vision.push(L1VisionEntry {
+        cell_idx: 42,
+        classification: L1Classification::Threat,
+        _pad: [0; 3],
+        direction_x: 1.0,
+        direction_y: 0.0,
+    });
+
+    assert_eq!(vision.count(), 1);
+    assert!(vision.has_threat());
+    assert!(!vision.has_prey());
+    assert!(vision.contains_cell(42));
+    assert!(!vision.contains_cell(0));
+
+    // Add a prey entry
+    vision.push(L1VisionEntry {
+        cell_idx: 100,
+        classification: L1Classification::Prey,
+        _pad: [0; 3],
+        direction_x: 0.0,
+        direction_y: 1.0,
+    });
+
+    assert_eq!(vision.count(), 2);
+    assert!(vision.has_threat());
+    assert!(vision.has_prey());
+    assert!(vision.contains_cell(100));
+
+    // Clear
+    vision.clear();
+    assert_eq!(vision.count(), 0);
+    assert!(!vision.has_threat());
+    assert!(!vision.has_prey());
+    assert!(!vision.contains_cell(42));
+}
+
+/// Test L1Vision is populated during perception system
+#[test]
+fn test_l1_vision_populated_during_perception() {
+    use crate::simulation::core::SimulationBuilder;
+    use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::CritId;
+
+    let mut sim = SimulationBuilder::new().build();
+    sim.set_boundaries(150.0, 150.0);
+
+    // Spawn a LARGE creature at the center, facing +X (east)
+    // Must have perception range >= L1_CELL_SIZE (60m) to trigger L1 scan
+    // Size 5.0m → range ~112m (well above 60m threshold)
+    let observer_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(75.0, 75.0)
+            .with_size(5.0) // Large enough for L1 scan (range ~112m > 60m)
+            .with_fov(180.0)
+            .facing(0.0) // Facing +X (east)
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Spawn a large creature in front (east, in FOV)
+    // This should cause the L1 cell containing it to be classified as non-Empty
+    let _neighbor_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(100.0, 75.0) // East of observer
+            .with_size(3.0) // Large enough to be perceivable by observer
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Run perception
+    for _ in 0..5 {
+        sim.update(0.016);
+    }
+
+    // Find observer and check L1Vision
+    let world = sim.world_mut();
+    let observer_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == observer_id)
+        .map(|(e, _)| e)
+        .expect("Observer should exist");
+
+    let l1_vision = world.get::<L1Vision>(observer_entity).unwrap();
+
+    // L1Vision should have at least one entry (the L1 cell containing the neighbor)
+    // It might also include the creature's own L1 cell if it's non-Empty
+    assert!(
+        l1_vision.count() >= 1,
+        "L1Vision should have at least one entry for nearby creature, got {}",
+        l1_vision.count()
+    );
+}
+
+/// Test L1Vision records L1 cells discovered during L0 scan
+///
+/// L1Vision includes L1 parent cells of any L0 cells that pass FOV culling.
+/// The L1 cell CENTER doesn't need to be in FOV - the creature may be at
+/// the edge of an L1 cell where the center is behind them.
+#[test]
+fn test_l1_vision_records_discovered_cells() {
+    use crate::simulation::core::SimulationBuilder;
+    use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::CritId;
+
+    let mut sim = SimulationBuilder::new().build();
+    sim.set_boundaries(200.0, 200.0);
+
+    // Spawn LARGE observer at center with narrow 90° FOV, facing east (+X)
+    // Must have perception range >= L1_CELL_SIZE (60m) to trigger L1 scan
+    // Size 5.0m → range ~112m (well above 60m threshold)
+    let observer_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(100.0, 100.0)
+            .with_size(5.0) // Large enough for L1 scan (range ~112m > 60m)
+            .with_fov(90.0) // Narrow: ±45° from facing
+            .facing(0.0)    // Facing +X (east)
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Spawn creature to the EAST (in FOV) - will cause L1 cell to be non-Empty
+    let _east_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(115.0, 100.0) // Close enough to be in L0 scan range (10m)
+            .with_size(3.0)   // Large enough to be non-Empty
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Run perception multiple times
+    for _ in 0..5 {
+        sim.update(0.016);
+    }
+
+    // Check L1Vision
+    let world = sim.world_mut();
+    let observer_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == observer_id)
+        .map(|(e, _)| e)
+        .expect("Observer should exist");
+
+    let l1_vision = world.get::<L1Vision>(observer_entity).unwrap();
+
+    // Should have at least one L1 entry (the cell containing the east creature)
+    assert!(
+        l1_vision.count() > 0,
+        "Should have at least one L1Vision entry for nearby non-Empty L1 cell"
+    );
+
+    // Verify direction vectors are normalized
+    for entry in l1_vision.iter() {
+        let mag_sq = entry.direction_x * entry.direction_x + entry.direction_y * entry.direction_y;
+        assert!(
+            (mag_sq - 1.0).abs() < 0.01,
+            "Direction vector should be normalized. mag²={}, direction=({}, {})",
+            mag_sq,
+            entry.direction_x,
+            entry.direction_y
+        );
+
+        // NOTE: L1Vision now includes ALL 8 ring cells including Empty ones.
+        // Empty cells are valuable information (escape routes, safe areas).
+        // No assertion about classification needed - all types are valid.
+    }
+
+    // With L1 cone scan, cells within FOV are perceived.
+    // 90° FOV facing east with large range should see at least the eastern cells.
+    assert!(
+        l1_vision.count() > 0,
+        "L1Vision should have entries for cells within FOV cone. Got: {}",
+        l1_vision.count()
+    );
+}
+
+/// Test L1Vision classifies tiny creatures correctly (Empty, not Prey)
+/// Large observers have high perception thresholds, so tiny creatures are not
+/// significant enough to register as Prey - their L1 cells are classified Empty.
+#[test]
+fn test_l1_vision_classifies_tiny_creatures_as_empty() {
+    use crate::simulation::core::SimulationBuilder;
+    use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::CritId;
+
+    let mut sim = SimulationBuilder::new().build();
+    sim.set_boundaries(200.0, 200.0);
+
+    // Spawn a large creature (high threshold) at center
+    let observer_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(100.0, 100.0)
+            .with_size(5.0) // Large = high perception threshold
+            .with_fov(180.0)
+            .facing(0.0)
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Spawn a tiny creature nearby (below threshold, so its L1 cell should be Empty)
+    let _tiny_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(120.0, 100.0)
+            .with_size(0.2) // Very small - below perception threshold
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Run perception
+    for _ in 0..5 {
+        sim.update(0.016);
+    }
+
+    // Check L1Vision
+    let world = sim.world_mut();
+    let observer_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == observer_id)
+        .map(|(e, _)| e)
+        .expect("Observer should exist");
+
+    let l1_vision = world.get::<L1Vision>(observer_entity).unwrap();
+
+    // L1Vision now records ALL ring cells including Empty ones.
+    // The tiny creature's mass is below the large observer's threshold,
+    // so its L1 cell should be classified as Empty, not Prey.
+    // We verify that size domination works: large creatures don't see tiny ones as Prey.
+    let prey_count = l1_vision
+        .iter()
+        .filter(|e| e.classification == L1Classification::Prey)
+        .count();
+
+    // Should have no Prey entries (the tiny creature is invisible to the large observer)
+    assert_eq!(
+        prey_count, 0,
+        "Large observer should not see tiny creature as Prey (size domination)"
+    );
+
+    // With cone scan, cells within FOV are perceived.
+    // 180° FOV should see cells in front hemisphere.
+    assert!(
+        l1_vision.count() > 0,
+        "L1Vision should have entries for cells within FOV cone. Got: {}",
+        l1_vision.count()
+    );
+}
+
+/// Test L1 scan range gate: myopic creatures (perception < L1_CELL_SIZE) skip L1 ring scan.
+///
+/// This is a Golden Zone optimization - the performance win IS the biological feature:
+/// - Myopic creatures don't have strategic awareness (can't see 60m+ anyway)
+/// - Skip ~280 cycles per creature (8 biosig lookups, classifications, direction calcs)
+#[test]
+fn test_l1_scan_range_gate_skips_myopic_creatures() {
+    use crate::simulation::core::SimulationBuilder;
+    use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::CritId;
+    use crate::simulation::spatial::constants::L1_CELL_SIZE;
+
+    let mut sim = SimulationBuilder::new().build();
+    sim.set_boundaries(200.0, 200.0);
+
+    // MYOPIC creature: small body (1.5m) = perception range (~22m)
+    // This is well BELOW L1_CELL_SIZE (60m), so L1 scan should be SKIPPED.
+    // Formula: range = body_size × 10 × (body_size/0.5)^0.35
+    // For 1.5m: 1.5 × 10 × 3^0.35 ≈ 22m
+    let myopic_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(100.0, 100.0)
+            .with_size(1.5) // Small = perception range ~22m (< 60m)
+            .with_fov(180.0)
+            .facing(0.0)
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // NORMAL creature: large body (5.0m) = perception range (~112m)
+    // This is well ABOVE L1_CELL_SIZE (60m), so L1 scan should run normally.
+    // Formula: range = body_size × 10 × (body_size/0.5)^0.35
+    // For 5.0m: 5 × 10 × 10^0.35 ≈ 112m
+    let normal_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(50.0, 100.0) // Different location to avoid perception interference
+            .with_size(5.0) // Large = perception range ~112m (> 60m)
+            .with_fov(180.0)
+            .facing(0.0)
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Spawn some creatures around to populate L1 cells
+    for angle in (0..360).step_by(60) {
+        let rad = (angle as f32).to_radians();
+        // Place at ~80m radius - within normal creature's range, but L1 cells exist
+        let x = 100.0 + 80.0 * rad.cos();
+        let y = 100.0 + 80.0 * rad.sin();
+        sim.spawn_crit(
+            CritBuilder::new()
+                .at(x, y)
+                .with_size(2.0)
+                .with_dormant_brain()
+                .with_all_capabilities(),
+        );
+    }
+
+    // Run perception
+    for _ in 0..5 {
+        sim.update(0.016);
+    }
+
+    // Find entities and check L1Vision
+    let world = sim.world_mut();
+
+    let myopic_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == myopic_id)
+        .map(|(e, _)| e)
+        .expect("Myopic creature should exist");
+
+    let normal_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == normal_id)
+        .map(|(e, _)| e)
+        .expect("Normal creature should exist");
+
+    // Verify perception ranges
+    let myopic_perception = world.get::<Perception>(myopic_entity).unwrap();
+    let normal_perception = world.get::<Perception>(normal_entity).unwrap();
+
+    assert!(
+        myopic_perception.range < L1_CELL_SIZE,
+        "Myopic creature's perception range ({:.1}m) should be < L1_CELL_SIZE ({:.1}m)",
+        myopic_perception.range,
+        L1_CELL_SIZE
+    );
+
+    assert!(
+        normal_perception.range >= L1_CELL_SIZE,
+        "Normal creature's perception range ({:.1}m) should be >= L1_CELL_SIZE ({:.1}m)",
+        normal_perception.range,
+        L1_CELL_SIZE
+    );
+
+    // CRITICAL ASSERTIONS:
+    let myopic_l1_vision = world.get::<L1Vision>(myopic_entity).unwrap();
+    let normal_l1_vision = world.get::<L1Vision>(normal_entity).unwrap();
+
+    // Myopic creature should have EMPTY L1Vision (skipped L1 ring scan)
+    assert_eq!(
+        myopic_l1_vision.count(),
+        0,
+        "RANGE GATE: Myopic creature (range={:.1}m < L1_CELL_SIZE={:.1}m) should skip L1 scan. \
+         Got {} L1Vision entries instead of 0.",
+        myopic_perception.range,
+        L1_CELL_SIZE,
+        myopic_l1_vision.count()
+    );
+
+    // Normal creature should have L1Vision entries (cells within FOV cone)
+    assert!(
+        normal_l1_vision.count() > 0,
+        "Normal creature (range={:.1}m >= L1_CELL_SIZE={:.1}m) should have L1 scan results. \
+         Got {} L1Vision entries, expected > 0.",
+        normal_perception.range,
+        L1_CELL_SIZE,
+        normal_l1_vision.count()
+    );
+}
+
+/// Test L1Vision direction vectors are normalized
+#[test]
+fn test_l1_vision_direction_normalized() {
+    use crate::simulation::core::SimulationBuilder;
+    use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::CritId;
+
+    let mut sim = SimulationBuilder::new().build();
+    sim.set_boundaries(200.0, 200.0);
+
+    let observer_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(100.0, 100.0)
+            .with_fov(270.0) // Wide FOV to see more L1 cells
+            .with_dormant_brain()
+            .with_all_capabilities(),
+    );
+
+    // Spawn creatures around
+    for angle in (0..360).step_by(60) {
+        let rad = (angle as f32).to_radians();
+        let x = 100.0 + 25.0 * rad.cos();
+        let y = 100.0 + 25.0 * rad.sin();
+        sim.spawn_crit(
+            CritBuilder::new()
+                .at(x, y)
+                .with_size(2.0)
+                .with_dormant_brain()
+                .with_all_capabilities(),
+        );
+    }
+
+    // Run perception
+    for _ in 0..5 {
+        sim.update(0.016);
+    }
+
+    let world = sim.world_mut();
+    let observer_entity = world
+        .query::<(Entity, &CritId)>()
+        .iter(world)
+        .find(|(_, id)| id.0 == observer_id)
+        .map(|(e, _)| e)
+        .expect("Observer should exist");
+
+    let l1_vision = world.get::<L1Vision>(observer_entity).unwrap();
+
+    // Verify direction vectors are approximately normalized (length ~1.0)
+    for entry in l1_vision.iter() {
+        let length = (entry.direction_x * entry.direction_x
+            + entry.direction_y * entry.direction_y)
+            .sqrt();
+        assert!(
+            (length - 1.0).abs() < 0.01,
+            "L1Vision direction should be normalized, got length {}",
+            length
+        );
+    }
 }

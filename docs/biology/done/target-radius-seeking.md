@@ -1,7 +1,7 @@
 # Target Radius Seeking (Edge-to-Edge Arrival)
 
 **Status:** ✅ Implemented
-**Location:** `apps/simulation/src/simulation/creatures/behaviors/seek.rs`
+**Location:** `apps/simulation/src/simulation/creatures/steering/seek.rs`
 
 ## What It Does
 

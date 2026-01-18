@@ -245,6 +245,22 @@ impl Simulation {
                 .insert(NeighborCache::new());
         }
 
+        // L1Vision must also be reconstructed (fixed-size array, runtime-computed)
+        use crate::simulation::perception::L1Vision;
+        let entities_needing_l1_vision: Vec<Entity> = simulation
+            .world
+            .query_filtered::<Entity, Without<L1Vision>>()
+            .iter(&simulation.world)
+            .filter(|e| simulation.world.get::<CritId>(*e).is_some())
+            .collect();
+
+        for entity in entities_needing_l1_vision {
+            simulation
+                .world
+                .entity_mut(entity)
+                .insert(L1Vision::new());
+        }
+
         Ok(simulation)
     }
 }
@@ -482,6 +498,36 @@ mod tests {
         assert!(
             !neighbor_caches[0].has_neighbors(),
             "Fresh NeighborCache should have no neighbors"
+        );
+    }
+
+    #[test]
+    fn test_save_state_reconstructs_l1_vision() {
+        let mut sim = SimulationBuilder::new().build();
+
+        let builder = CritBuilder::new().at(0.0, 0.0);
+        sim.spawn_crit(builder);
+
+        let save_state = sim.to_save_state().expect("Failed to create save state");
+
+        let mut restored_sim =
+            Simulation::from_save_state(save_state).expect("Failed to restore from save state");
+
+        use crate::simulation::perception::L1Vision;
+        use bevy_ecs::query::QueryState;
+
+        let mut query: QueryState<&L1Vision> = restored_sim.world_mut().query();
+        let l1_visions: Vec<_> = query.iter(restored_sim.world()).collect();
+
+        assert_eq!(
+            l1_visions.len(),
+            1,
+            "Restored creature should have L1Vision"
+        );
+        assert_eq!(
+            l1_visions[0].count(),
+            0,
+            "Fresh L1Vision should have no entries"
         );
     }
 }

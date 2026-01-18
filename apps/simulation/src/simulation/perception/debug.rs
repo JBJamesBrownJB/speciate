@@ -38,6 +38,17 @@ pub struct QueriedCell {
     pub y: i32,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct L1VisionDebugEntry {
+    pub cell_idx: u32,
+    pub classification: u8,
+    pub center_x: f32,
+    pub center_y: f32,
+    pub direction_x: f32,
+    pub direction_y: f32,
+}
+
 #[derive(Resource, Default, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PerceptionDebugSnapshot {
@@ -54,6 +65,7 @@ pub struct PerceptionDebugSnapshot {
     pub queried_cells: Vec<QueriedCell>,
     pub checked_cells: Vec<QueriedCell>,
     pub creature_cell: QueriedCell,
+    pub l1_vision: Vec<L1VisionDebugEntry>,
 }
 
 impl PerceptionDebugSnapshot {
@@ -71,6 +83,7 @@ impl PerceptionDebugSnapshot {
         self.queried_cells.clear();
         self.checked_cells.clear();
         self.creature_cell = QueriedCell::default();
+        self.l1_vision.clear();
     }
 
     pub fn update(
@@ -88,6 +101,7 @@ impl PerceptionDebugSnapshot {
         queried_cells: impl IntoIterator<Item = QueriedCell>,
         checked_cells: impl IntoIterator<Item = QueriedCell>,
         creature_cell: QueriedCell,
+        l1_vision: impl IntoIterator<Item = L1VisionDebugEntry>,
     ) {
         self.entity_id = entity_id;
         self.x = x;
@@ -105,5 +119,7 @@ impl PerceptionDebugSnapshot {
         self.checked_cells.clear();
         self.checked_cells.extend(checked_cells);
         self.creature_cell = creature_cell;
+        self.l1_vision.clear();
+        self.l1_vision.extend(l1_vision);
     }
 }

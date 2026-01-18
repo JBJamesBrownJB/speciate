@@ -25,6 +25,7 @@ import { Minimap } from "@/rendering/minimap";
 import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
 import { PauseControl } from "@/ui/PauseControl";
 import { TimeScaleControl } from "@/ui/TimeScaleControl";
+import { InteractionManager } from "@/interaction";
 import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
@@ -149,9 +150,6 @@ async function main(): Promise<void> {
     overlayManager.register(forceOverlay);
     overlayManager.enableKeyboardShortcuts();
 
-    // Wire up canvas for L1 grid hover detection
-    spatialGridOverlay.setCanvas(app.canvas as HTMLCanvasElement);
-
     // Minimap
     const minimap = new Minimap(
       app.stage,
@@ -188,40 +186,16 @@ async function main(): Promise<void> {
       creatureInfoPanel.hide();
     });
 
-    // Click handler for creature selection
-    const CLICK_RADIUS = 15; // World units for click detection
+    // IPC client (created early for InteractionManager)
+    const ipcClient: IPCClient | null = createIPCClient();
 
-    container.addEventListener('click', (event: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      const screenX = event.clientX - rect.left;
-      const screenY = event.clientY - rect.top;
-
-      // Convert screen to world coordinates
-      // Account for camera being centered in viewport
-      const worldPos = camera.screenToWorld(
-        screenX - viewportWidth / 2,
-        screenY - viewportHeight / 2
-      );
-
-      // Find nearest creature
-      const nearest = selectionManager.findNearestCreature(
-        latestCreatures,
-        worldPos.x,
-        worldPos.y,
-        CLICK_RADIUS
-      );
-
-      if (nearest) {
-        selectionManager.selectCreature(nearest);
-        if (ipcClient) {
-          ipcClient.selectCreatureDebug(nearest.id);
-        }
-      } else {
-        selectionManager.deselect();
-        if (ipcClient) {
-          ipcClient.selectCreatureDebug(null);
-        }
-      }
+    // Interaction manager (handles clicks and hover using PixiJS events)
+    const interactionManager = new InteractionManager({
+      worldContainer,
+      gridOverlay: spatialGridOverlay,
+      selectionManager,
+      ipcClient,
+      getCreatures: () => latestCreatures,
     });
 
     const creatureRenderer = new InterpolatedCreatureRenderer(texture, 200000);
@@ -262,8 +236,6 @@ async function main(): Promise<void> {
         window.electron?.setTimeScale?.(scale);
       },
     });
-
-    const ipcClient: IPCClient | null = createIPCClient();
 
     if (ipcClient) {
       await ipcClient.connect();
@@ -317,6 +289,8 @@ async function main(): Promise<void> {
               debugData.creatureCell
             );
           }
+          // Update L1 vision cells for L1 grid highlighting
+          spatialGridOverlay.updateL1VisionCells(debugData.l1Vision);
           // Update force overlay with acceleration from perception debug data
           const selected = selectionManager.getSelected();
           if (selected) {
@@ -332,6 +306,7 @@ async function main(): Promise<void> {
           perceptionOverlay.clear();
           creatureInfoPanel.updateDebugData(null);
           spatialGridOverlay.clearQueriedCells();
+          spatialGridOverlay.clearL1VisionCells();
           forceOverlay.update(undefined);
         }
       });
@@ -436,6 +411,15 @@ async function main(): Promise<void> {
         camera.zoom,
         viewportWidth,
         viewportHeight
+      );
+
+      // Update interaction manager hit area
+      interactionManager.updateViewport(
+        viewportWidth,
+        viewportHeight,
+        camera.x,
+        camera.y,
+        camera.zoom
       );
 
       // Update minimap viewport rectangle

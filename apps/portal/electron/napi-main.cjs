@@ -636,6 +636,38 @@ ipcMain.handle('resize-window', async (event, width) => {
 });
 
 /**
+ * IPC handler: Set terrain cell blocked state (portal)
+ */
+ipcMain.on('set-terrain-cell', (event, { cellX, cellY, blocked }) => {
+  if (!simulationEngine) {
+    console.error('[Electron NAPI] Cannot set terrain cell: simulation not running');
+    return;
+  }
+
+  try {
+    simulationEngine.setTerrainCell(cellX, cellY, blocked);
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to set terrain cell:', error);
+  }
+});
+
+/**
+ * IPC handler: Get all blocked terrain cells (portal)
+ */
+ipcMain.handle('get-terrain-state', async () => {
+  if (!simulationEngine || !simulationEngine.getTerrainState) {
+    return [];
+  }
+
+  try {
+    return simulationEngine.getTerrainState();
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to get terrain state:', error);
+    return [];
+  }
+});
+
+/**
  * Linux Sandbox Workaround
  */
 app.commandLine.appendSwitch('no-sandbox');

@@ -1,5 +1,4 @@
 use crate::simulation::creatures::dna::Dna;
-#[cfg(feature = "dev-tools")]
 use crossbeam_channel::Sender;
 
 /// L1 cell metadata returned by on-demand queries
@@ -48,6 +47,16 @@ pub enum SimCommand {
         max_x: f32,
         max_y: f32,
         margin: f32,
+    },
+    /// Set terrain cell blocked state (for terrain editing)
+    SetTerrainCell {
+        cell_x: u32,
+        cell_y: u32,
+        blocked: bool,
+    },
+    /// Get all blocked terrain cells (for initial frontend load)
+    GetTerrainState {
+        response_tx: Sender<Vec<(u32, u32)>>,
     },
     /// Query L1 cell at world position (dev-tools only)
     #[cfg(feature = "dev-tools")]

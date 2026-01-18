@@ -42,6 +42,11 @@ declare global {
         maxSize: number;
         avgSize: number;
       } | null>;
+
+      // Terrain editing
+      setTerrainCell: (cellX: number, cellY: number, blocked: boolean) => void;
+      getTerrainState: () => Promise<number[]>;
+      worldToTerrainCell: (worldX: number, worldY: number) => number[];
     };
   }
 }

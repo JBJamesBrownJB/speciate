@@ -26,6 +26,9 @@ import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
 import { PauseControl } from "@/ui/PauseControl";
 import { TimeScaleControl } from "@/ui/TimeScaleControl";
 import { InteractionManager } from "@/interaction";
+import { Toolbar } from "@/ui/Toolbar";
+import { TerrainTool } from "@/ui/TerrainTool";
+import { TerrainLayer } from "@/rendering/TerrainLayer";
 import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
@@ -189,6 +192,37 @@ async function main(): Promise<void> {
     // IPC client (created early for InteractionManager)
     const ipcClient: IPCClient | null = createIPCClient();
 
+    // Terrain layer (render blocked cells)
+    const terrainLayer = new TerrainLayer(worldContainer);
+
+    // Toolbar (tool selection)
+    const toolbar = new Toolbar({
+      onToolChange: () => {
+        // Cursor updates automatically via InteractionManager.updateViewport
+      },
+    });
+    toolbar.enableKeyboardShortcuts();
+
+    // Terrain tool (draw/erase terrain)
+    const terrainTool = new TerrainTool({
+      getActiveTool: () => toolbar.getTool(),
+      worldToTerrainCell: (worldX, worldY) => {
+        const result = window.electron?.worldToTerrainCell?.(worldX, worldY);
+        return result ? [result[0], result[1]] : [0, 0];
+      },
+      setTerrainCell: (cellX, cellY, blocked) => {
+        window.electron?.setTerrainCell?.(cellX, cellY, blocked);
+        terrainLayer.setCell(cellX, cellY, blocked);
+      },
+    });
+
+    // Load initial terrain state
+    if (window.electron?.getTerrainState) {
+      window.electron.getTerrainState().then((cells) => {
+        terrainLayer.setBlockedCells(cells);
+      });
+    }
+
     // Interaction manager (handles clicks and hover using PixiJS events)
     const interactionManager = new InteractionManager({
       worldContainer,
@@ -196,6 +230,7 @@ async function main(): Promise<void> {
       selectionManager,
       ipcClient,
       getCreatures: () => latestCreatures,
+      terrainTool,
     });
 
     const creatureRenderer = new InterpolatedCreatureRenderer(texture, 200000);
@@ -397,6 +432,15 @@ async function main(): Promise<void> {
       // Render with interpolation every frame
       creatureRenderer.render(
         deltaMs,
+        camera.x,
+        camera.y,
+        camera.zoom,
+        viewportWidth,
+        viewportHeight
+      );
+
+      // Update terrain layer (only redraws when dirty or camera moves)
+      terrainLayer.update(
         camera.x,
         camera.y,
         camera.zoom,

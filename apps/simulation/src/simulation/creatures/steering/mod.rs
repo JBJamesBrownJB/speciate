@@ -11,6 +11,7 @@
 
 mod avoidance;
 mod flee;
+mod obstacle_avoidance;
 mod seek;
 mod system;
 mod wander;
@@ -19,6 +20,7 @@ pub use avoidance::{
     calculate_avoidance, AvoidanceConfig, AvoidanceInput, AvoidanceOutput, Neighbor,
 };
 pub use flee::calculate_flee_force;
+pub use obstacle_avoidance::calculate_obstacle_avoidance;
 pub use seek::{calculate_arrival, ArrivalParams, ArrivalResult};
 pub use system::update_steering_system;
 pub use wander::{calculate_wander, WanderParams, WanderResult};

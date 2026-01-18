@@ -322,6 +322,34 @@ fn calculate_obstacle_repulsion(pos: &Position, obstacle: &PerceivedObstacle) ->
 - [ ] Blocked cells visible as cliff sprites in portal
 - [ ] No performance regression at 20K creatures
 
+### Phase 1b: Terrain Editing UI (This Sprint)
+
+1. **Toolbar component** - Tool selection UI in portal
+2. **Terrain tool** - Sub-tool for obstacle placement
+3. **Click/drag placement** - Place obstacles with mouse
+4. **IPC: Edit commands** - Send terrain edits from frontend to backend
+5. **Visual feedback** - Highlight cell under cursor when placing
+
+**UI Architecture:**
+```
+┌─────────────────────────────────────────────────────┐
+│  Toolbar (left edge or top)                         │
+│  ├─ [Select] - Default, click to select creatures   │
+│  ├─ [Terrain] - Expands to show terrain tools       │
+│  │   └─ [Obstacle] - Click to place blocked cells   │
+│  └─ [Future tools...]                               │
+└─────────────────────────────────────────────────────┘
+```
+
+**IPC Protocol:**
+```typescript
+// Frontend → Backend
+{ type: 'terrain_edit', cellX: number, cellY: number, blocked: boolean }
+
+// Backend → Frontend (on init or change)
+{ type: 'terrain_state', blockedCells: [number, number][] }
+```
+
 ### Phase 2: Terrain Types (Future Sprint)
 
 Evolve from bitmap to terrain type enum:

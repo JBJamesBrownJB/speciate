@@ -291,6 +291,36 @@ impl NapiApp {
                         bounds.enabled = true;
                     }
                 }
+                SimCommand::SetTerrainCell {
+                    cell_x,
+                    cell_y,
+                    blocked,
+                } => {
+                    use crate::simulation::terrain::TerrainGrid;
+
+                    if let Some(mut terrain) =
+                        self.simulation.world.get_resource_mut::<TerrainGrid>()
+                    {
+                        terrain.set_blocked_cell(cell_x, cell_y, blocked);
+                        eprintln!(
+                            "[NAPI] Terrain cell ({}, {}) set to blocked={}",
+                            cell_x, cell_y, blocked
+                        );
+                    }
+                }
+                SimCommand::GetTerrainState { response_tx } => {
+                    use crate::simulation::terrain::TerrainGrid;
+
+                    let blocked_cells = if let Some(terrain) =
+                        self.simulation.world.get_resource::<TerrainGrid>()
+                    {
+                        terrain.get_all_blocked_cells()
+                    } else {
+                        Vec::new()
+                    };
+
+                    let _ = response_tx.send(blocked_cells);
+                }
                 #[cfg(feature = "dev-tools")]
                 SimCommand::QueryL1Cell {
                     world_x,

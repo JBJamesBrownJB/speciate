@@ -261,6 +261,22 @@ impl Simulation {
                 .insert(L1Vision::new());
         }
 
+        // ObstacleCache must also be reconstructed (fixed-size array, runtime-computed from terrain)
+        use crate::simulation::terrain::ObstacleCache;
+        let entities_needing_obstacle_cache: Vec<Entity> = simulation
+            .world
+            .query_filtered::<Entity, Without<ObstacleCache>>()
+            .iter(&simulation.world)
+            .filter(|e| simulation.world.get::<CritId>(*e).is_some())
+            .collect();
+
+        for entity in entities_needing_obstacle_cache {
+            simulation
+                .world
+                .entity_mut(entity)
+                .insert(ObstacleCache::new());
+        }
+
         Ok(simulation)
     }
 }
@@ -528,6 +544,35 @@ mod tests {
             l1_visions[0].count(),
             0,
             "Fresh L1Vision should have no entries"
+        );
+    }
+
+    #[test]
+    fn test_save_state_reconstructs_obstacle_cache() {
+        let mut sim = SimulationBuilder::new().build();
+
+        let builder = CritBuilder::new().at(0.0, 0.0);
+        sim.spawn_crit(builder);
+
+        let save_state = sim.to_save_state().expect("Failed to create save state");
+
+        let mut restored_sim =
+            Simulation::from_save_state(save_state).expect("Failed to restore from save state");
+
+        use crate::simulation::terrain::ObstacleCache;
+        use bevy_ecs::query::QueryState;
+
+        let mut query: QueryState<&ObstacleCache> = restored_sim.world_mut().query();
+        let obstacle_caches: Vec<_> = query.iter(restored_sim.world()).collect();
+
+        assert_eq!(
+            obstacle_caches.len(),
+            1,
+            "Restored creature should have ObstacleCache"
+        );
+        assert!(
+            obstacle_caches[0].is_empty(),
+            "Fresh ObstacleCache should have no obstacles"
         );
     }
 }

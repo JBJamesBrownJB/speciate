@@ -268,4 +268,56 @@ contextBridge.exposeInMainWorld('electron', {
     }
     return await ipcRenderer.invoke('query-l1-cell', worldX, worldY);
   },
+
+  /**
+   * Set terrain cell blocked state
+   *
+   * Used for terrain editing in the portal UI.
+   *
+   * @param {number} cellX - Cell X coordinate (0-249)
+   * @param {number} cellY - Cell Y coordinate (0-249)
+   * @param {boolean} blocked - true to block, false to unblock
+   */
+  setTerrainCell: (cellX, cellY, blocked) => {
+    if (typeof cellX !== 'number' || typeof cellY !== 'number') {
+      throw new Error('setTerrainCell: cellX and cellY must be numbers');
+    }
+    if (typeof blocked !== 'boolean') {
+      throw new Error('setTerrainCell: blocked must be a boolean');
+    }
+    ipcRenderer.send('set-terrain-cell', { cellX, cellY, blocked });
+  },
+
+  /**
+   * Get all blocked terrain cells
+   *
+   * Returns flat array of cell coordinates: [x1, y1, x2, y2, ...]
+   *
+   * @returns {Promise<number[]>} Array of blocked cell coordinates
+   */
+  getTerrainState: async () => {
+    return await ipcRenderer.invoke('get-terrain-state');
+  },
+
+  /**
+   * Convert world coordinates to terrain cell coordinates
+   *
+   * @param {number} worldX - X coordinate in world units (-2500 to 2500)
+   * @param {number} worldY - Y coordinate in world units (-2500 to 2500)
+   * @returns {number[]} [cellX, cellY]
+   */
+  worldToTerrainCell: (worldX, worldY) => {
+    if (typeof worldX !== 'number' || typeof worldY !== 'number') {
+      throw new Error('worldToTerrainCell: worldX and worldY must be numbers');
+    }
+    // Calculate locally to avoid IPC latency
+    const HALF_WORLD = 2500;
+    const CELL_SIZE = 20;
+    const cellX = Math.floor((worldX + HALF_WORLD) / CELL_SIZE);
+    const cellY = Math.floor((worldY + HALF_WORLD) / CELL_SIZE);
+    return [
+      Math.max(0, Math.min(249, cellX)),
+      Math.max(0, Math.min(249, cellY))
+    ];
+  },
 });

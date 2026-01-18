@@ -475,6 +475,60 @@
       position: static;
       transform: none;
     }
+
+    /* Toolbar (left side) */
+    #toolbar {
+      position: fixed;
+      top: 50%;
+      left: 20px;
+      transform: translateY(-50%);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 6px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      box-shadow: 0 4px 16px var(--glass-shadow);
+    }
+
+    .toolbar-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .toolbar-btn:hover {
+      color: var(--text-accent);
+      background: rgba(111, 184, 63, 0.1);
+    }
+
+    .toolbar-btn.active {
+      color: var(--text-accent);
+      background: rgba(111, 184, 63, 0.2);
+      border-color: rgba(111, 184, 63, 0.4);
+    }
+
+    .toolbar-btn:focus-visible {
+      outline: 2px solid var(--text-accent);
+      outline-offset: 2px;
+    }
+
+    .toolbar-btn svg {
+      stroke: currentColor;
+    }
   </style>
 </head>
 <body>
@@ -597,6 +651,28 @@
       <button class="time-scale-btn" data-scale="4" aria-label="Quadruple speed" aria-pressed="false">4x</button>
     </div>
     <button id="pause-button" aria-label="Pause simulation">&#x23F8;</button>
+  </div>
+
+  <!-- Toolbar (left side) -->
+  <div id="toolbar">
+    <button class="toolbar-btn active" id="tool-select" aria-label="Select tool" title="Select (V)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+        <path d="M13 13l6 6"/>
+      </svg>
+    </button>
+    <button class="toolbar-btn" id="tool-terrain" aria-label="Terrain tool" title="Draw Cliffs (B)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 20h18"/>
+        <path d="M5 20l3-6 3 3 4-8 4 5v6"/>
+      </svg>
+    </button>
+    <button class="toolbar-btn" id="tool-eraser" aria-label="Eraser tool" title="Erase Terrain (E)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 20H7L3 16l9-9 9 9-4 4"/>
+        <path d="M6.5 13.5L15.5 4.5"/>
+      </svg>
+    </button>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

@@ -6,6 +6,7 @@ use crate::simulation::creatures::components::{
 use crate::simulation::creatures::constants::{ANGLE_CHANGE, WANDER_DISTANCE, WANDER_RADIUS};
 use crate::simulation::creatures::dna::Dna;
 use crate::simulation::perception::{L1Vision, NeighborCache, Perception};
+use crate::simulation::terrain::ObstacleCache;
 use bevy_ecs::prelude::*;
 use rand::Rng;
 
@@ -28,6 +29,7 @@ pub struct CritBundle {
     pub can_avoid_obstacles: CanAvoidObstacles,
     pub perception: Perception,
     pub neighbor_cache: NeighborCache,
+    pub obstacle_cache: ObstacleCache,
     pub l1_vision: L1Vision,
     pub target: Target,
 }
@@ -265,6 +267,7 @@ impl CritBuilder {
             can_avoid_obstacles: CanAvoidObstacles,
             perception: Perception::from_body_size_with_fov(size, fov_degrees),
             neighbor_cache: NeighborCache::new(),
+            obstacle_cache: ObstacleCache::new(),
             l1_vision: L1Vision::new(),
             target: self.target.unwrap_or(Target::at_point(0.0, 0.0)),
         }

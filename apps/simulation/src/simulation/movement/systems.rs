@@ -11,6 +11,7 @@ use crate::simulation::creatures::constants::{
 };
 use crate::simulation::math::{fast_atan2, normalize_angle};
 use crate::simulation::movement::noise::NoiseTable;
+use crate::simulation::terrain::TerrainGrid;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 pub fn integrate_motion_system(
@@ -28,6 +29,7 @@ pub fn integrate_motion_system(
     world_bounds: Res<crate::simulation::core::WorldBounds>,
     movement_config: Res<MovementConfig>,
     noise_table: Res<NoiseTable>,
+    terrain: Option<Res<TerrainGrid>>,
     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
 ) {
     #[cfg(feature = "dev-tools")]
@@ -49,6 +51,9 @@ pub fn integrate_motion_system(
 
     // Get reference to noise table for parallel access
     let noise_ref = &*noise_table;
+
+    // Capture terrain reference for parallel access (optional - allows system to work without terrain)
+    let terrain_ref = terrain.as_ref().map(|t| &**t);
 
     // Collect entities into Vec for Rayon parallel processing
     let mut entities: Vec<_> = query.iter_mut().collect();
@@ -75,8 +80,21 @@ pub fn integrate_motion_system(
                 velocity.vx *= drag_factor;
                 velocity.vy *= drag_factor;
 
+                let old_x = position.x;
+                let old_y = position.y;
                 position.x += velocity.vx * dt;
                 position.y += velocity.vy * dt;
+
+                // Terrain blocking for catatonic creatures
+                if let Some(terrain) = terrain_ref {
+                    if terrain.is_blocked(position.x, position.y) {
+                        // Revert position and zero velocity into obstacle
+                        position.x = old_x;
+                        position.y = old_y;
+                        velocity.vx = 0.0;
+                        velocity.vy = 0.0;
+                    }
+                }
 
                 // Boundary enforcement for coasting catatonic creatures
                 if position.x < min_x {
@@ -194,8 +212,21 @@ pub fn integrate_motion_system(
             acceleration.ax = 0.0;
             acceleration.ay = 0.0;
 
+            let old_x = position.x;
+            let old_y = position.y;
             position.x += velocity.vx * dt;
             position.y += velocity.vy * dt;
+
+            // Terrain blocking: stop at blocked cells
+            if let Some(terrain) = terrain_ref {
+                if terrain.is_blocked(position.x, position.y) {
+                    // Revert position and zero velocity into obstacle
+                    position.x = old_x;
+                    position.y = old_y;
+                    velocity.vx = 0.0;
+                    velocity.vy = 0.0;
+                }
+            }
 
             // Boundary enforcement (merged into main loop)
             if position.x < min_x {

@@ -256,6 +256,69 @@ export declare class SimulationEngine {
    */
   selectCreatureDebug(creatureId?: number | undefined | null): void
   /**
+   * Set terrain cell blocked state
+   *
+   * Used for terrain editing in the portal UI.
+   *
+   * # Arguments
+   * * `cell_x` - Cell X coordinate (0-249 for 5000m world with 20m cells)
+   * * `cell_y` - Cell Y coordinate (0-249)
+   * * `blocked` - true to mark as blocked (impassable), false to unblock
+   *
+   * # Errors
+   * * Simulation not started
+   * * Command queue full
+   *
+   * # Example (JavaScript)
+   * ```js
+   * // Block a terrain cell
+   * sim.setTerrainCell(125, 125, true);
+   *
+   * // Unblock it
+   * sim.setTerrainCell(125, 125, false);
+   * ```
+   */
+  setTerrainCell(cellX: number, cellY: number, blocked: boolean): void
+  /**
+   * Convert world coordinates to terrain cell coordinates
+   *
+   * Useful for terrain editing - convert mouse position to cell coordinates.
+   *
+   * # Arguments
+   * * `world_x` - X coordinate in world units (-2500 to 2500)
+   * * `world_y` - Y coordinate in world units (-2500 to 2500)
+   *
+   * # Returns
+   * Tuple of (cell_x, cell_y) as u32 values
+   *
+   * # Example (JavaScript)
+   * ```js
+   * const [cellX, cellY] = sim.worldToTerrainCell(mouseWorldX, mouseWorldY);
+   * sim.setTerrainCell(cellX, cellY, true);
+   * ```
+   */
+  worldToTerrainCell(worldX: number, worldY: number): Array<number>
+  /**
+   * Get all blocked terrain cells
+   *
+   * Returns array of blocked cell coordinates for initial frontend load.
+   * Each pair of values represents (cell_x, cell_y).
+   *
+   * # Returns
+   * Flat array: [cell_x_1, cell_y_1, cell_x_2, cell_y_2, ...]
+   *
+   * # Example (JavaScript)
+   * ```js
+   * const blockedCells = sim.getTerrainState();
+   * for (let i = 0; i < blockedCells.length; i += 2) {
+   *   const cellX = blockedCells[i];
+   *   const cellY = blockedCells[i + 1];
+   *   renderObstacle(cellX, cellY);
+   * }
+   * ```
+   */
+  getTerrainState(): Array<number>
+  /**
    * Get full telemetry snapshot (all 45+ metrics)
    *
    * **Performance:** 3-8µs per call (negligible overhead)

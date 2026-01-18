@@ -7,6 +7,7 @@
 //! - Single Rayon sync barrier instead of 4
 //! - Better cache utilization (each entity's components loaded once)
 
+use super::obstacle_avoidance::calculate_obstacle_avoidance;
 use super::seek::{calculate_arrival, ArrivalParams};
 use super::wander::{calculate_wander, WanderParams};
 use crate::simulation::core::components::{Acceleration, BodySize, Position, Velocity};
@@ -17,6 +18,7 @@ use crate::simulation::creatures::components::{
 use crate::simulation::creatures::constants::{SEEK_FORCE_MULT, WANDER_FORCE_MULT};
 use crate::simulation::math::SteeringContext;
 use crate::simulation::perception::NeighborCache;
+use crate::simulation::terrain::ObstacleCache;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 
@@ -136,8 +138,10 @@ pub type SteeringQuery<'w, 's> = Query<
         &'static HomePosition,
         // Seek-specific
         &'static Target,
-        // Avoidance-specific
+        // Creature avoidance (TTC-based)
         &'static NeighborCache,
+        // Obstacle avoidance (distance-based)
+        &'static ObstacleCache,
         // Capability markers (zero-sized, no cache impact)
         Has<CanWander>,
         Has<CanSeek>,
@@ -178,6 +182,7 @@ pub fn update_steering_system(
             _home,
             target,
             neighbor_cache,
+            obstacle_cache,
             can_wander,
             can_seek,
             can_avoid,
@@ -214,7 +219,7 @@ pub fn update_steering_system(
                 _ => {}
             }
 
-            // 2. Avoidance (additive with primary behavior)
+            // 2. Creature avoidance - TTC-based (additive with primary behavior)
             if *can_avoid && neighbor_cache.has_neighbors() {
                 let max_accel = size.max_force() / size.mass();
                 let (ax, ay) = apply_avoidance(
@@ -228,7 +233,21 @@ pub fn update_steering_system(
                 acceleration.ay += ay;
             }
 
-            // 3. Cap accumulated steering to creature's physical maximum
+            // 3. Obstacle avoidance - distance-based (separate from creature avoidance)
+            // Obstacles are static, so we use simple distance-based repulsion instead of TTC.
+            // This runs regardless of CanAvoidObstacles as terrain is always relevant.
+            if !obstacle_cache.is_empty() {
+                let max_accel = size.max_force() / size.mass();
+                let (ax, ay) = calculate_obstacle_avoidance(
+                    (position.x, position.y),
+                    obstacle_cache.iter(),
+                    max_accel,
+                );
+                acceleration.ax += ax;
+                acceleration.ay += ay;
+            }
+
+            // 4. Cap accumulated steering to creature's physical maximum
             let max_accel = size.max_force() / size.mass();
             (acceleration.ax, acceleration.ay) =
                 cap_acceleration(acceleration.ax, acceleration.ay, max_accel);
@@ -272,6 +291,7 @@ mod tests {
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(0.0, 0.0),
                 NeighborCache::new(),
+                ObstacleCache::new(),
                 CreatureState {
                     behavior: BehaviorMode::Wandering,
                     ..Default::default()
@@ -295,6 +315,7 @@ mod tests {
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(target_x, target_y),
                 NeighborCache::new(),
+                ObstacleCache::new(),
                 CreatureState {
                     behavior: BehaviorMode::Seeking,
                     ..Default::default()
@@ -349,6 +370,7 @@ mod tests {
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(1.0, 0.0),
                 NeighborCache::new(),
+                ObstacleCache::new(),
                 CreatureState {
                     behavior: BehaviorMode::Seeking,
                     ..Default::default()
@@ -383,6 +405,7 @@ mod tests {
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(0.0, 0.0),
                 NeighborCache::new(),
+                ObstacleCache::new(),
                 CreatureState {
                     behavior: BehaviorMode::Catatonic,
                     ..Default::default()
@@ -421,6 +444,7 @@ mod tests {
                 HomePosition::new(x, y),
                 Target::at_point(0.0, 0.0),
                 NeighborCache::new(),
+                ObstacleCache::new(),
                 CreatureState {
                     behavior: BehaviorMode::Wandering,
                     ..Default::default()
@@ -464,6 +488,7 @@ mod tests {
                 HomePosition::new(0.0, 0.0),
                 Target::at_point(0.0, 0.0),
                 NeighborCache::new(),
+                ObstacleCache::new(),
                 CreatureState {
                     behavior: BehaviorMode::Wandering,
                     ..Default::default()
@@ -485,6 +510,49 @@ mod tests {
             "Acceleration magnitude {} should be capped to max_accel {} (or below)",
             mag,
             max_accel
+        );
+    }
+
+    #[test]
+    fn obstacle_in_cache_produces_avoidance_acceleration() {
+        use crate::simulation::terrain::PerceivedObstacle;
+
+        let mut world = World::new();
+
+        // Create obstacle cache with an obstacle to the right
+        let mut obstacle_cache = ObstacleCache::new();
+        obstacle_cache.add(PerceivedObstacle::new(15.0, 0.0)); // Obstacle at +X
+
+        let entity = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 0.0, vy: 0.0 },
+                Acceleration::default(),
+                BodySize::default(),
+                Brain::default(),
+                test_wander_state(),
+                HomePosition::new(0.0, 0.0),
+                Target::at_point(0.0, 0.0),
+                NeighborCache::new(),
+                obstacle_cache,
+                CreatureState {
+                    behavior: BehaviorMode::Catatonic, // No primary behavior
+                    ..Default::default()
+                },
+                CanWander,
+                CanSeek,
+                CanAvoidObstacles,
+            ))
+            .id();
+
+        run_system(&mut world);
+
+        let accel = world.get::<Acceleration>(entity).unwrap();
+        // Should have negative X acceleration (pushed away from obstacle)
+        assert!(
+            accel.ax < 0.0,
+            "Obstacle to the right should produce negative X acceleration, got ax={}",
+            accel.ax
         );
     }
 }

@@ -13,6 +13,7 @@ use crate::simulation::spatial::{
     aggregate_l1_system, rebuild_spatial_grid_system, swap_spatial_grid_buffers_system,
     HierarchicalGrid,
 };
+use crate::simulation::terrain::{update_obstacle_cache_system, TerrainGrid};
 use bevy_ecs::prelude::*;
 
 /// Result of loading a trial
@@ -80,10 +81,12 @@ impl SimulationBuilder {
             perception::update_perception_system.after(aggregate_l1_system),
             // Behavior transition runs after perception (may use perception data in future)
             behavior_transition_system.after(perception::update_perception_system),
+            // Obstacle cache updates when creature enters new terrain cell (cheap, only on cell change)
+            update_obstacle_cache_system.after(behavior_transition_system),
             // FUSED STEERING: Single system replaces 4 separate systems (wander, seek, avoidance, flee)
             // Sprint 20 optimization: 1 query + 1 iteration instead of 4
             // Also includes steering cap (was separate system, now fused for performance)
-            update_steering_system.after(behavior_transition_system),
+            update_steering_system.after(update_obstacle_cache_system),
             update_body_size_cache,
             // integrate_motion MUST run AFTER steering (which now includes capping)
             // Rotation is now fused into integrate_motion_system for parallelization
@@ -116,6 +119,7 @@ impl SimulationBuilder {
         world.init_resource::<Events<SpawnCreatureEvent>>();
         world.insert_resource(NextCreatureId::default());
         world.insert_resource(HierarchicalGrid::new());
+        world.insert_resource(TerrainGrid::new());
 
         Self { world, schedule }
     }

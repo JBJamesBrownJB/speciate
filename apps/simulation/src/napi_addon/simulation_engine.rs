@@ -753,6 +753,120 @@ impl SimulationEngine {
         Ok(())
     }
 
+    /// Set terrain cell blocked state
+    ///
+    /// Used for terrain editing in the portal UI.
+    ///
+    /// # Arguments
+    /// * `cell_x` - Cell X coordinate (0-249 for 5000m world with 20m cells)
+    /// * `cell_y` - Cell Y coordinate (0-249)
+    /// * `blocked` - true to mark as blocked (impassable), false to unblock
+    ///
+    /// # Errors
+    /// * Simulation not started
+    /// * Command queue full
+    ///
+    /// # Example (JavaScript)
+    /// ```js
+    /// // Block a terrain cell
+    /// sim.setTerrainCell(125, 125, true);
+    ///
+    /// // Unblock it
+    /// sim.setTerrainCell(125, 125, false);
+    /// ```
+    #[napi]
+    pub fn set_terrain_cell(&self, cell_x: u32, cell_y: u32, blocked: bool) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
+            .try_send(SimCommand::SetTerrainCell {
+                cell_x,
+                cell_y,
+                blocked,
+            })
+            .map_err(|e| {
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
+            })?;
+        Ok(())
+    }
+
+    /// Convert world coordinates to terrain cell coordinates
+    ///
+    /// Useful for terrain editing - convert mouse position to cell coordinates.
+    ///
+    /// # Arguments
+    /// * `world_x` - X coordinate in world units (-2500 to 2500)
+    /// * `world_y` - Y coordinate in world units (-2500 to 2500)
+    ///
+    /// # Returns
+    /// Tuple of (cell_x, cell_y) as u32 values
+    ///
+    /// # Example (JavaScript)
+    /// ```js
+    /// const [cellX, cellY] = sim.worldToTerrainCell(mouseWorldX, mouseWorldY);
+    /// sim.setTerrainCell(cellX, cellY, true);
+    /// ```
+    #[napi]
+    pub fn world_to_terrain_cell(&self, world_x: f64, world_y: f64) -> Vec<u32> {
+        use crate::simulation::terrain::TERRAIN_CELL_SIZE;
+
+        const HALF_WORLD: f32 = 2500.0;
+        let cell_x = ((world_x as f32 + HALF_WORLD) / TERRAIN_CELL_SIZE)
+            .floor()
+            .clamp(0.0, 249.0) as u32;
+        let cell_y = ((world_y as f32 + HALF_WORLD) / TERRAIN_CELL_SIZE)
+            .floor()
+            .clamp(0.0, 249.0) as u32;
+        vec![cell_x, cell_y]
+    }
+
+    /// Get all blocked terrain cells
+    ///
+    /// Returns array of blocked cell coordinates for initial frontend load.
+    /// Each pair of values represents (cell_x, cell_y).
+    ///
+    /// # Returns
+    /// Flat array: [cell_x_1, cell_y_1, cell_x_2, cell_y_2, ...]
+    ///
+    /// # Example (JavaScript)
+    /// ```js
+    /// const blockedCells = sim.getTerrainState();
+    /// for (let i = 0; i < blockedCells.length; i += 2) {
+    ///   const cellX = blockedCells[i];
+    ///   const cellY = blockedCells[i + 1];
+    ///   renderObstacle(cellX, cellY);
+    /// }
+    /// ```
+    #[napi]
+    pub fn get_terrain_state(&self) -> Result<Vec<u32>> {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
+            .try_send(SimCommand::GetTerrainState { response_tx: tx })
+            .map_err(|e| {
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
+            })?;
+
+        // Wait for response with timeout (100ms should be plenty)
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(cells) => {
+                // Flatten to [x1, y1, x2, y2, ...]
+                let mut result = Vec::with_capacity(cells.len() * 2);
+                for (x, y) in cells {
+                    result.push(x);
+                    result.push(y);
+                }
+                Ok(result)
+            }
+            Err(_) => Err(Error::new(
+                Status::GenericFailure,
+                "Terrain state query timed out",
+            )),
+        }
+    }
+
     /// Get full telemetry snapshot (all 45+ metrics)
     ///
     /// **Performance:** 3-8µs per call (negligible overhead)

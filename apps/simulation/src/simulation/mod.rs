@@ -5,6 +5,7 @@ pub mod math;
 pub mod movement;
 pub mod perception;
 pub mod spatial;
+pub mod terrain;
 pub mod tick_controller;
 
 // Re-export commonly used types from core

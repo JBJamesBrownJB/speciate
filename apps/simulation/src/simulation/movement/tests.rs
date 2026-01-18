@@ -755,3 +755,174 @@ fn test_180_degree_reversal_is_gradual() {
         vel.vx
     );
 }
+
+// =============================================================================
+// Terrain Blocking Tests
+// =============================================================================
+
+#[test]
+fn test_creature_stops_at_blocked_cell() {
+    use crate::simulation::terrain::TerrainGrid;
+
+    let mut world = World::new();
+    world.insert_resource(DeltaTime(0.5)); // Longer dt to ensure crossing
+    world.insert_resource(PhysicsTick(0));
+    world.insert_resource(crate::simulation::core::WorldBounds::default());
+    world.insert_resource(MovementConfig {
+        locomotion_noise_base: 0.0,
+        ..Default::default()
+    });
+    world.insert_resource(NoiseTable::default());
+    #[cfg(feature = "dev-tools")]
+    world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+    // Create terrain with a blocked cell
+    let mut terrain = TerrainGrid::new();
+    // Cell coordinate math:
+    // - World is [-2500, 2500], cell size = 20m, 250 cells per axis
+    // - Cell 125 covers x in [0, 20) (world coords)
+    // - Cell 126 covers x in [20, 40)
+    // Block cell 126 (x in [20, 40))
+    terrain.set_blocked_cell(126, 125, true);
+    world.insert_resource(terrain);
+
+    let mut state = CreatureState::default();
+    state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+    // BodySize 1.0 has max_speed = 12 m/s
+    // With dt = 0.5 and speed 12 m/s, creature moves 6m per tick
+    // Start at x = 18, would reach x = 24 without blocking (in blocked cell 126)
+    let entity = world
+        .spawn((
+            BodySize::new(1.0),
+            Position { x: 18.0, y: 0.0 }, // In cell 125, very close to boundary at x=20
+            Velocity { vx: 100.0, vy: 0.0 }, // Will be clamped to max_speed=12
+            Acceleration { ax: 0.0, ay: 0.0 },
+            Rotation::default(),
+            state,
+        ))
+        .id();
+
+    use bevy_ecs::system::IntoSystem;
+    let mut system = IntoSystem::into_system(integrate_motion_system);
+    system.initialize(&mut world);
+    system.run((), &mut world);
+
+    let pos = world.get::<Position>(entity).unwrap();
+    let vel = world.get::<Velocity>(entity).unwrap();
+
+    // Should NOT have entered the blocked cell (cell 126 starts at x = 20)
+    assert!(
+        pos.x < 20.0,
+        "Creature should not enter blocked cell. Position: {}",
+        pos.x
+    );
+
+    // Velocity into blocked direction should be zeroed
+    assert_eq!(
+        vel.vx, 0.0,
+        "Velocity into blocked cell should be zeroed. vx: {}",
+        vel.vx
+    );
+}
+
+#[test]
+fn test_creature_moves_freely_without_terrain() {
+    let mut world = World::new();
+    world.insert_resource(DeltaTime(0.1));
+    world.insert_resource(PhysicsTick(0));
+    world.insert_resource(crate::simulation::core::WorldBounds::default());
+    world.insert_resource(MovementConfig {
+        locomotion_noise_base: 0.0,
+        ..Default::default()
+    });
+    world.insert_resource(NoiseTable::default());
+    #[cfg(feature = "dev-tools")]
+    world.insert_resource(crate::instrumentation::SystemTimings::new());
+    // NO TerrainGrid resource - movement should work normally
+
+    let mut state = CreatureState::default();
+    state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+    let entity = world
+        .spawn((
+            BodySize::new(1.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 10.0, vy: 0.0 },
+            Acceleration { ax: 0.0, ay: 0.0 },
+            Rotation::default(),
+            state,
+        ))
+        .id();
+
+    use bevy_ecs::system::IntoSystem;
+    let mut system = IntoSystem::into_system(integrate_motion_system);
+    system.initialize(&mut world);
+    system.run((), &mut world);
+
+    let pos = world.get::<Position>(entity).unwrap();
+    // Should have moved (with drag applied)
+    assert!(pos.x > 0.0, "Creature should move without terrain resource");
+}
+
+#[test]
+fn test_terrain_blocking_in_parallel() {
+    use crate::simulation::terrain::TerrainGrid;
+
+    let mut world = World::new();
+    world.insert_resource(DeltaTime(0.5)); // Longer dt to ensure crossing
+    world.insert_resource(PhysicsTick(0));
+    world.insert_resource(crate::simulation::core::WorldBounds::default());
+    world.insert_resource(MovementConfig {
+        locomotion_noise_base: 0.0,
+        ..Default::default()
+    });
+    world.insert_resource(NoiseTable::default());
+    #[cfg(feature = "dev-tools")]
+    world.insert_resource(crate::instrumentation::SystemTimings::new());
+
+    // Create terrain with blocked cells forming a wall
+    // Cell 130 covers x in [100, 120) in world coords
+    // (130 * 20) - 2500 = 2600 - 2500 = 100
+    let mut terrain = TerrainGrid::new();
+    for i in 0..10 {
+        terrain.set_blocked_cell(130, 120 + i, true);
+    }
+    world.insert_resource(terrain);
+
+    // Spawn multiple creatures approaching the wall
+    // BodySize 1.0 has max_speed = 12 m/s
+    // With dt = 0.5, they move 6m per tick
+    // Start at x = 98 to cross into cell 130 [100, 120)
+    for i in 0..100 {
+        let mut state = CreatureState::default();
+        state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+
+        world.spawn((
+            BodySize::new(1.0),
+            Position {
+                x: 98.0,
+                y: -100.0 + (i as f32 * 2.0),
+            },
+            Velocity { vx: 100.0, vy: 0.0 },
+            Acceleration { ax: 0.0, ay: 0.0 },
+            Rotation::default(),
+            state,
+        ));
+    }
+
+    use bevy_ecs::system::IntoSystem;
+    let mut system = IntoSystem::into_system(integrate_motion_system);
+    system.initialize(&mut world);
+    system.run((), &mut world);
+
+    // Verify all creatures stopped at the wall (cell 130 starts at x = 100)
+    for pos in world.query::<&Position>().iter(&world) {
+        assert!(
+            pos.x < 100.0,
+            "Creature should stop at wall. Position: ({}, {})",
+            pos.x,
+            pos.y
+        );
+    }
+}

@@ -1882,11 +1882,11 @@ fn test_l1_vision_records_discovered_cells() {
         // No assertion about classification needed - all types are valid.
     }
 
-    // With L1 ring scan, we should have 8 ring cells + potentially extended cells
-    // (8 ring cells for 360° area awareness)
+    // With L1 cone scan, cells within FOV are perceived.
+    // 90° FOV facing east with large range should see at least the eastern cells.
     assert!(
-        l1_vision.count() >= 8,
-        "L1Vision should have at least 8 entries (all ring cells). Got: {}",
+        l1_vision.count() > 0,
+        "L1Vision should have entries for cells within FOV cone. Got: {}",
         l1_vision.count()
     );
 }
@@ -1954,10 +1954,11 @@ fn test_l1_vision_classifies_tiny_creatures_as_empty() {
         "Large observer should not see tiny creature as Prey (size domination)"
     );
 
-    // Should have 8+ entries (all ring cells recorded)
+    // With cone scan, cells within FOV are perceived.
+    // 180° FOV should see cells in front hemisphere.
     assert!(
-        l1_vision.count() >= 8,
-        "L1Vision should have at least 8 entries (all ring cells). Got: {}",
+        l1_vision.count() > 0,
+        "L1Vision should have entries for cells within FOV cone. Got: {}",
         l1_vision.count()
     );
 }
@@ -2075,11 +2076,11 @@ fn test_l1_scan_range_gate_skips_myopic_creatures() {
         myopic_l1_vision.count()
     );
 
-    // Normal creature should have L1Vision entries (8 ring cells minimum)
+    // Normal creature should have L1Vision entries (cells within FOV cone)
     assert!(
-        normal_l1_vision.count() >= 8,
+        normal_l1_vision.count() > 0,
         "Normal creature (range={:.1}m >= L1_CELL_SIZE={:.1}m) should have L1 scan results. \
-         Got {} L1Vision entries, expected >= 8.",
+         Got {} L1Vision entries, expected > 0.",
         normal_perception.range,
         L1_CELL_SIZE,
         normal_l1_vision.count()

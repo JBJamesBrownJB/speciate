@@ -109,6 +109,9 @@ export interface TelemetryFrame {
   hardwareMetrics?: HardwareMetrics;
   parallelizationMetrics?: ParallelizationMetrics;
   windowsMetrics?: WindowsMetrics;
+  /** Render-pipeline (frontend lerp) metrics, folded into samples during recording
+   *  so the snapshot can capture them (they arrive on a separate live channel). */
+  renderMetrics?: RenderPipelineMetrics;
   timestamp: number;
   napiBufferCapacityPct?: number;
   napiBufferUsed?: number;
@@ -150,6 +153,7 @@ export interface MetricsSnapshot {
   hardwareMetricsDerived?: HardwareMetricsDerived;
   parallelizationMetrics?: Record<string, MetricStatistics>;
   windowsMetrics?: Record<string, MetricStatistics>;
+  renderMetrics?: Record<string, MetricStatistics>;
 }
 
 export interface GameState {

@@ -16,6 +16,7 @@ import type { RenderPipelineMetrics } from '../types';
 
 interface Props {
   metrics?: RenderPipelineMetrics;
+  label?: string;
 }
 
 interface MetricRowProps {
@@ -126,7 +127,8 @@ const pick = (v: number, good: number, warn: number, invert = false): string => 
   return COLORS.critical;
 };
 
-export const RenderPipelinePanel: React.FC<Props> = ({ metrics }) => {
+export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
+  const suffix = label ? ` — ${label}` : '';
   const jitterHist = useRef<number[]>([]);
   const alphaHist = useRef<number[]>([]);
   const jitterCanvas = useRef<HTMLCanvasElement>(null);
@@ -178,7 +180,7 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics }) => {
   if (!metrics) {
     return (
       <div className="cockpit-panel">
-        <div className="cockpit-panel-title">Render Pipeline</div>
+        <div className="cockpit-panel-title">Render Pipeline{suffix}</div>
         <p className="no-data">Waiting for render-pipeline metrics…</p>
         <p className="hint">Frontend/interpolation metrics (DEV builds only).</p>
       </div>
@@ -193,7 +195,7 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics }) => {
   return (
     <div className="cockpit-panel render-pipeline-panel">
       <div className="cockpit-panel-title">
-        Render Pipeline <span className="badge-tag">frontend</span>
+        Render Pipeline{suffix} <span className="badge-tag">frontend</span>
       </div>
 
       <MetricRow

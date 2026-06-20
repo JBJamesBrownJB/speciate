@@ -43,4 +43,21 @@ describe('snapshotToTelemetry', () => {
     const frame = snapshotToTelemetry(baseSnapshot());
     expect(frame.windowsMetrics).toBeUndefined();
   });
+
+  it('rebuilds renderMetrics (frontend lerp) from snapshot stats', () => {
+    const snap: MetricsSnapshot = {
+      ...baseSnapshot(),
+      renderMetrics: {
+        distinctGapMeanMs: stat(50),
+        distinctGapStdMs: stat(16),
+        alphaResetMean: stat(0.84),
+        stallFrames: stat(22),
+        totalFrames: stat(100),
+      },
+    };
+    const frame = snapshotToTelemetry(snap);
+    expect(frame.renderMetrics).toBeDefined();
+    expect(frame.renderMetrics!.distinctGapStdMs).toBe(16);
+    expect(frame.renderMetrics!.alphaResetMean).toBe(0.84);
+  });
 });

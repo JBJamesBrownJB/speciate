@@ -34,6 +34,7 @@ export const DevToolsApp: React.FC = () => {
   const [parallelizationMetrics, setParallelizationMetrics] = useState<ParallelizationMetrics | undefined>(undefined);
   const [windowsMetrics, setWindowsMetrics] = useState<WindowsMetrics | undefined>(undefined);
   const [renderMetrics, setRenderMetrics] = useState<RenderPipelineMetrics | undefined>(undefined);
+  const latestRenderMetricsRef = useRef<RenderPipelineMetrics | undefined>(undefined);
   const [currentTelemetry, setCurrentTelemetry] = useState<TelemetryFrame | null>(null);
   const hardwareMetrics = useSmoothedMetrics(rawHardwareMetrics, 0.3);
   const lastHardwareUpdateRef = useRef<number>(0);
@@ -143,6 +144,21 @@ export const DevToolsApp: React.FC = () => {
       }
     }
 
+    // Frontend lerp / render-pipeline metrics (all numeric).
+    const renderMetricsStats: Record<string, any> = {};
+    const samplesWithRender = collectedSamples.filter(s => s.renderMetrics);
+    if (samplesWithRender.length > 0) {
+      const keys = Object.keys(samplesWithRender[0].renderMetrics!) as Array<keyof RenderPipelineMetrics>;
+      for (const key of keys) {
+        const values = samplesWithRender
+          .filter(s => s.renderMetrics && typeof s.renderMetrics[key] === 'number')
+          .map(s => s.renderMetrics![key] as number);
+        if (values.length > 0) {
+          renderMetricsStats[key] = calculateStatistics(values);
+        }
+      }
+    }
+
     const snapshot: MetricsSnapshot = {
       metadata: {
         sampleCount: collectedSamples.length,
@@ -158,6 +174,7 @@ export const DevToolsApp: React.FC = () => {
       hardwareMetricsDerived: hardwareMetricsDerived,
       parallelizationMetrics: Object.keys(parallelizationMetricsStats).length > 0 ? parallelizationMetricsStats : undefined,
       windowsMetrics: Object.keys(windowsMetricsStats).length > 0 ? windowsMetricsStats : undefined,
+      renderMetrics: Object.keys(renderMetricsStats).length > 0 ? renderMetricsStats : undefined,
     };
 
     try {
@@ -199,6 +216,11 @@ export const DevToolsApp: React.FC = () => {
       }
 
       if (isSamplingRef.current) {
+        // Fold in the latest frontend lerp metrics (separate live channel) so the
+        // snapshot captures them too.
+        if (latestRenderMetricsRef.current) {
+          telemetry.renderMetrics = latestRenderMetricsRef.current;
+        }
         samplesRef.current.push(telemetry);
         setSampleCount(samplesRef.current.length);
 
@@ -217,6 +239,7 @@ export const DevToolsApp: React.FC = () => {
     window.electron?.onTelemetryUpdate?.(handleTelemetryUpdate);
 
     const unsubscribeRenderMetrics = window.electron?.onRenderMetricsUpdate?.((m) => {
+      latestRenderMetricsRef.current = m;
       setRenderMetrics(m);
     });
 
@@ -321,7 +344,14 @@ export const DevToolsApp: React.FC = () => {
 
       <NAPIBufferPanel telemetry={currentTelemetry} />
 
-      <RenderPipelinePanel metrics={renderMetrics} />
+      {showComparison && snapshotTelemetry ? (
+        <div className="comparison-layout">
+          <RenderPipelinePanel metrics={renderMetrics} label="🔴 LIVE" />
+          <RenderPipelinePanel metrics={snapshotTelemetry.renderMetrics} label="📁 SNAPSHOT" />
+        </div>
+      ) : (
+        <RenderPipelinePanel metrics={renderMetrics} />
+      )}
 
       <DnaSettings
         sizeGene={sizeGene}

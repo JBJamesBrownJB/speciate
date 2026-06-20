@@ -1,4 +1,4 @@
-import type { MetricsSnapshot, TelemetryFrame, SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, WindowsMetrics } from '../types';
+import type { MetricsSnapshot, TelemetryFrame, SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, WindowsMetrics, RenderPipelineMetrics } from '../types';
 
 export function snapshotToTelemetry(snapshot: MetricsSnapshot): TelemetryFrame {
   const systemTimings: SystemTimingsSnapshot = {} as SystemTimingsSnapshot;
@@ -44,6 +44,14 @@ export function snapshotToTelemetry(snapshot: MetricsSnapshot): TelemetryFrame {
     }
   }
 
+  let renderMetrics: RenderPipelineMetrics | undefined;
+  if (snapshot.renderMetrics) {
+    renderMetrics = {} as RenderPipelineMetrics;
+    for (const [key, stats] of Object.entries(snapshot.renderMetrics)) {
+      (renderMetrics as any)[key] = stats.avg;
+    }
+  }
+
   return {
     tick: Math.round(snapshot.tick.avg),
     creatureCount: Math.round(snapshot.creatureCount.avg),
@@ -55,6 +63,7 @@ export function snapshotToTelemetry(snapshot: MetricsSnapshot): TelemetryFrame {
     hardwareMetrics,
     parallelizationMetrics,
     windowsMetrics,
+    renderMetrics,
     timestamp: Date.now(),
   };
 }

@@ -95,6 +95,24 @@ describe('ElectronIPCClient', () => {
       expect(state!.protocolVersion).toBe(2);
     });
 
+    it('uses the pushed sim tick for GameState.tick (was hardcoded 0)', async () => {
+      let capturedCallback:
+        | ((data: { buffer: number[]; creatureCount: number; tick?: number }) => void)
+        | null = null;
+      mockElectronAPI.onNAPIBufferUpdate.mockImplementation((callback) => {
+        capturedCallback = callback;
+      });
+      await client.connect();
+
+      // push-on-swap path: the doorbell carries the tick
+      capturedCallback!({ buffer: createMockNAPIBuffer(2), creatureCount: 2, tick: 4242 });
+      expect(client.getLatestState()!.tick).toBe(4242);
+
+      // legacy poll-fallback path: no tick → falls back to 0
+      capturedCallback!({ buffer: createMockNAPIBuffer(2), creatureCount: 2 });
+      expect(client.getLatestState()!.tick).toBe(0);
+    });
+
     it('should correctly parse SoA layout into creature data', async () => {
       let capturedCallback: ((data: { buffer: number[], creatureCount: number }) => void) | null = null;
 

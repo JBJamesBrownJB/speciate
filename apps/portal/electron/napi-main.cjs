@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { createFrameDelivery } = require('./frameDelivery.cjs');
 
 let mainWindow;
 let devToolsWindow = null;
@@ -123,50 +124,22 @@ function startSimulation() {
     }
 
     // --- Frame delivery: push-on-swap (event-driven), with a poll fallback ---
-    // deliverFrame ships positions + perception once per Rust buffer swap. Telemetry
-    // runs on its own light timer (below) so the status heartbeat isn't tied to the
-    // drop-prone position doorbell.
-    let frameCount = 0;
-    const deliverFrame = (tick) => {
-      if (!simulationEngine || shuttingDown) return;
-
-      frameCount++;
-      if (frameCount % 200 === 0) {
+    // deliverFrame (extracted to frameDelivery.cjs for testing) ships positions +
+    // perception once per Rust buffer swap. Telemetry runs on its own light timer
+    // (below) so the status heartbeat isn't tied to the drop-prone position doorbell.
+    const deliverFrame = createFrameDelivery({
+      getEngine: () => simulationEngine,
+      getMainWindow: () => mainWindow,
+      isShuttingDown: () => shuttingDown,
+      creatureBuffer,
+      perceptionBuffer,
+      floatsPerCreature: FLOATS_PER_CREATURE,
+      disableBufferCalls: DISABLE_BUFFER_CALLS,
+      onMemorySample: () => {
         const mem = process.memoryUsage();
         console.log(`[Memory] RSS: ${(mem.rss / 1024 / 1024).toFixed(1)}MB, Heap: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}/${(mem.heapTotal / 1024 / 1024).toFixed(1)}MB, External: ${(mem.external / 1024 / 1024).toFixed(1)}MB, ArrayBuffers: ${(mem.arrayBuffers / 1024 / 1024).toFixed(1)}MB`);
-      }
-
-      try {
-        if (!DISABLE_BUFFER_CALLS) {
-          // fillBuffer() copies positions into our JS-owned buffer (zero-alloc) and
-          // returns the creature count.
-          const bufferCreatureCount = simulationEngine.fillBuffer(creatureBuffer);
-
-          // slice() (NOT subarray) - subarray would serialize the whole 10MB backing
-          // ArrayBuffer over Electron IPC.
-          const usedSize = bufferCreatureCount * FLOATS_PER_CREATURE;
-          const buffer = creatureBuffer.slice(0, usedSize);
-
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('napi-buffer-update', {
-              buffer,
-              creatureCount: bufferCreatureCount,
-              tick, // additive; consumers destructure only buffer/creatureCount
-            });
-          }
-
-          // Perception debug buffer (dev-tools only; frontend tracks selection state)
-          if (simulationEngine.fillPerceptionDebug) {
-            simulationEngine.fillPerceptionDebug(perceptionBuffer);
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('perception-debug-update', perceptionBuffer);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('[Electron NAPI] deliverFrame error:', error);
-      }
-    };
+      },
+    });
 
     // Register the buffer-ready doorbell BEFORE start(): Rust clones the callback once
     // at thread spawn, so registering after start() would be a silent no-op.

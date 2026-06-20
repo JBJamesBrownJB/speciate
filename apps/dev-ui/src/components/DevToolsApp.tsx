@@ -17,7 +17,7 @@ import { useSmoothedMetrics } from '../hooks/useSmoothedMetrics';
 import { calculateStatistics } from '../utils/statistics';
 import { snapshotToTelemetry } from '../utils/snapshotConverter';
 import { MetricsColumn } from './MetricsColumn';
-import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, TelemetryFrame, MetricsSnapshot, DnaData } from '../types';
+import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, WindowsMetrics, TelemetryFrame, MetricsSnapshot, DnaData } from '../types';
 import '../styles/cockpit.css';
 
 const SAMPLE_DURATION_MS = 3000;
@@ -31,6 +31,7 @@ export const DevToolsApp: React.FC = () => {
   const [systemTimings, setSystemTimings] = useState<SystemTimingsSnapshot | undefined>(undefined);
   const [rawHardwareMetrics, setRawHardwareMetrics] = useState<HardwareMetrics | undefined>(undefined);
   const [parallelizationMetrics, setParallelizationMetrics] = useState<ParallelizationMetrics | undefined>(undefined);
+  const [windowsMetrics, setWindowsMetrics] = useState<WindowsMetrics | undefined>(undefined);
   const [currentTelemetry, setCurrentTelemetry] = useState<TelemetryFrame | null>(null);
   const hardwareMetrics = useSmoothedMetrics(rawHardwareMetrics, 0.3);
   const lastHardwareUpdateRef = useRef<number>(0);
@@ -173,6 +174,10 @@ export const DevToolsApp: React.FC = () => {
 
       if (telemetry.parallelizationMetrics) {
         setParallelizationMetrics(telemetry.parallelizationMetrics);
+      }
+
+      if (telemetry.windowsMetrics?.available) {
+        setWindowsMetrics(telemetry.windowsMetrics);
       }
 
       if (isSamplingRef.current) {
@@ -329,6 +334,7 @@ export const DevToolsApp: React.FC = () => {
             systemTimings={systemTimings}
             hardwareMetrics={hardwareMetrics}
             parallelizationMetrics={parallelizationMetrics}
+            windowsMetrics={windowsMetrics}
           />
           <MetricsColumn
             label="📁 SNAPSHOT"
@@ -339,6 +345,7 @@ export const DevToolsApp: React.FC = () => {
             systemTimings={snapshotTelemetry.systemTimings}
             hardwareMetrics={snapshotTelemetry.hardwareMetrics}
             parallelizationMetrics={snapshotTelemetry.parallelizationMetrics}
+            windowsMetrics={snapshotTelemetry.windowsMetrics}
           />
         </div>
       ) : (
@@ -351,6 +358,7 @@ export const DevToolsApp: React.FC = () => {
           systemTimings={systemTimings}
           hardwareMetrics={hardwareMetrics}
           parallelizationMetrics={parallelizationMetrics}
+          windowsMetrics={windowsMetrics}
         />
       )}
     </div>

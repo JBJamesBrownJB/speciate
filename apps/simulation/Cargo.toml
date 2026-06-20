@@ -49,6 +49,16 @@ dhat = { version = "0.3", optional = true }  # Heap profiling (dhat-heap feature
 [target.'cfg(target_os = "linux")'.dependencies]
 perf-event = { version = "0.4", optional = true }  # Hardware performance counters
 
+# Windows-only: cheap process telemetry (cycle time, page faults, working set)
+# to partially fill the dev-ui metrics gap where perf_event is unavailable.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_System_WindowsProgramming",
+] }
+
 [features]
 # Enable test helper methods for integration tests
 test-helpers = []

@@ -495,8 +495,9 @@ impl NapiApp {
 
         // Note: L1 cell data now sent via separate binary buffer (see fill_l1_buffer)
 
+        #[allow(unused_mut)] // `mut` is only needed on Windows (see below)
         #[cfg(feature = "dev-tools")]
-        {
+        let mut snapshot = {
             let hardware_metrics = self.simulation.get_hardware_metrics();
             let parallelization_metrics = self.simulation.get_parallelization_metrics();
 
@@ -511,20 +512,27 @@ impl NapiApp {
                 hardware_metrics,
                 parallelization_metrics,
             )
+        };
+
+        #[allow(unused_mut)]
+        #[cfg(not(feature = "dev-tools"))]
+        let mut snapshot = TelemetrySnapshot::new(
+            tick,
+            count,
+            tick_rate_hz,
+            cell_size,
+            l1_cell_size,
+            grid_bounds,
+            system_timings,
+        );
+
+        // Windows-only process telemetry (replaces the Linux PMU panel in dev-ui).
+        #[cfg(target_os = "windows")]
+        {
+            snapshot.windows_metrics = crate::instrumentation::windows_metrics::read_snapshot();
         }
 
-        #[cfg(not(feature = "dev-tools"))]
-        {
-            TelemetrySnapshot::new(
-                tick,
-                count,
-                tick_rate_hz,
-                cell_size,
-                l1_cell_size,
-                grid_bounds,
-                system_timings,
-            )
-        }
+        snapshot
     }
 
     /// Record total tick timing (for NAPI run loop)

@@ -6,6 +6,25 @@ use crate::instrumentation::{HardwareSnapshot, ParallelizationSnapshot, SystemTi
 #[cfg(not(feature = "dev-tools"))]
 use crate::instrumentation::SystemTimingsSnapshot;
 
+/// Windows-only process telemetry, shown in the dev-ui where the Linux PMU
+/// hardware counters are unavailable. Always present in the JSON (camelCase);
+/// `available` is false on non-Windows hosts and when the Win32 probes fail.
+/// See `crate::instrumentation::windows_metrics` and
+/// docs/scale/windows-parity-strategy.md §4.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsMetricsSnapshot {
+    pub available: bool,
+    /// Process reference cycles per second (RDTSC-based; not true core-clock cycles).
+    pub process_cycles_per_sec: f64,
+    /// Page faults per second (rate of the cumulative count).
+    pub page_faults_per_sec: f64,
+    /// Cumulative page-fault count since process start.
+    pub page_fault_count: u64,
+    /// Working-set (resident) memory in bytes.
+    pub working_set_bytes: u64,
+}
+
 /// L1 cell data for heatmap visualization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +68,10 @@ pub struct TelemetrySnapshot {
     pub parallelization_metrics: ParallelizationSnapshot,
 
     pub system_timings: SystemTimingsSnapshot,
+
+    /// Windows-only process telemetry (cycle time, page faults, working set).
+    /// `available` is false off Windows. Populated in `get_telemetry`.
+    pub windows_metrics: WindowsMetricsSnapshot,
 
     #[cfg(not(feature = "dev-tools"))]
     pub hardware_metrics: HardwareSnapshotStub,
@@ -115,6 +138,7 @@ impl TelemetrySnapshot {
             spatial_grid_min_y: spatial_grid_bounds.2,
             spatial_grid_max_y: spatial_grid_bounds.3,
             system_timings,
+            windows_metrics: WindowsMetricsSnapshot::default(),
             #[cfg(feature = "dev-tools")]
             hardware_metrics,
             #[cfg(feature = "dev-tools")]
@@ -146,6 +170,7 @@ impl Default for TelemetrySnapshot {
             spatial_grid_min_y: -MAX_WORLD_SIZE,
             spatial_grid_max_y: MAX_WORLD_SIZE,
             system_timings: SystemTimingsSnapshot::default(),
+            windows_metrics: WindowsMetricsSnapshot::default(),
             #[cfg(feature = "dev-tools")]
             hardware_metrics: HardwareSnapshot::default(),
             #[cfg(feature = "dev-tools")]

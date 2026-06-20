@@ -47,6 +47,16 @@ export interface ParallelizationMetrics {
   processMemoryBytes: number;
 }
 
+/** Windows-only process telemetry (Win32 cycle time + page faults + working set).
+ *  `available` is false on non-Windows hosts. Mirrors the Rust WindowsMetricsSnapshot. */
+export interface WindowsMetrics {
+  available: boolean;
+  processCyclesPerSec: number;
+  pageFaultsPerSec: number;
+  pageFaultCount: number;
+  workingSetBytes: number;
+}
+
 export interface SystemTimingsSnapshot {
   totalTickUs: number;
   movementUs: number;
@@ -80,6 +90,7 @@ export interface TelemetryFrame {
   systemTimings: SystemTimingsSnapshot;
   hardwareMetrics?: HardwareMetrics;
   parallelizationMetrics?: ParallelizationMetrics;
+  windowsMetrics?: WindowsMetrics;
   timestamp: number;
   napiBufferCapacityPct?: number;
   napiBufferUsed?: number;

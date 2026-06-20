@@ -13,6 +13,11 @@ mod snapshot;
 #[cfg(feature = "dev-tools")]
 mod parallelization;
 
+// Windows-only process telemetry (cycle time, page faults, working set).
+// Independent of dev-tools: fills part of the perf_event gap on Windows.
+#[cfg(target_os = "windows")]
+pub mod windows_metrics;
+
 #[cfg(feature = "dev-tools")]
 pub use hardware_metrics::{HardwareMetrics, HardwareSnapshot, HardwareSnapshotResource};
 

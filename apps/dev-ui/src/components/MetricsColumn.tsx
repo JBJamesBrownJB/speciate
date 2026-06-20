@@ -18,8 +18,9 @@ import { BranchScope } from './BranchScope';
 import { Parallelism } from './Parallelism';
 import { MemoryMetrics } from './MemoryMetrics';
 import { LinuxOnlyBadge } from './LinuxOnlyBadge';
+import { WindowsMetricsPanel } from './WindowsMetricsPanel';
 import { hardwareCountersSupported } from '../utils/platform';
-import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics } from '../types';
+import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, WindowsMetrics } from '../types';
 
 export interface MetricsColumnProps {
   label: string;
@@ -30,6 +31,7 @@ export interface MetricsColumnProps {
   systemTimings?: SystemTimingsSnapshot;
   hardwareMetrics?: HardwareMetrics;
   parallelizationMetrics?: ParallelizationMetrics;
+  windowsMetrics?: WindowsMetrics;
 }
 
 /**
@@ -47,6 +49,7 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
     systemTimings,
     hardwareMetrics,
     parallelizationMetrics,
+    windowsMetrics,
   }) => {
     return (
       <div className="comparison-column">
@@ -81,6 +84,13 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
               </div>
             </>
           )}
+
+          {/* Windows-only process telemetry, shown alongside the badge on Windows. */}
+          {windowsMetrics?.available && (
+            <div className="cockpit-container cockpit-row-4">
+              <WindowsMetricsPanel metrics={windowsMetrics} />
+            </div>
+          )}
         </div>
 
         <SystemTimingsPanel timings={systemTimings} />
@@ -96,7 +106,8 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
       prevProps.tickRateHz === nextProps.tickRateHz &&
       prevProps.systemTimings === nextProps.systemTimings &&
       prevProps.hardwareMetrics === nextProps.hardwareMetrics &&
-      prevProps.parallelizationMetrics === nextProps.parallelizationMetrics
+      prevProps.parallelizationMetrics === nextProps.parallelizationMetrics &&
+      prevProps.windowsMetrics === nextProps.windowsMetrics
     );
   }
 );

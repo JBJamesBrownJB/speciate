@@ -11,6 +11,7 @@ vi.mock('./BranchScope', () => ({ BranchScope: () => <div>gauge:branch</div> }))
 vi.mock('./Parallelism', () => ({ Parallelism: () => <div>panel:parallelism</div> }));
 vi.mock('./MemoryMetrics', () => ({ MemoryMetrics: () => <div>panel:memory</div> }));
 vi.mock('./SystemTimingsPanel', () => ({ SystemTimingsPanel: () => <div>panel:timings</div> }));
+vi.mock('./WindowsMetricsPanel', () => ({ WindowsMetricsPanel: () => <div>panel:windows</div> }));
 
 function setPlatform(platform: string | undefined): void {
   (window as unknown as { electron?: { platform?: string } }).electron =
@@ -36,6 +37,28 @@ describe('MetricsColumn', () => {
     expect(screen.getByText('panel:memory')).toBeInTheDocument();
     // No gauges without hardware metrics.
     expect(screen.queryByText('gauge:ipc')).not.toBeInTheDocument();
+    // No Windows panel unless windowsMetrics.available is set.
+    expect(screen.queryByText('panel:windows')).not.toBeInTheDocument();
+  });
+
+  it('shows the Windows metrics panel when windowsMetrics is available', () => {
+    setPlatform('win32');
+    render(
+      <MetricsColumn
+        {...base}
+        systemTimings={timings}
+        parallelizationMetrics={parallel}
+        windowsMetrics={{
+          available: true,
+          processCyclesPerSec: 1,
+          pageFaultsPerSec: 1,
+          pageFaultCount: 1,
+          workingSetBytes: 1,
+        }}
+      />
+    );
+    expect(screen.getByText('panel:windows')).toBeInTheDocument();
+    expect(screen.getByText(/linux only/i)).toBeInTheDocument();
   });
 
   it('with hardware metrics present: renders gauges and no badge', () => {

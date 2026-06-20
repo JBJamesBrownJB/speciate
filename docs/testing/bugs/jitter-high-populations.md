@@ -54,3 +54,19 @@ This matches the canonical anti-pattern in Gaffer's *Snapshot Interpolation* and
 3. Delivery-side: push one IPC message per Rust buffer swap instead of a 40 Hz poll (removes duplicates/phase beat at the source).
 
 Sources: Gaffer "Fix Your Timestep" & "Snapshot Interpolation"; Valve "Source Multiplayer Networking" (`cl_interp 0.1`).
+
+### CONFIRMED by measurement (2026-06-20, single creature)
+
+The DEV probe (`apps/portal/src/rendering/InterpolationDiagnostics.ts`) reported, steadily, with one creature:
+
+```
+distinct-gap 50ms (27–68, σ16) | delivery 32ms | α@reset 0.84 (0.60–1.00) | stalls ~22/101f | dupes 38%
+```
+
+Every predicted signature is present:
+- **distinct-gap**: mean is correct (50 ms) but variance is large (σ16, range 27–68 ms) — snapshot delivery jitters, exactly as theorised.
+- **α@reset = 0.84 avg, down to 0.60**: the lerp is frequently truncated well before 1.0 → the renderer snaps to the next tick mid-move (the buffer sets `start = previous end`, so the rendered position jumps forward to the old target, then re-lerps).
+- **stalls ~22%**: when a gap runs long (>50 ms), alpha clamps at 1.0 and the creature freezes until the next snapshot.
+- **dupes 38%**: the ~32 Hz poll re-reads the unchanged 20 Hz buffer ~1 in 3 times.
+
+So the motion alternates snap (short gaps) and freeze (long gaps). The mean gap being 50 ms is why average speed looks right while the frame-to-frame motion is jerky. **Diagnosis confirmed; proceed to the fix.** The probe doubles as the before/after verifier: a correct fix should drive α@reset → ~1.0, stalls → ~0, and distinct-gap σ → low.

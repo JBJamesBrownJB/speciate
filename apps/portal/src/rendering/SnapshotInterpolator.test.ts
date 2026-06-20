@@ -72,3 +72,45 @@ describe('SnapshotInterpolator (render-in-the-past playout)', () => {
     expect(c.current()!.alpha).toBeCloseTo(0.25, 5);
   });
 });
+
+// maxQueue bounds the buffer so the renderer's slot pool can safely recycle slots
+// (a slot still referenced in the queue must never be overwritten). It is the cap
+// that makes the GC ring sound: poolSize >= maxQueue + 2.
+describe('SnapshotInterpolator maxQueue (ring-safety cap)', () => {
+  const capped = (maxQueue: number) =>
+    new SnapshotInterpolator<string>({ tickIntervalMs: 50, maxQueue });
+
+  it('defaults to unbounded — the buffer grows and keeps the oldest pair', () => {
+    const c = new SnapshotInterpolator<string>({ tickIntervalMs: 50 });
+    for (let i = 0; i < 10; i++) c.push(`S${i}`);
+    // No cap: still rendering the oldest pair, one tick in the past.
+    expect(c.current()).toEqual({ from: 'S0', to: 'S1', alpha: 0 });
+  });
+
+  it('caps the buffer at maxQueue by dropping the OLDEST (keeps the freshest)', () => {
+    const c = capped(3);
+    for (let i = 0; i < 6; i++) c.push(`S${i}`); // S0..S5
+    // Only the newest 3 survive: S3,S4,S5 → oldest renderable pair is S3->S4.
+    expect(c.current()).toEqual({ from: 'S3', to: 'S4', alpha: 0 });
+  });
+
+  it('dropping the oldest at the cap does NOT reset the in-flight alpha', () => {
+    const c = capped(3);
+    c.push('S0'); c.push('S1'); c.push('S2');
+    c.advance(25); // alpha 0.5 on S0->S1
+    expect(c.current()!.alpha).toBe(0.5);
+
+    c.push('S3'); // exceeds cap of 3 → drops S0; clock value must be untouched
+    const seg = c.current()!;
+    expect(seg.from).toBe('S1'); // pair advanced (oldest dropped)...
+    expect(seg.to).toBe('S2');
+    expect(seg.alpha).toBe(0.5); // ...but the playout clock was NOT reset
+  });
+
+  it('never drops below the look-ahead depth needed to play', () => {
+    const c = capped(3);
+    c.push('A'); c.push('B'); c.push('C');
+    // A cap of 3 still leaves >=2 buffered + 1 ahead, so playback is live.
+    expect(c.current()).not.toBeNull();
+  });
+});

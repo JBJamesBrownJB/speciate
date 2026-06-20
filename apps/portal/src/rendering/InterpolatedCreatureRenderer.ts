@@ -10,12 +10,14 @@ import {
 import { interpDiag } from "./InterpolationDiagnostics";
 import { SnapshotInterpolator } from "./SnapshotInterpolator";
 import { writeInterleavedSegment } from "./interleavedBuffer";
+import { CreatureFramePool, type CreatureFrameSlot } from "./CreatureFramePool";
 import type { CreatureData } from "@/types/GameState";
 import { getTickIntervalMs } from "@/core/constants";
 
-/** A copied, stable snapshot of one frame's creatures (the renderer must not hold
- *  references to ElectronIPCClient's reused objects). */
-type Snapshot = Array<{ id: number; x: number; y: number; rotation: number; size: number }>;
+/** A stable, pre-allocated SoA snapshot of one frame's creatures. The renderer must
+ *  not hold references to ElectronIPCClient's reused objects, so each frame is copied
+ *  into a pooled slot (no per-tick object allocation — see CreatureFramePool). */
+type Snapshot = CreatureFrameSlot;
 
 export class InterpolatedCreatureRenderer {
   private static readonly FLOATS_PER_CREATURE = 7;
@@ -32,7 +34,16 @@ export class InterpolatedCreatureRenderer {
 
   // Render-in-the-past playout: buffer snapshots, interpolate ~1 tick behind so the
   // tween always has a target to roll into (no end-of-tween stall, no reset-on-arrival).
-  private interpolator = new SnapshotInterpolator<Snapshot>({ tickIntervalMs: 50 });
+  // MAX_QUEUE caps the buffer so the slot pool can recycle safely; POOL_SIZE must be
+  // >= MAX_QUEUE + 2 (the +2 covers the lagging latestSnapshot/uploadedTo refs) — see
+  // framePoolAliasing.test.ts.
+  private static readonly MAX_QUEUE = 6;
+  private static readonly POOL_SIZE = 8;
+  private interpolator = new SnapshotInterpolator<Snapshot>({
+    tickIntervalMs: 50,
+    maxQueue: InterpolatedCreatureRenderer.MAX_QUEUE,
+  });
+  private pool: CreatureFramePool; // pre-allocated SoA frame slots (no per-tick GC)
   private latestSnapshot: Snapshot | null = null; // newest data — count/visibility/warm-up
   private uploadedTo: Snapshot | null = null; // which `to` snapshot is currently on the GPU
   private dirty: boolean = false;
@@ -42,6 +53,9 @@ export class InterpolatedCreatureRenderer {
     this.vertexBufferCapacity = maxCreatures;
     const bufferSize = maxCreatures * InterpolatedCreatureRenderer.FLOATS_PER_CREATURE;
     this.vertexBuffers = [new Float32Array(bufferSize), new Float32Array(bufferSize)];
+
+    // Pre-allocate the SoA frame-slot ring (the per-tick allocation we're eliminating).
+    this.pool = new CreatureFramePool(InterpolatedCreatureRenderer.POOL_SIZE, maxCreatures);
 
     // Create custom geometry
     this.geometry = this.createGeometry();
@@ -251,17 +265,14 @@ export class InterpolatedCreatureRenderer {
     this.pushSnapshot(creatures);
   }
 
-  /** Copy a frame into a stable snapshot and buffer it. Never resets the tween. */
+  /** Copy a frame into a pooled SoA slot and buffer it. Never resets the tween, never
+   *  allocates per-creature objects (the slot pool recycles backing arrays). */
   private pushSnapshot(creatures: CreatureData[]): void {
-    const snap: Snapshot = new Array(creatures.length);
-    for (let i = 0; i < creatures.length; i++) {
-      const c = creatures[i];
-      snap[i] = { id: c.id, x: c.x, y: c.y, rotation: c.rotation, size: c.size };
-    }
+    const snap = this.pool.acquire(creatures);
     this.interpolator.push(snap);
     this.latestSnapshot = snap;
     this.dirty = true;
-    this.mesh.visible = snap.length > 0;
+    this.mesh.visible = snap.count > 0;
   }
 
   render(
@@ -310,7 +321,7 @@ export class InterpolatedCreatureRenderer {
 
   /** Build the interleaved start/end buffer for the `from`->`to` segment and upload it. */
   private buildAndUpload(from: Snapshot, to: Snapshot): void {
-    const creatureCount = to.length;
+    const creatureCount = to.count;
 
     // When cleared, just set instance count to 0 - no buffer update needed
     if (creatureCount === 0) {
@@ -363,7 +374,7 @@ export class InterpolatedCreatureRenderer {
   }
 
   getCreatureCount(): number {
-    return this.latestSnapshot?.length ?? 0;
+    return this.latestSnapshot?.count ?? 0;
   }
 
   getUniforms(): Record<string, unknown> {

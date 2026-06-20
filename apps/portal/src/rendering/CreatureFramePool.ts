@@ -1,0 +1,94 @@
+interface CreatureLike {
+  id: number;
+  x: number;
+  y: number;
+  rotation: number;
+  size: number;
+}
+
+/**
+ * One frame's creatures in Structure-of-Arrays form. Position/rotation/size live in
+ * parallel typed arrays sized to capacity; `count` is the live length. `idToIndex`
+ * is rebuilt on every fill so the interleaved-buffer builder can match `from`→`to`
+ * by id without allocating a Map per draw.
+ *
+ * The point is reuse: `fill()` writes through the existing typed arrays and never
+ * allocates per-creature objects (the per-tick GC churn we're eliminating). It only
+ * reallocates when a frame is larger than the current capacity.
+ */
+export class CreatureFrameSlot {
+  ids: Int32Array;
+  xs: Float32Array;
+  ys: Float32Array;
+  rots: Float32Array;
+  sizes: Float32Array;
+  count = 0;
+  readonly idToIndex = new Map<number, number>();
+
+  constructor(capacity: number) {
+    this.ids = new Int32Array(capacity);
+    this.xs = new Float32Array(capacity);
+    this.ys = new Float32Array(capacity);
+    this.rots = new Float32Array(capacity);
+    this.sizes = new Float32Array(capacity);
+  }
+
+  /** Grow the backing arrays to hold at least `capacity` entries. No-op if they
+   *  already fit, so a steady-state fill reuses the same arrays (the GC win). */
+  ensureCapacity(capacity: number): void {
+    if (capacity <= this.ids.length) return;
+    this.ids = new Int32Array(capacity);
+    this.xs = new Float32Array(capacity);
+    this.ys = new Float32Array(capacity);
+    this.rots = new Float32Array(capacity);
+    this.sizes = new Float32Array(capacity);
+  }
+
+  /** Copy a frame in via typed-array writes only (no per-creature allocation) and
+   *  rebuild idToIndex. Returns itself for convenient chaining from the pool. */
+  fill(creatures: CreatureLike[]): this {
+    const n = creatures.length;
+    this.ensureCapacity(n);
+    this.idToIndex.clear();
+    for (let i = 0; i < n; i++) {
+      const c = creatures[i];
+      this.ids[i] = c.id;
+      this.xs[i] = c.x;
+      this.ys[i] = c.y;
+      this.rots[i] = c.rotation;
+      this.sizes[i] = c.size;
+      this.idToIndex.set(c.id, i);
+    }
+    this.count = n;
+    return this;
+  }
+}
+
+/**
+ * Round-robin pool of pre-allocated SoA frame slots. The renderer acquires a slot
+ * per snapshot instead of allocating a fresh object[] each tick. Round-robin (not
+ * a free list) is deliberate: older frames stay live in the interpolator's queue,
+ * so the pool must hand out a *different* slot each tick and only recycle one once
+ * it's no longer referenced. Sizing invariant the renderer enforces:
+ * poolSize >= maxQueue + 2 (the +2 covers the lagging latestSnapshot/uploadedTo).
+ */
+export class CreatureFramePool {
+  private readonly slots: CreatureFrameSlot[];
+  private next = 0;
+
+  constructor(poolSize: number, capacity: number) {
+    this.slots = Array.from({ length: poolSize }, () => new CreatureFrameSlot(capacity));
+  }
+
+  /** Fill the next slot in the ring with `creatures` and return it. */
+  acquire(creatures: CreatureLike[]): CreatureFrameSlot {
+    const slot = this.slots[this.next];
+    this.next = (this.next + 1) % this.slots.length;
+    return slot.fill(creatures);
+  }
+
+  /** Pre-grow every slot so an upcoming large frame never reallocates mid-ring. */
+  ensureCapacity(capacity: number): void {
+    for (const slot of this.slots) slot.ensureCapacity(capacity);
+  }
+}

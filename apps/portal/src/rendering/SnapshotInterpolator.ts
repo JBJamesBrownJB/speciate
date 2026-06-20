@@ -23,22 +23,31 @@ export class SnapshotInterpolator<T> {
   private readonly queue: T[] = [];
   private alpha = 0;
   private started = false;
+  private readonly maxQueue: number;
 
   /** Buffer depth required before we start playing (>=3 ⇒ one tick of look-ahead). */
   private static readonly START_DEPTH = 3;
 
-  constructor(opts?: { tickIntervalMs?: number }) {
+  constructor(opts?: { tickIntervalMs?: number; maxQueue?: number }) {
     this.tickIntervalMs = opts?.tickIntervalMs ?? 50;
+    this.maxQueue = opts?.maxQueue ?? Infinity;
   }
 
   setTickInterval(ms: number): void {
     if (ms > 0) this.tickIntervalMs = ms;
   }
 
-  /** Append a snapshot. Never resets the in-flight tween. */
+  /**
+   * Append a snapshot. Never resets the in-flight tween. When the buffer exceeds
+   * maxQueue (a delivery burst out-running the render clock) the OLDEST snapshots
+   * are dropped — keeping the freshest and bounding the buffer so the renderer's
+   * slot pool can safely recycle. Dropping only advances which pair is shown; the
+   * playout clock (alpha) is left untouched.
+   */
   push(snapshot: T): void {
     this.queue.push(snapshot);
     if (this.queue.length >= SnapshotInterpolator.START_DEPTH) this.started = true;
+    while (this.queue.length > this.maxQueue) this.queue.shift();
   }
 
   /** Advance the render clock by real elapsed time. Rolls over between snapshots. */

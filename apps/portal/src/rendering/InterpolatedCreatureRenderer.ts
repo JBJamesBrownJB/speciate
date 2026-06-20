@@ -8,6 +8,7 @@ import {
   type Texture,
 } from "pixi.js";
 import { InterpolationBufferManager } from "./InterpolationBufferManager";
+import { interpDiag } from "./InterpolationDiagnostics";
 import type { CreatureData } from "@/types/GameState";
 import { getTickIntervalMs } from "@/core/constants";
 
@@ -242,6 +243,8 @@ export class InterpolatedCreatureRenderer {
   }
 
   onSimulationTick(creatures: CreatureData[]): void {
+    // DEV-only: capture alpha before reset (≈1.0 healthy; <1.0 = reset mid-lerp = snap).
+    if (import.meta.env.DEV) interpDiag.recordAlphaReset(this.interpolationAlpha);
     this.bufferManager.update(creatures);
     this.updateGeometryBuffer();
     this.interpolationAlpha = 0.0; // Reset interpolation
@@ -262,6 +265,9 @@ export class InterpolatedCreatureRenderer {
     // Update interpolation alpha
     this.interpolationAlpha += deltaMS / this.tickIntervalMs;
     this.interpolationAlpha = Math.max(0.0, Math.min(1.0, this.interpolationAlpha));
+
+    // DEV-only: a frame clamped at 1.0 is a "frozen" frame (lerp finished, no new data yet).
+    if (import.meta.env.DEV) interpDiag.recordFrame(this.interpolationAlpha >= 1.0);
 
     // Update shader uniforms (v8 API: access via UniformGroup.uniforms)
     const uniforms = (this.shader.resources.uniforms as UniformGroup).uniforms;

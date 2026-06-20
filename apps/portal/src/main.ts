@@ -12,6 +12,7 @@ import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
+import { interpDiag } from "@/rendering/InterpolationDiagnostics";
 import { ChangeDetector } from "@/core/ChangeDetection";
 import { SelectionManager } from "@/systems/SelectionManager";
 import {
@@ -256,6 +257,14 @@ async function main(): Promise<void> {
 
         // Detect if state changed (count or positions changed)
         const stateChanged = changeDetector.shouldUpdate(creatures);
+
+        // DEV-only interpolation pipeline probe (stripped from prod builds).
+        if (import.meta.env.DEV) {
+          const now = performance.now();
+          interpDiag.recordDelivery(now);
+          interpDiag.recordSnapshot(now, stateChanged);
+          interpDiag.maybeReport(now);
+        }
 
         if (stateChanged) {
 

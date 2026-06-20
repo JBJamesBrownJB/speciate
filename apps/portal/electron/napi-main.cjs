@@ -574,10 +574,26 @@ ipcMain.handle('query-l1-cell', async (event, worldX, worldY) => {
  */
 ipcMain.handle('save-metrics-snapshot', async (event, snapshot) => {
   try {
-    // Use snapshot's actual end time for timestamp (more accurate than current time)
-    const timestamp = new Date(snapshot.metadata.endTime);
-    const dateStr = timestamp.toISOString().replace(/:/g, '-').split('.')[0];
-    const defaultFilename = `snapshot_${dateStr}.json`;
+    // Self-describing filename: <platform>_pop<N>_<tick>ms_<localdate>.json
+    // (e.g. win_pop500k_6.8ms_2026-06-20_2009.json). Population, tick time, and OS
+    // are the at-a-glance comparison keys; full stats live inside the file.
+    const ts = new Date(snapshot.metadata.endTime);
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateStr = `${ts.getFullYear()}-${pad(ts.getMonth() + 1)}-${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}`;
+
+    const platformTag = { win32: 'win', darwin: 'mac', linux: 'linux' }[process.platform] || process.platform;
+
+    const fmtCount = (n) => {
+      if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`.replace(/\.0M$/, 'M');
+      if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`.replace(/\.0k$/, 'k');
+      return `${Math.round(n)}`;
+    };
+    const popTag = `pop${fmtCount(snapshot.creatureCount?.avg ?? 0)}`;
+
+    const tickUs = snapshot.systemTimings?.totalTickUs?.avg ?? 0;
+    const tickTag = tickUs > 0 ? `_${(tickUs / 1000).toFixed(1)}ms` : '';
+
+    const defaultFilename = `${platformTag}_${popTag}${tickTag}_${dateStr}.json`;
 
     // Pre-populate path to docs/performance/snapshots directory
     const snapshotsDir = path.join(__dirname, '../../../docs/performance/snapshots');

@@ -13,6 +13,19 @@
 //! - Cache-friendly (sequential memory access)
 //! - Validated in Phase 0.6 benchmark: 350 μs for 27.5K creatures
 
+/// Maximum concurrent creatures the position pipeline can carry.
+///
+/// SINGLE SOURCE OF TRUTH for the producer-side cap. It sizes the position
+/// `DoubleBuffer` (`MAX_CREATURES * 5` f32s: ID, X, Y, Rot, Size); `export_positions`
+/// truncates to this capacity, so it is the hard ceiling on visible population. The
+/// Electron-main receive buffer is sized to match (`apps/portal/electron/napi-main.cjs`).
+///
+/// **Note:** raising this raises the *buffer* ceiling (capability), not a validated
+/// population — see `docs/scale/` for the honest validated → stretch ladder. Known
+/// ceiling on the seam: ids cross as f32 (exact only to 2^24 ≈ 16.7M cumulative) —
+/// see `docs/testing/bugs/f32-id-precision-ceiling.md`.
+pub const MAX_CREATURES: usize = 1_000_000;
+
 pub struct DoubleBuffer {
     read: Vec<f32>,
     write: Vec<f32>,
@@ -157,6 +170,22 @@ mod tests {
         assert_eq!(read_slice[x_offset + 99], 500.0);
         assert_eq!(read_slice[rot_offset + 99], 3.14);
         assert_eq!(read_slice[size_offset + 99], 25.0);
+    }
+
+    /// The producer position buffer (sized from MAX_CREATURES) must carry at least one
+    /// million concurrent creatures. `export_positions` truncates to `buffer.size() / 5`,
+    /// so this capacity IS the hard population ceiling — below the target, creatures past
+    /// the cap are silently dropped at the seam. Guards against the cap drifting back down.
+    #[test]
+    fn producer_buffer_holds_at_least_one_million_creatures() {
+        const FLOATS_PER_CREATURE: usize = 5; // ID, X, Y, Rot, Size (matches export_positions)
+        let buffer = DoubleBuffer::new(MAX_CREATURES * FLOATS_PER_CREATURE);
+        let capacity = buffer.size() / FLOATS_PER_CREATURE;
+        assert!(
+            capacity >= 1_000_000,
+            "producer buffer capacity {} < 1,000,000 — population would truncate at the seam",
+            capacity
+        );
     }
 
     #[test]

@@ -5,7 +5,7 @@ pub mod perception_debug_buffer;
 pub mod telemetry;
 
 pub use bevy_app::NapiApp;
-pub use double_buffer::DoubleBuffer;
+pub use double_buffer::{DoubleBuffer, MAX_CREATURES};
 #[cfg(feature = "dev-tools")]
 pub use perception_debug_buffer::PerceptionDebugBuffer;
 pub use telemetry::TelemetrySnapshot;

@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createFrameDelivery } = require('./frameDelivery.cjs');
+const { FLOATS_PER_CREATURE, MAX_CREATURES, creatureBufferFloats } = require('./bufferLayout.cjs');
 
 let mainWindow;
 let devToolsWindow = null;
@@ -10,8 +11,8 @@ let pollingInterval = null; // legacy fallback poll (only when push-on-swap unav
 let telemetryInterval = null; // status heartbeat (decoupled from the position doorbell)
 let shuttingDown = false;
 
-// Buffer layout constant - MUST match apps/portal/src/types/BufferLayout.ts
-const FLOATS_PER_CREATURE = 5; // ID, X, Y, Rotation, Size
+// Buffer layout (FLOATS_PER_CREATURE, MAX_CREATURES) is sourced from bufferLayout.cjs
+// (the JS twin of the Rust producer cap). See that file for the seam contract.
 
 // Environment detection
 const isDev = process.env.NODE_ENV === 'development';
@@ -96,16 +97,18 @@ function startSimulation() {
     simulationEngine = new addon.SimulationEngine();
     console.log('[Electron NAPI] ✅ SimulationEngine created');
 
-    // Create persistent buffers for zero-allocation polling (memory leak fix)
-    // 500K creatures * FLOATS_PER_CREATURE = 2.5M floats = 10MB
-    creatureBuffer = new Float32Array(500000 * FLOATS_PER_CREATURE);
+    // Create persistent buffers for zero-allocation polling (memory leak fix).
+    // Sized to the MAX_CREATURES cap (matches the Rust producer buffer); at 1M that is
+    // 5M floats = 20MB. Smaller than this would truncate positions at the seam.
+    creatureBuffer = new Float32Array(creatureBufferFloats());
     // Perception debug buffer: query required size from Rust (single source of truth)
     if (!simulationEngine.getPerceptionDebugBufferSize) {
       throw new Error('[Electron NAPI] FATAL: getPerceptionDebugBufferSize() unavailable - rebuild native addon with dev-tools feature');
     }
     const perceptionBufferSize = simulationEngine.getPerceptionDebugBufferSize();
     perceptionBuffer = new Float32Array(perceptionBufferSize);
-    console.log(`[Electron NAPI] ✅ Persistent buffers created (creature: 10MB, perception: ${perceptionBufferSize} floats)`);
+    const creatureBufferMB = (creatureBuffer.byteLength / 1024 / 1024).toFixed(0);
+    console.log(`[Electron NAPI] ✅ Persistent buffers created (creature: ${creatureBufferMB}MB for ${MAX_CREATURES.toLocaleString()} max, perception: ${perceptionBufferSize} floats)`);
 
     // Find most recent save state (by timestamp in filename)
     const assetsPath = path.join(__dirname, '../../simulation');

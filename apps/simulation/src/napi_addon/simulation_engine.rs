@@ -28,7 +28,7 @@ use std::time::Duration;
 use crate::config::SaveStateConfig;
 #[cfg(feature = "dev-tools")]
 use crate::ipc::bridge::PerceptionDebugBuffer;
-use crate::ipc::bridge::{DoubleBuffer, NapiApp, TelemetrySnapshot};
+use crate::ipc::bridge::{DoubleBuffer, NapiApp, TelemetrySnapshot, MAX_CREATURES};
 use crate::persistence::{SaveStateWorker, SaveType};
 use crate::simulation::TickController;
 
@@ -201,11 +201,9 @@ impl SimulationEngine {
         let (tx, rx) = crossbeam_channel::bounded(128);
         self.command_sender = Some(tx);
 
-        // Allocate double buffer (SoA layout: ID, X, Y, Rotation, Size)
-        // Pre-allocate for 500K creatures (20 MB, double-buffered = 40 MB total)
-        // Sprint 20 upgrade - performance allows larger populations
-        const MAX_CREATURES: usize = 500_000;
-        let size = MAX_CREATURES * 5; // 2.5M f32s (ID, X, Y, Rot, Size)
+        // Allocate double buffer (SoA layout: ID, X, Y, Rotation, Size).
+        // Sized from the MAX_CREATURES single source of truth (module const).
+        let size = MAX_CREATURES * 5; // f32s per creature: ID, X, Y, Rot, Size
         *self.buffer.lock() = DoubleBuffer::new(size);
 
         self.running.store(true, Ordering::SeqCst);

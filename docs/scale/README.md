@@ -40,6 +40,8 @@ For where this pillar sits among the four, see [`../ROADMAP.md`](../ROADMAP.md).
 
 The gap between Linux 500K and Windows 20K is itself a finding, not a footnote. Closing it (or explaining it) is in scope for this pillar.
 
+> **Buffer capability ≠ validated population.** The position-pipeline buffer cap was raised **500K → 1M** (`apps/simulation/src/ipc/bridge/double_buffer.rs` `MAX_CREATURES`; the Electron-main receive buffer matches). This removes a hard ceiling that previously made the 1M stretch target *structurally* impossible — but it is a **capability**, not a measurement. The validated number above is unchanged; 1M stays the stretch target until a benchmarked run earns it. (Seam caveat at high cumulative spawns: `../testing/bugs/f32-id-precision-ceiling.md`.)
+
 ---
 
 ## Why this pillar exists

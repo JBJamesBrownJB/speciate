@@ -386,6 +386,9 @@ impl NapiApp {
         let size_offset = export_count * 4;
 
         for (i, (id, pos, rot, size)) in visible_entities.iter().take(export_count).enumerate() {
+            // TODO(critical, deferred): `id.0 as f32` loses precision above 2^24 (~16.7M
+            // cumulative spawns) → id collisions → wrong interpolation. Bit-cast u32 bits
+            // instead. See docs/testing/bugs/f32-id-precision-ceiling.md
             write_slice[i] = id.0 as f32;
             write_slice[x_offset + i] = pos.x;
             write_slice[y_offset + i] = pos.y;

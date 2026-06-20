@@ -14,7 +14,7 @@
 
 Also at this level:
 
-- [`bugs/`](bugs/) — 📖 active investigation notes for live defects, not lifecycle features. `jitter-high-populations.md` (jerky movement at 100K near the latency ceiling), `zipping-crits.md` (creatures breaching force caps via emergency-force path).
+- [`bugs/`](bugs/) — 📖 active investigation notes for live defects, not lifecycle features. `jitter-high-populations.md` (jerky movement at high population — ✅ resolved via push-on-swap + snapshot interpolation), `f32-id-precision-ceiling.md` (🔴 critical, deferred — creature ids lose precision above ~16.7M cumulative spawns), `zipping-crits.md` (creatures breaching force caps via emergency-force path).
 - `dev-tools-toggle-features.md` — 📋 deferred design for a Dev-UI debug control plane (toggle FOV / forces / spatial-grid layers).
 - `hot-load-config.md` — 📋 deferred hot-reload config system (runtime constant tuning without recompilation).
 

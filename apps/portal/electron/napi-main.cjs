@@ -5,7 +5,8 @@ const fs = require('fs');
 let mainWindow;
 let devToolsWindow = null;
 let simulationEngine = null;
-let pollingInterval = null;
+let pollingInterval = null; // legacy fallback poll (only when push-on-swap unavailable)
+let telemetryInterval = null; // status heartbeat (decoupled from the position doorbell)
 let shuttingDown = false;
 
 // Buffer layout constant - MUST match apps/portal/src/types/BufferLayout.ts
@@ -121,6 +122,59 @@ function startSimulation() {
       }
     }
 
+    // --- Frame delivery: push-on-swap (event-driven), with a poll fallback ---
+    // deliverFrame ships positions + perception once per Rust buffer swap. Telemetry
+    // runs on its own light timer (below) so the status heartbeat isn't tied to the
+    // drop-prone position doorbell.
+    let frameCount = 0;
+    const deliverFrame = (tick) => {
+      if (!simulationEngine || shuttingDown) return;
+
+      frameCount++;
+      if (frameCount % 200 === 0) {
+        const mem = process.memoryUsage();
+        console.log(`[Memory] RSS: ${(mem.rss / 1024 / 1024).toFixed(1)}MB, Heap: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}/${(mem.heapTotal / 1024 / 1024).toFixed(1)}MB, External: ${(mem.external / 1024 / 1024).toFixed(1)}MB, ArrayBuffers: ${(mem.arrayBuffers / 1024 / 1024).toFixed(1)}MB`);
+      }
+
+      try {
+        if (!DISABLE_BUFFER_CALLS) {
+          // fillBuffer() copies positions into our JS-owned buffer (zero-alloc) and
+          // returns the creature count.
+          const bufferCreatureCount = simulationEngine.fillBuffer(creatureBuffer);
+
+          // slice() (NOT subarray) - subarray would serialize the whole 10MB backing
+          // ArrayBuffer over Electron IPC.
+          const usedSize = bufferCreatureCount * FLOATS_PER_CREATURE;
+          const buffer = creatureBuffer.slice(0, usedSize);
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('napi-buffer-update', {
+              buffer,
+              creatureCount: bufferCreatureCount,
+              tick, // additive; consumers destructure only buffer/creatureCount
+            });
+          }
+
+          // Perception debug buffer (dev-tools only; frontend tracks selection state)
+          if (simulationEngine.fillPerceptionDebug) {
+            simulationEngine.fillPerceptionDebug(perceptionBuffer);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('perception-debug-update', perceptionBuffer);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Electron NAPI] deliverFrame error:', error);
+      }
+    };
+
+    // Register the buffer-ready doorbell BEFORE start(): Rust clones the callback once
+    // at thread spawn, so registering after start() would be a silent no-op.
+    const hasDoorbell = typeof simulationEngine.onBufferReady === 'function';
+    if (hasDoorbell) {
+      simulationEngine.onBufferReady((tick) => deliverFrame(tick));
+    }
+
     if (mostRecentSaveState) {
       console.log('[Electron NAPI] 💾 Found save state, loading from:', mostRecentSaveState);
       simulationEngine.start(0, assetsPath, () => {
@@ -133,93 +187,39 @@ function startSimulation() {
       }, null);
     }
 
-    // Query target simulation Hz and calculate polling rate
-    // Poll at 2x simulation rate to ensure we never miss frames
     const targetSimHz = simulationEngine.getTargetHz();
-    const pollHz = targetSimHz * 2;
-    const pollIntervalMs = Math.floor(1000 / pollHz);
+    if (hasDoorbell) {
+      console.log(`[Electron NAPI] ✅ Simulation started: ${targetSimHz}Hz — push-on-swap delivery enabled (event-driven, no polling)`);
+    } else {
+      // Fallback: the addon predates onBufferReady (not rebuilt). Poll at 2x sim rate,
+      // calling the SAME deliverFrame so there is no duplicated delivery logic.
+      const pollHz = targetSimHz * 2;
+      const pollIntervalMs = Math.floor(1000 / pollHz);
+      console.warn(`[Electron NAPI] ⚠️ onBufferReady unavailable — falling back to polling at ${pollHz}Hz (rebuild the addon to enable push-on-swap)`);
+      pollingInterval = setInterval(() => deliverFrame(simulationEngine.getTick()), pollIntervalMs);
+    }
 
-    console.log(`[Electron NAPI] ✅ Simulation started: ${targetSimHz}Hz, polling at ${pollHz}Hz`);
-
-    // Memory logging counter
-    let pollCount = 0;
-
-    // Set up polling loop
-    pollingInterval = setInterval(() => {
-      if (!simulationEngine || shuttingDown) {
-        clearInterval(pollingInterval);
-        return;
-      }
-
-      pollCount++;
-
-      // Log memory usage every 10 seconds (~200-400 polls)
-      if (pollCount % 200 === 0) {
-        const mem = process.memoryUsage();
-        console.log(`[Memory] RSS: ${(mem.rss / 1024 / 1024).toFixed(1)}MB, Heap: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}/${(mem.heapTotal / 1024 / 1024).toFixed(1)}MB, External: ${(mem.external / 1024 / 1024).toFixed(1)}MB, ArrayBuffers: ${(mem.arrayBuffers / 1024 / 1024).toFixed(1)}MB`);
-      }
-
+    // Telemetry/status heartbeat on its own light timer (~2x/sec), decoupled from the
+    // position doorbell so a dropped frame never skips a status update.
+    telemetryInterval = setInterval(() => {
+      if (!simulationEngine || shuttingDown) return;
+      if (DISABLE_TELEMETRY_CALLS) return;
       try {
-        // DEBUG: Skip buffer calls to isolate memory leak
-        if (!DISABLE_BUFFER_CALLS) {
-          // Fill persistent buffer with creature data (zero-allocation)
-          // fillBuffer() copies data into our JS-owned buffer and returns creature count
-          const bufferCreatureCount = simulationEngine.fillBuffer(creatureBuffer);
-
-          // Slice to actual creature count (SoA layout: ID, X, Y, Rotation, Size)
-          // Use slice() not subarray() - subarray creates view into full 10MB buffer
-          // which causes Electron IPC to serialize the entire backing ArrayBuffer
-          const usedSize = bufferCreatureCount * FLOATS_PER_CREATURE;
-          const buffer = creatureBuffer.slice(0, usedSize);
-
-          // Send buffer to portal (Float32Array - Electron IPC handles typed arrays efficiently)
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('napi-buffer-update', {
-              buffer: buffer, // Pass Float32Array directly (structured clone algorithm)
-              creatureCount: bufferCreatureCount,
-            });
-          }
-
-          // Fill perception debug buffer (zero-allocation, dev-tools only)
-          // Always send so frontend can track selection state (buffer[0] = hasData flag)
-          if (simulationEngine.fillPerceptionDebug) {
-            simulationEngine.fillPerceptionDebug(perceptionBuffer);
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('perception-debug-update', perceptionBuffer);
-            }
-          }
-
+        const telemetry = JSON.parse(simulationEngine.getTelemetry());
+        const bufferStats = JSON.parse(simulationEngine.getBufferStats());
+        telemetry.napiBufferCapacityPct = bufferStats.utilizationPct;
+        telemetry.napiBufferUsed = bufferStats.used;
+        telemetry.napiBufferCapacity = bufferStats.capacity;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('telemetry-update', telemetry);
         }
-
-        // Get telemetry (every ~0.5 seconds at 22Hz simulation)
-        if (!DISABLE_TELEMETRY_CALLS) {
-          const tick = simulationEngine.getTick();
-          if (tick % 11 === 0) {
-            const telemetryJson = simulationEngine.getTelemetry();
-            const telemetry = JSON.parse(telemetryJson);
-
-            // Get buffer stats and add to telemetry
-            const bufferStatsJson = simulationEngine.getBufferStats();
-            const bufferStats = JSON.parse(bufferStatsJson);
-            telemetry.napiBufferCapacityPct = bufferStats.utilizationPct;
-            telemetry.napiBufferUsed = bufferStats.used;
-            telemetry.napiBufferCapacity = bufferStats.capacity;
-
-            // Send to portal (for tick rate display)
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('telemetry-update', telemetry);
-            }
-
-            // Send to dev-ui
-            if (devToolsWindow && !devToolsWindow.isDestroyed()) {
-              devToolsWindow.webContents.send('telemetry-update', telemetry);
-            }
-          }
+        if (devToolsWindow && !devToolsWindow.isDestroyed()) {
+          devToolsWindow.webContents.send('telemetry-update', telemetry);
         }
       } catch (error) {
-        console.error('[Electron NAPI] Polling error:', error);
+        console.error('[Electron NAPI] Telemetry error:', error);
       }
-    }, pollIntervalMs);
+    }, 500);
 
   } catch (error) {
     console.error('[Electron NAPI] Failed to start simulation:', error);
@@ -721,10 +721,14 @@ app.on('before-quit', (event) => {
 
   console.log('[Electron NAPI] Shutting down simulation...');
 
-  // Clear polling interval
+  // Clear timers (fallback poll + telemetry heartbeat)
   if (pollingInterval) {
     clearInterval(pollingInterval);
     pollingInterval = null;
+  }
+  if (telemetryInterval) {
+    clearInterval(telemetryInterval);
+    telemetryInterval = null;
   }
 
   // Stop simulation gracefully

@@ -61,9 +61,9 @@ export class ElectronIPCClient implements IPCClient {
     this.unsubscribers.push(unsubTelemetry);
 
     // Use new NAPI buffer updates
-    const unsubBuffer = window.electron.onNAPIBufferUpdate((data: { buffer: number[], creatureCount: number }) => {
+    const unsubBuffer = window.electron.onNAPIBufferUpdate((data: { buffer: number[], creatureCount: number, tick?: number }) => {
       try {
-        const { buffer, creatureCount } = data;
+        const { buffer, creatureCount, tick } = data;
 
         // Ensure pre-allocated array has capacity (one-time allocation)
         this.ensureCreatureCapacity(creatureCount);
@@ -86,7 +86,7 @@ export class ElectronIPCClient implements IPCClient {
 
         const state: GameState = {
           protocolVersion: 2, // NAPI protocol version
-          tick: 0, // Will be provided by separate telemetry
+          tick: tick ?? 0, // sim tick from the push-on-swap doorbell (0 in poll fallback)
           tickRateHz: this._cachedTickRateHz, // Updated from telemetry
           creatures,
           entityCount: creatureCount,

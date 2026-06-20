@@ -48,6 +48,12 @@ export declare class SimulationEngine {
   /** Create new SimulationEngine (does not start simulation yet) */
   constructor()
   /**
+   * Register a "buffer ready" callback, fired once per position-buffer swap with the
+   * sim tick. Lets the host push positions per frame (event-driven) instead of polling
+   * on a timer — eliminating duplicate reads and delivery jitter. Call BEFORE `start`.
+   */
+  onBufferReady(callback: (...args: any[]) => any): void
+  /**
    * Start simulation with initial creature count
    *
    * # Arguments

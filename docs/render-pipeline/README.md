@@ -93,20 +93,20 @@ Key properties:
 
 ## 6. The fix is two complementary parts
 
-| Part | Side | What it does | Task |
-|------|------|--------------|------|
-| **Push-on-swap** | Sim / IPC (Rust) | Deliver each frame **once, on time, tagged with its tick** — push from Rust when the buffer swaps instead of polling. Kills duplicates + most delivery jitter at the source, and supplies the timestamps the render side needs. | [`todo/push-on-swap.md`](./todo/push-on-swap.md) |
-| **Snapshot interpolation** | Render (TS) | Render in the past from a snapshot buffer; drive α from a real-time clock between two timestamped snapshots; never reset on arrival. Tolerates whatever jitter remains. | [`todo/snapshot-interpolation.md`](./todo/snapshot-interpolation.md) |
+| Order | Part | Side | What it does | Task |
+|-------|------|------|--------------|------|
+| **1st** | **Snapshot interpolation** | Render (TS) | Render in the past from a snapshot buffer; drive α from a real-time clock between two timestamped snapshots; never reset on arrival. Tolerates whatever jitter remains. | [`todo/snapshot-interpolation.md`](./todo/snapshot-interpolation.md) |
+| **2nd** | **Push-on-swap** | Sim / IPC (Rust) | Deliver each frame **once, on time, tagged with its tick** — push from Rust when the buffer swaps instead of polling. Kills duplicates + the remaining delivery jitter at the source, and replaces arrival-time stamps with clean sim-tick stamps. | [`todo/push-on-swap.md`](./todo/push-on-swap.md) |
 
-**Why both:** push-on-swap *reduces* the jitter; snapshot interpolation makes the result *robust* to the jitter the async seam will always have. Order: **push-on-swap first** (measure the drop in the panel), then **snapshot interpolation** (measure α pin to 1.0 and stalls → 0).
+**Why both, and why this order:** snapshot interpolation is the fix that directly produces smooth motion, and it can **stand alone** — initially timestamping snapshots on *arrival*, so it needs no sim change. We do it **first** because the result is immediately visible in the panel (α pins to 1.0, stalls → 0). Push-on-swap then *removes* jitter at the source (duplicates → 0, snapshot-gap σ drops) and upgrades the timestamps from arrival-time to exact sim-tick time. Together they're the complete, textbook-correct solution.
 
 ---
 
 ## 7. References
 
-- Bernier, Y. (Valve) — *Latency Compensating Methods…*, GDC 2001.
-- Valve Developer Community — *Source Multiplayer Networking* (`cl_interp`).
-- Fiedler, G. — *Fix Your Timestep!* and *Snapshot Interpolation*, gafferongames.com.
+- **Bernier, Yahn W.** (Valve Software). *"Latency Compensating Methods in Client/Server In-game Protocol Design and Optimization."* Game Developers Conference (GDC), 2001. — the origin of entity interpolation ("render in the past").
+- **Valve Developer Community.** *"Source Multiplayer Networking."* — entity interpolation in the Source engine; default `cl_interp 0.1` = render 100 ms in the past.
+- **Fiedler, Glenn.** *"Fix Your Timestep!"* (2004) and *"Snapshot Interpolation."* gafferongames.com — the underlying fixed-timestep + interpolation math (`alpha = elapsed / dt`, previous+current buffer, buffered snapshots).
 
 ---
 

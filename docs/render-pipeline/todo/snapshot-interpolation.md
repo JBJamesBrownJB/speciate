@@ -1,12 +1,14 @@
 # Snapshot Interpolation (render in the past)
 
-**Status:** 📋 Planned — do after push-on-swap.
-**Dependencies:** [`push-on-swap.md`](./push-on-swap.md) (provides per-frame tick timestamps + single clean delivery).
+**Status:** 📋 Planned — **do first** (the high-impact render fix; stands alone).
+**Dependencies:** none required. Timestamps come from snapshot **arrival time** initially; [`push-on-swap.md`](./push-on-swap.md) is a later refinement that swaps in exact sim-tick timestamps and removes duplicates.
 **Area:** Render (TypeScript / portal).
 
 ## Goal
 
 Make the renderer **robust to delivery jitter** by adopting Valve-style **entity interpolation**: keep a small buffer of timestamped snapshots, render ~1 tick **in the past**, and drive the interpolation α from a **real-time clock between two snapshots** — *never* resetting α when a snapshot arrives. Background + origin: [`../README.md`](../README.md) §5.
+
+**Credit:** entity interpolation / "render in the past" is from **Yahn W. Bernier** (Valve Software), *"Latency Compensating Methods in Client/Server In-game Protocol Design and Optimization,"* GDC 2001 — shipped in the Source engine as `cl_interp`. Underlying timestep math: **Glenn Fiedler**, *"Fix Your Timestep!"* / *"Snapshot Interpolation."* Full citations in [`../README.md`](../README.md) §7.
 
 ## Why (the problem it removes)
 
@@ -14,7 +16,7 @@ Today the renderer treats "a snapshot arrived" as its clock: it resets α to 0 o
 
 ## Design (high-level)
 
-- **Buffer snapshots with timestamps.** Extend `InterpolationBufferManager` (`apps/portal/src/rendering/InterpolationBufferManager.ts`) to retain the last few snapshots keyed by their sim tick (from push-on-swap), not just previous+current.
+- **Buffer snapshots with timestamps.** Extend `InterpolationBufferManager` (`apps/portal/src/rendering/InterpolationBufferManager.ts`) to retain the last few snapshots, each stamped with its **arrival time** (`performance.now()` when a *distinct* snapshot is received) — not just previous+current. (Later, push-on-swap replaces arrival time with the exact sim tick.)
 - **Render clock, not arrival clock.** Maintain a clock that advances by real frame `deltaMS`, targeting `now − interpolationDelay` where the delay ≈ **1 tick (50 ms)** (Valve uses 100 ms). Arrival of a snapshot only *appends to the buffer* — it never resets the clock or moves the creature.
 - **Interpolate the bracketing pair.** Each frame, pick the two buffered snapshots that straddle the render clock and set α from their timestamps (`α = (clock − A.t) / (B.t − A.t)`). The existing GPU shader lerp (`InterpolatedCreatureRenderer.ts:167`) is reused unchanged — only how α and the start/end buffers are chosen changes.
 - **Underrun = hold.** If the clock outruns the newest snapshot (buffer ran dry), hold at the newest position. Do **not** extrapolate (avoids overshoot pops).

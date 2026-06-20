@@ -1,7 +1,7 @@
 # Push-on-Swap (deliver positions once, on time, tagged)
 
-**Status:** 📋 Planned — do this first.
-**Dependencies:** none. **Enables** [`snapshot-interpolation.md`](./snapshot-interpolation.md) by supplying per-frame tick timestamps.
+**Status:** 📋 Planned — do **after** [`snapshot-interpolation.md`](./snapshot-interpolation.md) (this is the source-side refinement).
+**Dependencies:** none. **Refines** snapshot-interpolation: removes duplicate frames and replaces its arrival-time stamps with exact sim-tick timestamps.
 **Area:** Sim / IPC (Rust + NAPI + Electron main).
 
 ## Goal

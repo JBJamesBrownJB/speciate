@@ -270,11 +270,6 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics }) => {
           <canvas ref={alphaCanvas} className="memory-sparkline" />
         </div>
       </div>
-
-      <p className="rm-legend">
-        <strong>σ</strong> (sigma) = standard deviation — how much a value wobbles around its
-        average; lower = steadier. <strong>α</strong> (alpha) = how far a slide finished, 0–1.
-      </p>
     </div>
   );
 };

@@ -24,6 +24,23 @@ describe('RenderPipelinePanel', () => {
     expect(screen.getByText(/waiting for render-pipeline metrics/i)).toBeInTheDocument();
   });
 
+  it('rounds averaged (float) counts from a loaded snapshot', () => {
+    render(
+      <RenderPipelinePanel
+        metrics={{
+          ...sample,
+          stallFrames: 25.3555,
+          totalFrames: 100.644,
+          distinctCount: 20.3555,
+          duplicateCount: 11.644,
+        }}
+      />
+    );
+    expect(screen.getByText('25/101 (25%)')).toBeInTheDocument(); // stall frames
+    expect(screen.getByText('20/s')).toBeInTheDocument(); // snapshot rate
+    expect(screen.getByText('38% (12/32)')).toBeInTheDocument(); // duplicate frames
+  });
+
   it('renders each metric with a label, a value, and a self-documenting tooltip', () => {
     const { container } = render(<RenderPipelinePanel metrics={sample} />);
 

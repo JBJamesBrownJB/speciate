@@ -188,9 +188,14 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
   }
 
   const m = metrics;
-  const total = m.distinctCount + m.duplicateCount;
-  const dupePct = total > 0 ? Math.round((m.duplicateCount / total) * 100) : 0;
-  const stallPct = m.totalFrames > 0 ? Math.round((m.stallFrames / m.totalFrames) * 100) : 0;
+  // Counts are integers live, but averaged floats in a loaded snapshot — round for display.
+  const distinct = Math.round(m.distinctCount);
+  const dupes = Math.round(m.duplicateCount);
+  const total = distinct + dupes;
+  const dupePct = total > 0 ? Math.round((dupes / total) * 100) : 0;
+  const stalls = Math.round(m.stallFrames);
+  const frames = Math.round(m.totalFrames);
+  const stallPct = frames > 0 ? Math.round((stalls / frames) * 100) : 0;
 
   return (
     <div className="cockpit-panel render-pipeline-panel">
@@ -220,7 +225,7 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
 
       <MetricRow
         label="Stall frames"
-        value={`${m.stallFrames}/${m.totalFrames} (${stallPct}%)`}
+        value={`${stalls}/${frames} (${stallPct}%)`}
         color={pick(stallPct, 2, 10, true)}
         blurb="Render frames frozen at the end of a tween, waiting for the next snapshot."
         measures="Render frames where alpha was pinned at 1.0 (nowhere left to interpolate)."
@@ -230,7 +235,7 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
 
       <MetricRow
         label="Duplicate frames"
-        value={`${dupePct}% (${m.duplicateCount}/${total})`}
+        value={`${dupePct}% (${dupes}/${total})`}
         color={COLORS.neutral}
         blurb="Buffers re-read with no new data (the poll runs faster than the sim ticks)."
         measures="Deliveries carrying positions identical to the previous frame."
@@ -250,8 +255,8 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
 
       <MetricRow
         label="Snapshot rate"
-        value={`${m.distinctCount}/s`}
-        color={Math.abs(m.distinctCount - 20) <= 2 ? COLORS.success : COLORS.warning}
+        value={`${distinct}/s`}
+        color={Math.abs(distinct - 20) <= 2 ? COLORS.success : COLORS.warning}
         blurb="Distinct position frames per second — should match the sim tick rate (20 Hz)."
         measures="Count of changed snapshots observed in the last second."
         healthy="≈20 (the sim tick rate)."

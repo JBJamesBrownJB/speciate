@@ -612,9 +612,11 @@ ipcMain.handle('save-metrics-snapshot', async (event, snapshot) => {
  */
 ipcMain.handle('load-metrics-snapshot', async () => {
   try {
-    const result = await dialog.showOpenDialog({
+    // Open where snapshots are actually saved (see save-metrics-snapshot), not Documents.
+    const snapshotsDir = path.join(__dirname, '../../../docs/performance/snapshots');
+    const result = await dialog.showOpenDialog(devToolsWindow || mainWindow, {
       title: 'Load Metrics Snapshot',
-      defaultPath: app.getPath('documents'),
+      defaultPath: snapshotsDir,
       filters: [
         { name: 'JSON Files', extensions: ['json'] },
         { name: 'All Files', extensions: ['*'] }

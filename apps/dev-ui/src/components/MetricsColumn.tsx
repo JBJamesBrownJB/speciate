@@ -58,8 +58,10 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
         <div className="hardware-cockpit-section">
           <h2>Hardware Performance Cockpit</h2>
 
-          {/* Linux-only PMU gauges, or a "Linux only" badge on non-Linux hosts. */}
-          {hardwareMetrics ? (
+          {/* Linux-only PMU gauges, or a "Linux only" badge on non-Linux hosts.
+              Gate on platform, not on hardwareMetrics truthiness: Windows sends a
+              ZEROED hardwareMetrics object, which would otherwise render dead gauges. */}
+          {hardwareMetrics && hardwareCountersSupported() ? (
             <div className="cockpit-container">
               <VectorizationTachometer ipc={hardwareMetrics.ipc} />
               <CacheFirewall

@@ -61,6 +61,23 @@ describe('MetricsColumn', () => {
     expect(screen.getByText(/linux only/i)).toBeInTheDocument();
   });
 
+  it('on Windows with a ZEROED hardware metrics object: still shows the badge, not dead gauges', () => {
+    // Windows sends a zeroed (truthy) hardwareMetrics object — the badge must
+    // still win, otherwise the IPC/cache/branch gauges render with no data.
+    setPlatform('win32');
+    render(
+      <MetricsColumn
+        {...base}
+        systemTimings={timings}
+        parallelizationMetrics={parallel}
+        hardwareMetrics={{ ipc: 0, l1dMissRate: 0, llcMissRate: 0, branchMissRate: 0 } as HardwareMetrics}
+      />
+    );
+    expect(screen.getByText(/linux only/i)).toBeInTheDocument();
+    expect(screen.queryByText('gauge:ipc')).not.toBeInTheDocument();
+    expect(screen.queryByText('gauge:cache')).not.toBeInTheDocument();
+  });
+
   it('with hardware metrics present: renders gauges and no badge', () => {
     setPlatform('linux');
     render(

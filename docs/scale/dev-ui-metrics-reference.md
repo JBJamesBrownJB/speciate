@@ -83,10 +83,24 @@ can't run. Source: `apps/simulation/src/instrumentation/windows_metrics.rs`.
 
 | Metric | What it is | What it indicates | How to improve |
 |--------|-----------|-------------------|----------------|
-| `processCyclesPerSec` | Process **reference** cycles/sec (`QueryProcessCycleTime`, RDTSC-based — **not** true core-clock cycles) | Coarse "how much CPU is this process burning". Rising with no extra creatures = wasted work (e.g. busy-spin). | Pace the master loop; reduce per-tick work. Treat as a trend, not an absolute. |
+| `processCyclesPerSec` | CPU cycles/sec summed across **all** the process's threads (`QueryProcessCycleTime`) | Coarse "how much CPU is this process burning". Rising with no extra creatures = wasted work (e.g. busy-spin). | Pace the master loop; reduce per-tick work. Treat as a trend, not an absolute. |
 | `pageFaultsPerSec` | Rate of page faults | See the note below — a few hundred/sec is normal. | Reduce per-tick allocation churn if it climbs into the thousands and correlates with disk I/O. |
 | `pageFaultCount` | Cumulative page faults since start | Ever-increasing by nature; only the *rate* is interesting. | n/a. |
 | `workingSetBytes` | Resident memory (same idea as Process Memory) | Plateau good; steady climb = leak. | Same as Process Memory. |
+
+### Reading the cycles rate (rough "cores in use")
+
+`QueryProcessCycleTime` sums cycles across **all** the process's threads, so dividing by
+one core's clock gives a rough "cores worth of work" figure:
+
+```
+cores in use ≈ processCyclesPerSec ÷ (core GHz × 1e9)
+e.g. 20 G/s ÷ ~5 GHz ≈ ~4 cores
+```
+
+This confirms parallelism is spreading across cores (good) and shows headroom vs the
+core count. **Caveat:** CPU frequency varies with boost/throttle, so this is a relative
+trend, not an exact measurement — don't convert cycles to wall-clock time.
 
 ### What are "page faults"? (and why ~200–300/sec is fine)
 

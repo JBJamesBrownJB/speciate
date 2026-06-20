@@ -411,3 +411,51 @@
   border-radius: 4px;
   background: rgba(156, 163, 175, 0.1);
 }
+
+/* Shared panel styles (also used by HardwareMetricsPanel, previously unstyled). */
+.panel {
+  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  border-radius: 8px;
+}
+
+.panel-header {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.panel-content .no-data {
+  color: #cbd5e1;
+  margin: 0.25rem 0;
+}
+
+.panel-content .hint {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  margin: 0.25rem 0 0;
+}
+
+/* "Linux only" badge shown in place of the PMU gauges on non-Linux hosts. */
+.linux-only-badge {
+  width: 100%;
+  border-style: dashed;
+  border-color: rgba(100, 116, 139, 0.5);
+}
+
+.badge-tag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #0f172a;
+  background: #9ca3af;
+  border-radius: 999px;
+  vertical-align: middle;
+}

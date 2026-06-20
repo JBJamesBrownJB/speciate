@@ -7,6 +7,9 @@ const { contextBridge, ipcRenderer } = require('electron');
  */
 
 contextBridge.exposeInMainWorld('electron', {
+  // Host OS (Node process.platform) so the dev-ui can label Linux-only metrics.
+  platform: process.platform,
+
   onStateUpdateBinary: (callback) => {
     if (typeof callback !== 'function') {
       throw new Error('onStateUpdateBinary: callback must be a function');

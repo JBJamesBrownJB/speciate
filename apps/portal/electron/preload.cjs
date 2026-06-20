@@ -14,6 +14,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Expose ONLY specific methods to renderer process
 contextBridge.exposeInMainWorld('electron', {
   /**
+   * Host OS, so the dev-ui can label Linux-only metrics and gate Windows-only panels.
+   * One of 'win32' | 'darwin' | 'linux' | ... (Node's process.platform values).
+   */
+  platform: process.platform,
+
+  /**
    * Subscribe to state updates from simulation (BINARY - OLD stdio IPC)
    * Callback receives Uint8Array of raw MessagePack data
    *

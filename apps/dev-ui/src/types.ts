@@ -143,6 +143,8 @@ export interface CreatureSnapshot {
 declare global {
   interface Window {
     electron?: {
+      /** Host OS from Node's process.platform (e.g. 'win32', 'linux', 'darwin'). */
+      platform?: 'win32' | 'darwin' | 'linux' | string;
       sendCommand?: (command: DevCommand) => void;
       setSystemFrequency?: (systemName: string, divisor: number) => void;
       onStateUpdateBinary?: (callback: (binaryData: Uint8Array) => void) => void;

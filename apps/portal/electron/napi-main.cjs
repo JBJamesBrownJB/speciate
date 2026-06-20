@@ -319,6 +319,13 @@ async function createDevToolsWindow() {
     },
   });
 
+  // Forward dev-tools renderer console to the terminal — this window has no other
+  // observability path, so a React throw here would otherwise be silent.
+  devToolsWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    const levels = ['', 'INFO', 'WARNING', 'ERROR'];
+    console.log(`[DevTools Renderer ${levels[level]}] ${message} (${sourceId}:${line})`);
+  });
+
   if (isDev) {
     const viteURL = 'http://localhost:5174';
     console.log(`[Electron NAPI] Dev Tools: Loading from dev-ui Vite at ${viteURL}`);

@@ -17,6 +17,8 @@ import { CacheFirewall } from './CacheFirewall';
 import { BranchScope } from './BranchScope';
 import { Parallelism } from './Parallelism';
 import { MemoryMetrics } from './MemoryMetrics';
+import { LinuxOnlyBadge } from './LinuxOnlyBadge';
+import { hardwareCountersSupported } from '../utils/platform';
 import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics } from '../types';
 
 export interface MetricsColumnProps {
@@ -50,9 +52,11 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
       <div className="comparison-column">
         <h2 className={`comparison-header ${labelClass}`}>{label}</h2>
 
-        {hardwareMetrics && (
-          <div className="hardware-cockpit-section">
-            <h2>Hardware Performance Cockpit</h2>
+        <div className="hardware-cockpit-section">
+          <h2>Hardware Performance Cockpit</h2>
+
+          {/* Linux-only PMU gauges, or a "Linux only" badge on non-Linux hosts. */}
+          {hardwareMetrics ? (
             <div className="cockpit-container">
               <VectorizationTachometer ipc={hardwareMetrics.ipc} />
               <CacheFirewall
@@ -61,18 +65,23 @@ export const MetricsColumn: React.FC<MetricsColumnProps> = React.memo(
               />
               <BranchScope branchMissRate={hardwareMetrics.branchMissRate} />
             </div>
-            {parallelizationMetrics && systemTimings && (
-              <>
-                <div className="cockpit-container cockpit-row-2">
-                  <Parallelism metrics={parallelizationMetrics} systemTimings={systemTimings} />
-                </div>
-                <div className="cockpit-container cockpit-row-3">
-                  <MemoryMetrics processMemoryBytes={parallelizationMetrics.processMemoryBytes} />
-                </div>
-              </>
-            )}
-          </div>
-        )}
+          ) : !hardwareCountersSupported() ? (
+            <LinuxOnlyBadge />
+          ) : null}
+
+          {/* Parallelism + memory are cross-platform — render independently of the
+              Linux-only hardware counters so they still appear on Windows. */}
+          {parallelizationMetrics && systemTimings && (
+            <>
+              <div className="cockpit-container cockpit-row-2">
+                <Parallelism metrics={parallelizationMetrics} systemTimings={systemTimings} />
+              </div>
+              <div className="cockpit-container cockpit-row-3">
+                <MemoryMetrics processMemoryBytes={parallelizationMetrics.processMemoryBytes} />
+              </div>
+            </>
+          )}
+        </div>
 
         <SystemTimingsPanel timings={systemTimings} />
       </div>

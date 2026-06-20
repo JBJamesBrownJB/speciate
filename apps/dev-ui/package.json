@@ -11,18 +11,25 @@
     "preview": "vite preview",
     "test:ipc": "node test-ipc.cjs",
     "test:trial": "node test-trial-loading.cjs",
-    "test": "npm run test:ipc && npm run test:trial"
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test": "npm run test:unit"
   },
   "dependencies": {
+    "@msgpack/msgpack": "^3.0.0-beta2",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@msgpack/msgpack": "^3.0.0-beta2"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
-    "vite": "^7.2.2"
+    "vite": "^7.2.2",
+    "vitest": "^4.1.9"
   }
 }

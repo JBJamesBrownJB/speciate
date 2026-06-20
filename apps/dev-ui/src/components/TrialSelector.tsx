@@ -23,13 +23,25 @@ export const TrialSelector: React.FC<TrialSelectorProps> = ({
   randomizeDna,
 }) => {
   const [selectedTrial, setSelectedTrial] = useState<string>(
-    TRIAL_TEMPLATES[0].name
+    TRIAL_TEMPLATES[0]?.name ?? ''
   );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onLoadTrial(selectedTrial);
   };
+
+  if (TRIAL_TEMPLATES.length === 0) {
+    return (
+      <div className="section">
+        <h2>Load Trial Template</h2>
+        <p className="info-text">
+          No trial templates generated. Run <code>npm run generate:trials</code> in
+          apps/dev-ui (it scans apps/simulation/specs/**/*.toml).
+        </p>
+      </div>
+    );
+  }
 
   const selectedTemplate = TRIAL_TEMPLATES.find(
     (t) => t.name === selectedTrial

@@ -45,11 +45,25 @@ const MetricRow: React.FC<MetricRowProps> = ({ label, value, color, blurb, measu
 
 const MAX_HISTORY = 90;
 
+interface RefLine {
+  value: number;
+  color: string;
+  label: string;
+}
+
+/**
+ * Sparkline with a fixed [yMin, yMax] scale, dashed good/bad reference lines (so a
+ * value's height is meaningful), axis labels, and a trace coloured by severity.
+ */
 const renderSparkline = (
   canvas: HTMLCanvasElement,
   history: number[],
-  refValue: number | null,
-  refMax: number
+  yMin: number,
+  yMax: number,
+  refLines: RefLine[],
+  traceColor: string,
+  topLabel: string,
+  bottomLabel: string
 ): void => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -60,29 +74,44 @@ const renderSparkline = (
   ctx.scale(dpr, dpr);
   const { width, height } = rect;
   ctx.clearRect(0, 0, width, height);
-  if (history.length < 2) return;
 
-  const maxValue = Math.max(refMax, ...history) * 1.1 || 1;
-  const xStep = width / (MAX_HISTORY - 1);
+  const span = yMax - yMin || 1;
+  const yOf = (v: number) => height - Math.max(0, Math.min((v - yMin) / span, 1)) * height;
 
-  if (refValue !== null) {
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(74, 222, 128, 0.35)';
+  ctx.font = '9px system-ui, sans-serif';
+
+  // Dashed good/bad reference lines with right-aligned labels — these ARE the scale.
+  refLines.forEach(({ value, color, label }) => {
+    const y = yOf(value);
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = color;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
-    const y = height - (refValue / maxValue) * height;
+    ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
     ctx.stroke();
     ctx.setLineDash([]);
-  }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'right';
+    ctx.fillText(label, width - 3, Math.min(height - 2, Math.max(9, y - 2)));
+  });
 
+  // Y-axis scale labels (top = yMax, bottom = yMin) so the absolute scale is clear.
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'left';
+  ctx.fillText(topLabel, 3, 9);
+  ctx.fillText(bottomLabel, 3, height - 2);
+
+  if (history.length < 2) return;
+  const xStep = width / (MAX_HISTORY - 1);
   ctx.beginPath();
   ctx.lineWidth = 1.5;
-  ctx.strokeStyle = COLORS.streaming;
+  ctx.strokeStyle = traceColor;
   history.forEach((v, i) => {
     const x = i * xStep;
-    const y = height - Math.min(v / maxValue, 1) * height;
+    const y = yOf(v);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -111,8 +140,39 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics }) => {
     const ah = alphaHist.current;
     ah.push(metrics.alphaResetMean);
     if (ah.length > MAX_HISTORY) ah.shift();
-    if (jitterCanvas.current) renderSparkline(jitterCanvas.current, jh, null, 16);
-    if (alphaCanvas.current) renderSparkline(alphaCanvas.current, ah, 1.0, 1.0);
+
+    if (jitterCanvas.current) {
+      // Jitter (σ ms): lower is better. 0–30 ms scale; good ≤5, bad ≥12.
+      renderSparkline(
+        jitterCanvas.current,
+        jh,
+        0,
+        30,
+        [
+          { value: 5, color: COLORS.success, label: '5 good' },
+          { value: 12, color: COLORS.critical, label: '12 bad' },
+        ],
+        pick(metrics.distinctGapStdMs, 5, 12, true),
+        '30 ms',
+        '0'
+      );
+    }
+    if (alphaCanvas.current) {
+      // α (0–1): higher is better. 0.5–1.0 scale; target 1.0, snap below 0.85.
+      renderSparkline(
+        alphaCanvas.current,
+        ah,
+        0.5,
+        1.0,
+        [
+          { value: 1.0, color: COLORS.success, label: '1.0 target' },
+          { value: 0.85, color: COLORS.critical, label: '0.85 snap' },
+        ],
+        pick(metrics.alphaResetMean, 0.95, 0.85, false),
+        '1.0',
+        '0.5'
+      );
+    }
   }, [metrics]);
 
   if (!metrics) {
@@ -198,11 +258,15 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics }) => {
 
       <div className="rm-spark-grid">
         <div className="rm-spark">
-          <div className="rm-spark-label">Jitter — σ sigma (std-dev), ms — want flat &amp; low</div>
+          <div className="rm-spark-label">
+            Jitter — σ std-dev (ms) · dashed: green 5 = good, red 12 = bad · want flat &amp; below green
+          </div>
           <canvas ref={jitterCanvas} className="memory-sparkline" />
         </div>
         <div className="rm-spark">
-          <div className="rm-spark-label">Lerp completion (α alpha, 0–1) — want pinned at 1.0</div>
+          <div className="rm-spark-label">
+            Lerp completion — α (0–1) · dashed: green 1.0 = target, red 0.85 = snap · want pinned at green
+          </div>
           <canvas ref={alphaCanvas} className="memory-sparkline" />
         </div>
       </div>

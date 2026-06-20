@@ -47,6 +47,24 @@ export interface ParallelizationMetrics {
   processMemoryBytes: number;
 }
 
+/** Render-pipeline (frontend) metrics — interpolation cadence between the sim and
+ *  the renderer. Renderer-origin (portal), relayed via main → dev-ui. Mirrors the
+ *  portal's RenderPipelineMetrics. See docs/testing/bugs/jitter-high-populations.md. */
+export interface RenderPipelineMetrics {
+  distinctGapMeanMs: number;
+  distinctGapStdMs: number;
+  distinctGapMinMs: number;
+  distinctGapMaxMs: number;
+  deliveryMeanMs: number;
+  alphaResetMean: number;
+  alphaResetMin: number;
+  alphaResetMax: number;
+  stallFrames: number;
+  totalFrames: number;
+  distinctCount: number;
+  duplicateCount: number;
+}
+
 /** Windows-only process telemetry (Win32 cycle time + page faults + working set).
  *  `available` is false on non-Windows hosts. Mirrors the Rust WindowsMetricsSnapshot. */
 export interface WindowsMetrics {
@@ -156,6 +174,8 @@ declare global {
     electron?: {
       /** Host OS from Node's process.platform (e.g. 'win32', 'linux', 'darwin'). */
       platform?: 'win32' | 'darwin' | 'linux' | string;
+      /** DEV-only: render-pipeline metrics relayed from the portal renderer. */
+      onRenderMetricsUpdate?: (callback: (metrics: RenderPipelineMetrics) => void) => () => void;
       sendCommand?: (command: DevCommand) => void;
       setSystemFrequency?: (systemName: string, divisor: number) => void;
       onStateUpdateBinary?: (callback: (binaryData: Uint8Array) => void) => void;

@@ -371,6 +371,17 @@ async function createDevToolsWindow() {
 /**
  * IPC handler: Spawn creatures (dev tools command)
  */
+/**
+ * IPC relay: render-pipeline metrics from the portal (game window) → dev-tools window.
+ * These are renderer-origin (interpolation cadence), so they don't ride the Rust
+ * telemetry channel. DEV-only: the portal only sends them in dev builds.
+ */
+ipcMain.on('render-metrics', (event, metrics) => {
+  if (devToolsWindow && !devToolsWindow.isDestroyed()) {
+    devToolsWindow.webContents.send('render-metrics-update', metrics);
+  }
+});
+
 ipcMain.on('spawn-creatures', (event, count) => {
   if (!simulationEngine) {
     console.error('[Electron NAPI] Cannot spawn: simulation not running');

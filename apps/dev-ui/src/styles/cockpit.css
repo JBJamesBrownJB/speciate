@@ -459,3 +459,91 @@
   border-radius: 999px;
   vertical-align: middle;
 }
+
+/* Render Pipeline panel (frontend/interpolation metrics) */
+.render-pipeline-panel {
+  width: 100%;
+  align-items: stretch;
+  text-align: left;
+}
+
+.render-metric-row {
+  position: relative;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.15);
+}
+
+.rm-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.rm-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.rm-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rm-blurb {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-top: 0.15rem;
+}
+
+/* Hover tooltip — pure CSS, no JS hover state. */
+.rm-tooltip {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  top: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.25rem;
+  padding: 0.5rem 0.6rem;
+  background: rgba(2, 6, 23, 0.97);
+  border: 1px solid rgba(100, 116, 139, 0.5);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #e2e8f0;
+  pointer-events: none;
+}
+
+.render-metric-row:hover .rm-tooltip {
+  display: block;
+}
+
+.rm-tip-line {
+  margin: 0.15rem 0;
+}
+
+.rm-tip-good {
+  color: #4ade80;
+}
+
+.rm-tip-bad {
+  color: #f87171;
+}
+
+.rm-spark-grid {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rm-spark-label {
+  font-size: 0.68rem;
+  color: #9ca3af;
+  margin-bottom: 0.15rem;
+}

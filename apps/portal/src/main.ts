@@ -263,7 +263,8 @@ async function main(): Promise<void> {
           const now = performance.now();
           interpDiag.recordDelivery(now);
           interpDiag.recordSnapshot(now, stateChanged);
-          interpDiag.maybeReport(now);
+          const renderMetrics = interpDiag.maybeReport(now);
+          if (renderMetrics) window.electron?.sendRenderMetrics?.(renderMetrics);
         }
 
         if (stateChanged) {

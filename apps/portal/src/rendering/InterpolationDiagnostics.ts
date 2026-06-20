@@ -19,6 +19,24 @@
  *   the bug  -> distinct-gap spread 25–75ms (σ high), α@reset scattered <1.0, stalls > 0
  */
 
+/** Structured one-interval snapshot, sent to the dev-ui Render Pipeline panel. */
+export interface RenderPipelineMetrics {
+  distinctGapMeanMs: number;
+  distinctGapStdMs: number;
+  distinctGapMinMs: number;
+  distinctGapMaxMs: number;
+  deliveryMeanMs: number;
+  alphaResetMean: number;
+  alphaResetMin: number;
+  alphaResetMax: number;
+  stallFrames: number;
+  totalFrames: number;
+  distinctCount: number;
+  duplicateCount: number;
+}
+
+const REPORT_INTERVAL_MS = 1000;
+
 class Accumulator {
   private n = 0;
   private sum = 0;
@@ -103,19 +121,38 @@ export class InterpolationDiagnostics {
     if (clampedAtEnd) this.stallFrames++;
   }
 
-  /** Emits a one-line summary at most once per second, then resets the window. */
-  maybeReport(now: number): void {
+  /**
+   * Once per interval: returns a structured snapshot (for the dev-ui panel) and
+   * logs a one-line console fallback, then resets the window. Returns null between
+   * intervals. Caller forwards the snapshot to the dev-ui.
+   */
+  maybeReport(now: number): RenderPipelineMetrics | null {
     if (!this.lastReportT) {
       this.lastReportT = now;
-      return;
+      return null;
     }
-    if (now - this.lastReportT < 1000) return;
+    if (now - this.lastReportT < REPORT_INTERVAL_MS) return null;
     this.lastReportT = now;
 
     const total = this.distinctCount + this.duplicateCount;
     const dupePct = total > 0 ? Math.round((this.duplicateCount / total) * 100) : 0;
     const d = this.distinct;
     const a = this.alphaReset;
+
+    const metrics: RenderPipelineMetrics = {
+      distinctGapMeanMs: d.mean,
+      distinctGapStdMs: d.std,
+      distinctGapMinMs: d.lo,
+      distinctGapMaxMs: d.hi,
+      deliveryMeanMs: this.delivery.mean,
+      alphaResetMean: a.mean,
+      alphaResetMin: a.lo,
+      alphaResetMax: a.hi,
+      stallFrames: this.stallFrames,
+      totalFrames: this.totalFrames,
+      distinctCount: this.distinctCount,
+      duplicateCount: this.duplicateCount,
+    };
 
     // console.info (not log — banned; not error — this is not an error). DEV-only.
     console.info(
@@ -133,6 +170,8 @@ export class InterpolationDiagnostics {
     this.totalFrames = 0;
     this.distinctCount = 0;
     this.duplicateCount = 0;
+
+    return metrics;
   }
 }
 

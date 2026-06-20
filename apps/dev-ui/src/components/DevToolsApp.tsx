@@ -17,7 +17,8 @@ import { useSmoothedMetrics } from '../hooks/useSmoothedMetrics';
 import { calculateStatistics } from '../utils/statistics';
 import { snapshotToTelemetry } from '../utils/snapshotConverter';
 import { MetricsColumn } from './MetricsColumn';
-import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, WindowsMetrics, TelemetryFrame, MetricsSnapshot, DnaData } from '../types';
+import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, WindowsMetrics, RenderPipelineMetrics, TelemetryFrame, MetricsSnapshot, DnaData } from '../types';
+import { RenderPipelinePanel } from './RenderPipelinePanel';
 import '../styles/cockpit.css';
 
 const SAMPLE_DURATION_MS = 3000;
@@ -32,6 +33,7 @@ export const DevToolsApp: React.FC = () => {
   const [rawHardwareMetrics, setRawHardwareMetrics] = useState<HardwareMetrics | undefined>(undefined);
   const [parallelizationMetrics, setParallelizationMetrics] = useState<ParallelizationMetrics | undefined>(undefined);
   const [windowsMetrics, setWindowsMetrics] = useState<WindowsMetrics | undefined>(undefined);
+  const [renderMetrics, setRenderMetrics] = useState<RenderPipelineMetrics | undefined>(undefined);
   const [currentTelemetry, setCurrentTelemetry] = useState<TelemetryFrame | null>(null);
   const hardwareMetrics = useSmoothedMetrics(rawHardwareMetrics, 0.3);
   const lastHardwareUpdateRef = useRef<number>(0);
@@ -198,8 +200,13 @@ export const DevToolsApp: React.FC = () => {
 
     window.electron?.onTelemetryUpdate?.(handleTelemetryUpdate);
 
+    const unsubscribeRenderMetrics = window.electron?.onRenderMetricsUpdate?.((m) => {
+      setRenderMetrics(m);
+    });
+
     return () => {
       window.electron?.removeStateUpdateListener?.();
+      unsubscribeRenderMetrics?.();
     };
   }, []);
 
@@ -297,6 +304,8 @@ export const DevToolsApp: React.FC = () => {
       />
 
       <NAPIBufferPanel telemetry={currentTelemetry} />
+
+      <RenderPipelinePanel metrics={renderMetrics} />
 
       <DnaSettings
         sizeGene={sizeGene}

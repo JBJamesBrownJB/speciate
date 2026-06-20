@@ -1,8 +1,12 @@
 import type { TelemetryFrame } from './types/TelemetryFrame';
+import type { RenderPipelineMetrics } from './rendering/InterpolationDiagnostics';
 
 declare global {
   interface Window {
     electron?: {
+      /** DEV-only: send render-pipeline metrics to the dev-tools window. */
+      sendRenderMetrics?: (metrics: RenderPipelineMetrics) => void;
+
       /** @deprecated Use onNAPIBufferUpdate instead */
       onStateUpdateBinary: (callback: (binaryData: Uint8Array) => void) => () => void;
 

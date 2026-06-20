@@ -20,6 +20,33 @@ contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
 
   /**
+   * DEV-only: forward render-pipeline metrics from the portal (game window) to the
+   * main process, which relays them to the dev-tools window. Renderer-origin metrics
+   * (interpolation cadence) don't ride the Rust telemetry channel, so they need this hop.
+   *
+   * @param {Object} metrics - RenderPipelineMetrics snapshot
+   */
+  sendRenderMetrics: (metrics) => {
+    if (typeof metrics !== 'object' || metrics === null) return;
+    ipcRenderer.send('render-metrics', metrics);
+  },
+
+  /**
+   * Subscribe to render-pipeline metric updates (dev-tools window).
+   *
+   * @param {Function} callback - called with each RenderPipelineMetrics snapshot
+   * @returns {Function} Unsubscribe function
+   */
+  onRenderMetricsUpdate: (callback) => {
+    if (typeof callback !== 'function') {
+      throw new Error('onRenderMetricsUpdate: callback must be a function');
+    }
+    const handler = (_event, metrics) => callback(metrics);
+    ipcRenderer.on('render-metrics-update', handler);
+    return () => ipcRenderer.removeListener('render-metrics-update', handler);
+  },
+
+  /**
    * Subscribe to state updates from simulation (BINARY - OLD stdio IPC)
    * Callback receives Uint8Array of raw MessagePack data
    *

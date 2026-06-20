@@ -112,6 +112,7 @@ Output: `dist/` directory with static HTML/JS/CSS.
 
 ## See Also
 
-- `/workspace/scripts/README.md` - Main development workflow
-- `/workspace/CLAUDE.md` - Electron IPC architecture
-- `/workspace/trials/` - Trial template TOML files
+- [`AGENTS.md`](./AGENTS.md) - dev-ui area guide (traps, codegen coupling, timings contract)
+- [`../../scripts/README.md`](../../scripts/README.md) - development workflow
+- [`../../docs/architecture/electron-architecture.md`](../../docs/architecture/electron-architecture.md) - Electron / NAPI IPC architecture
+- Trial template TOMLs are generated from [`../../apps/simulation/specs/`](../../apps/simulation/specs/)

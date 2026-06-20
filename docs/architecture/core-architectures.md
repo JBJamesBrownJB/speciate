@@ -10,9 +10,9 @@ This document indexes the foundational architectural principles that ALL feature
 |--------------|---------|----------|-----------|
 | **DNA-Driven Design** | Hardcoded traits prevent evolution | Encode primitives in DNA, behavior emerges | `docs/biology/ideas/dna-driven-design.md` |
 | **Force Accumulation** | Multiple behaviors compete | All forces ADD to acceleration | `docs/architecture/behavior-engine.md` |
-| **Two-Level Spatial Grid** | O(N^2) perception | L0 (10m) + L1 (30m) hierarchy | `ABC-SUPER_SPRINT/1-dual-grid.md` |
+| **Two-Level Spatial Grid** | O(N^2) perception | L0 (20m) + L1 (60m) hierarchy | `docs/performance/done/hierarchical-spatial-grid.md` |
 | **ECS Capability Markers** | Archetype thrashing | ZST markers added at spawn, never removed | `docs/architecture/ecs-optimization-playbook.md` |
-| **Frequency Throttling** | Expensive cognitive systems | Entity-ID bucketing with bitwise AND | `ABC-SUPER_SPRINT/3-frequency-control.md` |
+| **Frequency Throttling** | Expensive cognitive systems | Entity-ID bucketing with bitwise AND | `docs/performance/done/system-update-frequency.md` |
 | **Binary IPC** | JSON serialization kills FPS | Zero-copy Float32Array buffers | `docs/architecture/electron-architecture.md` |
 
 ---
@@ -114,8 +114,8 @@ Naive perception is O(N^2) - every creature checks every other creature. Doesn't
 
 | Level | Cell Size | Purpose | Data |
 |-------|-----------|---------|------|
-| **L0** | 10m | Fine perception, collision | Entity positions, velocities |
-| **L1** | 30m (3x3 L0) | Strategic classification | BioSignature: total_mass, max_size, creature_count |
+| **L0** | 20m | Fine perception, collision | Entity positions, velocities |
+| **L1** | 60m (3x3 L0) | Strategic classification | BioSignature: total_mass, max_size, creature_count |
 
 **Query flow:**
 1. Check L1 cell classification (Threat/Prey/Empty)
@@ -135,7 +135,7 @@ Naive perception is O(N^2) - every creature checks every other creature. Doesn't
 
 ### Reference
 
-Full details: `ABC-SUPER_SPRINT/1-dual-grid.md`
+Full details: `docs/performance/done/hierarchical-spatial-grid.md`
 Implementation: `apps/simulation/src/simulation/spatial/`
 
 ---
@@ -168,7 +168,7 @@ Query<..., Without<Dead>>  // Exclude dead entities
 
 - Capabilities: Add ALL at spawn, NEVER remove
 - State changes: Mutate `BehaviorMode` enum, don't change components
-- Death handling: Add `Dead` marker, don't despawn immediately (defer cleanup)
+- Death handling (planned — no mortality system exists yet): when added, use a deferred `Dead` marker instead of despawning in the hot path. See `docs/biology/ideas/mortality.md`
 - Query with `With<>`/`Without<>` for filtering, not component presence
 
 ### Reference
@@ -214,7 +214,7 @@ let should_process = (entity_id & (divisor - 1)) == (tick & (divisor - 1));
 
 ### Reference
 
-Full details: `ABC-SUPER_SPRINT/3-frequency-control.md`
+Full details: `docs/performance/done/system-update-frequency.md`
 Implementation: `apps/simulation/src/simulation/core/frequency_throttle.rs`
 
 ---
@@ -309,4 +309,4 @@ Archived decisions documenting what was tried and abandoned:
 
 ---
 
-*Last updated: 2025-12-29*
+*Last updated: 2026-06-20*

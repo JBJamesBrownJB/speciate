@@ -49,7 +49,7 @@ Speciate Phase 1 uses **Electron** to package the simulation as a standalone des
 │                          ▼                                       │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │              Rust Simulation (Native Addon)                 │ │
-│  │  - Bevy ECS (22.2Hz physics tick)                           │ │
+│  │  - Bevy ECS (20Hz simulation tick)                          │ │
 │  │  - Rayon parallelization (16 cores)                         │ │
 │  │  - Double-buffered position data                            │ │
 │  │  - Viewport-culled creature export                          │ │
@@ -110,9 +110,9 @@ Frontend sends camera viewport bounds each frame:
 
 | Metric | Value |
 |--------|-------|
-| Physics tick rate | 22.2 Hz |
+| Simulation tick rate | 20 Hz |
 | IPC overhead | <1ms per frame |
-| Creature capacity | 200K+ (with viewport culling) |
+| Creature capacity | 1M target (stretch) · 500K Linux validated · 20K Windows experimental |
 | CPU utilization | 16 cores via Rayon |
 
 ## Security Model

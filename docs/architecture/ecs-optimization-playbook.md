@@ -496,11 +496,10 @@ Ordered by effort/impact ratio:
 
 ## Resources
 
-- **ECS Metrics Spec:** `/docs/architecture/ecs-metrics-specification.md`
-- **Integration Guide:** `/docs/testing/metrics/ecs-metrics-integration-guide.md`
+- **ECS Metrics Spec:** `docs/scale/ecs-metrics-specification.md`
 - **Bevy Archetype Docs:** `https://docs.rs/bevy/latest/bevy/ecs/archetype/`
-- **Biology Notes:** `/docs/biology/biology-notes.md` (for trait design)
-- **System CLAUDE:** `/apps/simulation/CLAUDE.md` (ECS architecture patterns)
+- **Biology Notes:** `docs/biology/biology-notes.md` (for trait design)
+- **System AGENTS:** `apps/simulation/AGENTS.md` (ECS architecture patterns)
 
 ---
 

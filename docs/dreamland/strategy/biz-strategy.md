@@ -1,3 +1,5 @@
+*🌟 Dreamland / north-star - aspirational vision, **not scheduled**. Dates, costs, and revenue figures here are illustrative of the vision, not commitments. For current state see the root README and `docs/ROADMAP.md`. Back to [Dreamland overview](../README.md).*
+
 # Business Strategy: Steam Early Access
 
 **Last Updated:** 2025-11-10

@@ -121,5 +121,5 @@ Crowding affinity feeds directly into drive calculation:
 
 ## Related
 
-- See Phase B (`ABC-SUPER_SPRINT/2-simple-drive-simplex.md`) for drive system
+- See Phase B in `sprint_summaries/abc-super-sprint_summary.md` for the drive system
 - See `docs/biology/ideas/dna-driven-design.md` for DNA architecture

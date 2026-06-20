@@ -160,7 +160,7 @@ Currently all creatures use same `CRITICAL_TTC_SECONDS`. Future work could scale
 - Lee, D.N. (1976) - Tau variable and visual collision detection
 - Fotowat, H. & Bhattacharya, S. (2008) - Looming-sensitive neurons in locust
 - Reynolds, C.W. (1987) - Boids flocking (separation behavior)
-- ABC-SUPER_SPRINT/4-better-avoid.md - Design specification
+- `sprint_summaries/abc-super-sprint_summary.md` - ABC Super Sprint summary (design record)
 
 ---
 

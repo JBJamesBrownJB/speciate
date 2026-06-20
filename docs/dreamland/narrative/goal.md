@@ -1,3 +1,5 @@
+*🌟 Dreamland / north-star - aspirational vision, **not scheduled**. For current state see the root README and `docs/ROADMAP.md`. Back to [Dreamland overview](../README.md).*
+
 # Game Goal: Daughter Rescue Campaign
 
 **Last Updated:** 2025-11-10
@@ -176,7 +178,7 @@ Player approaches the pod, surrounded by tamed creatures/Drongos protecting them
 
 ### Taming System
 
-See `/workspace/docs/gameplay/taming-system.md` for full details.
+See [`docs/gameplay/ideas/taming-system.md`](../../gameplay/ideas/taming-system.md) for full details.
 
 **Tier 1: Beacon Zones (Early Game)**
 - Place beacon, creatures within radius become docile over time

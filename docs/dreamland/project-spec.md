@@ -1,8 +1,10 @@
+*🌟 Dreamland / north-star - aspirational vision, **not scheduled**. For current state see the root README and `docs/ROADMAP.md`. Back to [Dreamland overview](./README.md).*
+
 # Project Spec: "Speciate"
 
 **Status**: Foundational Document
 **Last Updated**: 2025-11-10 (Updated for Steam Early Access pivot)
-**Related**: [DNA-Driven Design](./biology/dna-driven-design.md), [Business Strategy](./strategy/biz-strategy.md), [Game Goal](./strategy/goal.md)
+**Related**: [DNA-Driven Design](../biology/ideas/dna-driven-design.md), [Business Strategy](./strategy/biz-strategy.md), [Game Goal](./narrative/goal.md)
 
 ---
 
@@ -65,7 +67,7 @@ A **DNA-driven artificial life simulation** where hundreds of autonomous creatur
 
 * **Wrapper (Electron):** Bundles Rust + TypeScript into single `.exe`/`.app`/`.AppImage` for Steam distribution
 
-**See:** [Electron Architecture Documentation](./architecture/electron-architecture.md)
+**See:** [Electron Architecture Documentation](../architecture/electron-architecture.md)
 
 **Benefits:**
 - Zero server costs ($228k/year eliminated)

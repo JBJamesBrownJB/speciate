@@ -53,7 +53,7 @@ When flee directions cancel (cornered prey), output is near-zero. This produces 
 
 ### Recommendation Applied
 
-Implemented in `ABC-SUPER_SPRINT/drive-simplex-plan.md`:
+Implemented in the ABC Super Sprint (see `sprint_summaries/abc-super-sprint_summary.md`):
 - Two-tier system (Emergency/Motivated) - Phase B implements Motivated only
 - Contribution arrays per category (flee/approach/disperse)
 - DriveContribution with source, tier, vector, magnitude

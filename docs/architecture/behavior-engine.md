@@ -33,7 +33,7 @@ fn avoidance_system(mut query: Query<(&Position, &mut Acceleration)>) {
 // Physics system integrates accumulated forces (Euler integration)
 fn integrate_motion_system(
     mut query: Query<(&mut Position, &mut Velocity, &mut Acceleration)>,
-    dt: Res<DeltaTime>,  // Injected by physics tick (33.3ms at 30Hz)
+    dt: Res<DeltaTime>,  // Injected by simulation tick (50ms at 20Hz)
 ) {
     for (mut pos, mut vel, mut accel) in query.iter_mut() {
         vel.vx += accel.ax * dt.0;  // Integrate acceleration
@@ -426,8 +426,8 @@ perception::update_perception_system  →  behavior systems  →  physics
 - State transitions may depend on threat detection
 
 **Perception Performance:**
-- Planned: 50m bucket grid with FxHash (O(N) average case)
-- See: `SPRINTS/spatial-grid/SPRINT_PLAN.md` for implementation plan
+- Implemented: two-level spatial grid (L0 20m / L1 60m) with FxHash (O(N) average case)
+- See: `docs/performance/done/hierarchical-spatial-grid.md` for design rationale
 - See `src/simulation/perception/systems.rs`
 
 ## Force Hierarchy & Priority
@@ -463,49 +463,41 @@ After dodge: Avoidance drops to 0N, seek resumes, creature reaches food
 ### Current Architecture: Single-Tick Simulation
 
 The simulation runs all systems at a single tick rate:
-- **~22Hz Tick Rate** - All systems (physics, AI, perception) run together
+- **20Hz Tick Rate** - All systems (physics, AI, perception) run together (`TARGET_SIMULATION_HZ = 20.0`, ~50ms budget)
 - **Frontend Interpolation** - 60+ FPS visuals via lerp between frames
 
-**Note:** Dual-tick was explored and abandoned. See `docs/archive/dual-tick/` for rationale.
+**Note:** Dual-tick (separate 30Hz physics / 20Hz AI schedules) was explored and abandoned in Sprint 11 - sequential single-thread execution gave no benefit. See `docs/archive/dual-tick/` for rationale.
 
-**Physics Tick Budget (30Hz):**
-- Grid updates: ~3ms (incremental only)
-- Collision detection: ~10ms
-- Motion integration: ~5ms
-- Total: ~18ms ✅ (46% headroom)
+**Tick Budget (20Hz, ~50ms):**
+- Grid rebuild (two-level L0/L1): incremental, low cost
+- Perception queries: dominant cost, mitigated by L0/L1 grid + frequency throttling
+- Steering force calculation
+- Motion integration (parallelized via Rayon, ~6.3x speedup)
 
-**AI Tick Budget (20Hz):**
-- Perception queries: ~40ms (100K creatures)
-- Behavior transition: ~2ms
-- Force calculation: ~8ms
-- Total: ~50ms ⚠️ (at budget limit)
+### Scalability Ladder
 
-**Bottleneck:** Perception system (O(N²) brute force). Optimization planned via 50m bucket grid - see `SPRINTS/spatial-grid/SPRINT_PLAN.md`.
+Honest validated → target → stretch positioning:
 
-### Scalability Targets
+| Tier | Creature Count | Status |
+|------|----------------|--------|
+| Validated (Linux) | 500,000 | Tested |
+| Experimental (Windows) | 20,000 | Not officially supported; root cause under investigation |
+| Stretch target | 1,000,000 | The art of the possible |
 
-| Creature Count | Physics | AI | Strategy |
-|----------------|---------|-----|----------|
-| 0-10,000       | 30 Hz   | 20 Hz | Current dual-tick implementation |
-| 10,000-50,000  | 30 Hz   | 20 Hz | Spatial grid (see `SPRINTS/spatial-grid/SPRINT_PLAN.md`) |
-| 50,000-100,000 | 30 Hz   | 20 Hz | Parallel queries, SIMD distance calc |
-| 100,000-200,000| 30 Hz   | 20 Hz | Optimized dual-tick (target) |
-| 200,000+       | 30 Hz   | 10 Hz | LOD simulation (partial update) |
-
-**Target: 150,000-200,000 creatures** with dual-tick architecture.
+Scaling strategies in play: two-level spatial grid (L0 20m / L1 60m), frequency throttling (power-of-2 bucketing), Rayon parallelization, viewport-culled IPC export.
 
 ### Future Optimizations
 
 **Implemented Optimizations:**
-1. **Spatial Grid:** 200m bucket grid with FxHash (O(N) queries)
-2. **Dual-Tick Architecture:** 30Hz physics / 20Hz AI (implemented)
-3. **Incremental Updates:** Only update grid on cell changes
+1. **Two-Level Spatial Grid:** L0 20m / L1 60m with FxHash (O(N) queries) - see `docs/performance/done/hierarchical-spatial-grid.md`
+2. **Rayon Parallelization:** Movement systems use all cores (~6.3x speedup) - see `docs/performance/done/rayon-parallelization.md`
+3. **Frequency Throttling:** Power-of-2 entity-ID bucketing for cognitive systems - see `docs/performance/done/system-update-frequency.md`
+4. **Incremental Updates:** Only update grid on cell changes
 
 **Planned Optimizations:**
-1. **ECS Parallelization:** Bevy's `par_iter_mut()` for perception
-2. **SIMD Physics:** Vectorized distance calculations
-3. **LOD Simulation:** Full sim near player, statistical sim distant
-4. **GPU Compute:** Perception queries on GPU (research phase)
+1. **SIMD Physics:** Vectorized distance calculations
+2. **LOD Simulation:** Full sim near player, statistical sim distant
+3. **GPU Compute:** Perception queries on GPU (research phase)
 
 ## DNA Integration (Future)
 
@@ -552,7 +544,7 @@ fn seek_system(query: Query<(&DNA, &Target, &mut Acceleration)>) {
 
 **Goal:** Create viable ecological niches, not perfect balance. Every strategy succeeds somewhere, fails elsewhere.
 
-**See:** `docs/biology/dna-driven-design.md` for full specification
+**See:** `docs/biology/ideas/dna-driven-design.md` for full specification
 
 ## Testing Strategy
 
@@ -583,7 +575,7 @@ cargo test
 
 ### Test-Driven Development (TDD)
 
-**MANDATORY workflow (from CLAUDE.md):**
+**MANDATORY workflow (from `/AGENTS.md`):**
 1. Run `cargo test` before ANY code change
 2. Write test FIRST if adding new functionality
 3. Run tests IMMEDIATELY after change
@@ -626,7 +618,7 @@ src/simulation/perception/
 | **Data**                 | `Target`, `WanderState` (structs)        | Pure data, no logic, minimal payload        |
 | **System Ordering**      | Behaviors → Physics → Constraints        | Correct force application and integration   |
 | **Force Hierarchy**      | Panic > Homeward > Seek > Avoid > Wander | Biological priority, emergent behavior      |
-| **Perception**           | Spatial awareness, O(N²) brute-force     | Feeds neighbor data to avoidance            |
+| **Perception**           | Spatial awareness via two-level L0/L1 grid | Feeds neighbor data to avoidance            |
 | **DNA Integration**      | Hardcoded → gene expression (future)     | Genetic diversity, evolution, player breeding |
 
 ---
@@ -634,7 +626,7 @@ src/simulation/perception/
 **Remember:** In this architecture, **forces ARE behavior**. Creatures don't have scripts - they have sensory inputs (perception) and motor outputs (forces). Complex behaviors emerge from simple force combinations.
 
 **See Also:**
-- `/workspace/CLAUDE.md` - Project-wide principles (TDD, DNA-driven design)
-- `/workspace/apps/simulation/CLAUDE.md` - ECS patterns and architectural standards
-- `/workspace/docs/biology/biology-notes.md` - Zoologist consultations log
-- `/workspace/docs/biology/dna-driven-design.md` - DNA architecture specification
+- `/AGENTS.md` - Project-wide principles (TDD, DNA-driven design)
+- `apps/simulation/AGENTS.md` - ECS patterns and architectural standards
+- `docs/biology/biology-notes.md` - Zoologist consultations log
+- `docs/biology/ideas/dna-driven-design.md` - DNA architecture specification

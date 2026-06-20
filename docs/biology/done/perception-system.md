@@ -195,7 +195,7 @@ Runtime-adjustable Hz for perception system using entity-ID bucketing.
 - `apps/simulation/src/simulation/perception/fov_patterns.rs` - FOV-tier extended cell patterns
 - `apps/simulation/src/simulation/creatures/constants/perception.rs` - FovTier enum and thresholds
 - `docs/biology/done/avoidance-behavior.md` - TTC-based avoidance
-- `ABC-SUPER_SPRINT/1-dual-grid.md` - L1 grid design
+- `sprint_summaries/abc-super-sprint_summary.md` - ABC Super Sprint summary (L1 grid design record)
 
 ---
 

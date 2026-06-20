@@ -267,7 +267,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 6. Log decision in biology-notes.md
 
 **See Also:**
-- `CLAUDE.md` - DNA-driven design principles
+- `/AGENTS.md` - DNA-driven design principles
 - `docs/biology/dna-driven-design.md` - DNA architecture spec
 - `docs/biology/biology-notes.md` - Zoologist consultation log
 - `docs/architecture/behavior-engine.md` - Behavior system architecture

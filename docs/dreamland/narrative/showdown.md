@@ -1,4 +1,6 @@
-The showdown 
+*🌟 Dreamland / north-star - aspirational vision, **not scheduled**. For current state see the root README and `docs/ROADMAP.md`. Back to [Dreamland overview](../README.md).*
+
+# The Showdown
 
 Amassed army? Camera zooms to the daughters pod, zooms back to reveal the enemy army, zooms back with dramatic music to you, your entire tamed population lined up as your army. The drongos proudly by your side, torches in hand. Your army will have their target set as the pod, their behaviour set to “ Get there or die trying” . You need to keep up with your herd, falling behind will leave you vulnerable, run, shield, mount, ride, whatever u need to do to get there!
 

@@ -1,5 +1,9 @@
 # Documentation Standards for /docs
 
+**Category:** 📖 Reference — how docs are written in this repo (the doc taxonomy map lives in [README.md](./README.md)).
+
+**Positioning:** Speciate is a **portfolio showcase** - a high-performance artificial-life engine + visual sandbox demonstrating Rust × JS systems craft. For overall direction (four pillars, NOW/NEXT/DREAM tiers), see `docs/ROADMAP.md`. The standards below govern HOW we write docs, regardless of pillar.
+
 ## Core Principle
 
 **Documentation describes WHAT and WHY, not HOW. Code shows HOW.**
@@ -50,6 +54,36 @@ pub fn calculate_mass(size: &BodySize) -> f32 {  ← Don't do this
     size.length.powf(2.5)
 }
 ```
+
+---
+
+## Documentation Taxonomy — the KIND of every doc
+
+**Every doc folder has exactly ONE category. Make it unmistakable.** The authoritative map of the whole tree lives in [docs/README.md](./README.md); this section codifies the convention so future docs follow it.
+
+### Category legend
+
+| | Category | Meaning |
+|--|----------|---------|
+| 📖 | **Reference** | Stable knowledge. NOT a feature lifecycle. Architecture, contracts, glossaries, retrospectives, archived decisions, evidence/assets. |
+| 💡 | **Ideas** | Brainstormed, exploratory, **NOT committed**. `*/ideas/` and freeform concept folders. |
+| 🚧 | **In progress (NOW)** | Being built right now — the active NOW pillars (`scale/`, `visuals/`). Cross-link the [Roadmap](./ROADMAP.md) NOW tier. |
+| 📋 | **Planned** | Approved/designed but **not started**. `*/todo/` and deferred plans. |
+| ✅ | **Done** | Implemented and working. `*/done/`. |
+| 🌙 | **Dreamland** | Aspirational north-star. **Not scheduled.** |
+
+### Reference vs Lifecycle — keep them separated
+
+There are two kinds of doc area, and they must not be confused:
+
+- **Reference areas (📖)** hold stable knowledge that does **not** move through a pipeline: `architecture/`, `protocol/`, `process/`, `incidents/`, `archive/`, and the root `GLOSSARY.md`. They have **no** `ideas/todo/done/` subfolders. Evidence/asset folders (`performance/snapshots/`, `performance/history/`, `architecture/diagrams/`) are reference **data**, not prose — never treat a benchmark JSON or a diagram PNG as a "doc."
+- **Lifecycle areas** hold features moving `ideas/` 💡 → `todo/` 📋 → `done/` ✅: `biology/`, `gameplay/`, `performance/`, `testing/`. The NOW pillars `scale/` and `visuals/` are 🚧 and cross-link the Roadmap.
+
+### Applying the convention
+
+- **Folder/index level, not every leaf.** Set category at the area `README.md` (banner at top) and at the [docs/README.md](./README.md) map. Do **not** stamp an emoji on every leaf doc; the existing `ideas/todo/done` structure already signals lifecycle stage.
+- **Each major area carries a `README.md`** stating its purpose, its category, and (for lifecycle areas) what `ideas/todo/done` mean + a pointer to the [Roadmap](./ROADMAP.md) for what is in progress NOW.
+- **Honesty mandate applies to the label too.** An unbuilt item is 📋 Planned even if it is NOW-adjacent. Do not promote ideas to "done."
 
 ---
 

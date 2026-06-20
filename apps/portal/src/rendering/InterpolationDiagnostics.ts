@@ -1,12 +1,10 @@
 /**
  * InterpolationDiagnostics — DEV-ONLY render-pipeline probe.
  *
- * Measures snapshot delivery cadence vs the interpolation clock to diagnose the
- * jerky-visuals bug (docs/testing/bugs/jitter-high-populations.md). Theory: the
- * renderer assumes a fixed 50 ms lerp window and resets alpha on each snapshot,
- * but snapshots are delivered by a free-running 40 Hz poll of a 20 Hz producer,
- * so the real gap jitters and alpha either stalls at 1.0 (freeze) or resets
- * mid-lerp (snap).
+ * Measures snapshot delivery cadence and render stalls (the dev-ui Render Pipeline
+ * panel). It diagnosed — and now guards against regressions of — the jerky-visuals
+ * bug (docs/testing/bugs/jitter-high-populations.md, RESOLVED). Healthy looks like a
+ * tight ~50 ms snapshot gap (low σ), ~0 duplicate frames, and ~0 stall frames.
  *
  * Cost controls:
  * - Every call site is guarded by `import.meta.env.DEV`, so this whole file is
@@ -14,10 +12,6 @@
  * - Running accumulators only — no per-frame allocations, no per-frame I/O.
  * - Produces ONE structured snapshot per second (consumed by the dev-ui Render
  *   Pipeline panel via main), so the probe cannot perturb what it measures.
- *
- * Read it with a SINGLE creature spawned (the cleanest test rig):
- *   healthy  -> snapshot-gap ~50ms tight (σ low), α@reset ~1.0, stalls ~0
- *   the bug  -> snapshot-gap spread 25–75ms (σ high), α@reset scattered <1.0, stalls > 0
  */
 
 /** Structured one-interval snapshot, sent to the dev-ui Render Pipeline panel. */
@@ -27,9 +21,6 @@ export interface RenderPipelineMetrics {
   distinctGapMinMs: number;
   distinctGapMaxMs: number;
   deliveryMeanMs: number;
-  alphaResetMean: number;
-  alphaResetMin: number;
-  alphaResetMax: number;
   stallFrames: number;
   totalFrames: number;
   distinctCount: number;
@@ -87,7 +78,6 @@ export class InterpolationDiagnostics {
 
   private readonly delivery = new Accumulator(); // ms between every buffer received
   private readonly distinct = new Accumulator(); // ms between *changed* snapshots
-  private readonly alphaReset = new Accumulator(); // alpha value when a snapshot resets it
 
   private stallFrames = 0; // render frames sitting clamped at alpha = 1.0 (freeze)
   private totalFrames = 0;
@@ -111,11 +101,6 @@ export class InterpolationDiagnostics {
     }
   }
 
-  /** Interpolation alpha at the instant a new snapshot resets it to 0. */
-  recordAlphaReset(alpha: number): void {
-    this.alphaReset.add(alpha);
-  }
-
   /** One render frame; `clampedAtEnd` = alpha was pinned at 1.0 (no motion this frame). */
   recordFrame(clampedAtEnd: boolean): void {
     this.totalFrames++;
@@ -136,7 +121,6 @@ export class InterpolationDiagnostics {
     this.lastReportT = now;
 
     const d = this.distinct;
-    const a = this.alphaReset;
 
     const metrics: RenderPipelineMetrics = {
       distinctGapMeanMs: d.mean,
@@ -144,9 +128,6 @@ export class InterpolationDiagnostics {
       distinctGapMinMs: d.lo,
       distinctGapMaxMs: d.hi,
       deliveryMeanMs: this.delivery.mean,
-      alphaResetMean: a.mean,
-      alphaResetMin: a.lo,
-      alphaResetMax: a.hi,
       stallFrames: this.stallFrames,
       totalFrames: this.totalFrames,
       distinctCount: this.distinctCount,
@@ -155,7 +136,6 @@ export class InterpolationDiagnostics {
 
     this.delivery.reset();
     this.distinct.reset();
-    this.alphaReset.reset();
     this.stallFrames = 0;
     this.totalFrames = 0;
     this.distinctCount = 0;

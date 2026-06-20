@@ -9,9 +9,6 @@ const sample: RenderPipelineMetrics = {
   distinctGapMinMs: 27,
   distinctGapMaxMs: 68,
   deliveryMeanMs: 32,
-  alphaResetMean: 0.84,
-  alphaResetMin: 0.6,
-  alphaResetMax: 1.0,
   stallFrames: 22,
   totalFrames: 100,
   distinctCount: 20,
@@ -46,19 +43,17 @@ describe('RenderPipelinePanel', () => {
 
     // Labels present (exact, to avoid matching the sparkline captions)
     expect(screen.getByText('Snapshot gap')).toBeInTheDocument();
-    expect(screen.getByText('Lerp completion (α@reset)')).toBeInTheDocument();
     expect(screen.getByText('Stall frames')).toBeInTheDocument();
     expect(screen.getByText('Snapshot rate')).toBeInTheDocument();
 
     // Values rendered
     expect(screen.getByText(/50 ms · σ16 \(27–68\)/)).toBeInTheDocument();
-    expect(screen.getByText('0.84 (0.60–1.00)')).toBeInTheDocument();
 
-    // Six metric rows, each with a learn-what-it-measures tooltip.
-    expect(container.querySelectorAll('.render-metric-row')).toHaveLength(6);
-    expect(container.querySelectorAll('.rm-tooltip')).toHaveLength(6);
-    expect(screen.getAllByText('Measures:', { selector: 'strong' })).toHaveLength(6);
-    expect(screen.getAllByText('Healthy:', { selector: 'strong' })).toHaveLength(6);
-    expect(screen.getAllByText('Jitter bug:', { selector: 'strong' })).toHaveLength(6);
+    // Five metric rows, each with a learn-what-it-measures tooltip.
+    expect(container.querySelectorAll('.render-metric-row')).toHaveLength(5);
+    expect(container.querySelectorAll('.rm-tooltip')).toHaveLength(5);
+    expect(screen.getAllByText('Measures:', { selector: 'strong' })).toHaveLength(5);
+    expect(screen.getAllByText('Healthy:', { selector: 'strong' })).toHaveLength(5);
+    expect(screen.getAllByText('Jitter bug:', { selector: 'strong' })).toHaveLength(5);
   });
 });

@@ -50,7 +50,6 @@ describe('snapshotToTelemetry', () => {
       renderMetrics: {
         distinctGapMeanMs: stat(50),
         distinctGapStdMs: stat(16),
-        alphaResetMean: stat(0.84),
         stallFrames: stat(22),
         totalFrames: stat(100),
       },
@@ -58,6 +57,6 @@ describe('snapshotToTelemetry', () => {
     const frame = snapshotToTelemetry(snap);
     expect(frame.renderMetrics).toBeDefined();
     expect(frame.renderMetrics!.distinctGapStdMs).toBe(16);
-    expect(frame.renderMetrics!.alphaResetMean).toBe(0.84);
+    expect(frame.renderMetrics!.stallFrames).toBe(22);
   });
 });

@@ -130,18 +130,13 @@ const pick = (v: number, good: number, warn: number, invert = false): string => 
 export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
   const suffix = label ? ` — ${label}` : '';
   const jitterHist = useRef<number[]>([]);
-  const alphaHist = useRef<number[]>([]);
   const jitterCanvas = useRef<HTMLCanvasElement>(null);
-  const alphaCanvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (!metrics) return;
     const jh = jitterHist.current;
     jh.push(metrics.distinctGapStdMs);
     if (jh.length > MAX_HISTORY) jh.shift();
-    const ah = alphaHist.current;
-    ah.push(metrics.alphaResetMean);
-    if (ah.length > MAX_HISTORY) ah.shift();
 
     if (jitterCanvas.current) {
       // Jitter (σ ms): lower is better. 0–30 ms scale; good ≤5, bad ≥12.
@@ -157,22 +152,6 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
         pick(metrics.distinctGapStdMs, 5, 12, true),
         '30 ms',
         '0'
-      );
-    }
-    if (alphaCanvas.current) {
-      // α (0–1): higher is better. 0.5–1.0 scale; target 1.0, snap below 0.85.
-      renderSparkline(
-        alphaCanvas.current,
-        ah,
-        0.5,
-        1.0,
-        [
-          { value: 1.0, color: COLORS.success, label: '1.0 target' },
-          { value: 0.85, color: COLORS.critical, label: '0.85 snap' },
-        ],
-        pick(metrics.alphaResetMean, 0.95, 0.85, false),
-        '1.0',
-        '0.5'
       );
     }
   }, [metrics]);
@@ -214,16 +193,6 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
       />
 
       <MetricRow
-        label="Lerp completion (α@reset)"
-        value={`${m.alphaResetMean.toFixed(2)} (${m.alphaResetMin.toFixed(2)}–${m.alphaResetMax.toFixed(2)})`}
-        color={pick(m.alphaResetMean, 0.95, 0.85)}
-        blurb="How far each tween finishes (0–1) before new data resets it. 1.0 = smooth."
-        measures="Interpolation alpha at the instant a new snapshot resets it to 0."
-        healthy="≈1.00 — the tween completes just as the next frame arrives."
-        bug="< 1.0 means the creature is yanked toward the next position mid-move → a visible forward snap."
-      />
-
-      <MetricRow
         label="Stall frames"
         value={`${stalls}/${frames} (${stallPct}%)`}
         color={pick(stallPct, 2, 10, true)}
@@ -237,19 +206,19 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
         label="Duplicate frames"
         value={`${dupePct}% (${dupes}/${total})`}
         color={COLORS.neutral}
-        blurb="Buffers re-read with no new data (the poll runs faster than the sim ticks)."
+        blurb="Buffers delivered with no new data. With event-driven push-on-swap this should be ~0."
         measures="Deliveries carrying positions identical to the previous frame."
-        healthy="Expected ≈ pollRate/tickRate − 1; harmless on its own."
-        bug="Very high or erratic indicates the poll/produce mismatch that feeds the snapshot-gap jitter."
+        healthy="~0% — each buffer swap fires the doorbell exactly once."
+        bug="Sustained non-zero means duplicate sends crept back in, feeding the snapshot-gap jitter."
       />
 
       <MetricRow
         label="Delivery interval"
         value={`${m.deliveryMeanMs.toFixed(0)} ms`}
         color={COLORS.neutral}
-        blurb="Cadence of every buffer received (including duplicates) — the poll rate."
+        blurb="Cadence of every buffer received — driven by the sim's buffer-swap doorbell (push-on-swap)."
         measures="Mean time between buffer deliveries to the renderer, before change detection."
-        healthy="Steady; context for the duplicate-frame %."
+        healthy="Steady ~50 ms, tracking the 20 Hz sim beat."
         bug="If it drifts well off the sim's 50 ms beat, duplicates and phase jitter grow."
       />
 
@@ -269,12 +238,6 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics, label }) => {
             Jitter — σ std-dev (ms) · dashed: green 5 = good, red 12 = bad · want flat &amp; below green
           </div>
           <canvas ref={jitterCanvas} className="memory-sparkline" />
-        </div>
-        <div className="rm-spark">
-          <div className="rm-spark-label">
-            Lerp completion — α (0–1) · dashed: green 1.0 = target, red 0.85 = snap · want pinned at green
-          </div>
-          <canvas ref={alphaCanvas} className="memory-sparkline" />
         </div>
       </div>
     </div>

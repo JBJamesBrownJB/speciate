@@ -56,9 +56,6 @@ export interface RenderPipelineMetrics {
   distinctGapMinMs: number;
   distinctGapMaxMs: number;
   deliveryMeanMs: number;
-  alphaResetMean: number;
-  alphaResetMin: number;
-  alphaResetMax: number;
   stallFrames: number;
   totalFrames: number;
   distinctCount: number;

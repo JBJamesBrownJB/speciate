@@ -1,7 +1,7 @@
 # Push-on-Swap (deliver positions once, on time, tagged)
 
-**Status:** 📋 Planned — do **after** [`snapshot-interpolation.md`](./snapshot-interpolation.md) (this is the source-side refinement).
-**Dependencies:** none. **Refines** snapshot-interpolation: removes duplicate frames and replaces its arrival-time stamps with exact sim-tick timestamps.
+**Status:** 📋 Planned — **do first** (root-cause fix; event-driven delivery removes wasted polling + duplicates).
+**Dependencies:** none. **Enables** [`snapshot-interpolation.md`](./snapshot-interpolation.md) with steady, deduped, tick-tagged delivery (so its ring buffer stays shallow → lower latency).
 **Area:** Sim / IPC (Rust + NAPI + Electron main).
 
 ## Goal

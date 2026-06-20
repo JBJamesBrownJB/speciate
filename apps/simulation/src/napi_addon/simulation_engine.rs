@@ -72,6 +72,9 @@ pub struct SimulationEngine {
     time_scale: Arc<AtomicU32>,
     command_sender: Option<crossbeam_channel::Sender<SimCommand>>,
     telemetry_cb: Option<ThreadsafeFunction<String>>,
+    /// "Buffer ready" doorbell: fired once per position-buffer swap (carries the sim
+    /// tick) so the host pushes positions on each frame instead of polling on a timer.
+    buffer_ready_cb: Option<ThreadsafeFunction<u32>>,
     thread_handle: Option<JoinHandle<()>>,
     telemetry: Arc<RwLock<TelemetrySnapshot>>,
     buffer_creature_count: Arc<AtomicU64>,
@@ -119,6 +122,7 @@ impl SimulationEngine {
             time_scale: Arc::new(AtomicU32::new(1.0_f32.to_bits())),
             command_sender: None,
             telemetry_cb: None,
+            buffer_ready_cb: None,
             thread_handle: None,
             telemetry: Arc::new(RwLock::new(TelemetrySnapshot::default())),
             buffer_creature_count: Arc::new(AtomicU64::new(0)),
@@ -127,6 +131,19 @@ impl SimulationEngine {
             #[cfg(feature = "dev-tools")]
             perception_debug_buffer: Arc::new(Mutex::new(PerceptionDebugBuffer::new())),
         }
+    }
+
+    /// Register a "buffer ready" callback, fired once per position-buffer swap with the
+    /// sim tick. Lets the host push positions per frame (event-driven) instead of polling
+    /// on a timer — eliminating duplicate reads and delivery jitter. Call BEFORE `start`.
+    #[napi]
+    pub fn on_buffer_ready(&mut self, callback: JsFunction) -> Result<()> {
+        // Small bounded queue: under backpressure, NonBlocking drops stale frames rather
+        // than piling them up (the next swap supersedes a missed one anyway).
+        let tsfn: ThreadsafeFunction<u32> =
+            callback.create_threadsafe_function(3, |ctx| Ok(vec![ctx.value]))?;
+        self.buffer_ready_cb = Some(tsfn);
+        Ok(())
     }
 
     /// Start simulation with initial creature count
@@ -199,6 +216,7 @@ impl SimulationEngine {
         let paused_ref = Arc::clone(&self.paused);
         let time_scale_ref = Arc::clone(&self.time_scale);
         let telemetry_cb = self.telemetry_cb.clone();
+        let buffer_ready_cb = self.buffer_ready_cb.clone();
         let telemetry_ref = Arc::clone(&self.telemetry);
         let buffer_count_ref = Arc::clone(&self.buffer_creature_count);
         let assets_path_owned = assets_path.clone();
@@ -288,6 +306,16 @@ impl SimulationEngine {
                         buffer_count_ref.store(exported_count as u64, Ordering::Release);
 
                         tick += metrics.ticks_this_frame as u64;
+
+                        // Ring the "buffer ready" doorbell once per swap (event-driven
+                        // delivery): the host fillBuffer()s and forwards on this signal
+                        // instead of polling. NonBlocking → drops if the host is behind.
+                        if let Some(ref tsfn) = buffer_ready_cb {
+                            let _ = tsfn.call(
+                                Ok(tick as u32),
+                                ThreadsafeFunctionCallMode::NonBlocking,
+                            );
+                        }
 
                         // Calculate tick rate based on time scale
                         // At 1x: 20Hz, at 2x: 40Hz effective, etc.

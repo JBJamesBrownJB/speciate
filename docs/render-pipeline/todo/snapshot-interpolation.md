@@ -1,7 +1,7 @@
 # Snapshot Interpolation (render in the past)
 
-**Status:** 📋 Planned — **do first** (the high-impact render fix; stands alone).
-**Dependencies:** none required. Timestamps come from snapshot **arrival time** initially; [`push-on-swap.md`](./push-on-swap.md) is a later refinement that swaps in exact sim-tick timestamps and removes duplicates.
+**Status:** 📋 Planned — do **after** [`push-on-swap.md`](./push-on-swap.md) (clean, deduped, steady delivery lets the buffer stay shallow → lower latency).
+**Dependencies:** [`push-on-swap.md`](./push-on-swap.md) (steady ~50 ms delivery + per-frame tick ids). Can still fall back to fixed-rate playout if delivery jitter remains.
 **Area:** Render (TypeScript / portal).
 
 ## Goal
@@ -16,7 +16,9 @@ Today the renderer treats "a snapshot arrived" as its clock: it resets α to 0 o
 
 ## Design (high-level)
 
-- **Buffer snapshots with timestamps.** Extend `InterpolationBufferManager` (`apps/portal/src/rendering/InterpolationBufferManager.ts`) to retain the last few snapshots, each stamped with its **arrival time** (`performance.now()` when a *distinct* snapshot is received) — not just previous+current. (Later, push-on-swap replaces arrival time with the exact sim tick.)
+- **Buffer snapshots in a fixed-size ring.** Extend `InterpolationBufferManager` (`apps/portal/src/rendering/InterpolationBufferManager.ts`) to a **ring of ~3 pre-allocated `Float32Array` slots** (sized to max creatures). Copy each incoming snapshot into a slot — never allocate per frame. Rationale: at ~5.6 MB/snapshot, per-frame allocation would generate ~110 MB/s of garbage and cause GC hitches (the very thing we're removing). The ring's value here is **buffer reuse**, not O(1) indexing (N is tiny). Depth 2 = minimum (leaving + heading-to); 3 = one spare for a late/dropped frame. Push-on-swap's steady delivery lets the ring stay shallow → lower latency.
+- **Match creatures by id across slots.** Creatures spawn/die between snapshots, so the per-slot array index shifts — interpolate by creature **id**, not slot position (newly-appeared ids get `start = end`, no ghosting).
+- Each slot carries its sim **tick** (from push-on-swap) for the render clock; fall back to arrival time only if push-on-swap isn't in place.
 - **Render clock, not arrival clock.** Maintain a clock that advances by real frame `deltaMS`, targeting `now − interpolationDelay` where the delay ≈ **1 tick (50 ms)** (Valve uses 100 ms). Arrival of a snapshot only *appends to the buffer* — it never resets the clock or moves the creature.
 - **Interpolate the bracketing pair.** Each frame, pick the two buffered snapshots that straddle the render clock and set α from their timestamps (`α = (clock − A.t) / (B.t − A.t)`). The existing GPU shader lerp (`InterpolatedCreatureRenderer.ts:167`) is reused unchanged — only how α and the start/end buffers are chosen changes.
 - **Underrun = hold.** If the clock outruns the newest snapshot (buffer ran dry), hold at the newest position. Do **not** extrapolate (avoids overshoot pops).

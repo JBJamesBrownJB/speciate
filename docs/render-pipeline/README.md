@@ -95,10 +95,10 @@ Key properties:
 
 | Order | Part | Side | What it does | Task |
 |-------|------|------|--------------|------|
-| **1st** | **Snapshot interpolation** | Render (TS) | Render in the past from a snapshot buffer; drive α from a real-time clock between two timestamped snapshots; never reset on arrival. Tolerates whatever jitter remains. | [`todo/snapshot-interpolation.md`](./todo/snapshot-interpolation.md) |
-| **2nd** | **Push-on-swap** | Sim / IPC (Rust) | Deliver each frame **once, on time, tagged with its tick** — push from Rust when the buffer swaps instead of polling. Kills duplicates + the remaining delivery jitter at the source, and replaces arrival-time stamps with clean sim-tick stamps. | [`todo/push-on-swap.md`](./todo/push-on-swap.md) |
+| **1st** | **Push-on-swap** | Sim / IPC (Rust) | Replace the polling messenger with an **event**: Rust rings a "new positions ready" doorbell on each buffer swap, tagged with its tick. Kills duplicate work + delivery jitter at the source. Touches Rust + Electron main only — **not** the renderer. | [`todo/push-on-swap.md`](./todo/push-on-swap.md) |
+| **2nd** | **Snapshot interpolation** | Render (TS) | Render in the past from a fixed-size ring of snapshots; drive α from a real-time clock; never reset on arrival. Mops up any jitter the async boundary still leaves. | [`todo/snapshot-interpolation.md`](./todo/snapshot-interpolation.md) |
 
-**Why both, and why this order:** snapshot interpolation is the fix that directly produces smooth motion, and it can **stand alone** — initially timestamping snapshots on *arrival*, so it needs no sim change. We do it **first** because the result is immediately visible in the panel (α pins to 1.0, stalls → 0). Push-on-swap then *removes* jitter at the source (duplicates → 0, snapshot-gap σ drops) and upgrades the timestamps from arrival-time to exact sim-tick time. Together they're the complete, textbook-correct solution.
+**Why this order:** push-on-swap is the better *engineering* (event-driven beats polling — the messenger stops doing ~38% wasted duplicate work) **and** fixes the root cause of the jitter, in a layer (Rust + Electron main) that doesn't touch the renderer — so there's no rework risk. We measure the panel after it (expect duplicates → 0, σ → low, delivery → ~50 ms). *If* residual jerk remains (an async boundary always leaves a little), snapshot interpolation mops it up — and clean delivery lets its ring buffer stay shallow → lower latency. Together they're the complete, textbook-correct solution.
 
 ---
 

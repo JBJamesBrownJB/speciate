@@ -53,7 +53,8 @@ For overall direction (the four pillars and NOW/NEXT/DREAM tiers), start with th
 |---------------|---------|
 | [ROADMAP.md](./ROADMAP.md) | Authoritative NOW / NEXT / DREAM tiers. Every 🚧 banner cross-links here. |
 | [documentation-standards.md](./documentation-standards.md) | Documentation standards — including this taxonomy and the reference-vs-lifecycle split. |
-| [architecture/](./architecture/) | Engine architecture & design: Rust×JS thesis, core architectures, ECS optimization playbook, behavior engine, Electron/NAPI IPC, diagrams. |
+| [architecture/](./architecture/) | Engine architecture & design: Rust×JS thesis, core architectures, ECS optimization playbook, behavior engine, Electron/NAPI IPC, snapshot interpolation, diagrams. |
+| [render-pipeline/](./render-pipeline/) | ✅ Done — smooth motion across the Rust↔JS seam: the explainer (cause, dev-ui metrics, Valve-style fix) + `done/` records (push-on-swap, snapshot interpolation). Resolved the high-population jitter; algorithm promoted to `architecture/snapshot-interpolation.md`. |
 | [protocol/](./protocol/) | Stable cross-boundary contracts (e.g. the Behavior Enum contract). |
 | [process/](./process/) | Engineering retrospectives and production-incident lessons. |
 | [incidents/](./incidents/) | Post-mortem records (crash fixes, root-cause history). |
@@ -95,7 +96,6 @@ Each uses the `ideas/` 💡 → `todo/` 📋 → `done/` ✅ progression. See ea
 | Folder | Purpose |
 |--------|---------|
 | [lod-ai-framework/](./lod-ai-framework/) | `PLAN.md` — design complete, implementation deferred. |
-| [render-pipeline/](./render-pipeline/) | Smooth motion across the Rust↔JS seam — explainer (cause, dev-ui metrics, Valve-style fix) + `todo/` (push-on-swap, snapshot interpolation). Fixes the high-population jitter. |
 | `*/todo/` | Approved-but-unstarted items inside lifecycle areas. |
 
 ### 🌙 Dreamland — aspirational north-star (not scheduled)
@@ -114,6 +114,7 @@ Each uses the `ideas/` 💡 → `todo/` 📋 → `done/` ✅ progression. See ea
 - **Two-level spatial grid** — L0 20m / L1 60m (`CELL_SIZE = 20.0`, `L1_CELL_SIZE = CELL_SIZE * 3.0` in `simulation/spatial/constants.rs`).
 - **Frequency throttling** — power-of-2 bucketing spreads expensive per-creature work across ticks.
 - **Capability-marker ECS** — zero-sized markers added once at spawn keep archetypes stable.
+- **Snapshot interpolation** — the renderer shows motion ~1 tick in the past and drives the slide from a playout clock (never reset on arrival), so the 20 Hz sim looks smooth on a 60–120 Hz screen (`architecture/snapshot-interpolation.md`).
 - Frontend is **PixiJS (WebGL)** on Electron, with a web-distribution path open.
 
 ---

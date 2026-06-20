@@ -103,6 +103,7 @@ Linux is the supported, benchmarked platform today. Windows is a known-rough exp
 
 **Frontend (JS/web):**
 - **PixiJS (WebGL)** rendering
+- **Snapshot interpolation** — renders ~1 tick "in the past" across the NAPI seam and drives the slide from a playout clock (never reset on arrival), so the 20 Hz sim stays butter-smooth on a 120 Hz screen. Valve/Bernier + Fiedler's networking technique applied to a local seam (`docs/architecture/snapshot-interpolation.md`)
 - **Electron** desktop shell, with a **web-distribution** path
 
 > ### Why data-oriented ECS wins — trading-grade latency engineering

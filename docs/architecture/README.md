@@ -32,6 +32,7 @@ principle the rest of the codebase must align with.
 | [`ecs-optimization-playbook.md`](./ecs-optimization-playbook.md) | Data-Oriented Design in practice for Bevy ECS: cache locality, archetype stability, hot/cold data separation, and the Rayon movement parallelization (~6.3x across all cores) behind the scale numbers. This is also where the project's data-oriented-design rationale lives. |
 | [`electron-architecture.md`](./electron-architecture.md) | The Electron desktop shell and the NAPI-RS zero-copy shared-memory bridge between the Rust simulation and the TypeScript/PixiJS frontend (replaces the archived stdio/MessagePack path). |
 | [`behavior-engine.md`](./behavior-engine.md) | Reynolds steering behaviors on Bevy ECS: the force-accumulation pattern, per-behavior steering systems, creature state machines, and system ordering. |
+| [`snapshot-interpolation.md`](./snapshot-interpolation.md) | Smooth motion from the 20 Hz sim across the NAPI seam: render ~1 tick in the past, drive α from a playout clock (never reset on arrival), pool snapshots into SoA slots. The Valve/Bernier + Fiedler "render in the past" technique applied locally. |
 
 > **Note on `data-oriented-design`:** there is no standalone
 > `data-oriented-design.md` in this folder. The DOD material is folded into

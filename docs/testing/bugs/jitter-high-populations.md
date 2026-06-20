@@ -1,4 +1,4 @@
-> **Diagnosed + planned fix:** see [`../../render-pipeline/README.md`](../../render-pipeline/README.md) for the full explainer (cause, dev-ui metrics, industry fix) and the two task plans in `render-pipeline/todo/`.
+> **✅ RESOLVED 2026-06-20.** Fixed in two parts — **push-on-swap** (event-driven delivery) then **snapshot interpolation** (render in the past, never reset α on arrival). Motion is now visibly smooth ("butter"). Full explainer: [`../../render-pipeline/README.md`](../../render-pipeline/README.md); task records: [`../../render-pipeline/done/push-on-swap.md`](../../render-pipeline/done/push-on-swap.md) + [`../../render-pipeline/done/snapshot-interpolation.md`](../../render-pipeline/done/snapshot-interpolation.md); reference architecture: [`../../architecture/snapshot-interpolation.md`](../../architecture/snapshot-interpolation.md). The after-fix measurements are at the bottom of this doc; the diagnosis history below is kept for the record.
 
 When population is high 100k and latency is close to max 40ms or so we get jerky movement of crits.
 
@@ -71,4 +71,21 @@ Every predicted signature is present:
 - **stalls ~22%**: when a gap runs long (>50 ms), alpha clamps at 1.0 and the creature freezes until the next snapshot.
 - **dupes 38%**: the ~32 Hz poll re-reads the unchanged 20 Hz buffer ~1 in 3 times.
 
-So the motion alternates snap (short gaps) and freeze (long gaps). The mean gap being 50 ms is why average speed looks right while the frame-to-frame motion is jerky. **Diagnosis confirmed; proceed to the fix.** The probe doubles as the before/after verifier: a correct fix should drive α@reset → ~1.0, stalls → ~0, and distinct-gap σ → low.
+So the motion alternates snap (short gaps) and freeze (long gaps). The mean gap being 50 ms is why average speed looks right while the frame-to-frame motion is jerky. **Diagnosis confirmed; proceed to the fix.** The probe doubles as the before/after verifier: a correct fix should drive stalls → ~0 and distinct-gap σ → low.
+
+---
+
+## ✅ RESOLVED (2026-06-20) — measured after the two-part fix
+
+Both predicted fixes shipped, in the predicted order, and the probe confirmed each step on a single creature:
+
+| Metric | Before | After push-on-swap | After + snapshot interpolation |
+|--------|--------|--------------------|--------------------------------|
+| **Duplicate frames** | 38% | **0%** | 0% |
+| **Delivery interval** | ~32 ms | **~50 ms** | ~50 ms |
+| **Snapshot gap σ** | ~16 ms | **low** (rides the green line) | low |
+| **Stall frames** | ~22% | ~15% | **~0%** |
+| **α@reset** | 0.84 (0.60–1.00) | improved | **metric removed** (α no longer resets on arrival → measured nothing) |
+| **Visible motion** | snap + freeze | better, residual freeze | **smooth ("butter")** |
+
+**Why two parts, confirmed:** push-on-swap removed the *delivery* jitter (duplicates + phase beat) at the source, but the renderer still reset its tween on arrival, so the async boundary's residual wobble still froze ~15% of frames. Snapshot interpolation (render ~1 tick in the past, continuous clock, never reset on arrival) absorbed that — stalls → ~0%. A follow-up GC ring (pooled SoA snapshot slots) keeps the win from being re-introduced as GC stutter at 500k. See the two `done/` records and the reference architecture doc linked at the top.

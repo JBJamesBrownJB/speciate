@@ -1,8 +1,8 @@
 # Render Pipeline — Smooth Motion Across the Rust↔JS Seam
 
-**Category:** 📋 Planned (the fix lives in [`todo/`](./todo/)). The explainer below is reference knowledge; the two tasks are approved-but-not-started.
+**Category:** ✅ Done / 📖 Reference. Both parts shipped 2026-06-20 (the task records live in [`done/`](./done/)). The explainer below is standing reference knowledge for the problem and the fix.
 
-> **Staging doc.** Once the fix lands and is validated in the dev-ui **Render Pipeline** panel, promote the algorithm section to `docs/architecture/` and add a one-liner to the root `README.md` as a key engineering technique (credit Valve / Bernier + Fiedler).
+> **Promoted.** The algorithm is now reference architecture: [`../architecture/snapshot-interpolation.md`](../architecture/snapshot-interpolation.md), with a one-line mention in the root `README.md` (credit Valve / Bernier + Fiedler).
 
 Related: the bug — [`../testing/bugs/jitter-high-populations.md`](../testing/bugs/jitter-high-populations.md) · the live metrics — [`../scale/dev-ui-metrics-reference.md`](../scale/dev-ui-metrics-reference.md).
 
@@ -48,20 +48,21 @@ Because the renderer assumes a fixed 50 ms slide **and resets the slide every ti
  gap LONGER  than 50 ms → slide hits 100%, creature sits frozen, then jumps  → FREEZE
 ```
 
-It alternates snap and freeze — that alternation *is* the jerk. (See the bug doc for the measured numbers: σ16, α@reset 0.84, ~22% frozen frames.)
+It alternated snap and freeze — that alternation *was* the jerk. (See the bug doc for the measured numbers: σ16, ~22% frozen frames — now resolved.)
 
 ---
 
 ## 4. Seeing it — the dev-ui "Render Pipeline" panel
 
-The dev-tools window now visualises this live (DEV builds only; metrics are renderer-origin, relayed portal → main → dev-ui). Full definitions: [`../scale/dev-ui-metrics-reference.md`](../scale/dev-ui-metrics-reference.md). The headline reads:
+The dev-tools window visualises this live (DEV builds only; metrics are renderer-origin, relayed portal → main → dev-ui). Full definitions: [`../scale/dev-ui-metrics-reference.md`](../scale/dev-ui-metrics-reference.md). The headline reads:
 
 - **Snapshot gap** — time between new positions. Want a steady 50 ms with **low σ** (sigma = standard deviation = the wobble).
-- **Lerp completion (α@reset)** — how far each slide finished. Want **~1.0**.
-- **Stall frames** — frames frozen at the end. Want **~0%**.
-- Plus duplicate frames, delivery interval, snapshot rate, and two sparklines (jitter σ and α) with green/red good/bad reference lines.
+- **Stall frames** — frames frozen at the end of a tween. Want **~0%**. This is the render-side verification signal.
+- Plus duplicate frames, delivery interval, snapshot rate, and a jitter (σ) sparkline with green/red good/bad reference lines.
 
-This panel is the **before/after instrument** for the fix below.
+> The original panel also carried a **Lerp completion (α@reset)** metric, but the fix made the renderer stop resetting α on arrival, so α@reset measured nothing and was **removed**. Stall frames is the surviving signal.
+
+This panel was the **before/after instrument** for the fix below.
 
 ---
 
@@ -91,14 +92,14 @@ Key properties:
 
 ---
 
-## 6. The fix is two complementary parts
+## 6. The fix was two complementary parts (both shipped)
 
-| Order | Part | Side | What it does | Task |
-|-------|------|------|--------------|------|
-| **1st** | **Push-on-swap** | Sim / IPC (Rust) | Replace the polling messenger with an **event**: Rust rings a "new positions ready" doorbell on each buffer swap, tagged with its tick. Kills duplicate work + delivery jitter at the source. Touches Rust + Electron main only — **not** the renderer. | [`todo/push-on-swap.md`](./todo/push-on-swap.md) |
-| **2nd** | **Snapshot interpolation** | Render (TS) | Render in the past from a fixed-size ring of snapshots; drive α from a real-time clock; never reset on arrival. Mops up any jitter the async boundary still leaves. | [`todo/snapshot-interpolation.md`](./todo/snapshot-interpolation.md) |
+| Order | Part | Side | What it does | Record |
+|-------|------|------|--------------|--------|
+| **1st** | **Push-on-swap** | Sim / IPC (Rust) | Replaced the polling messenger with an **event**: Rust rings a "new positions ready" doorbell on each buffer swap, tagged with its tick. Killed duplicate work + delivery jitter at the source. Touches Rust + Electron main only — **not** the renderer. | [`done/push-on-swap.md`](./done/push-on-swap.md) |
+| **2nd** | **Snapshot interpolation** | Render (TS) | Renders in the past from a buffered queue of snapshots; drives α from a real-time clock; never resets on arrival. Mopped up the jitter the async boundary still left. | [`done/snapshot-interpolation.md`](./done/snapshot-interpolation.md) |
 
-**Why this order:** push-on-swap is the better *engineering* (event-driven beats polling — the messenger stops doing ~38% wasted duplicate work) **and** fixes the root cause of the jitter, in a layer (Rust + Electron main) that doesn't touch the renderer — so there's no rework risk. We measure the panel after it (expect duplicates → 0, σ → low, delivery → ~50 ms). *If* residual jerk remains (an async boundary always leaves a little), snapshot interpolation mops it up — and clean delivery lets its ring buffer stay shallow → lower latency. Together they're the complete, textbook-correct solution.
+**Why this order (validated):** push-on-swap is the better *engineering* (event-driven beats polling — the messenger stopped doing ~38% wasted duplicate work) **and** fixed the root cause, in a layer (Rust + Electron main) that doesn't touch the renderer — no rework risk. The panel confirmed it: duplicates → 0%, σ → low, delivery → ~50 ms, **stalls 22% → ~15%**. The residual stalls were the async boundary's last wobble surviving reset-on-arrival; snapshot interpolation removed reset-on-arrival and drove **stalls → ~0%**. Together they are the complete, textbook-correct solution — motion is now "butter".
 
 ---
 
@@ -110,4 +111,4 @@ Key properties:
 
 ---
 
-**Document Owner:** render pipeline · **Last Updated:** 2026-06-20
+**Document Owner:** render pipeline · **Status:** ✅ Resolved 2026-06-20 · **Last Updated:** 2026-06-20

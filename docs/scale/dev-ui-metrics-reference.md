@@ -136,10 +136,34 @@ The zero-copy `Float32Array` seam between Rust and the renderer.
 
 ---
 
+## Render Pipeline (DEV only)
+
+Frontend/interpolation cadence between the 20 Hz sim and the renderer. **Renderer-origin**
+(portal), relayed portal → main → dev-ui — these do *not* come from the Rust telemetry
+channel, and the probe is dead-code-eliminated from production builds. Source:
+`apps/portal/src/rendering/InterpolationDiagnostics.ts`. Background:
+[`../architecture/snapshot-interpolation.md`](../architecture/snapshot-interpolation.md);
+the bug this panel diagnosed: `docs/testing/bugs/jitter-high-populations.md` (resolved).
+
+| Metric | What it is | What it indicates | Healthy |
+|--------|-----------|-------------------|---------|
+| **Snapshot gap** (mean · σ · range) | Wall-clock gap between *distinct* (changed) position snapshots | The cadence the renderer actually sees. Mean ~50 ms is right; the **σ (sigma / std-dev)** is the wobble that drove the jitter. | ~50 ms mean, **σ low** (sparkline rides the green line). |
+| **Stall frames** | Render frames frozen at α = 1.0 (nowhere left to interpolate) | The render-side verification signal for the jitter fix — a late snapshot leaves the creature frozen then jumping. | **~0%**. |
+| **Duplicate frames** | Deliveries carrying positions identical to the previous frame | With event-driven push-on-swap each buffer swap fires once, so duplicates should be gone. | **~0%**. |
+| **Delivery interval** | Mean time between *all* buffer deliveries (before change detection) | The delivery cadence — driven by the sim's buffer-swap doorbell. | Steady ~50 ms (tracks the 20 Hz beat). |
+| **Snapshot rate** | Distinct snapshots observed per second | Should match the sim tick rate. | ≈20/s. |
+
+> Historical note: the panel once carried a **Lerp completion (α@reset)** metric. The
+> snapshot-interpolation fix made the renderer stop resetting α on arrival, so α@reset
+> measured nothing and was removed; **Stall frames** is the surviving render-side signal.
+
+---
+
 ## Quick triage recipe
 
 1. Is `totalTickUs` < 50 000? If yes, you have headroom — smoothness problems are
-   **render-side**, not the engine (see `docs/testing/bugs/jitter-high-populations.md`).
+   **render-side**, not the engine (see the Render Pipeline panel above and
+   `docs/testing/bugs/jitter-high-populations.md`).
 2. If no, find the biggest `*Us` sub-system and apply its row above.
 3. On Linux, confirm *why* with the cockpit: low `ipc` + high `llcMissRate` = memory-bound
    → shrink the working set. High `branchMissRate` → branchless hot paths.

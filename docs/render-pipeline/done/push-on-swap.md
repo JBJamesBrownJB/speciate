@@ -1,8 +1,10 @@
 # Push-on-Swap (deliver positions once, on time, tagged)
 
-**Status:** 📋 Planned — **do first** (root-cause fix; event-driven delivery removes wasted polling + duplicates).
-**Dependencies:** none. **Enables** [`snapshot-interpolation.md`](./snapshot-interpolation.md) with steady, deduped, tick-tagged delivery (so its ring buffer stays shallow → lower latency).
+**Status:** ✅ Implemented 2026-06-20 — the first of the two-part render-smoothness fix (root-cause: event-driven delivery replaced the free-running poll).
+**Dependencies:** none. **Enabled** [`snapshot-interpolation.md`](./snapshot-interpolation.md) with steady, deduped, tick-tagged delivery (so its ring buffer stays shallow → lower latency).
 **Area:** Sim / IPC (Rust + NAPI + Electron main).
+
+**Implementation:** Rust doorbell — `apps/simulation/src/napi_addon/simulation_engine.rs` (`on_buffer_ready`, a `ThreadsafeFunction<u32>` fired once after each buffer swap, carrying the tick; registered before `start()`). Electron delivery — `apps/portal/electron/frameDelivery.cjs` (`createFrameDelivery`, DI-factored for unit testing) wired in `apps/portal/electron/napi-main.cjs` (push on the doorbell; telemetry on its own ~500 ms interval; poll kept only as a no-doorbell fallback). Tests: `apps/portal/electron/frameDelivery.test.ts`.
 
 ## Goal
 
@@ -30,21 +32,23 @@ Do **not** change tick timing or the fixed-timestep model (`tick_controller.rs`)
   - Feeding two frames with the **same** tick id → the dedupe drops the second (no `onSimulationTick`).
   - Feeding **increasing** tick ids → each is accepted exactly once.
 
-## Expectations (verify live in the Render Pipeline panel, single creature)
+## Results (measured live in the Render Pipeline panel, single creature)
 
 | Metric | Before | After this task |
 |--------|--------|-----------------|
-| **Duplicate frames** | ~38% | **~0%** |
-| **Delivery interval** | ~31 ms | **~50 ms** (matches production) |
-| **Snapshot rate** | ~20/s | ~20/s (unchanged) |
-| **Snapshot gap σ** | ~16 ms | **drops** (jitter sparkline falls toward the green line) |
-| **α@reset** | 0.84 | improves, but may not fully pin until the render-side fix |
+| **Duplicate frames** | ~38% | **0%** ✅ (one delivery per swap — no duplicates to suppress) |
+| **Delivery interval** | ~31 ms | **~50 ms** ✅ (matches the 20 Hz producer) |
+| **Snapshot rate** | ~20/s | ~20/s (unchanged, as expected) |
+| **Snapshot gap σ** | ~16 ms | **dropped sharply** ✅ (jitter sparkline fell to the green line) |
+| **Stall frames** | ~22% | ~15% — improved, **but not gone** until the render-side fix |
 
-## Acceptance Criteria
+The residual stalls confirmed the plan's premise: event-driven delivery removes the *delivery* jitter, but the renderer still reset its tween on arrival, so an async-boundary wobble could still freeze a frame. That last bit is what [`snapshot-interpolation.md`](./snapshot-interpolation.md) closed.
 
-- Rust + TS tests above pass; full suites stay green; no regression in tick throughput.
-- Panel shows duplicates ~0% and delivery ~50 ms with one creature.
-- Prod build unaffected (no new player-facing cost; the dev probe stays DEV-gated).
+## Acceptance Criteria — met
+
+- ✅ Rust + TS tests pass; full suites green; no tick-throughput regression.
+- ✅ Panel shows duplicates 0% and delivery ~50 ms with one creature.
+- ✅ Prod build unaffected (the dev probe stays DEV-gated and dead-code-eliminated).
 
 ---
 

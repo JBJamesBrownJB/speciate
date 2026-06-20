@@ -14,6 +14,7 @@ This document indexes the foundational architectural principles that ALL feature
 | **ECS Capability Markers** | Archetype thrashing | ZST markers added at spawn, never removed | `docs/architecture/ecs-optimization-playbook.md` |
 | **Frequency Throttling** | Expensive cognitive systems | Entity-ID bucketing with bitwise AND | `docs/performance/done/system-update-frequency.md` |
 | **Binary IPC** | JSON serialization kills FPS | Zero-copy Float32Array buffers | `docs/architecture/electron-architecture.md` |
+| **Snapshot Interpolation** | 20 Hz sim looks jerky on a 60–120 Hz screen | Render ~1 tick in the past; drive α from a playout clock, never reset on arrival | `docs/architecture/snapshot-interpolation.md` |
 
 ---
 
@@ -256,6 +257,41 @@ TypeScript: Reads Float32Array directly (no parsing)
 
 Full details: `docs/architecture/electron-architecture.md`
 Implementation: `apps/simulation/src/napi_addon/simulation_engine.rs`
+
+---
+
+## 7. Snapshot Interpolation (smooth motion across the seam)
+
+### The Problem
+
+The sim commits positions at 20 Hz (every 50 ms); the screen redraws at 60–120 Hz. Showing the latest snapshot and restarting the slide on each arrival turns the jittery NAPI-seam delivery into visible **snap** (gap < 50 ms) and **freeze** (gap > 50 ms) — the high-population jitter bug, even with CPU headroom to spare.
+
+### The Architecture
+
+**Treat the NAPI seam as a tiny network: render in the past.** Buffer snapshots, render ~1 tick behind, and drive the interpolation α from a real-time playout clock — never reset α when a snapshot arrives (arrival only appends to the buffer).
+
+```
+snapshots:  A ──── B ──── C (latest)
+render clock = now − 1 tick:     ●  interpolate B→C here
+α = clock / tickInterval   (rolls over between pairs; never reset on arrival)
+```
+
+- **Always a snapshot ahead** → the slide never stalls at 1.0 waiting for data.
+- **Underrun holds** at the newest position (no extrapolation/overshoot).
+- **Match by creature id** across snapshots (new id → start = end; departed → dropped).
+- **GC ring:** each snapshot is copied into a pre-allocated SoA pool slot (no per-tick allocation) — pre-allocate-and-reuse, like the rest of the hot path.
+
+### Key Rules
+
+- NEVER reset the interpolation α on snapshot arrival (the core invariant)
+- Render in the past (≈1 tick) so the buffer is always ≥1 deep
+- Never allocate per-snapshot on the hot path — fill pooled SoA slots
+- Verify with the dev-ui **Stall frames** metric (drive to ~0%)
+
+### Reference
+
+Full details: `docs/architecture/snapshot-interpolation.md`
+Implementation: `apps/portal/src/rendering/SnapshotInterpolator.ts`, `InterpolatedCreatureRenderer.ts`
 
 ---
 

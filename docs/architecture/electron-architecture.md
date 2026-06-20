@@ -112,7 +112,7 @@ Frontend sends camera viewport bounds each frame:
 |--------|-------|
 | Simulation tick rate | 20 Hz |
 | IPC overhead | <1ms per frame |
-| Creature capacity | 1M target (stretch) · 500K Linux validated · 20K Windows experimental |
+| Creature capacity | 1M target (stretch) · 500K Linux validated · ~900K Windows peak run (single session, not yet CI-benchmarked) |
 | CPU utilization | 16 cores via Rayon |
 
 ## Security Model

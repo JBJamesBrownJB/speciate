@@ -375,20 +375,22 @@ Engineers are reading this, so here is the ladder without the marketing gloss.
 
 | Tier | Population | Status |
 |------|-----------:|--------|
-| **Validated** | 500,000 | Actually tested on Linux. |
-| **Validated** | 20,000 | Windows — **experimental, not officially supported.** |
-| **Stretch / north star** | 1,000,000 | The "art of the possible" target. Not yet reached. |
+| **Validated** | 500,000 | Actually tested on Linux — the supported, benchmarked baseline. |
+| **Peak run** | ~900,000 | Windows — sustained 20 Hz, single session, **not yet CI-benchmarked.** |
+| **Stretch / north star** | 1,000,000 | The "art of the possible" target. Not yet reached — ~10% of tick budget away. |
 
 The headline of one million creatures is a *target*, deliberately framed as the art
-of the possible — not a benchmark we are quietly claiming. The honest current state
+of the possible — not a benchmark we are quietly claiming. The honest validated state
 is **500K on Linux**.
 
-The Windows situation is a known, unresolved limitation: the engine runs reliably to
-~20K creatures on Windows but does not yet scale to the Linux numbers, and the root
-cause is **under investigation / not yet understood**. It would be easy to omit this
-from a showcase document; leaving it in is the point. A portfolio piece that hides
-its open problems is less convincing, not more — the open problem *is* signal about
-how the project handles uncertainty.
+What was, for a long time, a known unresolved limitation — Windows topping out around
+~20K with the root cause "under investigation" — turned out **not** to be an engine
+limit at all. It was a render-delivery defect (a free-running poll fighting the
+producer's clock); fixing it (push-on-swap + snapshot interpolation) let Windows run a
+single session at **~900K creatures at a sustained 20 Hz**, the tick at ~49 ms of its
+50 ms budget. That is a *peak run*, not a validated number — single machine, not yet
+CI-benchmarked — and it is stated that way on purpose. The honesty cuts both ways:
+we name the open problems, and we don't inflate the wins past what the receipts show.
 
 Making these numbers continuously trustworthy (rather than point-in-time claims) is
 the job of Pillar 1: the deterministic test framework, the live metrics dashboard,
@@ -407,10 +409,10 @@ work credible. The web brings the visuals and the distribution. And the NAPI
 `Float32Array` double buffer makes the boundary between them nearly free — which is
 the only reason you get to keep both sets of strengths at once.
 
-The numbers are honest: 500K validated on Linux, 20K experimental on Windows with an
-open root-cause investigation, one million as the declared stretch target. The
-architecture is principled and the limits are stated. That combination — ambition
-with receipts — is the showcase.
+The numbers are honest: 500K validated on Linux, a ~900K peak run on Windows (single
+session, not yet CI-benchmarked), one million as the declared stretch target — now
+within ~10% of the tick budget. The architecture is principled and the limits are
+stated. That combination — ambition with receipts — is the showcase.
 
 ---
 

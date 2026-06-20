@@ -109,7 +109,7 @@ Two safeguards keep the numbers honest:
 
 ### Honest limits
 
-- **Windows has no hardware counters.** The `perf_event` path is Linux-only by construction; on every other platform it compiles to a no-op stub returning zeros ([`hardware_metrics.rs:647-667`](../../apps/simulation/src/instrumentation/hardware_metrics.rs)). The Windows track is experimental (≈20K), not officially supported.
+- **Windows has no hardware counters.** The `perf_event` path is Linux-only by construction; on every other platform it compiles to a no-op stub returning zeros ([`hardware_metrics.rs:647-667`](../../apps/simulation/src/instrumentation/hardware_metrics.rs)). The Windows track is not the officially benchmarked baseline (Linux 500K is), though a single Windows session has run ~900K at 20 Hz.
 - **The richer `EcsMetrics` cache-efficiency system is a spec, not code.** `ecs-metrics-specification.md` describes a `cache_efficiency_score`, archetype-fragmentation analytics, and ~19 derived fields — but a search for `collect_ecs_metrics` / `cache_efficiency_score` / `top_3_archetype` across the source returns **zero matches**. The shipped `EcsMetrics` struct ([`instrumentation/snapshot.rs:20-26`](../../apps/simulation/src/instrumentation/snapshot.rs)) has three fields: archetype count, entity count, tick ms. Do not claim cache-efficiency scoring exists.
 - **`active_cores * 0.7` parallelism factor is a heuristic estimate**, explicitly labeled as such ([`instrumentation/parallelization.rs:114-124`](../../apps/simulation/src/instrumentation/parallelization.rs)), not a measured count.
 

@@ -23,15 +23,14 @@ Tiers: **NOW** (active) · **NEXT** (intended, scope TBD) · **DREAM** (north-st
 
 Build order: prove engine (1+2) → layer play (3) → realize payoff (4) → chase dream.
 
-### Honest scale ladder (validated → target → stretch)
+### Honest scale ladder (validated → peak → stretch)
 | Tier | Population | Platform | Status |
 |------|-----------|----------|--------|
-| Stretch ("art of the possible") | 1,000,000 | — | Headline target, **not yet achieved** |
-| Validated | 500,000 | Linux | Tested; the supported, benchmarked platform |
-| Experimental | 20,000 | Windows | Runs, **not officially supported**; ceiling under investigation |
-| Target (near-term) | 150K–200K | Cross-platform | Realistic near-term goal |
+| Stretch ("art of the possible") | 1,000,000 | — | Headline target, **not yet achieved** — now ~10% of tick budget away |
+| Peak run | ~900,000 | Windows | Sustained 20 Hz, single session (tick ~49 ms of 50 ms; render smooth — 0 stalls, σ 0.8 ms). **Not yet CI-benchmarked.** |
+| Validated | 500,000 | Linux | Tested; the supported, benchmarked baseline |
 
-README/docs scale badges are static placeholders; Pillar 1's CI is what makes them live.
+The old ~20K Windows "experimental ceiling" is **resolved** — it was a render-delivery defect, not an engine limit (fixed with push-on-swap + snapshot interpolation). The cap is now 1M (buffer); see `docs/scale/path-to-one-million.md`. README/docs scale badges are static placeholders; Pillar 1's CI is what makes them live.
 
 ### The thesis (see `docs/architecture/rust-js-thesis.md` + `docs/architecture/data-oriented-design.md`)
 - **Right shape:** a Rust core + web frontend joined by a **zero-copy NAPI `Float32Array` seam** — Rust throughput *and* the web's visual/distribution reach, with the serialization tax that sinks most hybrids made nearly free.

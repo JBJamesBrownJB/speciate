@@ -20,9 +20,9 @@ target or experiment, never as a shipped capability.
 
 | Tier | Population | Status |
 |------|-----------|--------|
-| **Stretch / "art of the possible"** | 1,000,000 creatures | Target headline. Not yet achieved. |
-| **Validated (Linux)** | 500,000 creatures | Actually tested. |
-| **Experimental (Windows)** | 20,000 creatures | Not officially supported. Root cause of the gap is unknown and under investigation. |
+| **Stretch / "art of the possible"** | 1,000,000 creatures | Target headline. Not yet achieved — now ~10% of tick budget away. |
+| **Peak run (Windows)** | ~900,000 creatures | Sustained 20 Hz, single session (tick ~49 ms of 50 ms; render smooth — 0 stalls, σ 0.8 ms). Not yet CI-benchmarked. The old ~20K Windows ceiling is resolved (it was a render-delivery defect). See [`scale/path-to-one-million.md`](./scale/path-to-one-million.md). |
+| **Validated (Linux)** | 500,000 creatures | Actually tested — the supported, benchmarked baseline. |
 
 The README's status badges (shields.io static placeholders) reflect this exact
 ladder. They are placeholders today; **Pillar 1's CI is what will make them live.**
@@ -59,9 +59,10 @@ can *prove* it on demand, on more than one OS.
   Portal). The dashboard turns "it's fast" into observable, defensible numbers.
 - **Windows + Linux CI** — cross-OS build + benchmark pipeline. This is what
   promotes the README scale badges from static placeholders to live status.
-- **The 500K-Linux / 20K-Windows reality** — keep it honest in docs and badges.
-  The Windows ceiling is an open **investigation**, not a hidden failure:
-  document findings as the root cause is isolated.
+- **Keep the scale numbers honest** in docs and badges — 500K validated on Linux, a
+  ~900K Windows peak run (single session, not yet CI-benchmarked). The old ~20K Windows
+  ceiling is resolved (render-delivery defect, not an engine limit); the job now is
+  *rigor* — make the peak a CI-verified, cross-platform number.
 - **March toward 1M** — the headline stretch target. Each optimization is
   measured against the validated 500K baseline, not asserted.
 

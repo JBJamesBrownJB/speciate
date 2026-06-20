@@ -75,4 +75,4 @@ These reflect Pillar 1's scale ladder and are static placeholders; Pillar 1's CI
 
 ![target](https://img.shields.io/badge/target-1M%20creatures-blue)
 ![linux](https://img.shields.io/badge/Linux-500K%20achieved-success)
-![windows](https://img.shields.io/badge/Windows-20K%20experimental-orange)
+![windows](https://img.shields.io/badge/Windows-900K%20%4020Hz-success)

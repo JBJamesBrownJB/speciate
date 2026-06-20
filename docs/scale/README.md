@@ -28,17 +28,17 @@ For where this pillar sits among the four, see [`../ROADMAP.md`](../ROADMAP.md).
 
 [![Target](https://img.shields.io/badge/target-1M%20creatures-blue)](../ROADMAP.md)
 [![Linux](https://img.shields.io/badge/Linux-500K%20achieved-success)](../ROADMAP.md)
-[![Windows](https://img.shields.io/badge/Windows-20K%20experimental-orange)](../ROADMAP.md)
+[![Windows](https://img.shields.io/badge/Windows-900K%20%4020Hz-success)](../ROADMAP.md)
 
 > **These badges are static placeholders.** They are hand-set shields.io images, not live measurements. Making them *live* - regenerated from real benchmark runs in CI - is one of this pillar's deliverables (see Cross-OS CI below).
 
 | Platform | Population | Status |
 |----------|-----------|--------|
-| **Target / stretch** | **1,000,000 creatures** | The art of the possible - the headline this engine is built to chase. |
-| **Linux** | **500,000 creatures** | Actually tested. Validated achieved state. |
-| **Windows** | **20,000 creatures** | Experimental. **Not officially supported.** Population ceiling far below Linux; root cause unknown and under investigation. |
+| **Target / stretch** | **1,000,000 creatures** | The art of the possible - the headline this engine is built to chase. Now ~10% of tick budget away. |
+| **Linux** | **500,000 creatures** | Actually tested. The rigorously validated, supported baseline. |
+| **Windows** | **~900,000 creatures** | Peak run @ a sustained 20 Hz this session (tick ~49 ms of 50 ms; render still smooth — 0 stall frames, σ 0.8 ms). Single run, near the budget ceiling, **not yet CI-benchmarked**. Evidence: [`../performance/snapshots/win_pop900k_49.4ms_2026-06-20_2352.json`](../performance/snapshots/win_pop900k_49.4ms_2026-06-20_2352.json). |
 
-The gap between Linux 500K and Windows 20K is itself a finding, not a footnote. Closing it (or explaining it) is in scope for this pillar.
+**The old ~20K Windows ceiling is gone** — it was a render-delivery/jitter defect, not an engine limit, and it fell alongside the smoothness work (push-on-swap + snapshot interpolation, `../render-pipeline/`). Windows now scales *past* the validated Linux figure in a raw run. The remaining job for this pillar is rigor, not headroom: turn the ~900K peak into a CI-verified, cross-platform validated number, and close the last ~10% of tick budget to 1M (see [`path-to-one-million.md`](./path-to-one-million.md)).
 
 > **Buffer capability ≠ validated population.** The position-pipeline buffer cap was raised **500K → 1M** (`apps/simulation/src/ipc/bridge/double_buffer.rs` `MAX_CREATURES`; the Electron-main receive buffer matches). This removes a hard ceiling that previously made the 1M stretch target *structurally* impossible — but it is a **capability**, not a measurement. The validated number above is unchanged; 1M stays the stretch target until a benchmarked run earns it. (Seam caveat at high cumulative spawns: `../testing/bugs/f32-id-precision-ceiling.md`.)
 
@@ -69,7 +69,7 @@ ECS-aware instrumentation that exposes Data-Oriented Design behavior - archetype
 - [`ecs-metrics-specification.md`](./ecs-metrics-specification.md) - the full specification: which metrics, why, and the <1ms-per-tick collection budget they must respect.
 
 ### 3. Windows + Linux CI
-Continuous integration that builds and runs the scale benchmarks on **both** Linux and Windows, captures the achieved population/throughput, and **regenerates the status badges from real runs.** This is what converts the static placeholders above into live status, and it is the structural fix for the Windows 20K mystery: a Windows runner that exercises the engine on every commit turns "root cause unknown" into "root cause observable."
+Continuous integration that builds and runs the scale benchmarks on **both** Linux and Windows, captures the achieved population/throughput, and **regenerates the status badges from real runs.** This is what converts the static placeholders above into live status — and what turns the ~900K Windows *peak run* into a continuously-verified number instead of a single-session result.
 
 ---
 
@@ -79,7 +79,7 @@ The current hardware-counter instrumentation is **Linux-only by construction.** 
 
 See [`../../apps/simulation/src/instrumentation/hardware_metrics.rs`](../../apps/simulation/src/instrumentation/hardware_metrics.rs) - the `#[cfg(target_os = "linux")]` perf-event path versus the `#[cfg(not(target_os = "linux"))]` stub.
 
-Implication for Pillar 1: the metrics story is strong on Linux (perf / eBPF / hardware counters) but **does not yet exist on Windows.** Part of this pillar's work is therefore a Windows-native counter path (or, at minimum, graceful degradation so the dashboard and CI still report meaningful timing/throughput metrics on Windows without the Linux-only hardware events). This is also directly relevant to investigating the Windows 20K ceiling - we currently have the least visibility on the platform where the engine performs worst.
+Implication for Pillar 1: the metrics story is strong on Linux (perf / eBPF / hardware counters) but **does not yet exist on Windows.** Part of this pillar's work is therefore a Windows-native counter path (or, at minimum, graceful degradation so the dashboard and CI still report meaningful timing/throughput metrics on Windows without the Linux-only hardware events). This matters now that Windows is where the *peak* population ran (~900K): the ~61% CPU-utilisation reading at that scale (the headroom toward 1M, see [`path-to-one-million.md`](./path-to-one-million.md)) wants silicon-level confirmation, and Windows is exactly where we have the least of it.
 
 ---
 

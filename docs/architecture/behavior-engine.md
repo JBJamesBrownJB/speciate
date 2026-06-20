@@ -480,9 +480,9 @@ Honest validated → target → stretch positioning:
 
 | Tier | Creature Count | Status |
 |------|----------------|--------|
-| Validated (Linux) | 500,000 | Tested |
-| Experimental (Windows) | 20,000 | Not officially supported; root cause under investigation |
-| Stretch target | 1,000,000 | The art of the possible |
+| Validated (Linux) | 500,000 | Tested; the supported baseline |
+| Peak run (Windows) | ~900,000 | Sustained 20 Hz, single session; not yet CI-benchmarked |
+| Stretch target | 1,000,000 | The art of the possible — ~10% of tick budget away |
 
 Scaling strategies in play: two-level spatial grid (L0 20m / L1 60m), frequency throttling (power-of-2 bucketing), Rayon parallelization, viewport-culled IPC export.
 

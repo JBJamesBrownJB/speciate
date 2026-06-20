@@ -4,7 +4,7 @@
 
 [![Target: 1M creatures](https://img.shields.io/badge/target-1M%20creatures-blue)](docs/ROADMAP.md)
 [![Linux: 500K achieved](https://img.shields.io/badge/Linux-500K%20achieved-brightgreen)](docs/scale/README.md)
-[![Windows: 20K experimental](https://img.shields.io/badge/Windows-20K%20experimental-orange)](docs/scale/README.md)
+[![Windows: 900K at 20Hz](https://img.shields.io/badge/Windows-900K%20%4020Hz-success)](docs/scale/README.md)
 
 > These badges are **static placeholders**. Pillar 1 (Prove Scale) builds the cross-OS CI that will make them live, driven from real benchmark runs.
 
@@ -62,12 +62,11 @@ Honest, validated → target → stretch:
 
 | Tier | Population | Platform | Status |
 |------|-----------|----------|--------|
-| **Validated** | 500K creatures | Linux | Actually tested and running |
-| **Experimental** | 20K creatures | Windows | Runs, but **not officially supported**; root cause of the ceiling is unknown / under investigation |
-| **Target** | 150K–200K | Cross-platform | The realistic near-term goal |
-| **Stretch** | 1,000,000 | — | The "art of the possible" headline |
+| **Validated** | 500K creatures | Linux | The supported, rigorously tested, benchmarked baseline |
+| **Peak run** | ~900K creatures | Windows | Hit a **sustained 20 Hz** this session (tick ~49 ms of the 50 ms budget; render still smooth — **0 stall frames, σ 0.8 ms**). Single run, near the budget ceiling, not yet CI-benchmarked |
+| **Stretch** | 1,000,000 | — | The "art of the possible" headline — now **~10% of tick budget away** |
 
-Linux is the supported, benchmarked platform today. Windows is a known-rough experimental path. The CI from Pillar 1 will turn these numbers into continuously-verified, live status.
+Linux 500K is the rigorously validated, supported baseline. Windows reached **~900K at a sustained 20 Hz** in a single session run (near the budget ceiling, not yet CI-verified) — the old ~20K Windows ceiling is gone, resolved alongside the render-delivery work. The CI from Pillar 1 will turn these into continuously-verified, live status. 1M is the next milestone — attainable, with the tick already at 49 ms of 50 ms ([path to one million](docs/scale/path-to-one-million.md)).
 
 ---
 

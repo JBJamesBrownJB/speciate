@@ -27,11 +27,11 @@ For overall direction (the four pillars and NOW/NEXT/DREAM tiers), start with th
 
 [![Target](https://img.shields.io/badge/target-1M_creatures-blue)](./ROADMAP.md)
 [![Linux](https://img.shields.io/badge/Linux-500K_validated-brightgreen)](./scale/README.md)
-[![Windows](https://img.shields.io/badge/Windows-20K_experimental-orange)](./scale/README.md)
+[![Windows](https://img.shields.io/badge/Windows-900K_%4020Hz-success)](./scale/README.md)
 
-- **Stretch / "art of the possible":** 1,000,000 creatures. Target headline, not yet achieved.
-- **Validated (Linux):** 500,000 creatures. Actually tested.
-- **Experimental (Windows):** 20,000 creatures. Not officially supported; gap under investigation.
+- **Stretch / "art of the possible":** 1,000,000 creatures. The headline — now ~10% of tick budget away, attainable.
+- **Validated (Linux):** 500,000 creatures. The rigorously tested, supported baseline.
+- **Peak run (Windows):** ~900,000 creatures at a sustained 20 Hz (tick ~49 ms of 50 ms; render still smooth — 0 stalls, σ 0.8 ms). Single session run, not yet CI-benchmarked. The old ~20K Windows ceiling is gone.
 
 > Badges are **static placeholders**. Pillar 1's CI is what will make them live.
 

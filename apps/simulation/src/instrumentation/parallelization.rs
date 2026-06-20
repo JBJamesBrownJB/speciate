@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 #[cfg(feature = "dev-tools")]
-use sysinfo::{CpuRefreshKind, RefreshKind, System};
+use sysinfo::{get_current_pid, CpuRefreshKind, Pid, ProcessesToUpdate, RefreshKind, System};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +43,8 @@ pub struct ParallelizationMetrics {
     read_count: AtomicU32,
     cached_cpu_usage: f32,
     cached_active_cores: usize,
+    pid: Option<Pid>,
+    cached_process_memory: u64,
 }
 
 #[cfg(feature = "dev-tools")]
@@ -50,23 +52,6 @@ impl ParallelizationMetrics {
     fn create_cpu_system() -> System {
         // Only request CPU info - no process info (much lighter)
         System::new_with_specifics(RefreshKind::new().with_cpu(CpuRefreshKind::everything()))
-    }
-
-    /// Read process memory directly from /proc/self/statm (zero allocations on Linux)
-    fn read_process_memory() -> u64 {
-        // /proc/self/statm format: size resident shared text lib data dt (all in pages)
-        // We want 'resident' (RSS) - the 2nd field
-        std::fs::read_to_string("/proc/self/statm")
-            .ok()
-            .and_then(|contents| {
-                let mut parts = contents.split_whitespace();
-                parts.next(); // skip 'size'
-                parts
-                    .next() // get 'resident' (RSS in pages)
-                    .and_then(|s| s.parse::<u64>().ok())
-                    .map(|pages| pages * 4096) // Convert pages to bytes (4KB pages)
-            })
-            .unwrap_or(0)
     }
 
     pub fn new() -> Self {
@@ -80,6 +65,8 @@ impl ParallelizationMetrics {
             read_count: AtomicU32::new(0),
             cached_cpu_usage: 0.0,
             cached_active_cores: 0,
+            pid: get_current_pid().ok(),
+            cached_process_memory: 0,
         }
     }
 
@@ -109,6 +96,15 @@ impl ParallelizationMetrics {
             };
 
             self.cached_active_cores = cpus.iter().filter(|cpu| cpu.cpu_usage() > 10.0).count();
+
+            // Cross-platform process RSS via sysinfo (replaces the Linux-only
+            // /proc/self/statm read, which returned 0 on Windows). Refreshed only
+            // the current PID, on the same cadence, to keep this light.
+            if let Some(pid) = self.pid {
+                system.refresh_processes(ProcessesToUpdate::Some(&[pid]));
+                self.cached_process_memory =
+                    system.process(pid).map(|p| p.memory()).unwrap_or(0);
+            }
         }
 
         let parallelism_factor = if self.cpu_cores_total > 0 {
@@ -123,16 +119,13 @@ impl ParallelizationMetrics {
             1
         };
 
-        // Read memory directly from /proc (zero allocations!)
-        let process_memory_bytes = Self::read_process_memory();
-
         ParallelizationSnapshot {
             cpu_cores_total: self.cpu_cores_total,
             cpu_cores_active: self.cached_active_cores,
             cpu_utilization_pct: self.cached_cpu_usage,
             estimated_parallelism_factor: parallelism_factor,
             concurrent_systems_estimate,
-            process_memory_bytes,
+            process_memory_bytes: self.cached_process_memory,
         }
     }
 }

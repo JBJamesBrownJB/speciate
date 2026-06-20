@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "dev-tools")]
 use bevy_ecs::system::Resource;
 
-#[cfg(feature = "dev-tools")]
+#[cfg(target_os = "linux")]
 use perf_event::{Builder, Counter, Group};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -29,18 +28,16 @@ pub struct HardwareSnapshot {
     pub backend_stall_ratio: f64,
 }
 
-#[cfg(feature = "dev-tools")]
 #[derive(bevy_ecs::system::Resource)]
 pub struct HardwareSnapshotResource(pub Option<HardwareSnapshot>);
 
-#[cfg(feature = "dev-tools")]
 impl Default for HardwareSnapshotResource {
     fn default() -> Self {
         Self(None)
     }
 }
 
-#[cfg(feature = "dev-tools")]
+#[cfg(target_os = "linux")]
 #[derive(Resource)]
 pub struct HardwareMetrics {
     // Group 1: IPC + stalls (4 counters, 1 syscall)
@@ -84,7 +81,7 @@ pub struct HardwareMetrics {
     prev_stalled_backend: u64,
 }
 
-#[cfg(feature = "dev-tools")]
+#[cfg(target_os = "linux")]
 impl HardwareMetrics {
     pub fn new() -> Self {
         match Self::try_init() {
@@ -640,17 +637,18 @@ impl HardwareMetrics {
     }
 }
 
-#[cfg(feature = "dev-tools")]
+#[cfg(target_os = "linux")]
 impl Default for HardwareMetrics {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(not(feature = "dev-tools"))]
+#[cfg(not(target_os = "linux"))]
+#[derive(Resource)]
 pub struct HardwareMetrics;
 
-#[cfg(not(feature = "dev-tools"))]
+#[cfg(not(target_os = "linux"))]
 impl HardwareMetrics {
     pub fn new() -> Self {
         Self
@@ -661,7 +659,7 @@ impl HardwareMetrics {
     }
 }
 
-#[cfg(not(feature = "dev-tools"))]
+#[cfg(not(target_os = "linux"))]
 impl Default for HardwareMetrics {
     fn default() -> Self {
         Self::new()
@@ -681,14 +679,14 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "dev-tools")]
+    #[cfg(target_os = "linux")]
     fn test_hardware_metrics_initialization() {
         let metrics = HardwareMetrics::new();
         assert!(metrics.cycles.is_some() || !metrics.enabled);
     }
 
     #[test]
-    #[cfg(feature = "dev-tools")]
+    #[cfg(target_os = "linux")]
     fn test_hardware_metrics_actually_count() {
         let mut metrics = HardwareMetrics::new();
 
@@ -731,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "dev-tools")]
+    #[cfg(target_os = "linux")]
     fn test_disabled_metrics_returns_none() {
         let mut metrics = HardwareMetrics {
             // Group 1: IPC + stalls
@@ -779,7 +777,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "dev-tools"))]
+    #[cfg(not(target_os = "linux"))]
     fn test_production_build_compiles_without_dev_tools() {
         let mut metrics = HardwareMetrics::new();
         let snapshot = metrics.read();

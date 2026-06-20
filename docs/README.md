@@ -95,6 +95,7 @@ Each uses the `ideas/` 💡 → `todo/` 📋 → `done/` ✅ progression. See ea
 | Folder | Purpose |
 |--------|---------|
 | [lod-ai-framework/](./lod-ai-framework/) | `PLAN.md` — design complete, implementation deferred. |
+| [render-pipeline/](./render-pipeline/) | Smooth motion across the Rust↔JS seam — explainer (cause, dev-ui metrics, Valve-style fix) + `todo/` (push-on-swap, snapshot interpolation). Fixes the high-population jitter. |
 | `*/todo/` | Approved-but-unstarted items inside lifecycle areas. |
 
 ### 🌙 Dreamland — aspirational north-star (not scheduled)

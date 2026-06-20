@@ -1,3 +1,5 @@
+> **Diagnosed + planned fix:** see [`../../render-pipeline/README.md`](../../render-pipeline/README.md) for the full explainer (cause, dev-ui metrics, industry fix) and the two task plans in `render-pipeline/todo/`.
+
 When population is high 100k and latency is close to max 40ms or so we get jerky movement of crits.
 
 It should be fine as latency is always below 50ms (unless our sampling is hiding breaching this though we don't get warnings of skipped / caught up frames in console).

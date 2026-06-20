@@ -81,60 +81,49 @@ describe("InterpolatedCreatureRenderer", () => {
     });
   });
 
-  describe("interpolation", () => {
+  describe("interpolation (render-in-the-past playout)", () => {
+    // Push enough snapshots to start playback (renders ~1 tick in the past).
+    const warmUp = (r: InterpolatedCreatureRenderer) => {
+      r.initialize([{ id: 1, x: 0, y: 0, rotation: 0, size: 10 }]);
+      r.onSimulationTick([{ id: 1, x: 100, y: 0, rotation: 0, size: 10 }]);
+      r.onSimulationTick([{ id: 1, x: 200, y: 0, rotation: 0, size: 10 }]);
+    };
+
     it("should start with interpolation alpha at 0.0", () => {
-      const uniforms = renderer.getUniforms();
-      expect(uniforms.uInterpolation).toBe(0.0);
-    });
-
-    it("should update interpolation alpha on render", () => {
-      const creatures: CreatureData[] = [
-        { id: 1, x: 0, y: 0, rotation: 0, size: 10 },
-      ];
-      renderer.initialize(creatures);
-      renderer.setTickRate(20.0); // Set tick rate (required for interpolation to work)
-
-      // Simulate render frame (16.67ms @ 60 FPS)
-      // Pass camera parameters: cameraX, cameraY, zoom, width, height
-      renderer.render(16.67, 0, 0, 10, 800, 600);
-
-      const uniforms = renderer.getUniforms();
-      // Alpha should be deltaMS / tickInterval
-      // 16.67ms / 50ms = ~0.33
-      expect(uniforms.uInterpolation).toBeGreaterThan(0.0);
-      expect(uniforms.uInterpolation).toBeLessThan(1.0);
-    });
-
-    it("should reset interpolation on simulation tick", () => {
-      const creatures: CreatureData[] = [
-        { id: 1, x: 0, y: 0, rotation: 0, size: 10 },
-      ];
-      renderer.initialize(creatures);
-      renderer.setTickRate(20.0); // Set tick rate (required for interpolation to work)
-
-      // Advance interpolation
-      renderer.render(16.67, 0, 0, 10, 800, 600);
-      expect(renderer.getUniforms().uInterpolation).toBeGreaterThan(0.0);
-
-      // Simulation tick should reset
-      renderer.onSimulationTick([
-        { id: 1, x: 100, y: 50, rotation: 1.0, size: 10 },
-      ]);
-
       expect(renderer.getUniforms().uInterpolation).toBe(0.0);
     });
 
-    it("should clamp interpolation to [0, 1] range", () => {
-      const creatures: CreatureData[] = [
-        { id: 1, x: 0, y: 0, rotation: 0, size: 10 },
-      ];
-      renderer.initialize(creatures);
+    it("should advance interpolation alpha on render once playing", () => {
+      warmUp(renderer);
+      renderer.setTickRate(20.0); // 50ms tick
+      renderer.render(25, 0, 0, 10, 800, 600); // half a tick
 
-      // Render with huge delta (simulate lag)
-      renderer.render(1000, 0, 0, 10, 800, 600); // 1 second
+      const a = renderer.getUniforms().uInterpolation as number;
+      expect(a).toBeGreaterThan(0.0);
+      expect(a).toBeLessThan(1.0);
+    });
 
-      const uniforms = renderer.getUniforms();
-      expect(uniforms.uInterpolation).toBeLessThanOrEqual(1.0);
+    it("should NOT reset alpha on a new snapshot (continuous playout)", () => {
+      warmUp(renderer);
+      renderer.setTickRate(20.0);
+      renderer.render(25, 0, 0, 10, 800, 600);
+      const before = renderer.getUniforms().uInterpolation as number;
+      expect(before).toBeGreaterThan(0.0);
+
+      // A new snapshot must only buffer — it must not snap alpha back to 0.
+      renderer.onSimulationTick([{ id: 1, x: 300, y: 0, rotation: 0, size: 10 }]);
+      renderer.render(0, 0, 0, 10, 800, 600);
+
+      expect(renderer.getUniforms().uInterpolation).toBeCloseTo(before, 5);
+    });
+
+    it("should hold alpha at 1.0 on buffer underrun (no overshoot)", () => {
+      warmUp(renderer);
+      renderer.setTickRate(20.0);
+      renderer.render(5000, 0, 0, 10, 800, 600); // far past what is buffered
+
+      const a = renderer.getUniforms().uInterpolation as number;
+      expect(a).toBe(1.0);
     });
   });
 
@@ -238,12 +227,14 @@ describe("InterpolatedCreatureRenderer", () => {
       expect(initTime).toBeLessThan(100); // Should init in <100ms
       expect(renderer.getCreatureCount()).toBe(100000);
 
-      // Render should be fast (just updates uniforms)
+      // First render does the one-time build+upload; a STEADY render (no new snapshot,
+      // no rebuild) is just advance + uniforms and must stay fast.
+      renderer.render(16.67, 0, 0, 10, 800, 600); // warm-up build
       const startRender = performance.now();
       renderer.render(16.67, 0, 0, 10, 800, 600);
       const renderTime = performance.now() - startRender;
 
-      expect(renderTime).toBeLessThan(5); // Should render in <5ms
+      expect(renderTime).toBeLessThan(5); // Steady render in <5ms
     });
 
     it("should handle rapid updates efficiently", () => {

@@ -7,16 +7,20 @@ import {
   UniformGroup,
   type Texture,
 } from "pixi.js";
-import { InterpolationBufferManager } from "./InterpolationBufferManager";
 import { interpDiag } from "./InterpolationDiagnostics";
+import { SnapshotInterpolator } from "./SnapshotInterpolator";
+import { writeInterleavedSegment } from "./interleavedBuffer";
 import type { CreatureData } from "@/types/GameState";
 import { getTickIntervalMs } from "@/core/constants";
+
+/** A copied, stable snapshot of one frame's creatures (the renderer must not hold
+ *  references to ElectronIPCClient's reused objects). */
+type Snapshot = Array<{ id: number; x: number; y: number; rotation: number; size: number }>;
 
 export class InterpolatedCreatureRenderer {
   private static readonly FLOATS_PER_CREATURE = 7;
   private static readonly DEFAULT_MAX_CREATURES = 200_000;
 
-  private bufferManager: InterpolationBufferManager;
   private geometry: Geometry;
   private shader: Shader;
   private mesh: Mesh;
@@ -26,13 +30,14 @@ export class InterpolatedCreatureRenderer {
   private vertexBufferCapacity: number;
   private currentBufferIndex: number = 0;
 
-  // Interpolation state
-  private interpolationAlpha: number = 0.0;
-  private tickIntervalMs: number = Infinity; // No interpolation until tick rate is set
+  // Render-in-the-past playout: buffer snapshots, interpolate ~1 tick behind so the
+  // tween always has a target to roll into (no end-of-tween stall, no reset-on-arrival).
+  private interpolator = new SnapshotInterpolator<Snapshot>({ tickIntervalMs: 50 });
+  private latestSnapshot: Snapshot | null = null; // newest data — count/visibility/warm-up
+  private uploadedTo: Snapshot | null = null; // which `to` snapshot is currently on the GPU
+  private dirty: boolean = false;
 
   constructor(texture: Texture, maxCreatures: number = InterpolatedCreatureRenderer.DEFAULT_MAX_CREATURES) {
-    this.bufferManager = new InterpolationBufferManager(maxCreatures);
-
     // Pre-allocate double buffers to max capacity (avoids GC pressure during spawning)
     this.vertexBufferCapacity = maxCreatures;
     const bufferSize = maxCreatures * InterpolatedCreatureRenderer.FLOATS_PER_CREATURE;
@@ -236,22 +241,27 @@ export class InterpolatedCreatureRenderer {
   }
 
   initialize(creatures: CreatureData[]): void {
-    this.bufferManager.initialize(creatures);
-    this.updateGeometryBuffer();
-    this.interpolationAlpha = 0.0;
-    this.mesh.visible = creatures.length > 0;
+    this.interpolator.reset();
+    this.latestSnapshot = null;
+    this.uploadedTo = null;
+    this.pushSnapshot(creatures);
   }
 
   onSimulationTick(creatures: CreatureData[]): void {
-    // DEV-only: capture alpha before reset (≈1.0 healthy; <1.0 = reset mid-lerp = snap).
-    if (import.meta.env.DEV) interpDiag.recordAlphaReset(this.interpolationAlpha);
-    this.bufferManager.update(creatures);
-    this.updateGeometryBuffer();
-    this.interpolationAlpha = 0.0; // Reset interpolation
-    // Update shader uniform immediately (for consistency and testability)
-    const uniforms = (this.shader.resources.uniforms as UniformGroup).uniforms;
-    uniforms.uInterpolation = this.interpolationAlpha;
-    this.mesh.visible = creatures.length > 0;
+    this.pushSnapshot(creatures);
+  }
+
+  /** Copy a frame into a stable snapshot and buffer it. Never resets the tween. */
+  private pushSnapshot(creatures: CreatureData[]): void {
+    const snap: Snapshot = new Array(creatures.length);
+    for (let i = 0; i < creatures.length; i++) {
+      const c = creatures[i];
+      snap[i] = { id: c.id, x: c.x, y: c.y, rotation: c.rotation, size: c.size };
+    }
+    this.interpolator.push(snap);
+    this.latestSnapshot = snap;
+    this.dirty = true;
+    this.mesh.visible = snap.length > 0;
   }
 
   render(
@@ -262,30 +272,45 @@ export class InterpolatedCreatureRenderer {
     viewportWidth: number,
     viewportHeight: number
   ): void {
-    // Update interpolation alpha
-    this.interpolationAlpha += deltaMS / this.tickIntervalMs;
-    this.interpolationAlpha = Math.max(0.0, Math.min(1.0, this.interpolationAlpha));
+    this.interpolator.advance(deltaMS);
 
-    // DEV-only: a frame clamped at 1.0 is a "frozen" frame (lerp finished, no new data yet).
-    if (import.meta.env.DEV) interpDiag.recordFrame(this.interpolationAlpha >= 1.0);
+    // Show the interpolated pair once playback has started, else the latest snapshot
+    // statically (warm-up before we have enough buffered to interpolate).
+    const seg = this.interpolator.current();
+    let from: Snapshot | null = null;
+    let to: Snapshot | null = null;
+    let alpha = 0;
+    if (seg) {
+      from = seg.from;
+      to = seg.to;
+      alpha = seg.alpha;
+    } else if (this.latestSnapshot) {
+      from = this.latestSnapshot;
+      to = this.latestSnapshot;
+    }
 
-    // Update shader uniforms (v8 API: access via UniformGroup.uniforms)
+    // DEV-only: a frame clamped at 1.0 is a "frozen" frame (the stall we're removing).
+    if (import.meta.env.DEV) interpDiag.recordFrame(alpha >= 1.0);
+
+    // Rebuild + upload only when the displayed `to` changes (rollover or new snapshot).
+    if (to && to !== this.uploadedTo) {
+      this.buildAndUpload(from!, to);
+      this.uploadedTo = to;
+      this.dirty = false;
+    }
+
     const uniforms = (this.shader.resources.uniforms as UniformGroup).uniforms;
-    uniforms.uInterpolation = this.interpolationAlpha;
+    uniforms.uInterpolation = alpha;
     (uniforms.uCameraPos as Float32Array)[0] = cameraX;
     (uniforms.uCameraPos as Float32Array)[1] = cameraY;
     uniforms.uCameraZoom = cameraZoom;
     (uniforms.uViewportSize as Float32Array)[0] = viewportWidth;
     (uniforms.uViewportSize as Float32Array)[1] = viewportHeight;
-
-    // Mark buffer as clean (GPU has latest data)
-    if (this.bufferManager.isDirty()) {
-      this.bufferManager.markClean();
-    }
   }
 
-  private updateGeometryBuffer(): void {
-    const creatureCount = this.bufferManager.getCreatureCount();
+  /** Build the interleaved start/end buffer for the `from`->`to` segment and upload it. */
+  private buildAndUpload(from: Snapshot, to: Snapshot): void {
+    const creatureCount = to.length;
 
     // When cleared, just set instance count to 0 - no buffer update needed
     if (creatureCount === 0) {
@@ -293,22 +318,16 @@ export class InterpolatedCreatureRenderer {
       return;
     }
 
-    const buffer = this.bufferManager.getBuffer();
-
     // Ensure capacity (only allocates if exceeding pre-allocated size)
     this.ensureVertexBufferCapacity(creatureCount);
 
-    // Swap to inactive buffer (prevents GPU stall while GPU reads active buffer)
+    // Swap to inactive buffer (prevents GPU stall while GPU reads active buffer) and
+    // write the id-matched start/end data directly into it (no intermediate copy).
     const nextBufferIndex = 1 - this.currentBufferIndex;
-
-    // Copy data to inactive buffer (reuses pre-allocated buffer)
-    this.vertexBuffers[nextBufferIndex].set(buffer);
-
-    // Swap buffers
+    writeInterleavedSegment(from, to, this.vertexBuffers[nextBufferIndex]);
     this.currentBufferIndex = nextBufferIndex;
 
-    // Update the GPU buffer with new data
-    // Create a subarray view of just the used portion for PixiJS
+    // Update the GPU buffer with a subarray view of just the used portion for PixiJS
     const usedLength = creatureCount * InterpolatedCreatureRenderer.FLOATS_PER_CREATURE;
     const activeBufferView = this.vertexBuffers[this.currentBufferIndex].subarray(0, usedLength);
     const pixiBuffer = this.geometry.getBuffer('aStartPos');
@@ -344,18 +363,19 @@ export class InterpolatedCreatureRenderer {
   }
 
   getCreatureCount(): number {
-    return this.bufferManager.getCreatureCount();
+    return this.latestSnapshot?.length ?? 0;
   }
 
   getUniforms(): Record<string, unknown> {
     return (this.shader.resources.uniforms as UniformGroup).uniforms as Record<string, unknown>;
   }
 
+  /** True when the newest snapshot has not yet been uploaded to the GPU. */
   isBufferDirty(): boolean {
-    return this.bufferManager.isDirty();
+    return this.dirty;
   }
 
   setTickRate(tickRateHz: number): void {
-    this.tickIntervalMs = getTickIntervalMs(tickRateHz);
+    this.interpolator.setTickInterval(getTickIntervalMs(tickRateHz));
   }
 }

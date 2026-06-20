@@ -122,3 +122,24 @@ Dev UI: I recommend emitting a new metric `collision_pairs_checked` per tick. Pi
 - Query iteration efficiency measurement
 
 **Golden Rule:** Optimizations without measurement are fiction. Every performance claim must be backed by perf data or Dev UI metrics.
+
+---
+
+## Windows performance & cross-OS telemetry
+
+`perf-event` is **Linux-only**: its in-process per-thread PMU *counting* (read deltas around your own code via `perf_event_open`) has no Win32 analogue. Keep the `cfg(target_os="linux")` gate on `hardware_metrics.rs` (protected WIP) and **never fabricate** the Linux `HardwareSnapshot` fields on Windows — the asymmetry is part of the narrative, so label it "reduced (no PMU)", don't fake zeros. Build the Windows side as a **separate** `WindowsHardwareMetrics` returning a partial, flagged snapshot over the **unchanged** Float32Array seam.
+
+**Measurement precision is NOT the gap — scheduling is.** `std::time::Instant` is already `QueryPerformanceCounter`-backed and sub-microsecond on Windows; the gap is waiting/parking/quantum (default 15.6 ms timer). Do not swap Instant for manual QPC chasing a perf win.
+
+Honest 3-tier Windows metrics:
+- **Tier 1 (now, zero-privilege):** `QueryThreadCycleTime`/`QueryProcessCycleTime` (`realtimeapiset.h` via `windows-rs`, `cfg(target_os="windows")`) — a per-thread/process CPU-cycle proxy. Label it "reference cycles", not true core-clock. Localizes which Bevy system regresses without admin.
+- **Tier 2 (no admin):** PDH (`windows::Win32::System::Performance`) for % Processor Time, context-switches/sec, page-faults/sec, working-set; and replace the Linux-only `/proc/self/statm` read in `parallelization.rs` with a `cfg`-dispatched `GetProcessMemoryInfo` so Windows process memory is non-zero. PDH has **no** cache/IPC/stall data.
+- **Tier 3 (opt-in "deep profile (admin)"):** ETW + PMC (`TraceSetInformation`/`TraceProfileSourceConfigInfo` via `windows-rs`, or external `wpr`/`xperf -pmc`) — the only route to true IPC + CacheMisses + BranchMispredictions parity. Needs `SeSystemProfilePrivilege`; sampling/tracing model, not in-process counting; gate behind a UI toggle + admin check, never default-on.
+
+**Reject:** `rdpmc` faults (#GP) in ring 3 (`CR4.PCE=0`, no supported toggle) — kernel driver required. Intel PCM gives real per-core IPC/L2/L3 but ships a signed kernel driver + C++ FFI — document as "maximum-fidelity, not baseline", never the default.
+
+**No Windows user-space equivalent** (state "Linux-only" in dev-ui): frontend/backend stall ratios, L1I miss rate (model-specific extended PMU only), L1D miss rate (PCM exposes L2/L3, not L1). True IPC and cache/branch counters are admin-only (Tier 3).
+
+**Profile-first** when ranking the 10k-vs-500k gap: attribute with Windows-native tools (WPA "CPU Usage (Precise)", PIX, Tracy) and rule out the **debug-vs-release runtime build** FIRST, then sparse-grid overhead, Rayon fork-join park/wake, busy-spin core + 15.6 ms timer — before blaming the OS. Defender real-time scan is a measurable per-process tax (`New-MpPerformanceRecording`/`Get-MpPerformanceReport`), bounded, not the 50x.
+
+**Verified Speciate facts to retain:** mimalloc is already the `#[global_allocator]` (`apps/simulation/src/lib.rs:23`); 20 Hz single-tick; L0=20m/L1=60m; release profile already `lto="fat"`/`codegen-units=1`/`panic="abort"`/`opt-level=3`. **Never modify** the protected WIP files `apps/simulation/Cargo.toml` and `apps/simulation/src/instrumentation/hardware_metrics.rs`.

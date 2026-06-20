@@ -155,3 +155,17 @@ Optimization: If health rarely changes, use a `Changed<CritterState>` filter to 
 4. **Accept/Reject:** If metrics don't improve (or worsen), rollback and iterate
 
 **Never trust intuition. Always demand perf data.**
+
+---
+
+## Windows performance & cross-OS (ECS hot loop)
+
+Speciate is Linux-VALIDATED at 500k, Windows-EXPERIMENTAL (~10k ceiling). You own the per-tick parallel shape — the layer where Windows amplifies the gap.
+
+- **Rayon park/unpark is more expensive on Windows.** std futexes sit on `WaitOnAddress` → `NtWaitForAlertByThreadId` and are documented to over-spin, so every fork-join barrier carries higher fixed tail-latency than Linux CFS. A single fully `.after()`-chained schedule has ~10+ barriers per tick (perception, movement, 4× grid rebuild, export `par_sort`), paying this tax 10+ times every 50 ms. At 10k entities the useful work per system is small relative to that fixed cost.
+- **Prefer FEWER, FATTER parallel regions.** Make `par_iter_mut` chunks coarse (`with_min_len` / uniform blocks) so each task amortizes steal/spin/wake; tiny per-entity tasks 20×/sec are the Windows worst case. Build **one** persistent global Rayon pool once (never per-tick), sized to **physical cores minus headroom** for the Node event loop + libuv (default 4) + V8 — a logical-core-sized pool oversubscribes, which Windows handles worse than Linux.
+- **Cache, false-sharing, affinity.** SoA archetype columns only pay off if workers don't bounce across cores/CCDs each tick — consider `core_affinity` pinning to stabilize residency. Keep the movement scratch buffer persistent (clear + refill, retain capacity) to avoid per-tick `Vec` churn and Windows first-touch page-fault tax (~175 µs/MB), which mimalloc does **not** remove.
+- **Sparsity hypothesis was REFUTED by measurement.** The production grid is fixed 10km extent (~252k L0 + ~28k L1 cells) hosting ~10k creatures (~0.04/cell), but a fixed-population world-size sweep showed per-tick time is flat in cell count: the rebuild is O(occupied), not O(cells) (`apps/simulation/src/simulation/spatial/grid.rs:308-327`). Do not chase population-adaptive bounds; it recovers nothing.
+- **Profile FIRST, blame the OS LAST.** Use Windows-native tools (WPA "CPU Usage (Precise)", PIX, Tracy) to split park/wake/spin from real compute before any Rayon surgery. Rule out the **debug-vs-release runtime build** confounder first — a debug Rayon ECS loop runs 20–50× slower; 500k/50 ≈ 10k fits the ceiling exactly. On Windows attribute hot systems via `QueryThreadCycleTime` (reference cycles), not PMU counters (perf-event is Linux-only).
+
+**Verified facts to preserve:** mimalloc is already the `#[global_allocator]`; 20 Hz single-tick; L0=20m/L1=60m; force accumulation; capability-marker ZSTs; power-of-2 frequency throttling; Rayon movement = manual `Vec` collect → `par_iter_mut`. **Never modify** the protected WIP files `apps/simulation/Cargo.toml` and `apps/simulation/src/instrumentation/hardware_metrics.rs`.

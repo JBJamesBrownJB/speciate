@@ -12,11 +12,12 @@
  * - Every call site is guarded by `import.meta.env.DEV`, so this whole file is
  *   dead-code-eliminated from production builds (the player portal).
  * - Running accumulators only — no per-frame allocations, no per-frame I/O.
- * - Emits ONE console line per second, so the probe cannot perturb what it measures.
+ * - Produces ONE structured snapshot per second (consumed by the dev-ui Render
+ *   Pipeline panel via main), so the probe cannot perturb what it measures.
  *
- * Read the line with a SINGLE creature spawned (the cleanest test rig):
- *   healthy  -> distinct-gap ~50ms tight (σ low), α@reset ~1.0, stalls ~0
- *   the bug  -> distinct-gap spread 25–75ms (σ high), α@reset scattered <1.0, stalls > 0
+ * Read it with a SINGLE creature spawned (the cleanest test rig):
+ *   healthy  -> snapshot-gap ~50ms tight (σ low), α@reset ~1.0, stalls ~0
+ *   the bug  -> snapshot-gap spread 25–75ms (σ high), α@reset scattered <1.0, stalls > 0
  */
 
 /** Structured one-interval snapshot, sent to the dev-ui Render Pipeline panel. */
@@ -122,9 +123,9 @@ export class InterpolationDiagnostics {
   }
 
   /**
-   * Once per interval: returns a structured snapshot (for the dev-ui panel) and
-   * logs a one-line console fallback, then resets the window. Returns null between
-   * intervals. Caller forwards the snapshot to the dev-ui.
+   * Once per interval: returns a structured snapshot for the dev-ui Render Pipeline
+   * panel, then resets the window. Returns null between intervals. The caller
+   * forwards the snapshot to the dev-ui over IPC.
    */
   maybeReport(now: number): RenderPipelineMetrics | null {
     if (!this.lastReportT) {
@@ -134,8 +135,6 @@ export class InterpolationDiagnostics {
     if (now - this.lastReportT < REPORT_INTERVAL_MS) return null;
     this.lastReportT = now;
 
-    const total = this.distinctCount + this.duplicateCount;
-    const dupePct = total > 0 ? Math.round((this.duplicateCount / total) * 100) : 0;
     const d = this.distinct;
     const a = this.alphaReset;
 
@@ -153,15 +152,6 @@ export class InterpolationDiagnostics {
       distinctCount: this.distinctCount,
       duplicateCount: this.duplicateCount,
     };
-
-    // console.info (not log — banned; not error — this is not an error). DEV-only.
-    console.info(
-      `[interp] distinct-gap ${d.mean.toFixed(0)}ms (${d.lo.toFixed(0)}–${d.hi.toFixed(0)}, σ${d.std.toFixed(0)}) | ` +
-        `delivery ${this.delivery.mean.toFixed(0)}ms | ` +
-        `α@reset ${a.mean.toFixed(2)} (${a.lo.toFixed(2)}–${a.hi.toFixed(2)}) | ` +
-        `stalls ${this.stallFrames}/${this.totalFrames}f | ` +
-        `dupes ${dupePct}% (${this.distinctCount} new / ${this.duplicateCount} dup)`
-    );
 
     this.delivery.reset();
     this.distinct.reset();

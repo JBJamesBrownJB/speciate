@@ -1,4 +1,4 @@
-import type { MetricsSnapshot, TelemetryFrame, SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics } from '../types';
+import type { MetricsSnapshot, TelemetryFrame, SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, WindowsMetrics } from '../types';
 
 export function snapshotToTelemetry(snapshot: MetricsSnapshot): TelemetryFrame {
   const systemTimings: SystemTimingsSnapshot = {} as SystemTimingsSnapshot;
@@ -36,14 +36,25 @@ export function snapshotToTelemetry(snapshot: MetricsSnapshot): TelemetryFrame {
     }
   }
 
+  let windowsMetrics: WindowsMetrics | undefined;
+  if (snapshot.windowsMetrics) {
+    windowsMetrics = { available: true } as WindowsMetrics;
+    for (const [key, stats] of Object.entries(snapshot.windowsMetrics)) {
+      (windowsMetrics as any)[key] = stats.avg;
+    }
+  }
+
   return {
     tick: Math.round(snapshot.tick.avg),
     creatureCount: Math.round(snapshot.creatureCount.avg),
     tickRateHz: snapshot.tickRateHz.avg,
     spatialGridCellSize: 50, // Default cell size (from Rust CELL_SIZE constant)
+    l1CellSize: 60, // L1_CELL_SIZE = CELL_SIZE * 3 (not captured in stat snapshots)
+    l1Cells: [], // heatmap cells aren't part of a stat snapshot
     systemTimings: systemTimings,
     hardwareMetrics,
     parallelizationMetrics,
+    windowsMetrics,
     timestamp: Date.now(),
   };
 }

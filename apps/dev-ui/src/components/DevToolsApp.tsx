@@ -128,6 +128,21 @@ export const DevToolsApp: React.FC = () => {
       }
     }
 
+    // Windows-only process metrics (numeric fields only; `available` is boolean and skipped).
+    const windowsMetricsStats: Record<string, any> = {};
+    const samplesWithWindows = collectedSamples.filter(s => s.windowsMetrics?.available);
+    if (samplesWithWindows.length > 0) {
+      const keys = Object.keys(samplesWithWindows[0].windowsMetrics!) as Array<keyof WindowsMetrics>;
+      for (const key of keys) {
+        const values = samplesWithWindows
+          .filter(s => s.windowsMetrics && typeof s.windowsMetrics[key] === 'number')
+          .map(s => s.windowsMetrics![key] as number);
+        if (values.length > 0) {
+          windowsMetricsStats[key] = calculateStatistics(values);
+        }
+      }
+    }
+
     const snapshot: MetricsSnapshot = {
       metadata: {
         sampleCount: collectedSamples.length,
@@ -142,6 +157,7 @@ export const DevToolsApp: React.FC = () => {
       hardwareMetrics: Object.keys(hardwareMetricsStats).length > 0 ? hardwareMetricsStats : undefined,
       hardwareMetricsDerived: hardwareMetricsDerived,
       parallelizationMetrics: Object.keys(parallelizationMetricsStats).length > 0 ? parallelizationMetricsStats : undefined,
+      windowsMetrics: Object.keys(windowsMetricsStats).length > 0 ? windowsMetricsStats : undefined,
     };
 
     try {

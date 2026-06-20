@@ -149,6 +149,7 @@ export interface MetricsSnapshot {
   hardwareMetrics?: Record<string, MetricStatistics>;
   hardwareMetricsDerived?: HardwareMetricsDerived;
   parallelizationMetrics?: Record<string, MetricStatistics>;
+  windowsMetrics?: Record<string, MetricStatistics>;
 }
 
 export interface GameState {

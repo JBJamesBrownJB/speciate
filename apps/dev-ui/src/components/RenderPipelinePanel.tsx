@@ -140,10 +140,10 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics }) => {
         label="Snapshot gap"
         value={`${m.distinctGapMeanMs.toFixed(0)} ms · σ${m.distinctGapStdMs.toFixed(0)} (${m.distinctGapMinMs.toFixed(0)}–${m.distinctGapMaxMs.toFixed(0)})`}
         color={pick(m.distinctGapStdMs, 5, 12, true)}
-        blurb="Time between new position frames reaching the renderer. Want a steady ~50 ms (20 Hz)."
+        blurb="Time between new position frames; want a steady ~50 ms (20 Hz). σ = sigma = standard deviation (the wobble) — lower is smoother."
         measures="Wall-clock gap between distinct (changed) position snapshots arriving at the renderer."
-        healthy="Mean ~50 ms with low spread (σ ≲ 5 ms)."
-        bug="Mean ~50 ms but wide spread / high σ = delivery jitter: the tween window keeps changing, so motion alternates snap and freeze."
+        healthy="Mean ~50 ms with low spread — σ (sigma / standard deviation) ≲ 5 ms."
+        bug="Mean ~50 ms but high σ (sigma) = big timing wobble: the tween window keeps changing, so motion alternates snap and freeze."
       />
 
       <MetricRow
@@ -198,14 +198,19 @@ export const RenderPipelinePanel: React.FC<Props> = ({ metrics }) => {
 
       <div className="rm-spark-grid">
         <div className="rm-spark">
-          <div className="rm-spark-label">Jitter (σ ms) — want flat & low</div>
+          <div className="rm-spark-label">Jitter — σ sigma (std-dev), ms — want flat &amp; low</div>
           <canvas ref={jitterCanvas} className="memory-sparkline" />
         </div>
         <div className="rm-spark">
-          <div className="rm-spark-label">Lerp completion (α) — want pinned at 1.0</div>
+          <div className="rm-spark-label">Lerp completion (α alpha, 0–1) — want pinned at 1.0</div>
           <canvas ref={alphaCanvas} className="memory-sparkline" />
         </div>
       </div>
+
+      <p className="rm-legend">
+        <strong>σ</strong> (sigma) = standard deviation — how much a value wobbles around its
+        average; lower = steadier. <strong>α</strong> (alpha) = how far a slide finished, 0–1.
+      </p>
     </div>
   );
 };

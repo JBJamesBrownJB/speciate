@@ -214,6 +214,24 @@ impl Simulation {
         self.spawn_crit(builder)
     }
 
+    #[cfg(any(test, feature = "test-helpers"))]
+    pub fn snapshot_creatures(&self) -> Vec<(u32, f32, f32, f32, f32)> {
+        use crate::simulation::core::components::Position;
+        use crate::simulation::creatures::components::CritId;
+        use crate::simulation::creatures::dna::Dna;
+
+        let mut out: Vec<(u32, f32, f32, f32, f32)> = unsafe {
+            let world_cell = self.world.as_unsafe_world_cell_readonly();
+            let mut query = world_cell.world_mut().query::<(&CritId, &Position, &Dna)>();
+            query
+                .iter(world_cell.world())
+                .map(|(id, pos, dna)| (id.0, pos.x, pos.y, dna.size_gene, dna.fov_gene))
+                .collect()
+        };
+        out.sort_by_key(|&(id, ..)| id);
+        out
+    }
+
     pub fn spawn_seeker(&mut self, x: f32, y: f32, target_x: f32, target_y: f32) -> u32 {
         let builder = CritBuilder::new().at(x, y).as_seeker(target_x, target_y);
         self.spawn_crit(builder)

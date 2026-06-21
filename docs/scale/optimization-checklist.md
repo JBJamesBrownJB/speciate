@@ -12,6 +12,27 @@
 ~56 ms mean / 68 ms p99 — **~12% over.** The **p99 tail breaks before the mean**, so the tail is
 the real scoreboard. Growth is ~O(n¹·¹⁵) (fixed-world density rises with population).
 
+## Findings log (verdicts from real runs)
+
+**2026-06-21 — Lab prereqs built** (multi-seed noise floor, p99-per-phase diff, cells_queried).
+At 900K the wall-p99 **noise floor ≈ 1.9–2.4 ms** — the bar any single change must clearly beat.
+
+- **T1.1 (exponent 0.35 → 0.25):** ✅ **KEEP for correctness · ⚠️ perf within noise.** Perception
+  mean −8%, but wall p99 −1.1 ms (< noise floor) — not a confident perf win alone. Kept because it
+  is biologically correct (eye allometry ~^0.25) and creates emergent prey-refuge (see
+  `biology-notes.md`). Note: `cells_queried` barely moved — it counts **L0** cells, but the trim
+  affects the **L1 cone scan** → we need an **L1-cells counter** (instrumentation gap).
+- **T1.2 `fast_inv_sqrt` + T1.3 chunk 64→256:** ❌ **DITCH (reverted, `87022fa`).** Stacked with
+  T1.1, wall p99 = 48.5 ms vs 48.0 ms baseline — flat/worse, within noise. Perception mean −6–8%
+  but steering/movement/grid drifted up ~0.5 ms (Rayon phase-transfer). No budget movement.
+
+> **META-LESSON: perception-mean micro-opts (<1 ms true effect) sit below the ~2 ms wall-p99 noise
+> floor — they do not move the tick budget.** The p99 tail is set by **variance + fork-join
+> barriers**, not by one phase's average. **Pivot:** chase the big-effect levers — **T3.1**
+> (schedule overlap → fewer barriers, attacks tail variance directly) and **T2.2 / T2.5**
+> (hunger-gating deletes whole perception ticks; stochastic phase smooths the tail). Stop
+> micro-tuning Tier 1.
+
 ## The model (where the budget actually goes)
 
 Perception (14.5 ms) + steering (13.1 ms) = **57% of the tick**, and phases sum to wall (no
@@ -162,12 +183,17 @@ density-inversion. For Tier 2, **also** the trophic-stability canary (±20% popu
 
 ## Recommended attack order
 
-1. **Prereqs L1–L3** (so verdicts are trustworthy).
-2. **T1.1 + T1.2 + T1.3** together (the cheap perception trio — the range trim is the big one).
-3. **T1.4** (steering rng hoist).
-4. **T2.1 / T2.2** (range cap + hunger-gate — the largest biological cuts).
-5. **T3.1** (schedule overlap — the structural ceiling-mover), then re-evaluate T3.4.
-6. **T2.3–T2.7 / T3.2 / T3.3** as the gap to 1M narrows.
+*(Revised after the Tier-1 findings above — micro-opts proved below the noise floor.)*
+
+1. ✅ **Prereqs L1–L3** — done.
+2. ✅ **T1.1 range trim** — kept for correctness; ❌ **T1.2/T1.3** ditched (below noise).
+3. **T2.5 stochastic perception phase** — NEXT. Directly attacks the p99 tail (the actual
+   bottleneck) by de-synchronising perception ticks; cheap (per-creature phase offset, no new
+   state); biological (reaction-time jitter). Best ratio of tail-impact to effort.
+4. **T3.1 schedule overlap** — removes fork-join barriers, the other tail driver. Bigger/riskier.
+5. **T2.2 hunger-gating** — the largest raw cut (deletes perception ticks for fed creatures), but
+   needs an energy/hunger state first — check whether one exists before committing.
+6. **T2.1 range cap / T2.3 / T2.4 / T3.2 / T3.3** as the gap to 1M narrows.
 
 ---
 

@@ -27,8 +27,7 @@ pub struct LabConfig {
 pub fn run_lab(cfg: &LabConfig) -> LabReport {
     let mut sim = build_world(&cfg.spec);
     let samples = sample_ticks(&mut sim, cfg.warmup, cfg.samples, cfg.dt);
-    let within = within_budget(&samples.total_tick, cfg.budget_us, cfg.metric)
-        || within_budget(&samples.wall_total, cfg.budget_us, cfg.metric);
+    let within = within_budget(&samples.wall_total, cfg.budget_us, cfg.metric);
 
     let max_pop = cfg.find_max.as_ref().map(|ramp| {
         let base = cfg.spec.clone();
@@ -39,7 +38,7 @@ pub fn run_lab(cfg: &LabConfig) -> LabReport {
             let mut spec = base.clone();
             spec.population = pop;
             let mut sim = build_world(&spec);
-            sample_ticks(&mut sim, warmup, n, dt).total_tick
+            sample_ticks(&mut sim, warmup, n, dt).wall_total
         });
         result.max_pop
     });
@@ -105,6 +104,23 @@ mod tests {
         let b = run_lab(&cfg);
         assert_eq!(a.samples.wall_total.count, b.samples.wall_total.count);
         assert_eq!(a.spec.population, b.spec.population);
+    }
+
+    #[test]
+    fn budget_keys_on_wall_clock_not_zeroed_total_tick() {
+        let cfg = LabConfig {
+            label: "tiny-budget".to_string(),
+            spec: small_spec(2000),
+            warmup: 1,
+            samples: 5,
+            dt: 0.05,
+            budget_us: 1,
+            metric: BudgetMetric::P99,
+            find_max: None,
+        };
+        let report = run_lab(&cfg);
+        assert!(report.samples.wall_total.p99 > 1.0, "wall clock must be real/nonzero");
+        assert!(!report.within_budget, "1us budget must fail on real wall-clock time");
     }
 
     #[test]

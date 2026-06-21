@@ -15,6 +15,7 @@ pub struct PhaseSamples {
     pub l1_aggregation: TickStats,
     pub behavior_transition: TickStats,
     pub export_positions: TickStats,
+    pub cells_queried: TickStats,
 }
 
 pub fn sample_ticks(sim: &mut Simulation, warmup: usize, samples: usize, dt: f32) -> PhaseSamples {
@@ -33,6 +34,7 @@ pub fn sample_ticks(sim: &mut Simulation, warmup: usize, samples: usize, dt: f32
     let mut l1 = Vec::with_capacity(samples);
     let mut behavior = Vec::with_capacity(samples);
     let mut export = Vec::with_capacity(samples);
+    let mut cells = Vec::with_capacity(samples);
 
     for _ in 0..samples {
         let start = Instant::now();
@@ -48,6 +50,7 @@ pub fn sample_ticks(sim: &mut Simulation, warmup: usize, samples: usize, dt: f32
         l1.push(t.l1_aggregation_us);
         behavior.push(t.behavior_transition_us);
         export.push(t.export_positions_us);
+        cells.push(t.cells_queried_total);
     }
 
     PhaseSamples {
@@ -60,6 +63,7 @@ pub fn sample_ticks(sim: &mut Simulation, warmup: usize, samples: usize, dt: f32
         l1_aggregation: summarize(&l1),
         behavior_transition: summarize(&behavior),
         export_positions: summarize(&export),
+        cells_queried: summarize(&cells),
     }
 }
 
@@ -105,5 +109,13 @@ mod tests {
         let mut sim = small_world();
         let s = sample_ticks(&mut sim, 3, 10, 0.05);
         assert!(s.perception.mean > 0.0, "per-phase timings populated with dev-tools");
+    }
+
+    #[test]
+    #[cfg(feature = "dev-tools")]
+    fn sampler_captures_cells_queried_under_dev_tools() {
+        let mut sim = small_world();
+        let s = sample_ticks(&mut sim, 3, 10, 0.05);
+        assert!(s.cells_queried.mean > 0.0, "perception must query L0 cells; signal for range-trim experiments");
     }
 }

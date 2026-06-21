@@ -26,8 +26,11 @@ impl Dna {
     }
 
     pub fn random() -> Self {
-        use rand::Rng;
         let mut rng = rand::thread_rng();
+        Self::random_seeded(&mut rng)
+    }
+
+    pub fn random_seeded(rng: &mut impl rand::Rng) -> Self {
         Self::new(rng.gen(), rng.gen())
     }
 
@@ -169,6 +172,39 @@ mod tests {
             let dna = Dna::random();
             assert!(dna.size_gene >= 0.0 && dna.size_gene <= 1.0);
             assert!(dna.fov_gene >= 0.0 && dna.fov_gene <= 1.0);
+        }
+    }
+
+    #[test]
+    fn random_seeded_is_deterministic_for_same_seed() {
+        use rand::rngs::StdRng;
+        use rand::SeedableRng;
+        let mut rng_a = StdRng::seed_from_u64(42);
+        let mut rng_b = StdRng::seed_from_u64(42);
+        let a = Dna::random_seeded(&mut rng_a);
+        let b = Dna::random_seeded(&mut rng_b);
+        assert_eq!(a, b, "same seed must produce identical DNA");
+    }
+
+    #[test]
+    fn random_seeded_varies_across_draws() {
+        use rand::rngs::StdRng;
+        use rand::SeedableRng;
+        let mut rng = StdRng::seed_from_u64(7);
+        let first = Dna::random_seeded(&mut rng);
+        let second = Dna::random_seeded(&mut rng);
+        assert_ne!(first, second, "successive draws from one rng must differ");
+    }
+
+    #[test]
+    fn random_seeded_stays_in_gene_range() {
+        use rand::rngs::StdRng;
+        use rand::SeedableRng;
+        let mut rng = StdRng::seed_from_u64(1);
+        for _ in 0..1000 {
+            let dna = Dna::random_seeded(&mut rng);
+            assert!((0.0..=1.0).contains(&dna.size_gene));
+            assert!((0.0..=1.0).contains(&dna.fov_gene));
         }
     }
 }

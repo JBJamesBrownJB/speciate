@@ -6,17 +6,41 @@
 > [`latency-tuning-lab.md`](./latency-tuning-lab.md)), which reproduces the
 > production engine within ~1% (verified below). See [`README.md`](./README.md) for the ladder.
 
-## Where we are (2026-06-21) — harness-verified
+## Where we are (2026-06-21) — 🎉 ONE MILLION achieved
 
-The latency lab now reproduces the engine faithfully. At **900,000 creatures** (random
-DNA, spread across the full ±5000 world, perception + behavior throttled to **divisor 8** —
-the standard benchmark config) the lab measures **48.3 ms mean** wall-clock tick versus the
-engine's own snapshot at **48.6 ms**
-([`../performance/snapshots/win_pop900k_48.6ms_randomDNA_2026-06-21_1450.json`](../performance/snapshots/win_pop900k_48.6ms_randomDNA_2026-06-21_1450.json))
-— under 1% apart, with steering matched to <1%. The model and reality finally agree, so the
-numbers below are reproducible from a seed, not a single manual run.
+**1,000,000 creatures sustained at 20 Hz on Windows.** Live engine snapshot:
+**48.5 ms mean tick · 49.4 ms p99 · 49.4 ms max** — the *entire* distribution under the 50 ms
+budget — with **0 render stall frames** (σ 1.15 ms) and ~2.8 GB memory. Config: **realistic
+(log-normal) DNA, perception + behavior throttled to divisor 8, full ±5000 world.** Evidence:
+[`../performance/snapshots/win_pop1M_48.5ms_2026-06-21_2333.json`](../performance/snapshots/win_pop1M_48.5ms_2026-06-21_2333.json).
 
-### Growth curve (seed 1, random DNA, full ±5000 world, divisor 8)
+**Cross-checked, not anecdotal.** The deterministic latency lab independently reproduces the
+engine within ~5% per-phase at 1M (perception 9.15 ↔ 9.77 ms, steering 13.55 ↔ 13.4 ms),
+confirming the number is real and seed-reproducible — not a single lucky frame.
+
+**Honest framing — it's at the wall, no headroom.** The live run was a clean pass, but the
+lab's multi-seed p99 (mean-of-p99s **51.4 ms**, worst seed 52.2 ms, noise floor 0.6 ms) shows
+the tail hovers right at 50 ms seed-to-seed. This is a *"just made it"* million, not a
+comfortable one.
+
+**What crossed the line: biology, not engine-polish.** Switching "random DNA" from a UNIFORM
+size smear (~half the population 5 m+ giants, each doing the expensive O(range²) long-range
+perception scan) to a **realistic log-normal pyramid** (most creatures small, ~1–2% giants)
+cut perception from ~14.5 ms to **9.15 ms** — the slice that crossed 50 ms. `cellsQueried`
+dropped ~47% (the causal proof). The incremental-grid (shelved for a resync stutter) and the
+perception micro-ops (below the noise floor) didn't get there; a single biology decision did.
+See [`../biology/biology-notes.md`](../biology/biology-notes.md).
+
+**The next lever is now steering (~13.5 ms)** — it overtook perception as the fattest phase, so
+that's where headroom *above* 1M lives.
+
+> **Sustained vs cold-start.** This is a cold-start million that held 20 Hz across the captured
+> window. An *indefinitely*-running million with creature death + respawn still crosses the
+> **f32 id-precision ceiling** (~16.7M cumulative spawns) and corrupts interpolation — the one
+> gate between "we hit a million" and "we run a million forever":
+> [`../testing/bugs/f32-id-precision-ceiling.md`](../testing/bugs/f32-id-precision-ceiling.md).
+
+### Growth curve — UNIFORM DNA (the heavier pre-realistic workload, for reference; seed 1, divisor 8)
 
 | Population | Mean tick | p99 tick | Within 50 ms? |
 |-----------|-----------|----------|---------------|
@@ -26,9 +50,11 @@ numbers below are reproducible from a seed, not a single manual run.
 | 900,000 | 48.3 ms | 56.9 ms | mean ✅ / **p99 ✗** |
 | 1,000,000 | 56.3 ms | 68.2 ms | ❌ |
 
-**Honest ceiling: ~920K by mean, ~830K by p99** — the tail busts 50 ms before the mean does,
-so 900K is "within budget but with no headroom" (occasional ticks spill). **1M is ~56 ms mean /
-68 ms p99 — about 12% over the budget on the mean.**
+**On the heavy uniform workload the ceiling was ~920K by mean / ~830K by p99** (1M ≈ 56 ms mean
+/ 68 ms p99, ~12% over). That is precisely the gap realistic DNA closed: the same 1M that sat
+12% over on uniform DNA lands at 48.5 ms on the realistic log-normal distribution. The uniform
+curve remains the conservative "all-giants" stress baseline; realistic DNA is the believable
+(and now budget-fitting) standard.
 
 Growth is **~O(n¹·¹⁵)** — mildly super-linear. In a *fixed* ±5000 world, density rises with
 population (more neighbours per perception, more occupied cells per grid rebuild + L1

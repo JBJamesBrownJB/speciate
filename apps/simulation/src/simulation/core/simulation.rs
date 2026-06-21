@@ -416,6 +416,31 @@ impl Simulation {
             .read()
     }
 
+    pub fn set_system_frequency(&mut self, system: &str, divisor: u8) {
+        use crate::simulation::core::components::FreqConfig;
+        let divisor = FreqConfig::clamp_power_of_2(divisor);
+        if let Some(mut config) = self.world.get_resource_mut::<FreqConfig>() {
+            match system {
+                "perception" => config.perception_divisor = divisor,
+                "behavior" => config.behavior_divisor = divisor,
+                "steering" => config.steering_divisor = divisor,
+                _ => {}
+            }
+        }
+    }
+
+    #[cfg(any(test, feature = "test-helpers"))]
+    pub fn system_frequency(&self, system: &str) -> u8 {
+        use crate::simulation::core::components::FreqConfig;
+        let config = self.world.resource::<FreqConfig>();
+        match system {
+            "perception" => config.perception_divisor,
+            "behavior" => config.behavior_divisor,
+            "steering" => config.steering_divisor,
+            _ => 0,
+        }
+    }
+
     pub fn world(&self) -> &World {
         &self.world
     }

@@ -62,6 +62,9 @@ pub fn build_world(spec: &WorldSpec) -> Simulation {
         sim.spawn_crit(builder);
     }
 
+    sim.set_system_frequency("perception", 8);
+    sim.set_system_frequency("behavior", 8);
+
     sim
 }
 
@@ -123,6 +126,20 @@ mod tests {
         };
         let sim = build_world(&spec);
         assert_eq!(sim.get_boundaries(), (-5000.0, 5000.0, -5000.0, 5000.0));
+    }
+
+    #[test]
+    fn build_world_throttles_perception_and_behavior_to_8() {
+        let spec = WorldSpec {
+            population: 100,
+            seed: 1,
+            half_extent_x: 5000.0,
+            half_extent_y: 5000.0,
+            distribution: Distribution::Uniform,
+        };
+        let sim = build_world(&spec);
+        assert_eq!(sim.system_frequency("perception"), 8);
+        assert_eq!(sim.system_frequency("behavior"), 8);
     }
 
     #[test]

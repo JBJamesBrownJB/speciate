@@ -1,4 +1,4 @@
-use crate::simulation::creatures::dna::Dna;
+use crate::simulation::creatures::dna::{Dna, SizeDistributionParams};
 use crate::{BehaviorMode, CritBuilder, Simulation, SimulationBuilder};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub enum Distribution {
     Uniform,
     Clustered { clusters: usize, spread: f32 },
+    RealisticSize { median_meters: f32, sigma_log10: f32 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,12 +36,19 @@ pub fn build_world(spec: &WorldSpec) -> Simulation {
                 (cx, cy)
             })
             .collect(),
-        Distribution::Uniform => Vec::new(),
+        Distribution::Uniform | Distribution::RealisticSize { .. } => Vec::new(),
+    };
+
+    let realistic_params = match spec.distribution {
+        Distribution::RealisticSize { median_meters, sigma_log10 } => {
+            Some(SizeDistributionParams::new(median_meters, sigma_log10))
+        }
+        _ => None,
     };
 
     for i in 0..spec.population {
         let (x, y) = match spec.distribution {
-            Distribution::Uniform => (
+            Distribution::Uniform | Distribution::RealisticSize { .. } => (
                 (rng.gen::<f32>() - 0.5) * (spec.half_extent_x * 2.0),
                 (rng.gen::<f32>() - 0.5) * (spec.half_extent_y * 2.0),
             ),
@@ -53,7 +61,11 @@ pub fn build_world(spec: &WorldSpec) -> Simulation {
             }
         };
 
-        let dna = Dna::random_seeded(&mut rng);
+        let dna = if let Some(ref params) = realistic_params {
+            Dna::random_realistic_seeded(&mut rng, params)
+        } else {
+            Dna::random_seeded(&mut rng)
+        };
         let builder = CritBuilder::new()
             .at(x, y)
             .with_dna(dna)

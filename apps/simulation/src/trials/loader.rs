@@ -5,7 +5,7 @@ use super::{CreatureType, SpawnPattern, SpecConfig, TrialConfig};
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::components::state::BehaviorMode;
 use crate::simulation::creatures::components::EntityTag;
-use crate::simulation::creatures::dna::Dna;
+use crate::simulation::creatures::dna::{Dna, SizeDistributionParams};
 use crate::simulation::creatures::systems::NextCreatureId;
 
 #[cfg(feature = "dev-tools")]
@@ -223,7 +223,10 @@ fn spawn_creature(
         let size_gene = ((size - SIZE_MIN) / (SIZE_MAX - SIZE_MIN)).clamp(0.0, 1.0);
         builder = builder.with_dna(Dna::new(size_gene, DEFAULT_FOV_GENE));
     } else if randomize_dna {
-        builder = builder.with_dna(Dna::random());
+        builder = builder.with_dna(Dna::random_realistic_seeded(
+            &mut rand::thread_rng(),
+            &SizeDistributionParams::realistic(),
+        ));
     } else if let Some(dna) = override_dna {
         builder = builder.with_dna(dna.clone());
     }

@@ -32,6 +32,8 @@ fn main() {
             clusters: arg(&args, "--clusters", 32),
             spread: arg(&args, "--spread", 150.0),
         }
+    } else if flag(&args, "--realistic-dna") {
+        Distribution::RealisticSize { median_meters: 0.5, sigma_log10: 0.45 }
     } else {
         Distribution::Uniform
     };

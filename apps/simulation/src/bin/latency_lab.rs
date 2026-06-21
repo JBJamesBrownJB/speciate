@@ -1,5 +1,6 @@
 use speciate::bench_lab::budget::TICK_BUDGET_US;
 use speciate::bench_lab::ramp::RampConfig;
+use speciate::bench_lab::sweep::sweep_populations;
 use speciate::bench_lab::world::{Distribution, WorldSpec};
 use speciate::bench_lab::{run_lab, BudgetMetric, LabConfig};
 
@@ -34,6 +35,33 @@ fn main() {
     } else {
         Distribution::Uniform
     };
+
+    if flag(&args, "--sweep") {
+        let from: usize = arg(&args, "--sweep-from", 100_000);
+        let to: usize = arg(&args, "--sweep-to", 1_000_000);
+        let step: usize = arg(&args, "--sweep-step", 100_000);
+        let pops: Vec<usize> = (from..=to).step_by(step.max(1)).collect();
+        let base = WorldSpec {
+            population: from,
+            seed,
+            half_extent_x: half_x,
+            half_extent_y: half_y,
+            distribution: distribution.clone(),
+        };
+        let points = sweep_populations(&base, &pops, warmup, samples, dt, TICK_BUDGET_US);
+        eprintln!("population,wall_mean_us,wall_p99_us,within_budget");
+        for p in &points {
+            eprintln!("{},{:.0},{:.0},{}", p.population, p.wall_mean_us, p.wall_p99_us, p.within_budget);
+        }
+        if let Some(i) = args.iter().position(|a| a == "--out") {
+            if let Some(path) = args.get(i + 1) {
+                let json = serde_json::to_string_pretty(&points).expect("serialize sweep");
+                std::fs::write(path, json).expect("write sweep");
+                eprintln!("wrote {path}");
+            }
+        }
+        return;
+    }
 
     let find_max = if flag(&args, "--find-max") {
         Some(RampConfig {

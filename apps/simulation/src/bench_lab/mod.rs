@@ -3,11 +3,13 @@ pub mod ramp;
 pub mod report;
 pub mod sampler;
 pub mod stats;
+pub mod sweep;
 pub mod world;
 
 pub use budget::{within_budget, BudgetMetric, TICK_BUDGET_US};
 pub use ramp::{find_max_pop, MaxPopResult, RampConfig};
 pub use report::{diff_reports, LabReport, PhaseDelta};
+pub use sweep::{sweep_populations, SweepPoint};
 pub use sampler::{sample_ticks, PhaseSamples};
 pub use stats::{summarize, TickStats};
 pub use world::{build_world, Distribution, WorldSpec};

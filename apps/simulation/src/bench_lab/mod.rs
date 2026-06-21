@@ -26,6 +26,40 @@ pub struct LabConfig {
     pub find_max: Option<RampConfig>,
 }
 
+#[derive(Debug, Clone)]
+pub struct MultiSeedReport {
+    pub label: String,
+    pub population: usize,
+    pub seeds: Vec<u64>,
+    pub per_seed: Vec<LabReport>,
+    pub wall_p99_across_seeds: TickStats,
+    pub wall_mean_across_seeds: TickStats,
+}
+
+pub fn run_lab_multi_seed(cfg: &LabConfig, seeds: &[u64]) -> MultiSeedReport {
+    let per_seed: Vec<LabReport> = seeds
+        .iter()
+        .map(|&s| {
+            let mut c = cfg.clone();
+            c.spec.seed = s;
+            c.label = format!("{}_seed{}", cfg.label, s);
+            run_lab(&c)
+        })
+        .collect();
+
+    let p99s: Vec<u64> = per_seed.iter().map(|r| r.samples.wall_total.p99.round() as u64).collect();
+    let means: Vec<u64> = per_seed.iter().map(|r| r.samples.wall_total.mean.round() as u64).collect();
+
+    MultiSeedReport {
+        label: cfg.label.clone(),
+        population: cfg.spec.population,
+        seeds: seeds.to_vec(),
+        wall_p99_across_seeds: summarize(&p99s),
+        wall_mean_across_seeds: summarize(&means),
+        per_seed,
+    }
+}
+
 pub fn run_lab(cfg: &LabConfig) -> LabReport {
     let mut sim = build_world(&cfg.spec);
     let samples = sample_ticks(&mut sim, cfg.warmup, cfg.samples, cfg.dt);
@@ -123,6 +157,26 @@ mod tests {
         let report = run_lab(&cfg);
         assert!(report.samples.wall_total.p99 > 1.0, "wall clock must be real/nonzero");
         assert!(!report.within_budget, "1us budget must fail on real wall-clock time");
+    }
+
+    #[test]
+    fn multi_seed_aggregates_across_seeds() {
+        let cfg = LabConfig {
+            label: "noise".to_string(),
+            spec: small_spec(1000),
+            warmup: 1,
+            samples: 5,
+            dt: 0.05,
+            budget_us: TICK_BUDGET_US,
+            metric: BudgetMetric::P99,
+            find_max: None,
+        };
+        let report = run_lab_multi_seed(&cfg, &[11, 42, 99]);
+        assert_eq!(report.seeds.len(), 3);
+        assert_eq!(report.per_seed.len(), 3);
+        assert_eq!(report.wall_p99_across_seeds.count, 3);
+        assert!(report.wall_p99_across_seeds.std_dev.is_finite(), "noise floor must be a finite number");
+        assert!(report.wall_p99_across_seeds.mean > 0.0);
     }
 
     #[test]

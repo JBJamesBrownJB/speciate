@@ -2,7 +2,7 @@ use speciate::bench_lab::budget::TICK_BUDGET_US;
 use speciate::bench_lab::ramp::RampConfig;
 use speciate::bench_lab::sweep::sweep_populations;
 use speciate::bench_lab::world::{Distribution, WorldSpec};
-use speciate::bench_lab::{run_lab, BudgetMetric, LabConfig};
+use speciate::bench_lab::{run_lab, run_lab_multi_seed, BudgetMetric, LabConfig};
 
 fn arg<T: std::str::FromStr>(args: &[String], key: &str, default: T) -> T {
     args.iter()
@@ -35,6 +35,23 @@ fn main() {
     } else {
         Distribution::Uniform
     };
+
+    if let Some(i) = args.iter().position(|a| a == "--seeds") {
+        let seeds: Vec<u64> = args.get(i + 1).map(|s| s.split(',').filter_map(|x| x.trim().parse().ok()).collect()).unwrap_or_default();
+        if !seeds.is_empty() {
+            let base = LabConfig {
+                label: format!("pop{pop}"),
+                spec: WorldSpec { population: pop, seed: seeds[0], half_extent_x: half_x, half_extent_y: half_y, distribution: distribution.clone() },
+                warmup, samples, dt, budget_us: TICK_BUDGET_US, metric: BudgetMetric::P99, find_max: None,
+            };
+            let r = run_lab_multi_seed(&base, &seeds);
+            eprintln!("[{} pop={}] seeds={:?}", r.label, r.population, r.seeds);
+            eprintln!("  wall p99: mean-of-p99s={:.0}us  NOISE-FLOOR(std)={:.0}us  worst={:.0}us",
+                r.wall_p99_across_seeds.mean, r.wall_p99_across_seeds.std_dev, r.wall_p99_across_seeds.max);
+            eprintln!("  wall mean: mean-of-means={:.0}us", r.wall_mean_across_seeds.mean);
+            return;
+        }
+    }
 
     if flag(&args, "--sweep") {
         let from: usize = arg(&args, "--sweep-from", 100_000);

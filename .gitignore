@@ -82,5 +82,6 @@ npm-debug.log*
 # Local overrides
 .claude/settings.local.json
 # Agent memory/cache
-.claude/memory.json.superpowers/
+.claude/memory.json
+.superpowers/
 .superpowers/

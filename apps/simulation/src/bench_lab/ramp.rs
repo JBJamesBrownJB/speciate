@@ -54,6 +54,9 @@ pub fn find_max_pop(cfg: &RampConfig, mut run: impl FnMut(usize) -> TickStats) -
     if let Some(mut hi) = first_fail {
         while hi - lo > cfg.tolerance {
             let mid = lo + (hi - lo) / 2;
+            if mid == lo {
+                break;
+            }
             if eval(mid, &mut evaluations) {
                 lo = mid;
             } else {
@@ -106,5 +109,14 @@ mod tests {
         c.low = 1_200_000;
         let result = find_max_pop(&c, synthetic);
         assert_eq!(result.max_pop, 0);
+    }
+
+    #[test]
+    fn bisection_terminates_with_zero_tolerance() {
+        let mut c = cfg();
+        c.tolerance = 0;
+        let result = find_max_pop(&c, synthetic);
+        assert!(within_budget(&synthetic(result.max_pop), 50_000, BudgetMetric::P99));
+        assert!(result.max_pop <= 1_000_000);
     }
 }

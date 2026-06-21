@@ -1,74 +1,91 @@
 # Path to One Million 🚧
 
 > **Category: 🚧 In progress (NOW) — Pillar 1.** The honest, measured state of the
-> million-creature quest and the concrete levers left. Evidence-driven; every number
-> here traces to a committed snapshot. See [`README.md`](./README.md) for the ladder.
+> million-creature quest. Every number here now traces to the deterministic
+> **latency tuning lab** (`apps/simulation/src/bench_lab/`, doc:
+> [`latency-tuning-lab.md`](./latency-tuning-lab.md)), which reproduces the
+> production engine within ~1% (verified below). See [`README.md`](./README.md) for the ladder.
 
-## Where we are (2026-06-20)
+## Where we are (2026-06-21) — harness-verified
 
-A single Windows run sustained **~900,000 creatures at a steady 20 Hz**. The tick is at
-the edge of the budget and the render pipeline is still smooth.
+The latency lab now reproduces the engine faithfully. At **900,000 creatures** (random
+DNA, spread across the full ±5000 world, perception + behavior throttled to **divisor 8** —
+the standard benchmark config) the lab measures **48.3 ms mean** wall-clock tick versus the
+engine's own snapshot at **48.6 ms**
+([`../performance/snapshots/win_pop900k_48.6ms_randomDNA_2026-06-21_1450.json`](../performance/snapshots/win_pop900k_48.6ms_randomDNA_2026-06-21_1450.json))
+— under 1% apart, with steering matched to <1%. The model and reality finally agree, so the
+numbers below are reproducible from a seed, not a single manual run.
 
-Evidence: [`../performance/snapshots/win_pop900k_49.4ms_2026-06-20_2352.json`](../performance/snapshots/win_pop900k_49.4ms_2026-06-20_2352.json)
-(16-core machine, single run, not yet CI-benchmarked).
+### Growth curve (seed 1, random DNA, full ±5000 world, divisor 8)
 
-| Signal | Value | Read |
-|--------|-------|------|
-| Population | 900,000 (rock-steady) | — |
-| Tick rate | 20 Hz held | no dropped beats |
-| **Total tick** | **~49.4 ms** of the 50 ms budget | **~0.6 ms headroom — at the wall** |
-| Render: stall frames | **0** | smooth |
-| Render: snapshot σ | **0.8 ms** | (was ~16 ms pre-fix) — "render in the past" scales |
-| Process memory | ~3.5 GB | comfortable; ~3.9 GB projected at 1M |
-| CPU utilisation | **~61%** across 16 active cores | **the lever — see below** |
+| Population | Mean tick | p99 tick | Within 50 ms? |
+|-----------|-----------|----------|---------------|
+| 500,000 | 26.2 ms | 28.5 ms | ✅ |
+| 700,000 | 36.5 ms | 38.8 ms | ✅ |
+| 800,000 | 42.6 ms | 44.2 ms | ✅ (last clean p99) |
+| 900,000 | 48.3 ms | 56.9 ms | mean ✅ / **p99 ✗** |
+| 1,000,000 | 56.3 ms | 68.2 ms | ❌ |
 
-The buffer ceiling is already 1M (raised this session), so the remaining gap is **tick
-budget**, not capacity.
+**Honest ceiling: ~920K by mean, ~830K by p99** — the tail busts 50 ms before the mean does,
+so 900K is "within budget but with no headroom" (occasional ticks spill). **1M is ~56 ms mean /
+68 ms p99 — about 12% over the budget on the mean.**
 
-## Where the 49.4 ms goes
+Growth is **~O(n¹·¹⁵)** — mildly super-linear. In a *fixed* ±5000 world, density rises with
+population (more neighbours per perception, more occupied cells per grid rebuild + L1
+aggregation), so per-creature cost creeps up. A constant-density ramp (world growing with
+population) would be flatter and reach higher — a benchmark variant worth adding.
 
-| System | Time | Share |
-|--------|------|-------|
-| Perception (neighbour detection) | ~15.0 ms | ~30% |
-| Steering (fused wander/seek/avoid forces) | ~12.5 ms | ~25% |
-| Movement (physics integration) | ~8.0 ms | ~16% |
-| Spatial grid rebuild | ~5.5 ms | ~11% |
-| L1 aggregation | ~3.0 ms | ~6% |
-| Behavior transition | ~3.0 ms | ~6% |
-| Export positions | ~2.4 ms | ~5% |
+## The dominant lever: the cognitive-system throttle
 
-**Perception + steering are ~55% of the tick** — that's where the budget is won or lost.
+Perception + behavior run on a **frequency throttle** (`FreqConfig`, entity-id bitwise
+bucketing): at divisor 8, only 1/8 of creatures perceive each tick. **This is the single
+biggest performance lever.** Perception cost is ~linear in creatures-processed-per-tick, and
+perception *range* scales super-linearly with body size
+(`apps/simulation/src/simulation/perception/components.rs:98`), so a random-DNA world full of
+large creatures is dominated by perception. The engine default is now **8** (was 2); running
+at 2 quadruples perception load and was the cause of an earlier mis-measured ~590K ceiling.
+The throttle is a Golden-Zone optimisation — slower perception means slower reactions, a real
+biological cost paid for the speed.
 
-## The lever: ~61% CPU at the wall
+## Where the ~48 ms goes (900K, divisor 8)
 
-All 16 cores are engaged, yet average utilisation is only ~61%. A 49 ms wall-clock tick
-that only keeps the cores ~61% busy means cores are **idling inside the tick** — serial
-stretches or load imbalance between parallel and serial systems. Closing that gap is the
-most promising route to 1M at 20 Hz: the work to run 900K is *already cheaper than 49 ms*
-if it were spread evenly. **Caveat:** this is an estimate from a coarse utilisation metric;
-the real serial bottleneck must be pinned with a profiler before chasing it.
+| System | Time |
+|--------|------|
+| Perception | ~14.5 ms |
+| Steering | ~13.1 ms |
+| Movement | ~8.3 ms |
+| Spatial grid rebuild | ~5.9 ms |
+| L1 aggregation | ~3.6 ms |
+| Behavior transition | ~3.8 ms |
 
-## Concrete next steps (ranked, unstarted)
+**Per-phase timings sum to ~total wall (gap <0.5%)** — there is **no significant serial-glue
+idle between phases.** The earlier "~61% CPU = cores idling in serial stretches" reading is
+**refuted**: that 61% was a coarse system-wide `sysinfo` average, not in-tick core occupancy.
+Any remaining under-utilisation lives *within* each parallel phase (load imbalance), not
+between them. Perception + steering are ~57% of the tick — that's where the last ~12% to 1M is
+won or lost.
 
-1. **Profile the tick to find the idle.** Use the **latency tuning lab**
-   (`docs/scale/latency-tuning-lab.md`) for deterministic per-phase A/B and max-pop
-   search; Linux `perf`/PMU for hardware counters. Confirm or refute the 61% read
-   before optimizing. (Agent: instrumentation-ian.)
-2. **Attack perception (~15 ms).** It's the fattest system and a Golden-Zone target:
-   size-based skip (giants ignore tiny entities), satiated-predator skip, tighter FOV/range
-   genes, coarser Rayon chunking. Each is a perf win that *is* a biological feature.
-3. **Attack steering (~12.5 ms).** Frequency-throttle where physics allows; reduce per-creature
-   force sources; check parallel chunk sizing.
-4. **CI-validate the number.** Turn the ~900K peak into a reproducible, cross-platform
-   CI benchmark (Pillar 1 deliverable) so the badge stops being a placeholder.
+## Concrete next steps (ranked)
 
-## Prerequisite for *sustained* 1M (not just a peak)
+1. **Attack perception (~14.5 ms).** Fattest phase and a Golden-Zone target: size-based skip
+   (giants ignore tiny entities), satiated-predator skip, throttle-hoist (don't dispatch Rayon
+   tasks for throttled-out creatures), tighter Rayon chunking. A/B each in the lab and watch
+   the **p99 tail** — that's what fails first.
+2. **Attack steering (~13.1 ms).** Nearly as fat as perception. Reduce per-creature force
+   sources; check parallel chunk sizing.
+3. **Parallelise the serial within-phase work** — L1 aggregation and the grid rebuild's
+   prefix-sum have single-threaded stretches inside their phases.
+4. **CI the harness.** The lab is deterministic and seed-stamped — wire `--sweep` /
+   `--find-max` into CI so the curve and ceiling regenerate on every commit (the Pillar 1
+   "live badge" deliverable).
 
-A long-running 1M world with creature death + respawn will cross the **f32 id-precision
-ceiling** (~16.7M cumulative spawns) and corrupt interpolation matching. Fix that before
-claiming sustained 1M, not just a cold-start peak:
+## Prerequisite for *sustained* 1M (not just a cold-start peak)
+
+A long-running 1M world with creature death + respawn crosses the **f32 id-precision ceiling**
+(~16.7M cumulative spawns) and corrupts interpolation matching. Fix before claiming *sustained*
+1M, not just a cold-start peak:
 [`../testing/bugs/f32-id-precision-ceiling.md`](../testing/bugs/f32-id-precision-ceiling.md).
 
 ---
 
-**Document Owner:** Pillar 1 (Prove Scale) · **Last Updated:** 2026-06-20
+**Document Owner:** Pillar 1 (Prove Scale) · **Last Updated:** 2026-06-21 (harness-verified)

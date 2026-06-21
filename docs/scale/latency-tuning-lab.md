@@ -3,16 +3,39 @@
 > **Category: 🚧 In progress (NOW) — Pillar 1.** A deterministic harness for ruling
 > speed/population optimizations in or out empirically. Code: `apps/simulation/src/bench_lab/`.
 
+## Verified faithful (2026-06-21)
+
+The lab reproduces the production engine. At **900K** (the standard config below) it measures
+**48.3 ms mean** wall-clock tick vs the engine's own snapshot at **48.6 ms**
+([`win_pop900k_48.6ms_randomDNA`](../performance/snapshots/win_pop900k_48.6ms_randomDNA_2026-06-21_1450.json))
+— **<1% apart**, with steering matched to <1% and every phase within a few percent. It is a
+faithful model, not an argument with reality.
+
+> Getting there took finding the real bug: the lab was running the cognitive-system throttle at
+> the engine *old* default (divisor 2) while the benchmark runs **divisor 8**, a 4× perception
+> load. That mis-config produced a bogus ~590K ceiling. Lesson: **the throttle divisor is the
+> dominant perf lever** — always match it.
+
+## Standard config (what the lab defaults to)
+
+Random DNA, spread across the **full ±5000 world** (`MAX_WORLD_SIZE`), perception + behavior
+throttled to **divisor 8** (`FreqConfig`, now the engine default). This is the real benchmark
+methodology. The binary defaults match it: `--half-x 5000 --half-y 5000`, random DNA, divisor 8
+applied by `build_world`.
+
 ## What it does
 
-Two measurements, two jobs:
+Three measurements, three jobs:
 
 1. **Headline KPI — max sustainable population.** `--find-max` does a coarse-bracket →
    bisection search for the largest population whose **p99 tick ≤ 50,000 µs**
    (`TICK_BUDGET_US`). This is the undeniable scoreboard number.
-2. **Diagnostic — per-phase A/B.** A fixed-population run (default 200k) captures
-   per-phase timings (perception/steering/movement/grid/L1/behavior/export) plus
-   wall-clock total, so a change can be attributed to a phase, not guessed at.
+2. **Growth curve.** `--sweep --sweep-from --sweep-to --sweep-step` measures p99 at evenly
+   spaced populations — the *shape* of tick-time vs count (currently ~O(n¹·¹⁵), super-linear
+   from rising fixed-world density). Use this, not the find-max trail, to see the growth shape.
+3. **Diagnostic — per-phase A/B.** A fixed-population run captures per-phase timings
+   (perception/steering/movement/grid/L1/behavior) plus wall-clock total, so a change can be
+   attributed to a phase, not guessed at.
 
 ## What metric the budget keys on
 
@@ -52,6 +75,10 @@ cd apps/simulation
 cargo run --release --features dev-tools --bin latency_lab -- \
   --pop 200000 --seed 1 --samples 60 --warmup 20 --out /tmp/before.json
 
+# Growth curve (the shape of tick-time vs population)
+cargo run --release --features dev-tools --bin latency_lab -- \
+  --sweep --sweep-from 100000 --sweep-to 1200000 --sweep-step 100000 --seed 1 --out /tmp/curve.json
+
 # Headline: find the max sustainable population
 cargo run --release --features dev-tools --bin latency_lab -- \
   --find-max --low 700000 --high 1100000 --coarse-step 100000 --tolerance 25000
@@ -60,6 +87,10 @@ cargo run --release --features dev-tools --bin latency_lab -- \
 cargo run --release --features dev-tools --bin latency_lab -- \
   --pop 200000 --clustered --clusters 32 --spread 150
 ```
+
+Latest verified curve (seed 1, random DNA, full world, divisor 8): 500K = 26 ms, 800K = 43 ms,
+900K = 48 ms mean (p99 57 ms), 1M = 56 ms mean (p99 68 ms). **Ceiling ~920K by mean / ~830K by
+p99; 1M ≈ 12% over budget.** See [`path-to-one-million.md`](./path-to-one-million.md).
 
 ## The honest gaps
 

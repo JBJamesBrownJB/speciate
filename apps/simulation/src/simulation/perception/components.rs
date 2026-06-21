@@ -261,18 +261,11 @@ mod tests {
 
     #[test]
     fn test_perception_scaling_with_body_size_default_fov() {
-        // Test the RELATIONSHIP: range scales super-linearly with body size due to allometry
-        // Formula: range = body_size × MULTIPLIER × (body_size / REF)^0.35 × fov_factor
         let small_perception = Perception::from_body_size(0.5);
         let standard_perception = Perception::from_body_size(1.0);
         let large_perception = Perception::from_body_size(2.0);
 
-        // Range should scale super-linearly (body_size^1 × body_size^0.35 = body_size^1.35)
         assert!(small_perception.range > 0.0, "Range must be positive");
-
-        // Expected ratio for 1.0 vs 0.5:
-        // base ratio: 2.0, allometry ratio: (1.0/0.5)^0.35 / (0.5/0.5)^0.35 = 2^0.35 ≈ 1.274
-        // total: 2.0 × 1.274 ≈ 2.55
         let ratio_1_to_05 = standard_perception.range / small_perception.range;
         let expected_ratio = 2.0 * (2.0_f32).powf(SIZE_ALLOMETRY_EXPONENT);
         assert!(
@@ -373,28 +366,10 @@ mod tests {
 
     #[test]
     fn test_perception_range_allometric_scaling() {
-        // With allometric scaling, larger creatures see proportionally less far
-        // A 10x larger creature (5.0m vs 0.5m) should see ~2.24x farther, not 10x
-        // Formula: allometry = (size / SIZE_ALLOMETRY_REFERENCE)^SIZE_ALLOMETRY_EXPONENT
-        //          (5.0 / 0.5)^0.35 = 10^0.35 ≈ 2.24
-
         let small_perception = Perception::new(180.0, SIZE_ALLOMETRY_REFERENCE);
         let large_perception = Perception::new(180.0, 5.0);
 
         let ratio = large_perception.range / small_perception.range;
-
-        // Expected ratio from allometric scaling:
-        // base_range ratio: 5.0 / 0.5 = 10
-        // allometry ratio: (5.0 / 0.5)^0.35 / (0.5 / 0.5)^0.35 = 10^0.35 / 1 = 2.24
-        // total ratio = 10 × 2.24 / 1 = 22.4 (accounting for both base and allometry)
-        // Actually: range = base × allometry × fov
-        // For 0.5m: base = 0.5 × 10 = 5, allometry = 1.0, fov = 1.0 → 5m
-        // For 5.0m: base = 5.0 × 10 = 50, allometry = 2.24, fov = 1.0 → 112m
-        // Ratio = 112 / 5 = 22.4
-
-        // Without allometry, ratio would be 10 (linear with body size)
-        // With allometry, large creature has MORE than linear scaling
-        // The allometry MULTIPLIES with base range, giving super-linear growth
 
         let expected_ratio = (5.0 / SIZE_ALLOMETRY_REFERENCE)
             * (5.0 / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
@@ -408,15 +383,8 @@ mod tests {
 
     #[test]
     fn test_perception_range_reference_size_has_unit_allometry() {
-        // At the reference size (0.5m), the allometry factor should be 1.0
-        // So range = base_range × 1.0 × fov_factor
-
         let perception = Perception::new(180.0, SIZE_ALLOMETRY_REFERENCE);
 
-        // base_range = 0.5 × 10 = 5m
-        // allometry = (0.5 / 0.5)^0.35 = 1.0
-        // fov_factor = (180 / 180)^0.4 = 1.0
-        // range = 5 × 1.0 × 1.0 = 5m
         let expected = SIZE_ALLOMETRY_REFERENCE * PERCEPTION_MULTIPLIER;
         assert!(
             (perception.range - expected).abs() < 0.01,
@@ -428,12 +396,6 @@ mod tests {
 
     #[test]
     fn test_perception_range_default_creature() {
-        // Default creature: 1.0m body, 180° FOV
-        // base_range = 1.0 × 10 = 10m
-        // allometry = (1.0 / 0.5)^0.35 = 2.0^0.35 ≈ 1.274
-        // fov_factor = (180 / 180)^0.4 = 1.0
-        // range = 10 × 1.274 × 1.0 ≈ 12.74m
-
         let perception = Perception::new(180.0, 1.0);
 
         let expected_allometry = (1.0 / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
@@ -449,12 +411,6 @@ mod tests {
 
     #[test]
     fn test_perception_range_large_creature() {
-        // Large creature: 5.0m body, 180° FOV
-        // base_range = 5.0 × 10 = 50m
-        // allometry = (5.0 / 0.5)^0.35 = 10^0.35 ≈ 2.239
-        // fov_factor = 1.0
-        // range = 50 × 2.239 × 1.0 ≈ 112m
-
         let perception = Perception::new(180.0, 5.0);
 
         let expected_allometry = (5.0 / SIZE_ALLOMETRY_REFERENCE).powf(SIZE_ALLOMETRY_EXPONENT);
@@ -466,5 +422,12 @@ mod tests {
             expected,
             perception.range
         );
+    }
+
+    #[test]
+    fn large_crit_perception_range_is_trimmed() {
+        let p = Perception::new(45.0, 10.0);
+        assert!(p.range < 400.0, "large-crit range {} should be < 400m after exponent trim", p.range);
+        assert!(p.range > 300.0, "but still substantial (sanity)");
     }
 }

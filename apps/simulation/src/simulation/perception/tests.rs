@@ -164,7 +164,7 @@ fn test_perception_detects_nearby_entities() {
 
     let mut world = World::new();
 
-    // Body size 1.0 → range = PERCEPTION_MULTIPLIER (100.0)
+    // Body size 1.0 → effective range ≈ body_size × PERCEPTION_MULTIPLIER(10.0) × allometry
     // Place crit1 and crit2 close together, crit3 far away
     let crit1 = world
         .spawn((
@@ -235,7 +235,7 @@ fn test_perception_clears_previous_neighbors() {
 
     let mut world = World::new();
 
-    // Body size 1.0 → range = PERCEPTION_MULTIPLIER (100.0)
+    // Body size 1.0 → effective range ≈ body_size × PERCEPTION_MULTIPLIER(10.0) × allometry
     let crit1 = world
         .spawn((
             Position { x: 0.0, y: 0.0 },

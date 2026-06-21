@@ -52,13 +52,14 @@ pub const DEFAULT_FOV_DEGREES: f32 = 180.0;
 // =============================================================================
 
 /// [ACTIVE] Exponent for size-based perception range scaling.
-/// BIOLOGICAL BASIS: Allometric scaling - larger animals don't just see linearly farther.
-/// With exponent 0.35:
+/// BIOLOGICAL BASIS: Eye/acuity allometry scales ~mass^0.2-0.25; detection range saturates
+/// from atmospheric/water extinction. 0.35 was over-generous for large creatures.
+/// With exponent 0.25:
 ///   - 0.5m creature: baseline
-///   - 1.0m creature: ~1.27× the range (not 2×)
-///   - 5.0m creature: ~2.24× the range of 0.5m (not 10×)
-/// Creates diminishing returns for size investment.
-pub const SIZE_ALLOMETRY_EXPONENT: f32 = 0.35;
+///   - 1.0m creature: ~1.19× the range (not 2×)
+///   - 5.0m creature: ~1.78× the range of 0.5m (not 10×)
+/// Trims large-crit range ~26% (e.g. 10m/45° FOV: ~510m→~368m); small/medium ~unchanged.
+pub const SIZE_ALLOMETRY_EXPONENT: f32 = 0.25;
 
 /// [ACTIVE] Reference size for allometric scaling (smallest creature size).
 /// Creatures at this size have allometry factor of 1.0.

@@ -106,4 +106,31 @@ mod tests {
         assert_eq!(a.samples.wall_total.count, b.samples.wall_total.count);
         assert_eq!(a.spec.population, b.spec.population);
     }
+
+    #[test]
+    fn run_lab_find_max_exercises_search_and_returns_some() {
+        use crate::bench_lab::ramp::RampConfig;
+
+        let cfg = LabConfig {
+            label: "findmax".to_string(),
+            spec: small_spec(100),
+            warmup: 1,
+            samples: 2,
+            dt: 0.05,
+            budget_us: TICK_BUDGET_US,
+            metric: BudgetMetric::P99,
+            find_max: Some(RampConfig {
+                low: 100,
+                high: 400,
+                coarse_step: 100,
+                tolerance: 50,
+                budget_us: TICK_BUDGET_US,
+                metric: BudgetMetric::P99,
+            }),
+        };
+        let report = run_lab(&cfg);
+        assert!(report.max_pop.is_some(), "find_max branch must populate max_pop");
+        let max = report.max_pop.unwrap();
+        assert!((100..=400).contains(&max), "max_pop {max} must lie within the ramp range");
+    }
 }

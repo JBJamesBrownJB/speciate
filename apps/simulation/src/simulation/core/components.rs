@@ -139,7 +139,8 @@ impl Default for ActualTickRate {
 }
 
 /// Runtime-adjustable frequency divisors for cognitive systems.
-/// Divisor=1 means every tick (full rate), divisor=2 means every 2nd tick, etc.
+/// Divisor=1 means every tick (full rate), divisor=N means every Nth tick.
+/// Default is 8 (standard benchmark throttle); clamp floor is 2 (no "off" option).
 /// Uses entity-ID bucketing to distribute updates evenly across ticks.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct FreqConfig {
@@ -151,8 +152,8 @@ pub struct FreqConfig {
 impl Default for FreqConfig {
     fn default() -> Self {
         Self {
-            perception_divisor: 2, // Minimum 2 - no "off" option
-            behavior_divisor: 2,   // Minimum 2 - no "off" option
+            perception_divisor: 8, // Default 8 (standard benchmark throttle); clamp floor is still 2
+            behavior_divisor: 8,   // Default 8 (standard benchmark throttle); clamp floor is still 2
             steering_divisor: 1,   // Keep 1 (steering throttling removed)
         }
     }
@@ -428,5 +429,13 @@ mod tests {
         assert_eq!(FreqConfig::clamp_power_of_2(16), 8);
         assert_eq!(FreqConfig::clamp_power_of_2(100), 8);
         assert_eq!(FreqConfig::clamp_power_of_2(255), 8);
+    }
+
+    #[test]
+    fn freq_config_default_is_8_for_cognitive_systems() {
+        let cfg = FreqConfig::default();
+        assert_eq!(cfg.perception_divisor, 8);
+        assert_eq!(cfg.behavior_divisor, 8);
+        assert_eq!(cfg.steering_divisor, 1);
     }
 }

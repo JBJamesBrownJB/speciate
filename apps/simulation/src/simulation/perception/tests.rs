@@ -783,12 +783,10 @@ fn test_wide_fov_perceives_many_neighbors_in_crowd() {
         sim.spawn_crit(CritBuilder::new().at(x, y).with_all_capabilities());
     }
 
-    // Run a few ticks to ensure perception runs
-    for _ in 0..3 {
+    for _ in 0..10 {
         sim.update(0.016);
     }
 
-    // Find the center creature and check its neighbor count
     let world = sim.world_mut();
     let center_entity = world
         .query::<(
@@ -805,16 +803,12 @@ fn test_wide_fov_perceives_many_neighbors_in_crowd() {
         .expect("Should have NeighborCache");
     let neighbor_count = neighbor_cache.neighbor_count();
 
-    // With 340° FOV and 12 neighbors evenly spaced, should see about 11
-    // (all except the one in the ~20° blind spot behind)
-    // But due to FOV direction and movement, let's just check we see MORE than 1
     assert!(
         neighbor_count > 1,
         "Wide FOV (340°) creature should perceive many neighbors, but only got {}",
         neighbor_count
     );
 
-    // Should see at least 6 neighbors (half of the 12 we spawned)
     assert!(
         neighbor_count >= 6,
         "Wide FOV (340°) creature should perceive at least 6 neighbors, but only got {}",
@@ -1093,7 +1087,7 @@ fn test_fov_variants_medium_90_crowd() {
         sim.spawn_crit(CritBuilder::new().at(x, y).with_all_capabilities());
     }
 
-    for _ in 0..3 {
+    for _ in 0..10 {
         sim.update(0.016);
     }
 
@@ -1113,8 +1107,6 @@ fn test_fov_variants_medium_90_crowd() {
         .expect("Should have NeighborCache");
     let neighbor_count = neighbor_cache.neighbor_count();
 
-    // 90° FOV = ±45° from facing. With 12 neighbors at 30° intervals,
-    // 0°, ±30° should be visible (3-4 neighbors)
     assert!(
         neighbor_count >= 2 && neighbor_count <= 5,
         "Medium FOV (90°) creature should perceive 2-5 neighbors, but got {}",
@@ -1257,9 +1249,7 @@ fn test_l0_scan_limited_to_adjacent_cells() {
         .map(|(e, _)| e)
         .expect("Distant should exist");
 
-    // Run multiple ticks to ensure spatial grid is populated
-    // (first tick inserts creatures into grid, subsequent ticks do perception)
-    for _ in 0..3 {
+    for _ in 0..10 {
         sim.update(0.016);
     }
 

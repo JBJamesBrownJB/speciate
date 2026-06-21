@@ -12,6 +12,7 @@ use crate::simulation::creatures::components::CreatureState;
 #[cfg(feature = "dev-tools")]
 use crate::simulation::creatures::components::CritId;
 use crate::simulation::creatures::constants::MAX_PERCEIVED_NEIGHBORS;
+use crate::simulation::math::fast_inv_sqrt;
 use crate::simulation::spatial::constants::{CELL_SIZE, L1_CELL_SIZE};
 use crate::simulation::spatial::{BioSignature, HierarchicalGrid};
 
@@ -113,7 +114,7 @@ pub fn update_perception_system(
     // SINGLE PERCEPTION PASS - identical in dev and production
     // ============================================================
     // Perception: Heavy, variable workload - smaller chunks for better load balancing
-    entities.par_iter_mut().with_min_len(64).for_each(
+    entities.par_iter_mut().with_min_len(256).for_each(
         |(entity, pos, rot, size, perception, neighbor_cache, l1_vision, state)| {
             // Check if this entity is the debug target (dev-tools only)
             #[cfg(feature = "dev-tools")]
@@ -542,7 +543,7 @@ pub fn update_perception_system(
                                 let classification =
                                     classify_l1_cell(biosig, my_mass, self_radius, is_my_cell);
 
-                                let inv_dist = dist_sq.sqrt().recip();
+                                let inv_dist = fast_inv_sqrt(dist_sq);
                                 l1_vision.push(L1VisionEntry {
                                     cell_idx: l1_idx as u32,
                                     classification,

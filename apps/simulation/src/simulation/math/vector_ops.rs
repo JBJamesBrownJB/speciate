@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_fast_inv_sqrt_accuracy() {
-        let test_values = [1.0, 4.0, 9.0, 16.0, 25.0, 100.0, 0.25];
+        let test_values = [1.0, 4.0, 9.0, 16.0, 25.0, 100.0, 0.25, 3600.0];
         for &x in &test_values {
             let fast = fast_inv_sqrt(x);
             let std = 1.0 / x.sqrt();

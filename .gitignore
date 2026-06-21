@@ -83,3 +83,4 @@ npm-debug.log*
 .claude/settings.local.json
 # Agent memory/cache
 .claude/memory.json.superpowers/
+.superpowers/

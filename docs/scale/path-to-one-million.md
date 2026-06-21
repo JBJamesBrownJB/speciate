@@ -50,9 +50,10 @@ the real serial bottleneck must be pinned with a profiler before chasing it.
 
 ## Concrete next steps (ranked, unstarted)
 
-1. **Profile the tick to find the idle.** Linux `perf`/PMU (the cockpit panel) or a
-   Windows profiler (WPA/Tracy) to see *which* phase leaves cores idle — confirm or refute
-   the 61% read before optimizing. (Instrumentation home: `docs/scale/`, agent: instrumentation-ian.)
+1. **Profile the tick to find the idle.** Use the **latency tuning lab**
+   (`docs/scale/latency-tuning-lab.md`) for deterministic per-phase A/B and max-pop
+   search; Linux `perf`/PMU for hardware counters. Confirm or refute the 61% read
+   before optimizing. (Agent: instrumentation-ian.)
 2. **Attack perception (~15 ms).** It's the fattest system and a Golden-Zone target:
    size-based skip (giants ignore tiny entities), satiated-predator skip, tighter FOV/range
    genes, coarser Rayon chunking. Each is a perf win that *is* a biological feature.

@@ -91,6 +91,9 @@ pub fn run_lab(cfg: &LabConfig) -> LabReport {
 }
 
 #[cfg(test)]
+mod crossing_measurement;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::bench_lab::budget::TICK_BUDGET_US;

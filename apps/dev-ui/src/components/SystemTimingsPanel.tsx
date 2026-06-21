@@ -226,10 +226,14 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
   const averageRefs = useRef<Record<string, number>>({});
   const [sortedKeys, setSortedKeys] = useState<string[]>([]);
 
-  // Frequency divisor state for controllable systems (minimum 2)
+  // Frequency divisor state for controllable systems.
+  // Must match the engine's FreqConfig::default (perception/behavior = 8; clamp floor 2).
+  // NOTE: this is the display default only — it is NOT pushed to the engine on mount
+  // (only on user change via handleDivisorChange), so it must mirror the engine default
+  // or the panel shows a value the engine isn't actually running.
   const [divisors, setDivisors] = useState<Record<string, number>>({
-    perception: 2,
-    behavior: 2,
+    perception: 8,
+    behavior: 8,
   });
 
   const handleDivisorChange = (systemName: string, divisor: number) => {

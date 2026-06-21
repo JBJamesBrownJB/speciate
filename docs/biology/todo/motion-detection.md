@@ -1,8 +1,10 @@
 # Motion Detection (Golden Zone Opportunity)
 
-## Status: DEFERRED
+## Status: DEFERRED → **recommended next 1M lever (2026-06-21)**
 
 Identified during Phase A planning. High-value optimization that provides free emergent behavior.
+
+**2026-06-21 update:** promoted to the recommended next perception cut on the path to 1M. Rationale (team perf analysis): it cuts the *fattest* tick phase (perception ~14.5 ms at 900K) by a *real* amount — at scale a large fraction of creatures are slow/idle, so skipping them is a big slice, plausibly enough to clear the ~2 ms p99 noise floor where the micro-trims (range-trim, fast_inv_sqrt) couldn't. Needs **no energy/hunger system** (just a velocity check), unlike hunger-gating. Double-value Golden Zone: perf win = "prey freeze = camouflage" gameplay. Validate in the latency lab (multi-seed, p99-aware, `cells_queried` as the causal signal). See `docs/scale/optimization-checklist.md` (T2.3) and `docs/scale/path-to-one-million.md`. First verify the existing L1 size-domination early-exit (`perception/systems.rs`) doesn't already overlap before building.
 
 ---
 

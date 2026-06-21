@@ -23,6 +23,9 @@ pub struct PhaseDelta {
     pub after_us: f64,
     pub delta_us: f64,
     pub pct: f64,
+    pub before_p99_us: f64,
+    pub after_p99_us: f64,
+    pub delta_p99_us: f64,
 }
 
 fn delta(name: &str, before: &TickStats, after: &TickStats) -> PhaseDelta {
@@ -30,7 +33,16 @@ fn delta(name: &str, before: &TickStats, after: &TickStats) -> PhaseDelta {
     let after_us = after.mean;
     let delta_us = after_us - before_us;
     let pct = if before_us == 0.0 { 0.0 } else { delta_us / before_us * 100.0 };
-    PhaseDelta { name: name.to_string(), before_us, after_us, delta_us, pct }
+    PhaseDelta {
+        name: name.to_string(),
+        before_us,
+        after_us,
+        delta_us,
+        pct,
+        before_p99_us: before.p99,
+        after_p99_us: after.p99,
+        delta_p99_us: after.p99 - before.p99,
+    }
 }
 
 pub fn diff_reports(before: &LabReport, after: &LabReport) -> Vec<PhaseDelta> {
@@ -97,5 +109,20 @@ mod tests {
         assert!(json.contains("withinBudget"));
         assert!(json.contains("buildType"));
         assert!(json.contains("totalTick"));
+    }
+
+    #[test]
+    fn diff_reports_tracks_p99_tail_separately_from_mean() {
+        let mut before = report("baseline", 15_000.0);
+        let mut after = report("candidate", 12_000.0);
+        before.samples.perception = TickStats { count: 7, min: 0.0, max: 16_000.0, mean: 15_000.0, std_dev: 0.0, p50: 15_000.0, p95: 16_000.0, p99: 16_000.0 };
+        after.samples.perception  = TickStats { count: 7, min: 0.0, max: 20_000.0, mean: 12_000.0, std_dev: 0.0, p50: 12_000.0, p95: 20_000.0, p99: 20_000.0 };
+
+        let deltas = diff_reports(&before, &after);
+        let p = deltas.iter().find(|d| d.name == "perception").unwrap();
+        assert_eq!(p.delta_us, -3_000.0, "mean delta");
+        assert_eq!(p.before_p99_us, 16_000.0);
+        assert_eq!(p.after_p99_us, 20_000.0);
+        assert_eq!(p.delta_p99_us, 4_000.0, "p99 tail REGRESSED even though mean improved");
     }
 }

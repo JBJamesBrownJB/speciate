@@ -67,6 +67,12 @@ won or lost.
 
 ## Concrete next steps (ranked)
 
+> The full try → test → keep/ditch experiment tracker (15+ levers across mechanical, biological
+> Golden-Zone, and structural, with the measurement protocol) lives in
+> [`optimization-checklist.md`](./optimization-checklist.md). The headline lever: trimming
+> large-creature perception range (lower the allometry exponent) — the fattest phase *and* a
+> biological-correctness fix.
+
 1. **Attack perception (~14.5 ms).** Fattest phase and a Golden-Zone target: size-based skip
    (giants ignore tiny entities), satiated-predator skip, throttle-hoist (don't dispatch Rayon
    tasks for throttled-out creatures), tighter Rayon chunking. A/B each in the lab and watch

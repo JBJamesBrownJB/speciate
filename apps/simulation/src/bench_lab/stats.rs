@@ -14,6 +14,10 @@ pub struct TickStats {
 }
 
 fn percentile(sorted: &[f64], p: f64) -> f64 {
+    debug_assert!(
+        sorted.windows(2).all(|w| w[0] <= w[1]),
+        "percentile requires sorted input"
+    );
     match sorted.len() {
         0 => 0.0,
         1 => sorted[0],

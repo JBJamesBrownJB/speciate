@@ -18,6 +18,8 @@ pub struct PhaseSamples {
 }
 
 pub fn sample_ticks(sim: &mut Simulation, warmup: usize, samples: usize, dt: f32) -> PhaseSamples {
+    let samples = samples.max(1);
+
     for _ in 0..warmup {
         sim.update(dt);
     }
@@ -74,6 +76,13 @@ mod tests {
             half_extent_y: 500.0,
             distribution: Distribution::Uniform,
         })
+    }
+
+    #[test]
+    fn sample_ticks_clamps_zero_samples_to_one() {
+        let mut sim = small_world();
+        let s = sample_ticks(&mut sim, 0, 0, 0.05);
+        assert_eq!(s.wall_total.count, 1, "zero samples must clamp to 1 to prevent false budget pass");
     }
 
     #[test]

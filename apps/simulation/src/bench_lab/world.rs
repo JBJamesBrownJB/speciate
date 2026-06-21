@@ -116,6 +116,52 @@ mod tests {
     }
 
     #[test]
+    fn clustered_distribution_positions_are_localized() {
+        let spread = 50.0_f32;
+        let s = WorldSpec {
+            population: 120,
+            seed: 42,
+            half_extent_x: 500.0,
+            half_extent_y: 500.0,
+            distribution: Distribution::Clustered { clusters: 4, spread },
+        };
+        let sim = build_world(&s);
+        let crits = sim.snapshot_creatures();
+        assert_eq!(crits.len(), 120);
+
+        let cluster_0: Vec<_> = crits.iter().step_by(4).collect();
+        let cluster_1: Vec<_> = crits.iter().skip(1).step_by(4).collect();
+
+        let max_spread_in_cluster = |members: &[&(u32, f32, f32, f32, f32)]| -> f32 {
+            members.iter().flat_map(|a| {
+                members.iter().map(move |b| {
+                    ((a.1 - b.1).powi(2) + (a.2 - b.2).powi(2)).sqrt()
+                })
+            }).fold(0.0_f32, f32::max)
+        };
+
+        let spread_0 = max_spread_in_cluster(&cluster_0);
+        let spread_1 = max_spread_in_cluster(&cluster_1);
+
+        assert!(
+            spread_0 <= spread * 2.0 * 2.0_f32.sqrt(),
+            "cluster 0 diameter {spread_0} exceeds 2×spread diagonal bound"
+        );
+        assert!(
+            spread_1 <= spread * 2.0 * 2.0_f32.sqrt(),
+            "cluster 1 diameter {spread_1} exceeds 2×spread diagonal bound"
+        );
+
+        let all_x: Vec<f32> = crits.iter().map(|c| c.1).collect();
+        let total_x_span = all_x.iter().cloned().fold(f32::MIN, f32::max)
+            - all_x.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(
+            total_x_span > spread * 2.0,
+            "clusters must be spread apart (total x-span {total_x_span} should exceed 2×spread)"
+        );
+    }
+
+    #[test]
     fn world_bounds_equal_spawn_extent_full_world() {
         let spec = WorldSpec {
             population: 1000,

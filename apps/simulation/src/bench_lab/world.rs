@@ -16,14 +16,14 @@ pub enum Distribution {
 pub struct WorldSpec {
     pub population: usize,
     pub seed: u64,
-    pub half_extent_x: f32,
-    pub half_extent_y: f32,
+    pub half_extent_x: f32, // full-world half-extent: creatures spawn across ±half_extent, bounds sit at the edges
+    pub half_extent_y: f32, // full-world half-extent: creatures spawn across ±half_extent, bounds sit at the edges
     pub distribution: Distribution,
 }
 
 pub fn build_world(spec: &WorldSpec) -> Simulation {
     let mut sim = SimulationBuilder::new()
-        .set_boundaries(spec.half_extent_x * 2.0, spec.half_extent_y * 2.0)
+        .set_boundaries(spec.half_extent_x, spec.half_extent_y)
         .build();
     let mut rng = StdRng::seed_from_u64(spec.seed);
 
@@ -110,5 +110,37 @@ mod tests {
         };
         let sim = build_world(&s);
         assert_eq!(sim.creature_count(), 800);
+    }
+
+    #[test]
+    fn world_bounds_equal_spawn_extent_full_world() {
+        let spec = WorldSpec {
+            population: 1000,
+            seed: 1,
+            half_extent_x: 5000.0,
+            half_extent_y: 5000.0,
+            distribution: Distribution::Uniform,
+        };
+        let sim = build_world(&spec);
+        assert_eq!(sim.get_boundaries(), (-5000.0, 5000.0, -5000.0, 5000.0));
+    }
+
+    #[test]
+    fn creatures_fill_the_whole_world() {
+        let spec = WorldSpec {
+            population: 5000,
+            seed: 2,
+            half_extent_x: 5000.0,
+            half_extent_y: 5000.0,
+            distribution: Distribution::Uniform,
+        };
+        let sim = build_world(&spec);
+        let crits = sim.snapshot_creatures();
+        let max_x = crits.iter().map(|c| c.1).fold(f32::MIN, f32::max);
+        let min_x = crits.iter().map(|c| c.1).fold(f32::MAX, f32::min);
+        let max_y = crits.iter().map(|c| c.2).fold(f32::MIN, f32::max);
+        let min_y = crits.iter().map(|c| c.2).fold(f32::MAX, f32::min);
+        assert!(max_x > 4000.0 && min_x < -4000.0, "x must span the full world");
+        assert!(max_y > 4000.0 && min_y < -4000.0, "y must span the full world");
     }
 }

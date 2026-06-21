@@ -22,8 +22,8 @@ fn main() {
     let seed: u64 = arg(&args, "--seed", 1);
     let samples: usize = arg(&args, "--samples", 60);
     let warmup: usize = arg(&args, "--warmup", 20);
-    let half_x: f32 = arg(&args, "--half-x", 2500.0);
-    let half_y: f32 = arg(&args, "--half-y", 2000.0);
+    let half_x: f32 = arg(&args, "--half-x", 5000.0);
+    let half_y: f32 = arg(&args, "--half-y", 5000.0);
     let dt: f32 = arg(&args, "--dt", 0.05);
 
     let distribution = if flag(&args, "--clustered") {

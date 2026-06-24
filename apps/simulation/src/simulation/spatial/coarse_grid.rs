@@ -181,21 +181,6 @@ impl CoarseGrid {
         (center_x, center_y)
     }
 
-    #[inline]
-    pub fn cells_mut(&mut self) -> &mut Vec<BioSignature> {
-        &mut self.cells
-    }
-
-    #[inline]
-    pub fn prev_non_empty_mut(&mut self) -> &mut Vec<usize> {
-        &mut self.prev_non_empty
-    }
-
-    #[inline]
-    pub fn non_empty_indices(&self) -> &[usize] {
-        &self.prev_non_empty
-    }
-
     /// Convert L1 cell index to cell coordinates.
     /// Returns (cx, cy) in grid coordinates (not world coordinates).
     #[inline]

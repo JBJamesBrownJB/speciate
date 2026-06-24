@@ -8,9 +8,12 @@
 
 **Status legend:** ☐ TODO · 🔬 TESTING · ✅ KEEP · ❌ DITCH · ⏸ BLOCKED (needs a prerequisite)
 
-**The gap to close:** at 900K the tick is 48.3 ms mean / **56.9 ms p99** (budget 50 ms). 1M is
-~56 ms mean / 68 ms p99 — **~12% over.** The **p99 tail breaks before the mean**, so the tail is
-the real scoreboard. Growth is ~O(n¹·¹⁵) (fixed-world density rises with population).
+**The wall now:** with realistic log-normal DNA, **1M creatures = 48.5 ms mean / 49.4 ms p99**
+(budget 50 ms) — the headline target is **hit, but with near-zero margin.** So the hunt measures at
+**1M** (the stress point where the tail actually bites) to buy margin and push the ceiling higher.
+The **p99 tail breaks before the mean**, so the tail is the real scoreboard. Growth is ~O(n¹·¹⁵)
+(fixed-world density rises with population). *(The old uniform-DNA workload busted 1M by ~12 %;
+realistic DNA was the unlock — re-baseline everything with `--realistic-dna`.)*
 
 ## Findings log (verdicts from real runs)
 
@@ -160,24 +163,49 @@ Suggested order: **T2.1 → T2.2 → T2.3 → T2.4 → T2.5 → T2.6**.
 
 Every item runs this before it earns ✅ KEEP. Build once: `cargo build --release --features dev-tools`.
 
-1. **Baseline** (once per experiment): `--pop 900000` and `--pop 200000`, each across **5 seeds**
-   (11, 42, 99, 137, 2025). The across-seed p99 std at 900K is your **noise floor** — if it
-   exceeds 2 ms, no single-seed run is evidence.
-2. **200K diagnostic** (`--out`, `diff_reports`): confirm the change moves the *expected phase
+1. **Baseline** (once per experiment): `--pop 1000000` and `--pop 500000`, each across **5 seeds**
+   (11, 42, 99, 137, 2025), with `--realistic-dna`. The `--seeds` run now prints, per phase, that
+   phase's p99 and its own `NOISE-FLOOR(std)` — record the noise floor of **the phase your change
+   targets** *and* the wall noise floor. Detection is judged against the phase floor, banking
+   against the wall floor.
+2. **500K diagnostic** (`--out`, `diff_reports`): confirm the change moves the *expected phase
    only*. Another phase moving >5% is a compensation signal — investigate.
-3. **900K verdict** (5 seeds, `--out`): the real test, because density bites near 1M in ways 200K
-   hides.
-4. **Phase attribution**: target phase's p99 drops ≥ the total wall p99 drop; no other phase p99
-   rises >1.5 ms (transfer budget).
-5. **Ceiling**: `--find-max --low 800000 --high 1100000 --coarse-step 50000 --tolerance 10000`,
-   3 seeds, baseline vs candidate.
+3. **1M verdict** (5 seeds, `--out`): the real test — 1M is the wall, where density bites in ways
+   lower pops hide. Feed the deltas + the two noise floors into `bench_lab::classify` (see Pass bar).
+4. **Phase attribution**: the targeted phase's p99 must drop; no *other* phase p99 may rise more
+   than `PHASE_REGRESSION_LIMIT_US` (2 ms) on any seed.
+5. **Ceiling**: `--find-max --low 1000000 --high 1500000 --coarse-step 50000 --tolerance 10000`,
+   3 seeds, baseline vs candidate — 1M is the floor now, so probe the headroom *above* it.
 6. **Sweep shape**: `--sweep 200000→1000000 step 100000` — candidate must not be worse than
    baseline at *any* population in [500K, 1M] (a high-density crossover = density-regressive → ditch).
 
-**Pass bar (KEEP):** `Δp99_wall @900K ≤ −3 ms` **AND** `|Δp99| > 2 × noise_floor` **AND** no
-per-phase p99 regression >2 ms on any seed **AND** ceiling +≥20K creatures **AND** no sweep
-density-inversion. For Tier 2, **also** the trophic-stability canary (±20% population). Defer
-(don't ditch) anything that lands between −1 and −3 ms.
+**Pass bar — phase-aware, encoded in `bench_lab::verdict::classify` (the doc and the code agree):**
+
+Judge in two tiers, because whole-tick noise (the sum of every phase's variance) drowns a real win
+in the one phase a change touches. Let `noise_phase` = the targeted phase's across-seed p99 std and
+`noise_wall` = the wall's.
+
+- **Detect (phase):** `Δp99_phase ≤ −2 × noise_phase`. The change must beat its *own* phase's noise.
+  Fail this → **DITCH** (indistinguishable from luck, or a regression).
+- **Bank (wall):** of the changes that pass detection —
+  - `Δp99_wall ≤ −2 × noise_wall` → **KEEP** (real *and* visibly moves the budget).
+  - `−2 × noise_wall < Δp99_wall < +2 × noise_wall` → **DEFER** (a genuine phase win the tick noise
+    hides; park it — don't discard it as noise).
+  - `Δp99_wall ≥ +2 × noise_wall` → **DITCH** (the phase win came with a hidden cost elsewhere).
+- **Always-ditch overrides:** any single phase regressing > 2 ms (`PHASE_REGRESSION_LIMIT_US`),
+  ceiling gain < 20K creatures, or any sweep density-inversion. Tier 2 adds the trophic-stability
+  canary (±20% population).
+
+There is **no flat 3 ms floor** anymore: a confident phase win is banked even when small, because
+the phase floor (not the fatter wall floor) already proved it is real. The deliberate gap is DEFER,
+not DITCH — see *stacking* below.
+
+**Stacking deferred wins (avoids the combinatorial trap):** DEFER is a holding pen, not a graveyard.
+When several real-but-tick-invisible wins accumulate, apply **all of them at once** and re-run the
+900K verdict on the *union*. If the union clears the wall bank bar → KEEP the whole set (done in
+*n* + 1 measurements, not 2ⁿ). Only if the union *under*-delivers vs the sum of its parts do you
+bisect to find the pair fighting over the same resource (usually two changes both trimming
+`cells_queried`).
 
 ---
 

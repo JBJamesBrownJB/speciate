@@ -45,6 +45,11 @@ const JOBS_FLAG = JOBS ? (' -j ' + JOBS) : ''
 const SHARED_TARGET = SIM + '/target'
 const BUILD = 'cargo build' + JOBS_FLAG + ' --release --features dev-tools --bin latency_lab --target-dir ' + SHARED_TARGET
 const RUN = 'cargo run --quiet' + JOBS_FLAG + ' --release --features dev-tools --target-dir ' + SHARED_TARGET + ' --bin latency_lab --'
+// Back-to-back A/B (RCA 2026-06-24): the candidate is judged against a freshly-run
+// CLEAN baseline binary stashed once, NOT a stale pinned baseline — kills drift, and
+// a clean-tree guard kills cross-candidate patch contamination.
+const RELEASE_BIN = SHARED_TARGET + '/release/latency_lab.exe' // freshly-built candidate
+const BASELINE_BIN = ART + '/latency_lab_baseline.exe' // stashed clean baseline
 
 const SCOPE_NOTE =
   'Scope allowed: engine micro-opts (behavior-preserving), architectural/risky (schedule overlap, ' +
@@ -197,42 +202,80 @@ log('Implement: ' + ready.length + '/' + ideas.length + ' compiled + passed test
 phase('Measure')
 const idById = Object.fromEntries(ideas.map((i) => [i.id, i]))
 
-// Baseline measured ONCE on the current (unpatched) tree.
+// Build ONCE on the clean (committed) tree and STASH the binary, so every candidate
+// can run it back-to-back without a rebuild. A back-to-back pair cancels machine drift.
 const baseline = await agent(
-  'Establish the perf baseline for an A/B comparison. Work directly in ' + SIM + ' (NO worktree). The working tree already ' +
-  'contains the harness; do not modify it.\n\n' +
+  'Build and STASH the clean baseline binary for back-to-back A/B. Work in ' + SIM + ' (NO worktree); the tree is the ' +
+  'committed state — do not modify source.\n\n' +
   '1. mkdir -p ' + ART + '\n' +
-  '2. Build: ' + BUILD + '\n' +
-  '3. Full baseline: ' + RUN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/base.full.json\n' +
-  '4. Triage baseline: ' + RUN + ' --seeds ' + TRIAGE_SEEDS + ' --pop ' + TRIAGE_POP + ' ' + WORLD + ' --out ' + ART + '/base.triage.json\n\n' +
-  'Return ok=true and the printed wall mean-of-p99s (ms) for the full run in notes. This run owns the machine; nothing else is running.',
-  { label: 'measure:baseline', phase: 'Measure', schema: { type: 'object', properties: { ok: { type: 'boolean' }, wall_p99_ms: { type: 'number' }, notes: { type: 'string' } }, required: ['ok', 'notes'] } }
+  '2. CLEAN-TREE GUARD: from ' + REPO + ', run `git diff --quiet -- apps/simulation/src`. If it exits non-zero, source is dirty — return ok=false and STOP.\n' +
+  '3. Build: ' + BUILD + '\n' +
+  '4. Stash the binary so candidates run it without rebuilding: cp ' + RELEASE_BIN + ' ' + BASELINE_BIN + '\n' +
+  '5. Sanity run + record the number: ' + BASELINE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + '\n\n' +
+  'Return ok=true and the baseline wall mean-of-p99s (ms) in notes. This run owns the machine; nothing else is running.',
+  { label: 'measure:baseline-stash', phase: 'Measure', schema: { type: 'object', properties: { ok: { type: 'boolean' }, wall_p99_ms: { type: 'number' }, notes: { type: 'string' } }, required: ['ok', 'notes'] } }
 )
+if (!baseline || !baseline.ok) {
+  log('Baseline build/stash failed (' + (baseline?.notes || 'agent died') + ') — aborting measure.')
+  return { aborted: 'baseline-failed', notes: baseline?.notes || 'baseline agent returned null' }
+}
 
 const measured = []
 for (const cand of ready) {
   const idea = idById[cand.id] || {}
   const phaseName = idea.target_phase || 'perception'
   const m = await agent(
-    'Measure ONE candidate optimization against the pinned baseline. SERIAL — you own the machine; never background a run.\n\n' +
+    'Measure ONE candidate via a CLEAN BACK-TO-BACK A/B. SERIAL — you own the machine; never background a run.\n\n' +
     'Candidate id: ' + cand.id + ' (targets phase: ' + phaseName + ')\n' +
-    'The unified diff to apply is between the <DIFF> markers:\n<DIFF>\n' + cand.diff + '\n</DIFF>\n\n' +
-    'Protocol (run from ' + REPO + '):\n' +
-    '1. Write the diff to ' + ART + '/' + cand.id + '.patch. `git apply --check` it; if it does not apply cleanly, return verdict=ERROR with the reason and STOP (do not modify the tree).\n' +
-    '2. `git apply ' + ART + '/' + cand.id + '.patch`\n' +
-    '3. Build: (cd ' + SIM + ' && ' + BUILD + '). If it fails to build, `git apply -R` the patch and return verdict=ERROR.\n' +
-    '4. TRIAGE: (cd ' + SIM + ' && ' + RUN + ' --seeds ' + TRIAGE_SEEDS + ' --pop ' + TRIAGE_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.triage.json)\n' +
-    '   then verdict: ' + RUN + ' --verdict --baseline ' + ART + '/base.triage.json --candidate ' + ART + '/' + cand.id + '.triage.json --phase ' + phaseName + '\n' +
-    '   The VERDICT= line prints dPhaseP99/dWallP99/noises in microseconds. If triage VERDICT=Ditch AND dWallP99 is not clearly negative ' +
-    '(i.e. no hint of improvement), set triage_only=true and use the triage verdict — skip the full run to save time.\n' +
-    '5. Otherwise ESCALATE: (cd ' + SIM + ' && ' + RUN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.full.json)\n' +
-    '   then: ' + RUN + ' --verdict --baseline ' + ART + '/base.full.json --candidate ' + ART + '/' + cand.id + '.full.json --phase ' + phaseName + '\n' +
-    '6. ALWAYS revert: `git apply -R ' + ART + '/' + cand.id + '.patch` so the tree is clean for the next candidate. Confirm with `git status`.\n\n' +
-    'Convert microseconds to ms (÷1000). Return the verdict (KEEP/DEFER/DITCH from the VERDICT= line, the escalated one if you ran it), ' +
-    'dwall_p99_ms, dphase_ms, phase_noise_ms, wall_noise_ms, triage_only, and notes. id MUST equal "' + cand.id + '".',
+    'Diff between the <DIFF> markers:\n<DIFF>\n' + cand.diff + '\n</DIFF>\n\n' +
+    'The stashed CLEAN baseline binary is ' + BASELINE_BIN + ' — run it as-is, never rebuild it. Protocol (from ' + REPO + '):\n' +
+    '1. CLEAN-TREE GUARD: `git diff --quiet -- apps/simulation/src`. If it exits non-zero the tree is contaminated by a prior ' +
+    "candidate's failed revert — return verdict=ERROR, notes=\"dirty tree before apply\", and STOP. NEVER measure on a dirty tree.\n" +
+    '2. Write the diff to ' + ART + '/' + cand.id + '.patch; `git apply --check` it; if it does not apply cleanly return verdict=ERROR and STOP.\n' +
+    '3. `git apply ' + ART + '/' + cand.id + '.patch`; build candidate: (cd ' + SIM + ' && ' + BUILD + '). If build fails, `git apply -R` and return verdict=ERROR. The candidate binary is now ' + RELEASE_BIN + '.\n' +
+    '4. TRIAGE — back-to-back, BASELINE FIRST then candidate (adjacent runs cancel drift):\n' +
+    '   ' + BASELINE_BIN + ' --seeds ' + TRIAGE_SEEDS + ' --pop ' + TRIAGE_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.base.triage.json\n' +
+    '   ' + RELEASE_BIN + ' --seeds ' + TRIAGE_SEEDS + ' --pop ' + TRIAGE_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.triage.json\n' +
+    '   verdict: ' + RELEASE_BIN + ' --verdict --baseline ' + ART + '/' + cand.id + '.base.triage.json --candidate ' + ART + '/' + cand.id + '.triage.json --phase ' + phaseName + '\n' +
+    '   If triage VERDICT=Ditch AND dWallP99 is not clearly negative, set triage_only=true, use the triage verdict, and skip to step 6.\n' +
+    '5. ESCALATE — back-to-back at full pop, BASELINE FIRST then candidate:\n' +
+    '   ' + BASELINE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.base.full.json\n' +
+    '   ' + RELEASE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.full.json\n' +
+    '   verdict: ' + RELEASE_BIN + ' --verdict --baseline ' + ART + '/' + cand.id + '.base.full.json --candidate ' + ART + '/' + cand.id + '.full.json --phase ' + phaseName + '\n' +
+    '6. REVERT + GUARD: `git apply -R ' + ART + '/' + cand.id + '.patch`, then `git diff --quiet -- apps/simulation/src` MUST pass. If it does not, note "revert FAILED — tree dirty" so the next candidate aborts.\n\n' +
+    'Convert microseconds to ms (÷1000). Return the verdict (the escalated full-pop one if you ran it), dwall_p99_ms, dphase_ms, ' +
+    'phase_noise_ms, wall_noise_ms, triage_only, and notes. id MUST equal "' + cand.id + '".',
     { label: 'measure:' + cand.id, phase: 'Measure', schema: MEASURE_SCHEMA }
   )
   if (m) measured.push({ ...m, scope: idea.scope, title: idea.title, tradeoffs: idea.tradeoffs, target_phase: m.target_phase || phaseName })
+}
+
+// REPLICATE every KEEP once more, back-to-back, before trusting it. A win that does
+// not reproduce is demoted to DITCH. (RCA 2026-06-24: a single contaminated measurement
+// turned a +10ms regression into a phantom -3ms KEEP that shipped.)
+for (const k of measured.filter((m) => m.verdict === 'KEEP')) {
+  const phaseName = k.target_phase || 'perception'
+  const rep = await agent(
+    'REPLICATE a KEEP to confirm it reproduces (RCA 2026-06-24 guard). SERIAL. From ' + REPO + ':\n' +
+    '1. CLEAN-TREE GUARD: `git diff --quiet -- apps/simulation/src`; if dirty return verdict=ERROR and STOP.\n' +
+    '2. Re-apply the patch already on disk: `git apply ' + ART + '/' + k.id + '.patch`; build (cd ' + SIM + ' && ' + BUILD + ').\n' +
+    '3. Back-to-back full A/B, BASELINE FIRST:\n' +
+    '   ' + BASELINE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/' + k.id + '.rep.base.json\n' +
+    '   ' + RELEASE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/' + k.id + '.rep.json\n' +
+    '   verdict: ' + RELEASE_BIN + ' --verdict --baseline ' + ART + '/' + k.id + '.rep.base.json --candidate ' + ART + '/' + k.id + '.rep.json --phase ' + phaseName + '\n' +
+    '4. REVERT + GUARD: `git apply -R ' + ART + '/' + k.id + '.patch`; `git diff --quiet -- apps/simulation/src` must pass.\n\n' +
+    'Return the replication verdict, dwall_p99_ms, and notes. id MUST equal "' + k.id + '".',
+    { label: 'replicate:' + k.id, phase: 'Measure', schema: MEASURE_SCHEMA }
+  )
+  // Demote any KEEP whose replication did not also land KEEP.
+  if (!rep || rep.verdict !== 'KEEP') {
+    k.notes = '[NOT REPRODUCED on replication: ' + (rep ? rep.verdict + ', dWall=' + rep.dwall_p99_ms + 'ms' : 'agent died') + '] ' + (k.notes || '')
+    k.verdict = 'DITCH'
+    k.replicated = false
+  } else {
+    k.replicated = true
+    k.notes = '[replicated: dWall=' + rep.dwall_p99_ms + 'ms] ' + (k.notes || '')
+  }
 }
 
 // ============================================================================
@@ -245,13 +288,16 @@ if (defers.length >= 2) {
   bundle = await agent(
     'Test whether stacking these DEFER wins clears the bank bar as a UNION. SERIAL — you own the machine.\n\n' +
     'Patches to stack (already on disk from the measure phase): ' + JSON.stringify(diffs) + '\n\n' +
-    'Protocol (from ' + REPO + '):\n' +
-    '1. Apply each patch in turn with `git apply` (check each first). If any conflicts with an already-applied one, skip it and note which.\n' +
-    '2. Build: (cd ' + SIM + ' && ' + BUILD + ').\n' +
-    '3. Full union run: (cd ' + SIM + ' && ' + RUN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/bundle.full.json)\n' +
-    '4. Verdict against the dominant phase (the one with the largest individual phase win among the stacked defers): ' +
-    RUN + ' --verdict --baseline ' + ART + '/base.full.json --candidate ' + ART + '/bundle.full.json --phase <dominant_phase>\n' +
-    '5. Reverse every applied patch (`git apply -R`) and confirm `git status` is clean.\n\n' +
+    'Protocol (from ' + REPO + '). The stashed clean baseline binary is ' + BASELINE_BIN + ' (run as-is):\n' +
+    '1. CLEAN-TREE GUARD: `git diff --quiet -- apps/simulation/src`; if dirty return verdict=ERROR and STOP.\n' +
+    '2. Apply each patch in turn with `git apply` (check each first). If any conflicts with an already-applied one, skip it and note which.\n' +
+    '3. Build the union: (cd ' + SIM + ' && ' + BUILD + ').\n' +
+    '4. Back-to-back full A/B, BASELINE FIRST then union:\n' +
+    '   ' + BASELINE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/bundle.base.json\n' +
+    '   ' + RELEASE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + ' --out ' + ART + '/bundle.full.json\n' +
+    '   verdict (dominant phase = the largest individual phase win among the stacked defers): ' +
+    RELEASE_BIN + ' --verdict --baseline ' + ART + '/bundle.base.json --candidate ' + ART + '/bundle.full.json --phase <dominant_phase>\n' +
+    '5. Reverse every applied patch (`git apply -R`) and confirm `git diff --quiet -- apps/simulation/src` passes.\n\n' +
     'Return id="bundle", the verdict, deltas in ms, and in notes: which patches actually stacked, and whether the union delivered ' +
     'roughly the SUM of the individual defer wins (additive) or under-delivered (a sign two changes fight over the same resource).',
     { label: 'accumulate:union', phase: 'Accumulate', schema: MEASURE_SCHEMA }

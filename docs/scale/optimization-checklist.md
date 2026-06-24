@@ -110,6 +110,7 @@ shrinks scan area; gating cuts tick count; skips prune candidates within each sc
 | ☐ | **T2.5 Stochastic phase** | random per-creature perception phase offset + jitter | Medium — **best tail smoother** | Natural staggered reaction delays |
 | ☐ | **T2.6 Size reaction-latency** | big crits re-decide every 4–8 ticks (steering cost) | Medium | You can juke a giant |
 | ☐ | **T2.7 Terrain/cover range** (new) | cut range in dense cover/water | Medium (where density is highest) | Cover as a stealth mechanic |
+| ☐ | **T2.8 FOV-cone L0 scan cull** (new) | scan only the L0 cells inside the *actual visual cone*, not the bounding box/circle — scan area scales with FOV width via precomputed per-FOV cone cell-masks (extend `fov_patterns.rs` lookup), **no per-cell transcendentals** | Medium–large (narrow-FOV crits over-scan L0 today) | Tunnel-vision is cheap *and* a real trait; wide-FOV pays for panoramic awareness |
 
 > **Shared guardrail for ALL of Tier 2 — the canary:** every lever risks the same failure mode,
 > *predator goes blind → starves → trophic cascade* (predator collapse → herbivore boom →
@@ -118,6 +119,16 @@ shrinks scan area; gating cuts tick count; skips prune candidates within each sc
 > Watch those two populations as the canary. Log every chosen range/threshold in `biology-notes.md`.
 
 Suggested order: **T2.1 → T2.2 → T2.3 → T2.4 → T2.5 → T2.6**.
+
+> **T2.8 caveat & prior art (the observation that seeded it):** at a glance some creatures scan far
+> more L0 cells than their visual cone actually covers — we're greedy with the L0 scan relative to
+> the FOV. The win is real **but the naive form was already DITCHED**: the L1 version (bound the cone
+> by inscribed circle + facing half-plane) regressed because the per-column `sqrt`+bound math cost
+> more than the ~21 % corner cells it saved (ledger `l1-cone-circular-and-fov-bound`). So the L0 cull
+> **must be table-driven** — precomputed cone cell-offset masks keyed by an FOV bucket — never per-cell
+> trig. Validate across the **full FOV range** (narrow → wide) with **bit-identical perceived-neighbour
+> sets**: a culled cell must be provably outside the cone so no realism is lost. Standard Tier 2
+> trophic canary applies. *(Logged 2026-06-24 as an idea to investigate.)*
 
 ---
 

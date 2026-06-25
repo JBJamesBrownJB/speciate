@@ -1,73 +1,73 @@
-# 🚧 Perf Hunt — Last Run (2026-06-24)
+# 🚧 Perf Hunt — Last Run (2026-06-25)
 
-**Population:** 1,000,000 (full) / 500,000 (triage) · **Seeds:** 11, 42, 99, 137, 2025 · **Ideas hunted:** 5 · **Kept:** 1
+**Verdict in one line: nothing to merge.** Five candidates hunted, five ditched. No regressions land in the tree — the baseline is untouched and the hunt was clean (back-to-back A/B, baseline-first, clean-tree guard passed before and after every candidate).
 
-> **Baseline (1M):** wall p99 = **46.97 ms** of the 50 ms / 20 Hz budget (noise floor σ = 0.91 ms). **Steering is the dominant phase** (p99 13.56 ms), then perception (10.08 ms) and movement (9.45 ms).
-> **The single KEEP this run buys back ~2.95 ms of wall p99 — roughly 6% of budget, ~0.6 ms inside the 50 ms ceiling becomes ~3.5 ms of headroom.**
+## Baseline (1M pop, 5 seeds: 11,42,99,137,2025)
 
----
+| Metric | Value |
+|---|---|
+| Wall p99 (mean of per-seed p99s) | **49.234 ms** (std 0.683 ms, worst 50.021 ms) |
+| Wall mean-of-means | 46.318 ms |
+| Headroom under 50 ms tick budget | **~0.77 ms (~1.5%)** |
 
-## Headline
+Per-phase p99 (ms): **steering 14.0** · **perception 11.0** · movement 9.3 · grid_rebuild 8.1 · l1_aggregation 4.8 · behavior 4.3. Steering is the single largest phase; perception second. Those are the two fattest targets and where four of five ideas aimed.
+
+## Summary table
 
 | Idea | Scope | Target phase | Verdict | Δwall p99 (ms) | Δphase (ms) |
 |---|---|---|---|---:|---:|
-| Parallelize L1 aggregation (Rayon owned-partition scatter) | architectural | l1_aggregation | ✅ **KEEP** | **−2.95** | **−1.52** |
-| Bound L1 cone by inscribed circle + facing half-plane | engine | perception | ❌ DITCH | −1.08 | **+0.25** ⚠ |
-| Hoist max_accel divide + defer SteeringContext build | engine | steering | ❌ DITCH | −1.16 | −0.34 |
-| Cost-decorrelated perception throttle bucketing | architectural | perception | ❌ DITCH | −0.08 | **+0.48** ⚠ |
-| Overlap update_body_size_cache with perception (break barrier) | architectural | behavior | ❌ DITCH | −0.78 | −0.22 |
+| Steering avoidance: sqrt-free closing-direction pre-filter | engine | steering | DITCH | +0.150 | −0.113 |
+| T3.1 software-pipeline grid rebuild overlapping prev-tick steering/movement | architectural | grid_rebuild | DITCH | +4.613 | +1.947 |
+| T2.2 sated-predator skip of L1 strategic cone scan (Golden Zone) | biological | perception | DITCH | +0.592 | −0.040 |
+| T2.5 stochastic per-entity perception phase offset | engine | perception | DITCH | +0.240 | +0.078 |
+| Steering wander: seeded PRNG + skip RNG for exhausted creatures | biological | steering | DITCH | +1.526 | +0.222 |
 
-Noise floors: wall p99 σ ≈ 0.91 ms (1M) / 1.27 ms (500k); per-phase σ ≈ 0.09–0.34 ms. A Δ only counts when it clears its own noise floor. ⚠ = the idea made its *own target phase slower*.
+> Δ convention: negative = faster (improvement). Every Δwall p99 above is **positive** — none of the five made wall p99 better.
+
+## ✅ KEEPS
+
+**None.** No candidate produced a bankable wall-p99 win.
+
+## 📦 BUNDLE
+
+**None formed.** A bundle requires surviving KEEPs/DEFERs to stack into a union A/B; this run had zero of each, so there was nothing to combine.
+
+## 📋 DEFERS (parked)
+
+**None survived.** One candidate (T2.2) earned a tentative DEFER at the 500k triage but **failed on escalation to 1M** (see below), so it is not parked — it is ditched.
+
+## ❌ DITCHED (with why)
+
+### 1. T2.2 — Sated-predator skip of the L1 cone scan (biological) — the near-miss
+The only idea that escalated. At 500k it looked real: perception p99 −0.252 ms at ~4.7σ over noise, wall p99 −0.241 ms (negative, sub-noise) → DEFER → escalated to 1M.
+**At 1M it collapsed:** perception gain fell to −0.040 ms vs 0.249 ms phase noise (gone), and wall p99 drifted to **+0.592 ms** (slightly worse, sub-noise). The win did not survive scale.
+**Why it died — and the honest tradeoff that predicted it:** the gate only pays off when a meaningful fraction of predators are *sated*. But there is **no feeding/energy-restore loop in production** (`restore_energy` exists only in tests), so under the bench drain energy is monotone-draining and the sated cohort is thin and shrinking. The instantaneous saving was too small to clear the p99 tail at full pop.
+*Behavior cost it would have carried if merged:* sated predators lose long-range strategic awareness and become pulse-hunters (start pursuit only below `LOW_ENERGY_THRESHOLD`), not continuous trackers. It would have required a trophic canary (apex + grazer counts within ±20% over a ≥5000-tick, 200k mixed-DNA run). Moot now — ditched on perf alone.
+
+### 2. T3.1 — Software-pipeline grid rebuild overlapping steering/movement (architectural) — the worst regression
+Hard regression at the 500k triage: grid_rebuild p99 **+1.947 ms** (vs 0.063 ms noise) and wall p99 **+4.613 ms** (vs 0.192 ms noise). The `rayon::join` overlap plus the `collect_grid_snapshot` Vec allocation and L1 double-buffer aggregation cost *more* than the serial schedule it replaced — the movement and grid arms contend for the shared Rayon pool rather than overlapping cleanly at this scale. Did not escalate. (This echoes the prior-run lesson that parallel L1 aggregation regressed on real hardware.)
+
+### 3. Steering wander: seeded PRNG + skip RNG for exhausted creatures (biological)
+Slower on *both* the target and wall: steering p99 **+0.222 ms** (noise 0.083) and wall p99 **+1.526 ms** — an order of magnitude over the 0.170 ms wall noise. The xorshift jitter + per-creature `is_exhausted()` branch + `PhysicsTick` resource read did not beat `thread_rng` and perturbed the hot `par_iter` loop. Clear regression; ditched at triage.
+
+### 4. Steering avoidance: sqrt-free closing-direction pre-filter (engine)
+A wash. Steering p99 −0.113 ms sits *inside* the 0.137 ms phase noise (not a real signal), and wall p99 moved the wrong way (+0.150 ms). The pre-filter saves a sqrt+2 divides only on already-rejected receding neighbors, but adds a divide on the converging path — and in dense 500k packs most in-range neighbors are converging, so the hot path got marginally *more* work. Bit-identical, but no win. Ditched at triage.
+
+### 5. T2.5 — Stochastic per-entity perception phase offset (engine)
+Slight regression: perception p99 **+0.078 ms** (noise 0.024) and wall p99 **+0.240 ms** (noise 0.226). The gate is frequency-invariant — every creature still perceives at the same 1-in-N cadence — so it *cannot* reduce mean perception cost; it only reshuffles which absolute tick a giant lands on. On this hardware the reshuffle did not flatten the p99 tail and added a hash+add per gated entity. Ditched at triage.
+
+## 🎯 Recommend merging
+
+**Nothing.** Zero KEEPs, zero surviving DEFERs, no bundle. Merging any of these five would regress the tree. Leave the baseline as-is.
+
+## 💡 What to hunt next
+
+The baseline is **~0.77 ms (~1.5%) from the 50 ms budget at 1M** — close enough that a single ~1 ms phase win clears the headline. Where to aim:
+
+- **Steering (14.0 ms, the fattest phase) — but stop nibbling the math.** Three steering micro-ops have now ditched (this run's pre-filter + wander-RNG; last run's hoist/defer-ctx). The phase-level math optimizations are below the detection bar at 1M. Next steering attempt should be **structural** (data layout / SoA access pattern / cache residency of the neighbor scan), not arithmetic shaving.
+- **Perception (11.0 ms) — frequency-invariant reshuffles are a dead end.** T2.5 confirms that anything preserving total work/tick can't cut mean cost. To win on perception, *reduce work*: a real cull (Golden Zone skip) that survives 1M, not a tail-reshape. T2.2 was the right shape but starved by the missing feeding loop.
+- **Unblock the biological Golden Zone gates by fixing the bench, not the gate.** T2.2 and the wander-skip both died on the same root cause: **no energy-restore loop exists**, so monotone drain makes the sated/non-exhausted cohorts unrepresentative under the bench. Until the lab models a steady-state energy distribution (or a feeding loop ships), every hunger/sated/exhaustion gate will under-measure. Consider seeding a realistic steady-state energy distribution into `latency_lab` so these gates can be evaluated honestly.
+- **Architectural overlap needs a contention model.** T3.1's failure (shared Rayon pool, sub-linear overlap) suggests pipeline-overlap ideas won't pay until arms run on disjoint thread sub-pools or the snapshot-collect cost is eliminated. Park architectural overlap until that's designed.
 
 ---
-
-## ✅ KEEP — merge candidate
-
-### Parallelize L1 aggregation — Rayon owned-partition scatter
-**Δwall p99 −2.95 ms · Δl1_aggregation p99 −1.52 ms · no phase regressed (worst +(-)0.08 ms).**
-
-Both the phase win (−1.52 ms vs 0.10 ms noise) and the wall win (−2.95 ms vs 0.91 ms noise) clear their noise floors by a wide margin — this is the only candidate that produced a credible, end-to-end wall-clock gain at 1M. Triage at 500k was a "Defer" (wall delta clearly negative), which is exactly why it was escalated to the full run, where it confirmed as a Keep.
-
-**What it does:** replaces the serial non-empty-cell reduce that builds the L1 coarse grid with a Rayon owned-partition (row-band) scatter — each thread owns a disjoint band of L1 rows and writes only its own cells, so there is no contention and no float-add reordering.
-
-**Tradeoff / consequence — the cost the human is buying:**
-- **No behavior change, and provably so.** Output is identical data; owned-partition preserves float-add order, so it is bit-identical. Ships a TDD guard (`parallel_aggregation_byte_identical_to_serial`) and the gate's 100-tick replay holds. **No biological change, no trophic canary needed** — this is a pure mechanical re-parallelization, not a perception/behavior change.
-- **Memory:** wants a fresh L1 buffer per tick unless double-buffered. Mitigation: keep two L1 buffers and ping-pong.
-- **Re-read cost:** each thread re-reads the L0 non-empty list (cache-resident, cheap).
-- **Latent soundness invariant:** correctness depends on L0 being immutable during aggregation. If a *future* change ever lets L0 mutate mid-aggregation, the snapshot soundness breaks. **Recommend: encapsulate/assert that invariant when merging** so it can't silently rot.
-- **Floor behavior:** if Rayon fork overhead ever exceeds the ~3.6 ms phase at low thread counts, the lab gate ditches it — it can never become a regression.
-
----
-
-## 🎁 Bundle — none this run
-
-No bundle was formed. A bundle is a stacked union of DEFER-tier wins A/B'd together; this run produced **one KEEP and zero DEFERs**, so there was nothing to stack or test for additivity.
-
----
-
-## 📋 Defers (parked) — none
-
-No candidate landed in the DEFER tier this run. The four non-keeps were all clear DITCHes (see below), not parked-for-stacking.
-
----
-
-## ❌ Ditched — and why
-
-- **Bound L1 cone by inscribed circle + facing half-plane** *(perception)* — **made its own target phase slower (+0.25 ms vs 0.09 ms noise).** The extra per-column `sqrt` + bound computation cost more than the ~21% corner-cell savings buys back at this scale. Wall delta (−1.08 ms) sat inside the 1.27 ms triage noise floor — no real win. Triage-only; never escalated.
-- **Cost-decorrelated perception throttle bucketing** *(perception)* — **made its own target phase slower (+0.48 ms vs 0.09 ms noise).** The scramble + keyed-gate overhead plus worse cache locality cost more than spreading the expensive-giant tail across ticks saves. Wall delta −0.08 ms is essentially zero. **Hypothesis not supported.** Triage-only.
-- **Hoist max_accel divide + defer SteeringContext build** *(steering)* — a sound micro-op, but its steering-phase delta (−0.34 ms) sits *on* the 0.34 ms noise floor at 1M: no reliable per-phase win, and worst-phase regression was +0.04 ms. Below the detection bar at scale. Bundled determinism test is a good guard if revisited.
-- **Overlap update_body_size_cache with perception** *(behavior, barrier-variance lever)* — the reorder is correct and bit-identical (good tests), and the phase win (−0.22 ms) just clears its 0.13 ms floor, but the wall win (−0.78 ms) is *below* the 0.91 ms wall noise floor — not a credible end-to-end gain. The riskiest idea on the slate (an incorrect reorder silently corrupts physics) for a payoff that vanishes into noise at 1M.
-
----
-
-## Recommend merging
-
-1. **Parallelize L1 aggregation** — the only confirmed win: **−2.95 ms wall p99** with **zero behavior change**, bit-identical, test-guarded, and safe (gate auto-ditches if fork overhead ever flips it). Merge it. **One condition:** encapsulate/assert the "L0 immutable during aggregation" invariant so a future edit can't silently break soundness.
-
-That's the whole shortlist — one clean, high-confidence Keep.
-
-## What to hunt next
-
-- **Go where the time is: steering (p99 13.56 ms) is the dominant phase** and remains untouched. The two micro-ops tried this run (max_accel hoist, ctx defer) were below the noise bar — the next steering hunt needs an *algorithmic* lever (e.g. cut per-neighbor force work, restructure the steering neighbor loop, or SoA the steering inputs), not a 1–2-op trim.
-- **Perception (p99 10.08 ms) resisted two angles this run** (circular cone bound, cost-decorrelated bucketing) — both *regressed* the phase. Treat further per-cell perception micro-opts as suspect; look instead at reducing how many cells are queried (`cells_queried` p99 ≈ 2.75M is huge) via tighter culling that doesn't add per-column transcendentals.
-- **Movement (p99 9.45 ms)** is the third-largest phase and was not probed this run — a fresh target.
+*Method note: all five ran clean back-to-back A/B, baseline-first, on a verified clean tree; every patch applied/reverted cleanly and the clean-tree guard re-passed after each. Triage at 500k (seeds 11,42,99); escalation to 1M (seeds 11,42,99,137,2025) only on a clearly-negative wall signal. Ledger: `docs/scale/perf-hunt/ledger.jsonl`.*

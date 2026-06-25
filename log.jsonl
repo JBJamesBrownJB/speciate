@@ -1,0 +1,1 @@
+{"id":"019f00a0-2f53-7852-bd43-15bffa1cd83f","author":"JB","kind":"prompt","text":"works good, started at around 46ms, soaked it for about 10 mins and took a snapshot, crept up to 48ms but seemed reasonably stable, I think we can merge with main, checkout my post soak snapshot","ts":"2026-06-25T21:12:05Z","turn":"ac70f24d-6e6c-40bb-8993-0901dac069ac"}

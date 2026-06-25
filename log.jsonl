@@ -13,3 +13,4 @@
 {"id":"019f00e7-cd99-7c93-9e55-4b18204754aa","author":"JB","kind":"summary","text":"Want me to open the full report, or queue a follow-up hunt targeting the steering barrier?","ts":"2026-06-25T22:30:19Z","turn":"c835e79c-3e5f-4321-9794-355e7ec88145"}
 {"id":"019f00e8-6ce0-7ee0-9e5a-b91c7c06b947","author":"JB","kind":"prompt","text":"ok, well record findings and commit push I guess","ts":"2026-06-25T22:30:59Z","turn":"c835e79c-3e5f-4321-9794-355e7ec88145"}
 {"id":"019f00e9-b50b-74c2-9e3f-d08ef2e0ff30","author":"JB","kind":"summary","text":"Note: GitHub flagged 65 Dependabot vulnerabilities on the repo — unrelated to this commit, but there if you want to look later.","ts":"2026-06-25T22:32:24Z","turn":"c835e79c-3e5f-4321-9794-355e7ec88145"}
+{"id":"019f00eb-51b2-71b0-aa72-3df7e7896d17","author":"JB","kind":"prompt","text":"/perf-hunt 10","ts":"2026-06-25T22:34:09Z","turn":"c835e79c-3e5f-4321-9794-355e7ec88145"}

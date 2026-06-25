@@ -10,12 +10,13 @@ median gate (`bench_lab::verdict::classify`). Negative = faster. All three are *
 
 ---
 
-## ✅ Merging now — `perception-compact-active-set` (−2.57 ms)
+## ✅ MERGED — `perception-compact-active-set` (−2.57 ms) · `c9fe2a2`
 
 Hoist the throttle + `is_active` gate into the serial collect so the parallel dispatch shrinks
-~`perception_divisor`×. The biggest single perception win of the 2026-06-25 hunt and the keystone
-of the perception stack. **Being merged via branch `perf/perception-compact-active-set`** — once
-that lands, drop this section.
+~`perception_divisor`×. The biggest single perception win of the 2026-06-25 hunt. **Merged
+2026-06-25** after a human-validated 10-min soak (1M/20Hz held ~46→48 ms total tick, under budget;
+live perception p99 dropped ~10.6 → 7.45 ms — see `docs/performance/snapshots/win_pop1M_47.5ms_2026-06-25_2210.json`).
+**⚠️ Re-baseline the perf-hunt** before the next run — perception detect bars have shifted.
 
 ---
 

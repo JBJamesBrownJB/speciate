@@ -61,6 +61,7 @@ See `docs/scale/optimization-checklist.md` for the full Pass bar.
 | `dphase_ms` | Δ targeted-phase p99 |
 | `notes` | rationale, commit refs, tradeoffs |
 | `retest` *(optional)* | if present, the entry is **re-eligible** despite a DITCH verdict — it was ditched under an older, noisier gate. The value says which gate change reopened it and why it may now pass. Hunters re-propose these as priority. |
+| `merge` *(optional)* | for a `KEEP`, whether the win is actually **in the engine**. `KEEP` is the gate's verdict (it's a real, tested win); `merge` is the *human's* call. Values: `merged` (landed), `held` (tested win deliberately not merged — the value records the tradeoff under deliberation), absent (not yet decided). Lets a proven win be parked on an architectural tradeoff without losing or faking the result. |
 
 `DO_NOT_REVISIT` / `DONE` entries are hard exclusions — the hunters are told to skip them.
 `DEFER` entries are candidates for a future accumulation round. A `retest`-marked `DITCH` keeps its

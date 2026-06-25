@@ -95,8 +95,30 @@ pub fn update_perception_system(
     #[cfg(feature = "dev-tools")]
     let debug_target_entity = debug_target.get();
 
-    // Collect all entities for parallel processing
-    let mut entities: Vec<_> = query.iter_mut().collect();
+    // Frequency throttling: entity-ID bucketing with power-of-2 optimization.
+    // Hoisted above the collect so the throttle+active gate runs once, serially, during
+    // the (already-serial) collect instead of once per dispatched closure in parallel.
+    let throttle = FrequencyThrottle::new(freq.perception_divisor, physics_tick.get());
+
+    // Compact the active set BEFORE the parallel dispatch: keep only the entities this
+    // tick's throttle bucket will actually process AND that are behaviourally active.
+    // This shrinks the dispatched Vec ~`perception_divisor`x and removes the no-op
+    // parallel work units (and their cache/scheduler tax) that throttled creatures incur.
+    // Order and Entity values are preserved => bit-identical neighbor / L1Vision output.
+    // DEV-TOOLS: always retain the debug target so its visualization stays stable even
+    // when throttled/inactive; its skip semantics are preserved in the body below.
+    let mut entities: Vec<_> = query
+        .iter_mut()
+        .filter(|(entity, _, _, _, _, _, _, state)| {
+            #[cfg(feature = "dev-tools")]
+            let keep_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
+            #[cfg(not(feature = "dev-tools"))]
+            let keep_debug_target = false;
+
+            keep_debug_target
+                || (throttle.should_process(entity.index()) && state.behavior.is_active())
+        })
+        .collect();
 
     // DEV-TOOLS: Mutex to capture ACTUAL cell data during perception for debug target
     #[cfg(feature = "dev-tools")]
@@ -105,9 +127,6 @@ pub fn update_perception_system(
 
     // Get L1 grid reference for early-exit optimization
     let l1_grid_ref = &grid.l1;
-
-    // Frequency throttling: entity-ID bucketing with power-of-2 optimization
-    let throttle = FrequencyThrottle::new(freq.perception_divisor, physics_tick.get());
 
     // ============================================================
     // SINGLE PERCEPTION PASS - identical in dev and production
@@ -119,18 +138,11 @@ pub fn update_perception_system(
             #[cfg(feature = "dev-tools")]
             let is_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
 
-            // Frequency throttling: skip if not in current bucket
-            // IMPORTANT: Do NOT clear neighbor_cache when skipping - keep stale data
-            // EXCEPTION: Always process debug target to prevent visualization flashing
-            #[cfg(feature = "dev-tools")]
-            let bypass_throttle = is_debug_target;
-            #[cfg(not(feature = "dev-tools"))]
-            let bypass_throttle = false;
-
-            if !bypass_throttle && !throttle.should_process(entity.index()) {
-                return;
-            }
-
+            // Throttle + active gating already happened during the serial collect above,
+            // so every dispatched entity is in this tick's bucket and active. The only
+            // exception is the dev-tools debug target, which the filter retains even when
+            // throttled/inactive: preserve its "don't clobber stale cache when inactive"
+            // semantics here (an inactive target is visualized via the else-branch later).
             if !state.behavior.is_active() {
                 return;
             }

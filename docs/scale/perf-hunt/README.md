@@ -37,6 +37,13 @@ Encoded in `apps/simulation/src/bench_lab/verdict.rs` (`classify`), measured by
 - **Bank against the wall floor:** KEEP if the tick visibly moves; DEFER if real-but-tick-invisible
   (parked for stacking, never discarded as noise); DITCH if it regresses the tick or any phase >2 ms.
 
+The noise floor is the std of the **paired** per-seed A/B differences (Common Random Numbers), not a
+single arm's across-seed spread — shared world variance cancels (commit `505e591`). ⚠️ **Known limit:**
+at 1M the floor is dominated by run-to-run drift (±2.3 ms wall between two identical runs), which
+pairing cannot cancel — so sub-~2.3 ms wall wins are currently *unconfirmable*. See
+[`noise-characterization-2026-06-25.md`](noise-characterization-2026-06-25.md) for the data and the fix
+(detect on a stabler statistic than p99).
+
 See `docs/scale/optimization-checklist.md` for the full Pass bar.
 
 ## Ledger format (`ledger.jsonl`, append-only, one JSON object per line)

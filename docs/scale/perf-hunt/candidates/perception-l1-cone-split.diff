@@ -1,0 +1,480 @@
+diff --git a/apps/simulation/src/simulation/core/simulation.rs b/apps/simulation/src/simulation/core/simulation.rs
+index 9672c54..e6a44ad 100644
+--- a/apps/simulation/src/simulation/core/simulation.rs
++++ b/apps/simulation/src/simulation/core/simulation.rs
+@@ -36,8 +36,8 @@ impl SimulationBuilder {
+             Acceleration, BodySize, Position, Rotation, Velocity,
+         };
+         use crate::simulation::creatures::components::{
+-            BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanWander,
+-            CreatureState, CritId, FleeState, HomePosition, Target, WanderState,
++            BehaviorMode, Brain, BrainMode, CanAvoidObstacles, CanFlee, CanSeek, CanStrategicVision,
++            CanWander, CreatureState, CritId, FleeState, HomePosition, Target, WanderState,
+         };
+         use bevy_ecs::prelude::AppTypeRegistry;
+ 
+@@ -63,6 +63,7 @@ impl SimulationBuilder {
+             type_registry.register::<CanFlee>();
+             type_registry.register::<CanWander>();
+             type_registry.register::<CanAvoidObstacles>();
++            type_registry.register::<CanStrategicVision>();
+ 
+             type_registry.register::<Target>();
+ 
+@@ -201,9 +202,21 @@ impl Simulation {
+     }
+ 
+     pub fn spawn_crit(&mut self, builder: CritBuilder) -> u32 {
++        use crate::simulation::creatures::components::CanStrategicVision;
++        use crate::simulation::spatial::constants::L1_CELL_SIZE;
++
+         let id = self.world.resource_mut::<NextCreatureId>().generate();
+ 
+-        let _entity = self.world.spawn(builder.build(id)).id();
++        let bundle = builder.build(id);
++        // Tag long-range perceivers so the strategic L1 cone scan can run as its own
++        // work-stealing pass (capability-marker pattern). Range is static post-spawn,
++        // so this membership is fixed for the creature's lifetime.
++        let strategic_vision = bundle.perception.range >= L1_CELL_SIZE;
++
++        let mut entity = self.world.spawn(bundle);
++        if strategic_vision {
++            entity.insert(CanStrategicVision);
++        }
+ 
+         id
+     }
+diff --git a/apps/simulation/src/simulation/creatures/components/capabilities.rs b/apps/simulation/src/simulation/creatures/components/capabilities.rs
+index 291b6c2..aedeb45 100644
+--- a/apps/simulation/src/simulation/creatures/components/capabilities.rs
++++ b/apps/simulation/src/simulation/creatures/components/capabilities.rs
+@@ -17,3 +17,14 @@ pub struct CanWander;
+ #[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
+ #[reflect(Component)]
+ pub struct CanAvoidObstacles;
++
++/// Capability marker: this creature's perception range reaches into the coarse L1
++/// grid (`perception.range >= L1_CELL_SIZE`), so it participates in the strategic
++/// L1 cone scan. Assigned once at spawn from the (static) perception range so the
++/// heavy, branchy cone scan can be hoisted into its own work-stealing Rayon pass —
++/// a handful of giants no longer straggle behind 63 cheap neighbors in a shared
++/// min-len leaf. INVARIANT: `perception.range` is immutable post-spawn, so this
++/// marker never goes stale.
++#[derive(Component, Clone, Copy, Debug, Default, Serialize, Deserialize, Reflect)]
++#[reflect(Component)]
++pub struct CanStrategicVision;
+diff --git a/apps/simulation/src/simulation/perception/systems.rs b/apps/simulation/src/simulation/perception/systems.rs
+index 26de5a1..3b13eb6 100644
+--- a/apps/simulation/src/simulation/perception/systems.rs
++++ b/apps/simulation/src/simulation/perception/systems.rs
+@@ -8,6 +8,7 @@ use super::fov_patterns;
+ use crate::instrumentation::SystemTimings;
+ use crate::simulation::core::components::{BodySize, FreqConfig, PhysicsTick, Position, Rotation};
+ use crate::simulation::core::FrequencyThrottle;
++use crate::simulation::creatures::components::CanStrategicVision;
+ use crate::simulation::creatures::components::CreatureState;
+ #[cfg(feature = "dev-tools")]
+ use crate::simulation::creatures::components::CritId;
+@@ -78,9 +79,23 @@ pub fn update_perception_system(
+         &BodySize,
+         &Perception,
+         &mut NeighborCache,
+-        &mut L1Vision,
+         &CreatureState,
+     )>,
++    // Strategic L1 cone scan runs as a SEPARATE work-stealing pass over only the
++    // long-range giants. Disjoint mutable access (L1Vision here, NeighborCache in
++    // `query`) keeps both queries conflict-free in one system.
++    mut strategic_query: Query<
++        (
++            Entity,
++            &Position,
++            &Rotation,
++            &BodySize,
++            &Perception,
++            &mut L1Vision,
++            &CreatureState,
++        ),
++        With<CanStrategicVision>,
++    >,
+     #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
+     #[cfg(feature = "dev-tools")] debug_target: Res<PerceptionDebugTarget>,
+     #[cfg(feature = "dev-tools")] mut debug_snapshot: ResMut<PerceptionDebugSnapshot>,
+@@ -114,7 +129,7 @@ pub fn update_perception_system(
+     // ============================================================
+     // Perception: Heavy, variable workload - smaller chunks for better load balancing
+     entities.par_iter_mut().with_min_len(64).for_each(
+-        |(entity, pos, rot, size, perception, neighbor_cache, l1_vision, state)| {
++        |(entity, pos, rot, size, perception, neighbor_cache, state)| {
+             // Check if this entity is the debug target (dev-tools only)
+             #[cfg(feature = "dev-tools")]
+             let is_debug_target = debug_target_entity.map_or(false, |t| *entity == t);
+@@ -135,9 +150,10 @@ pub fn update_perception_system(
+                 return;
+             }
+ 
+-            // Clear caches only when we're actually updating perception
++            // Clear cache only when we're actually updating perception.
++            // L1Vision is cleared+repopulated in the separate strategic pass below
++            // (only long-range creatures ever touch it; the rest stay permanently empty).
+             neighbor_cache.clear();
+-            l1_vision.clear();
+ 
+             let x = pos.x;
+             let y = pos.y;
+@@ -492,67 +508,13 @@ pub fn update_perception_system(
+                         }
+                     }
+ 
+-                    // =================================================================
+-                    // L1 CONE SCAN: Check all L1 cells within perception cone
+-                    // =================================================================
+-                    // RANGE GATE: Only creatures with perception >= L1_CELL_SIZE benefit
+-                    // from strategic L1 awareness. Myopic creatures skip this entirely.
+-                    // GOLDEN ZONE: The performance win IS the biological feature -
+-                    // creatures that can't see 60m+ don't have strategic area awareness.
+-                    if range >= L1_CELL_SIZE {
+-                        let range_sq = range * range;
+-                        let max_cell_dist = (range / L1_CELL_SIZE).ceil() as i32;
+-
+-                        let (creature_l1_cx, creature_l1_cy) =
+-                            l1_grid_ref.index_to_cell_coords(my_l1_cell_idx);
+-
+-                        for dx in -max_cell_dist..=max_cell_dist {
+-                            for dy in -max_cell_dist..=max_cell_dist {
+-                                if dx == 0 && dy == 0 {
+-                                    continue;
+-                                }
+-
+-                                let l1_cx = creature_l1_cx + dx;
+-                                let l1_cy = creature_l1_cy + dy;
+-
+-                                let Some(l1_idx) =
+-                                    l1_grid_ref.get_cell_index_by_coords(l1_cx, l1_cy)
+-                                else {
+-                                    continue;
+-                                };
+-
+-                                let (cell_center_x, cell_center_y) =
+-                                    l1_grid_ref.cell_center_from_index(l1_idx);
+-
+-                                let to_cell_x = cell_center_x - x;
+-                                let to_cell_y = cell_center_y - y;
+-                                let dist_sq = to_cell_x * to_cell_x + to_cell_y * to_cell_y;
+-
+-                                if dist_sq > range_sq {
+-                                    continue;
+-                                }
+-
+-                                let rough_dot = to_cell_x * facing_x + to_cell_y * facing_y;
+-                                if !is_in_fov(rough_dot, dist_sq, cos_half_fov, cos_half_fov_sq) {
+-                                    continue;
+-                                }
+-
+-                                let biosig = l1_grid_ref.get_biosignature(l1_idx);
+-                                let is_my_cell = l1_idx == my_l1_cell_idx;
+-                                let classification =
+-                                    classify_l1_cell(biosig, my_mass, self_radius, is_my_cell);
+-
+-                                let inv_dist = dist_sq.sqrt().recip();
+-                                l1_vision.push(L1VisionEntry {
+-                                    cell_idx: l1_idx as u32,
+-                                    classification,
+-                                    _pad: [0; 3],
+-                                    direction_x: to_cell_x * inv_dist,
+-                                    direction_y: to_cell_y * inv_dist,
+-                                });
+-                            }
+-                        }
+-                    }
++                    // NOTE: The L1 strategic-cone scan that populates L1Vision used to
++                    // live here. It is the heavy, branchy tail owned by a tiny fraction
++                    // of long-range giants, so it has been hoisted into the dedicated
++                    // "STRATEGIC L1 CONE PASS" after this loop, over only the
++                    // CanStrategicVision creatures, with min_len(1) so every core can
++                    // steal one giant at a time instead of stranding it behind 63 cheap
++                    // neighbors in a shared 64-element leaf.
+ 
+                     // Final selection: get K closest using partial sort
+                     // select_nth_unstable_by(k-1) partitions so [0..k-1] are <= element at k-1
+@@ -581,6 +543,114 @@ pub fn update_perception_system(
+         },
+     );
+ 
++    // ============================================================
++    // STRATEGIC L1 CONE PASS - long-range giants only
++    // ============================================================
++    // The L1 cone scan touches up to (2*ceil(range/L1)+1)^2 cells per creature and
++    // is owned by the ~1-2% of giants with perception.range >= L1_CELL_SIZE. Running
++    // it as its own par_iter over ONLY those creatures (CanStrategicVision) with
++    // min_len(1) lets work-stealing balance the heavy tail one giant at a time,
++    // instead of stranding a giant behind 63 cheap neighbors in pass 1's min_len(64)
++    // leaf. The gate (throttle + is_active) is identical to pass 1, so exactly the
++    // same creatures clear+repopulate L1Vision and results stay bit-identical.
++    {
++        let mut strategic: Vec<_> = strategic_query.iter_mut().collect();
++        strategic.par_iter_mut().with_min_len(1).for_each(
++            |(entity, pos, rot, size, perception, l1_vision, state)| {
++                #[cfg(feature = "dev-tools")]
++                let bypass_throttle = debug_target_entity.map_or(false, |t| *entity == t);
++                #[cfg(not(feature = "dev-tools"))]
++                let bypass_throttle = false;
++
++                if !bypass_throttle && !throttle.should_process(entity.index()) {
++                    return;
++                }
++
++                if !state.behavior.is_active() {
++                    return;
++                }
++
++                // Clear+repopulate L1Vision only when this giant is actually updated
++                // this tick (mirrors pass 1's clear/early-return pairing).
++                l1_vision.clear();
++
++                let x = pos.x;
++                let y = pos.y;
++                let self_radius = size.radius();
++                let range = perception.range;
++                let cos_half_fov_sq = perception.cos_half_fov_sq;
++                let cos_half_fov = perception.cos_half_fov;
++                let facing_x = rot.cos_radians;
++                let facing_y = rot.sin_radians;
++                let my_mass = BioSignature::mass_from_radius(self_radius);
++                let my_l1_cell_idx = l1_grid_ref.position_to_cell_index(x, y);
++
++                // =================================================================
++                // L1 CONE SCAN: Check all L1 cells within perception cone
++                // =================================================================
++                // RANGE GATE: Only creatures with perception >= L1_CELL_SIZE benefit
++                // from strategic L1 awareness. The CanStrategicVision marker is exactly
++                // that gate applied at spawn; the guard below preserves bit-identical
++                // behavior and documents the invariant.
++                // GOLDEN ZONE: The performance win IS the biological feature -
++                // creatures that can't see 60m+ don't have strategic area awareness.
++                if range >= L1_CELL_SIZE {
++                    let range_sq = range * range;
++                    let max_cell_dist = (range / L1_CELL_SIZE).ceil() as i32;
++
++                    let (creature_l1_cx, creature_l1_cy) =
++                        l1_grid_ref.index_to_cell_coords(my_l1_cell_idx);
++
++                    for dx in -max_cell_dist..=max_cell_dist {
++                        for dy in -max_cell_dist..=max_cell_dist {
++                            if dx == 0 && dy == 0 {
++                                continue;
++                            }
++
++                            let l1_cx = creature_l1_cx + dx;
++                            let l1_cy = creature_l1_cy + dy;
++
++                            let Some(l1_idx) = l1_grid_ref.get_cell_index_by_coords(l1_cx, l1_cy)
++                            else {
++                                continue;
++                            };
++
++                            let (cell_center_x, cell_center_y) =
++                                l1_grid_ref.cell_center_from_index(l1_idx);
++
++                            let to_cell_x = cell_center_x - x;
++                            let to_cell_y = cell_center_y - y;
++                            let dist_sq = to_cell_x * to_cell_x + to_cell_y * to_cell_y;
++
++                            if dist_sq > range_sq {
++                                continue;
++                            }
++
++                            let rough_dot = to_cell_x * facing_x + to_cell_y * facing_y;
++                            if !is_in_fov(rough_dot, dist_sq, cos_half_fov, cos_half_fov_sq) {
++                                continue;
++                            }
++
++                            let biosig = l1_grid_ref.get_biosignature(l1_idx);
++                            let is_my_cell = l1_idx == my_l1_cell_idx;
++                            let classification =
++                                classify_l1_cell(biosig, my_mass, self_radius, is_my_cell);
++
++                            let inv_dist = dist_sq.sqrt().recip();
++                            l1_vision.push(L1VisionEntry {
++                                cell_idx: l1_idx as u32,
++                                classification,
++                                _pad: [0; 3],
++                                direction_x: to_cell_x * inv_dist,
++                                direction_y: to_cell_y * inv_dist,
++                            });
++                        }
++                    }
++                }
++            },
++        );
++    }
++
+     // ============================================================
+     // DEV-TOOLS ONLY: Capture visualization AFTER perception runs
+     // This observes the results, doesn't change behavior
+@@ -592,10 +662,10 @@ pub fn update_perception_system(
+ 
+         if let Some(target_entity) = debug_target_entity {
+             // Find the debug target in our entities list and capture its state
+-            if let Some((_, pos, rot, _size, perception, neighbor_cache, l1_vision, state)) =
++            if let Some((_, pos, rot, _size, perception, neighbor_cache, state)) =
+                 entities
+                     .iter()
+-                    .find(|(e, _, _, _, _, _, _, _)| *e == target_entity)
++                    .find(|(e, _, _, _, _, _, _)| *e == target_entity)
+             {
+                 let entity_id = crit_ids.get(target_entity).map(|id| id.0).unwrap_or(0);
+ 
+@@ -637,22 +707,29 @@ pub fn update_perception_system(
+                         })
+                         .collect();
+ 
+-                    // Build L1Vision debug entries with cell centers
+-                    let l1_vision_debug: Vec<L1VisionDebugEntry> = l1_vision
+-                        .iter()
+-                        .map(|entry| {
+-                            let (center_x, center_y) =
+-                                l1_grid_ref.cell_center_from_index(entry.cell_idx as usize);
+-                            L1VisionDebugEntry {
+-                                cell_idx: entry.cell_idx,
+-                                classification: entry.classification as u8,
+-                                center_x,
+-                                center_y,
+-                                direction_x: entry.direction_x,
+-                                direction_y: entry.direction_y,
+-                            }
++                    // Build L1Vision debug entries with cell centers.
++                    // L1Vision is owned by the strategic pass; read it back from that
++                    // query (empty for non-strategic / short-range debug targets).
++                    let l1_vision_debug: Vec<L1VisionDebugEntry> = strategic_query
++                        .get(target_entity)
++                        .map(|(.., l1_vision, _)| {
++                            l1_vision
++                                .iter()
++                                .map(|entry| {
++                                    let (center_x, center_y) = l1_grid_ref
++                                        .cell_center_from_index(entry.cell_idx as usize);
++                                    L1VisionDebugEntry {
++                                        cell_idx: entry.cell_idx,
++                                        classification: entry.classification as u8,
++                                        center_x,
++                                        center_y,
++                                        direction_x: entry.direction_x,
++                                        direction_y: entry.direction_y,
++                                    }
++                                })
++                                .collect()
+                         })
+-                        .collect();
++                        .unwrap_or_default();
+ 
+                     let (creature_cx, creature_cy) = grid_ref.world_to_cell(x, y);
+ 
+diff --git a/apps/simulation/src/simulation/perception/tests.rs b/apps/simulation/src/simulation/perception/tests.rs
+index bd42367..193e670 100644
+--- a/apps/simulation/src/simulation/perception/tests.rs
++++ b/apps/simulation/src/simulation/perception/tests.rs
+@@ -2077,6 +2077,103 @@ fn test_l1_scan_range_gate_skips_myopic_creatures() {
+     );
+ }
+ 
++/// Test the CanStrategicVision marker drives the split strategic L1 pass.
++///
++/// The L1 cone scan was hoisted out of the main perception loop into a separate
++/// work-stealing pass keyed on the `CanStrategicVision` capability marker. This
++/// pins the invariant that the marker is assigned at spawn EXACTLY when
++/// `perception.range >= L1_CELL_SIZE`, and that L1Vision is populated for marked
++/// (strategic) creatures and stays empty for unmarked (myopic) ones - i.e. the
++/// split pass produces the same L1Vision membership as the old inline range gate.
++#[test]
++fn test_strategic_vision_marker_matches_range_gate_and_l1_population() {
++    use crate::simulation::core::SimulationBuilder;
++    use crate::simulation::creatures::builder::CritBuilder;
++    use crate::simulation::creatures::components::{CanStrategicVision, CritId};
++    use crate::simulation::spatial::constants::L1_CELL_SIZE;
++
++    let mut sim = SimulationBuilder::new().build();
++    sim.set_boundaries(300.0, 300.0);
++
++    // Strategic giant: range well above L1_CELL_SIZE (60m) -> should be marked.
++    let giant_id = sim.spawn_crit(
++        CritBuilder::new()
++            .at(150.0, 150.0)
++            .with_size(5.0)
++            .with_fov(180.0)
++            .facing(0.0)
++            .with_dormant_brain()
++            .with_all_capabilities(),
++    );
++
++    // Myopic creature: range well below L1_CELL_SIZE -> should NOT be marked.
++    let myopic_id = sim.spawn_crit(
++        CritBuilder::new()
++            .at(60.0, 150.0)
++            .with_size(1.5)
++            .with_fov(180.0)
++            .facing(0.0)
++            .with_dormant_brain()
++            .with_all_capabilities(),
++    );
++
++    // Surround the giant with sizeable neighbors so its FOV cone has non-empty cells.
++    for angle in (0..360).step_by(45) {
++        let rad = (angle as f32).to_radians();
++        sim.spawn_crit(
++            CritBuilder::new()
++                .at(150.0 + 80.0 * rad.cos(), 150.0 + 80.0 * rad.sin())
++                .with_size(2.0)
++                .with_dormant_brain()
++                .with_all_capabilities(),
++        );
++    }
++
++    for _ in 0..3 {
++        sim.update(0.016);
++    }
++
++    let world = sim.world_mut();
++    let mut giant = None;
++    let mut myopic = None;
++    for (e, id) in world.query::<(Entity, &CritId)>().iter(world) {
++        if id.0 == giant_id {
++            giant = Some(e);
++        } else if id.0 == myopic_id {
++            myopic = Some(e);
++        }
++    }
++    let giant = giant.expect("giant should exist");
++    let myopic = myopic.expect("myopic should exist");
++
++    // Marker membership must match the range gate exactly.
++    let giant_range = world.get::<Perception>(giant).unwrap().range;
++    let myopic_range = world.get::<Perception>(myopic).unwrap().range;
++    assert!(giant_range >= L1_CELL_SIZE);
++    assert!(myopic_range < L1_CELL_SIZE);
++
++    assert!(
++        world.get::<CanStrategicVision>(giant).is_some(),
++        "long-range giant (range {giant_range:.1}m) must carry CanStrategicVision"
++    );
++    assert!(
++        world.get::<CanStrategicVision>(myopic).is_none(),
++        "myopic creature (range {myopic_range:.1}m) must NOT carry CanStrategicVision"
++    );
++
++    // L1Vision population must follow the marker: populated for the giant, empty
++    // for the myopic creature (the strategic pass only ever touches marked entities).
++    assert!(
++        world.get::<L1Vision>(giant).unwrap().count() > 0,
++        "strategic pass should populate the giant's L1Vision"
++    );
++    assert_eq!(
++        world.get::<L1Vision>(myopic).unwrap().count(),
++        0,
++        "unmarked myopic creature's L1Vision must stay empty"
++    );
++}
++
+ /// Test L1Vision direction vectors are normalized
+ #[test]
+ fn test_l1_vision_direction_normalized() {

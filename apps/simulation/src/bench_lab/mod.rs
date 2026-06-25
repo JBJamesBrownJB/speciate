@@ -46,6 +46,29 @@ pub struct MultiSeedReport {
     /// of each field is that phase's noise floor — the precise yardstick the
     /// verdict classifier judges a phase-targeted change against.
     pub per_phase_p99_across_seeds: PhaseNoiseFloors,
+    /// Per-seed p99s (wall + each phase) in seed order, so a baseline-vs-candidate
+    /// verdict can pair the arms seed-for-seed. `default` keeps older artifacts that
+    /// predate this field deserializable (verdict then falls back to across-seed std).
+    #[serde(default)]
+    pub per_seed_p99: PerSeedP99s,
+}
+
+/// Per-seed p99 values (µs) for the wall and each time phase, in seed order.
+/// WHY: baseline and candidate run on the SAME seeds, so each seed's world-to-world
+/// cost is common to both arms. Pairing the per-seed p99s (Common Random Numbers)
+/// cancels that shared variance, leaving only the change's own effect — exposing
+/// real wins the much larger across-seed spread would otherwise bury as noise.
+/// Serialized (unlike `per_seed`) because the cross-process A/B verdict needs it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerSeedP99s {
+    pub wall: Vec<f64>,
+    pub perception: Vec<f64>,
+    pub steering: Vec<f64>,
+    pub movement: Vec<f64>,
+    pub spatial_grid_rebuild: Vec<f64>,
+    pub l1_aggregation: Vec<f64>,
+    pub behavior_transition: Vec<f64>,
 }
 
 /// Across-seed p99 distribution per phase. `std_dev` = the phase's noise floor,
@@ -108,6 +131,17 @@ impl Phase {
             Phase::Behavior => &floors.behavior_transition,
         }
     }
+
+    fn select_seeds<'a>(&self, s: &'a PerSeedP99s) -> &'a [f64] {
+        match self {
+            Phase::Perception => &s.perception,
+            Phase::Steering => &s.steering,
+            Phase::Movement => &s.movement,
+            Phase::GridRebuild => &s.spatial_grid_rebuild,
+            Phase::L1Aggregation => &s.l1_aggregation,
+            Phase::Behavior => &s.behavior_transition,
+        }
+    }
 }
 
 /// Build the verdict inputs from a baseline vs candidate A/B, both measured the
@@ -130,14 +164,45 @@ pub fn evidence_from_reports(
         })
         .fold(f64::NEG_INFINITY, f64::max);
 
+    // Pair the arms seed-for-seed (Common Random Numbers): baseline and candidate
+    // ran the SAME seeds, so each seed's world-to-world cost is shared and cancels
+    // in the per-seed difference. The signal (mean of diffs) is unchanged, but the
+    // noise floor collapses from the across-seed spread to the much smaller paired
+    // std — the across-seed variance was never attributable to the change. Falls
+    // back to the across-seed std for summary-only inputs (older artifacts/fixtures).
+    let (phase_delta_p99_us, phase_noise_floor_us) =
+        paired_delta_and_noise(target.select_seeds(&baseline.per_seed_p99), target.select_seeds(&candidate.per_seed_p99))
+            .unwrap_or((cand_phase.mean - base_phase.mean, base_phase.std_dev));
+    let (tick_delta_p99_us, tick_noise_floor_us) =
+        paired_delta_and_noise(&baseline.per_seed_p99.wall, &candidate.per_seed_p99.wall)
+            .unwrap_or((
+                candidate.wall_p99_across_seeds.mean - baseline.wall_p99_across_seeds.mean,
+                baseline.wall_p99_across_seeds.std_dev,
+            ));
+
     ChangeEvidence {
-        phase_delta_p99_us: cand_phase.mean - base_phase.mean,
-        phase_noise_floor_us: base_phase.std_dev,
-        tick_delta_p99_us: candidate.wall_p99_across_seeds.mean
-            - baseline.wall_p99_across_seeds.mean,
-        tick_noise_floor_us: baseline.wall_p99_across_seeds.std_dev,
+        phase_delta_p99_us,
+        phase_noise_floor_us,
+        tick_delta_p99_us,
+        tick_noise_floor_us,
         worst_phase_regression_us,
     }
+}
+
+/// Paired difference of two seed-aligned p99 vectors: `(mean(cand−base), std)`.
+/// `std` is the population std of the per-seed differences (matching [`summarize`]),
+/// i.e. the noise that survives after the shared world variance cancels. Returns
+/// `None` when the arms cannot be paired (mismatched/under-two seeds), so callers
+/// fall back to the unpaired across-seed floor.
+fn paired_delta_and_noise(base: &[f64], cand: &[f64]) -> Option<(f64, f64)> {
+    if base.len() != cand.len() || base.len() < 2 {
+        return None;
+    }
+    let diffs: Vec<f64> = cand.iter().zip(base).map(|(c, b)| c - b).collect();
+    let n = diffs.len() as f64;
+    let mean = diffs.iter().sum::<f64>() / n;
+    let variance = diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / n;
+    Some((mean, variance.sqrt()))
 }
 
 pub fn run_lab_multi_seed(cfg: &LabConfig, seeds: &[u64]) -> MultiSeedReport {
@@ -172,6 +237,20 @@ pub fn run_lab_multi_seed(cfg: &LabConfig, seeds: &[u64]) -> MultiSeedReport {
         cells_queried: phase_p99(|s| &s.cells_queried),
     };
 
+    // Raw (unrounded) per-seed p99s in seed order, so the verdict can pair arms.
+    let seed_p99 = |select: fn(&PhaseSamples) -> &TickStats| -> Vec<f64> {
+        per_seed.iter().map(|r| select(&r.samples).p99).collect()
+    };
+    let per_seed_p99 = PerSeedP99s {
+        wall: seed_p99(|s| &s.wall_total),
+        perception: seed_p99(|s| &s.perception),
+        steering: seed_p99(|s| &s.steering),
+        movement: seed_p99(|s| &s.movement),
+        spatial_grid_rebuild: seed_p99(|s| &s.spatial_grid_rebuild),
+        l1_aggregation: seed_p99(|s| &s.l1_aggregation),
+        behavior_transition: seed_p99(|s| &s.behavior_transition),
+    };
+
     MultiSeedReport {
         label: cfg.label.clone(),
         population: cfg.spec.population,
@@ -179,6 +258,7 @@ pub fn run_lab_multi_seed(cfg: &LabConfig, seeds: &[u64]) -> MultiSeedReport {
         wall_p99_across_seeds: summarize(&p99s),
         wall_mean_across_seeds: summarize(&means),
         per_phase_p99_across_seeds,
+        per_seed_p99,
         per_seed,
     }
 }
@@ -353,12 +433,14 @@ mod tests {
 
     /// A report where every time phase shares `phase` stats and the wall uses
     /// `wall` stats — enough to exercise the evidence builder deterministically.
+    /// No per-seed vectors → exercises the across-seed (unpaired) fallback path.
     fn report_with(perception: TickStats, wall: TickStats) -> MultiSeedReport {
         MultiSeedReport {
             label: "t".into(),
             population: 900_000,
             seeds: vec![11, 42, 99, 137, 2025],
             per_seed: vec![],
+            per_seed_p99: PerSeedP99s::default(),
             wall_p99_across_seeds: wall,
             wall_mean_across_seeds: TickStats::default(),
             per_phase_p99_across_seeds: PhaseNoiseFloors {
@@ -366,6 +448,50 @@ mod tests {
                 ..PhaseNoiseFloors::default()
             },
         }
+    }
+
+    /// A report carrying real per-seed steering & wall p99s, with the across-seed
+    /// summaries derived from them — mirrors a real run so the paired path engages.
+    fn report_with_seeds(steering: &[f64], wall: &[f64]) -> MultiSeedReport {
+        let u64s = |xs: &[f64]| xs.iter().map(|&x| x.round() as u64).collect::<Vec<_>>();
+        MultiSeedReport {
+            label: "t".into(),
+            population: 900_000,
+            seeds: vec![11, 42, 99],
+            per_seed: vec![],
+            per_seed_p99: PerSeedP99s {
+                wall: wall.to_vec(),
+                steering: steering.to_vec(),
+                ..PerSeedP99s::default()
+            },
+            wall_p99_across_seeds: summarize(&u64s(wall)),
+            wall_mean_across_seeds: TickStats::default(),
+            per_phase_p99_across_seeds: PhaseNoiseFloors {
+                steering: summarize(&u64s(steering)),
+                ..PhaseNoiseFloors::default()
+            },
+        }
+    }
+
+    #[test]
+    fn evidence_pairs_seeds_so_a_consistent_win_clears_cross_seed_noise() {
+        // Worlds differ wildly seed-to-seed (steering p99 10ms→18ms across seeds;
+        // across-seed std ≈ 3.27ms), but the candidate is consistently ~0.5ms
+        // faster on EVERY seed and the wall ~2.5ms faster on every seed. The
+        // shared world variance must cancel: judged against the across-seed std
+        // this is invisible (Ditch); paired, it is a clean Keep.
+        let base = report_with_seeds(&[10_000.0, 14_000.0, 18_000.0], &[48_000.0, 52_000.0, 56_000.0]);
+        let cand = report_with_seeds(&[9_500.0, 13_400.0, 17_600.0], &[45_400.0, 49_600.0, 53_500.0]);
+        let ev = evidence_from_reports(&base, &cand, Phase::Steering);
+
+        // Signal is unchanged (mean of diffs = diff of means).
+        assert!((ev.phase_delta_p99_us - -500.0).abs() < 1e-6, "phase signal");
+        assert!((ev.tick_delta_p99_us - -2_500.0).abs() < 1e-6, "wall signal");
+        // Noise is the PAIRED-difference std (≈82us), not the across-seed std (≈3266us).
+        assert!(ev.phase_noise_floor_us < 200.0, "paired phase noise, got {}", ev.phase_noise_floor_us);
+        assert!(ev.tick_noise_floor_us < 200.0, "paired wall noise, got {}", ev.tick_noise_floor_us);
+        // The whole point: a win the unpaired gate threw away now banks.
+        assert_eq!(classify(&ev), Verdict::Keep);
     }
 
     #[test]
@@ -404,6 +530,35 @@ mod tests {
             "steering's +3ms must be the worst regression, got {}",
             ev.worst_phase_regression_us
         );
+    }
+
+    #[test]
+    fn per_seed_p99_survives_json_round_trip_so_verdict_can_pair() {
+        // The verdict runs in a separate process off serialized A/B artifacts. If
+        // per-seed p99s don't survive serde (the original `per_seed` bug), pairing
+        // silently degrades to the unpaired floor. Guard the boundary.
+        let r = report_with_seeds(&[10_000.0, 14_000.0, 18_000.0], &[48_000.0, 52_000.0, 56_000.0]);
+        let round: MultiSeedReport = serde_json::from_str(&serde_json::to_string(&r).unwrap()).unwrap();
+        assert_eq!(round.per_seed_p99.steering, vec![10_000.0, 14_000.0, 18_000.0]);
+        assert_eq!(round.per_seed_p99.wall, vec![48_000.0, 52_000.0, 56_000.0]);
+    }
+
+    #[test]
+    fn multi_seed_populates_per_seed_p99_in_seed_order() {
+        let cfg = LabConfig {
+            label: "per-seed".to_string(),
+            spec: small_spec(1000),
+            warmup: 1,
+            samples: 5,
+            dt: 0.05,
+            budget_us: TICK_BUDGET_US,
+            metric: BudgetMetric::P99,
+            find_max: None,
+        };
+        let report = run_lab_multi_seed(&cfg, &[11, 42, 99]);
+        assert_eq!(report.per_seed_p99.wall.len(), 3, "one wall p99 per seed for pairing");
+        assert_eq!(report.per_seed_p99.steering.len(), 3);
+        assert!(report.per_seed_p99.wall.iter().all(|&x| x > 0.0), "real wall p99s");
     }
 
     #[test]

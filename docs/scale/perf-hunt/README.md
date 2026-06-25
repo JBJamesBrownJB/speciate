@@ -60,6 +60,8 @@ See `docs/scale/optimization-checklist.md` for the full Pass bar.
 | `dwall_p99_ms` | Δ wall p99 at the test population (negative = faster) |
 | `dphase_ms` | Δ targeted-phase p99 |
 | `notes` | rationale, commit refs, tradeoffs |
+| `retest` *(optional)* | if present, the entry is **re-eligible** despite a DITCH verdict — it was ditched under an older, noisier gate. The value says which gate change reopened it and why it may now pass. Hunters re-propose these as priority. |
 
 `DO_NOT_REVISIT` / `DONE` entries are hard exclusions — the hunters are told to skip them.
-`DEFER` entries are candidates for a future accumulation round.
+`DEFER` entries are candidates for a future accumulation round. A `retest`-marked `DITCH` keeps its
+original verdict and reason (history intact) but is surfaced for a fresh A/B under the improved gate.

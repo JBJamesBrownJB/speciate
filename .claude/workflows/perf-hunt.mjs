@@ -119,7 +119,9 @@ phase('Recall')
 const brief = await agent(
   'You are briefing a fleet of performance-optimization hunters for the Speciate Rust/Bevy ECS engine.\n' +
   'READ, in this order:\n' +
-  '1. ' + LEDGER + ' (JSONL: every idea already tried + its verdict; DO_NOT_REVISIT and DONE are HARD exclusions)\n' +
+  '1. ' + LEDGER + ' (JSONL: every idea already tried + its verdict; DO_NOT_REVISIT and DONE are HARD exclusions. ' +
+  'An entry with a "retest" field is RE-ELIGIBLE despite a DITCH verdict — it was ditched under the OLD noisier gate ' +
+  'and the "retest" note says why it may now pass; surface these as PRIORITY re-tests, with their prior result as context)\n' +
   '2. ' + REPO + '/docs/scale/optimization-checklist.md (the Pass bar, attack order, ditched list, next levers)\n' +
   '3. ' + REPO + '/docs/scale/path-to-one-million.md (current phase budget breakdown; which phase is fattest)\n' +
   '4. Skim the hot systems: apps/simulation/src/simulation/{perception,steering,movement}/ and spatial/.\n\n' +
@@ -142,7 +144,8 @@ const proposals = (await parallel(ANGLES.map((a) => () =>
     'You are a Speciate performance hunter focused on ' + a.lens + '.\n\nBRIEF:\n' + brief + '\n\n' + SCOPE_NOTE + '\n\n' +
     'Propose up to ' + perHunter + ' DISTINCT, concrete optimization ideas in your lens. Each needs a real implementation ' +
     'sketch with file:line anchors (read the actual code to ground it). Do NOT propose anything on the ledger DO_NOT_REVISIT/DONE list. ' +
-    'Be honest about predicted impact and tradeoffs.',
+    'Ledger entries with a "retest" field ARE fair game — re-propose them (the gate that ditched them was too noisy); reuse the prior ' +
+    'sketch and cite the entry. Be honest about predicted impact and tradeoffs.',
     { label: 'hunt:' + a.key, phase: 'Ideate', schema: IDEAS_SCHEMA }
   )
 ))).filter(Boolean).flatMap((r) => r.ideas || [])
@@ -151,7 +154,8 @@ const synth = await agent(
   'You are the lead engineer triaging ' + proposals.length + ' proposed perf optimizations for Speciate.\n\n' +
   'PROPOSALS (JSON):\n' + JSON.stringify(proposals) + '\n\n' +
   'Cross-check every proposal against the ledger ' + LEDGER + ' — DROP anything that duplicates a DO_NOT_REVISIT/DONE/' +
-  'already-DITCHED entry. Then select the ' + COUNT + ' STRONGEST and most DIVERSE ideas (spread across phases and scopes, ' +
+  'already-DITCHED entry, EXCEPT entries carrying a "retest" field: those are explicitly re-eligible (ditched under the old ' +
+  'noisier gate) and should be PREFERRED, not dropped. Then select the ' + COUNT + ' STRONGEST and most DIVERSE ideas (spread across phases and scopes, ' +
   'not all perception). Merge near-duplicates. Keep the best implementation sketch for each. Return exactly ' + COUNT +
   ' ideas (or fewer if not enough survive), each with a unique id.',
   { label: 'ideate:synthesize', phase: 'Ideate', schema: IDEAS_SCHEMA }

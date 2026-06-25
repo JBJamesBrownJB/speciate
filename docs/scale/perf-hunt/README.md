@@ -18,7 +18,8 @@ Workflow({ name: 'perf-hunt', args: { count: 3, pilot: true } })   # fast pilot
 
 | Phase | Concurrency | What happens |
 |-------|-------------|--------------|
-| **Recall** | 1 | Read this ledger + `optimization-checklist.md` + engine; brief the hunters on what's tried, what's hot, what not to repeat. |
+| **Baseline** | 1 | Build + stash the clean `HEAD` binary and **profile its live per-phase breakdown** at full pop. This is what tells the hunters which phase is fattest *right now* — so a merged win auto-shifts the next run's targeting with no hand-maintained doc. The same stashed binary is reused as the A/B reference in Measure (built once). |
+| **Recall** | 1 | Read this ledger + `optimization-checklist.md` + engine; brief the hunters on the **live fattest phases** (from Baseline), what's tried, and what not to repeat. The doc phase figures are reference-only and may be stale; the live profile overrides them. |
 | **Ideate** | parallel | Hunter fleet proposes ideas from distinct angles; a synthesizer dedupes vs the ledger to `count`. |
 | **Implement** | parallel (worktrees) | Each idea implemented in isolation, gated on `cargo test`. All worktrees share one **pre-warmed `--target-dir`** so Bevy's deps compile once; cargo's build lock coordinates the concurrent compiles. Build jobs are uncapped (all cores) by default — pass `jobs` to throttle. Output = a unified diff. |
 | **Measure** | **strictly serial** | One lab run at a time on a quiet machine — the sim saturates all cores, so two at once = garbage numbers (noisy neighbour). Each candidate is A/B'd vs a baseline through `classify()`. |

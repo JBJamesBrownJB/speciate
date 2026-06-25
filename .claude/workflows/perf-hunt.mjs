@@ -3,10 +3,11 @@ export const meta = {
   description: 'Hunt, implement, measure & rank Speciate perf optimizations through the phase-aware lab gate; learns via a ledger',
   whenToUse: 'When you want to automatically discover and validate performance optimizations. Pass a number = how many ideas to hunt.',
   phases: [
-    { title: 'Recall', detail: 'read the ledger + checklist; brief the hunters' },
+    { title: 'Baseline', detail: 'build+stash the clean HEAD binary and profile its LIVE per-phase breakdown' },
+    { title: 'Recall', detail: 'read the ledger + checklist; brief the hunters on the live fattest phases' },
     { title: 'Ideate', detail: 'parallel hunter fleet proposes ideas; synthesizer dedupes vs ledger' },
     { title: 'Implement', detail: 'each idea built in an isolated worktree, gated on cargo test -> unified diff' },
-    { title: 'Measure', detail: 'SERIAL: one lab run at a time, A/B vs baseline through classify()' },
+    { title: 'Measure', detail: 'SERIAL: one lab run at a time, A/B vs the stashed baseline through classify()' },
     { title: 'Accumulate', detail: 'SERIAL: stack DEFER wins, measure the union' },
     { title: 'Report', detail: 'rank, log verdicts to the ledger, present tradeoffs' },
   ],
@@ -115,18 +116,57 @@ const gateBrief =
   'tail/SLO guard, NOT the detector). The VERDICT line prints dPhaseMedian/dWallMedian. No flat 3ms floor.'
 
 // ============================================================================
+// Baseline FIRST: build+stash the clean HEAD binary AND profile its live per-phase
+// breakdown UP FRONT, so the hunters are briefed on the ACTUAL current-fattest phases
+// rather than a hand-maintained doc that goes stale the moment a win merges. The same
+// stashed binary is reused as the A/B reference in Measure — built once, not twice.
+phase('Baseline')
+const PHASE_KEYS = ['perception', 'steering', 'movement', 'grid_rebuild', 'l1_aggregation', 'behavior']
+const baseline = await agent(
+  'Build, STASH, and PROFILE the clean baseline for this run. Work in ' + SIM + ' (NO worktree); the tree is the ' +
+  'committed state — do not modify source.\n\n' +
+  '1. mkdir -p ' + ART + '\n' +
+  '2. CLEAN-TREE GUARD: from ' + REPO + ', run `git diff --quiet -- apps/simulation/src`. If it exits non-zero, source is dirty — return ok=false and STOP.\n' +
+  '3. Build: ' + BUILD + '\n' +
+  '4. Stash the binary so candidates run it without rebuilding: cp ' + RELEASE_BIN + ' ' + BASELINE_BIN + '\n' +
+  '5. PROFILE: ' + BASELINE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + '\n' +
+  '   It prints "wall p99: mean-of-p99s=<us>" and a per-phase line each ("phase <name> p99=<us> ...").\n' +
+  '6. Convert µs→ms (÷1000) and return ok=true, wall_p99_ms, phases={' + PHASE_KEYS.join(',') + '} in ms, and ' +
+  'fattest = those phase names sorted DESCENDING by p99. This run owns the machine; nothing else is running.',
+  { label: 'baseline-profile', phase: 'Baseline', schema: { type: 'object', properties: {
+      ok: { type: 'boolean' },
+      wall_p99_ms: { type: 'number' },
+      phases: { type: 'object', properties: Object.fromEntries(PHASE_KEYS.map((p) => [p, { type: 'number' }])) },
+      fattest: { type: 'array', items: { type: 'string' } },
+      notes: { type: 'string' },
+    }, required: ['ok', 'notes'] } }
+)
+if (!baseline || !baseline.ok) {
+  log('Baseline build/profile failed (' + (baseline?.notes || 'agent died') + ') — aborting before ideation.')
+  return { aborted: 'baseline-failed', notes: baseline?.notes || 'baseline agent returned null' }
+}
+const liveProfile = baseline.phases
+  ? 'LIVE BASELINE measured THIS run at ' + FULL_POP + ' creatures (authoritative — use this, not the doc): wall p99 ' +
+    (typeof baseline.wall_p99_ms === 'number' ? baseline.wall_p99_ms.toFixed(1) : '?') + ' ms; per-phase p99 (ms): ' +
+    PHASE_KEYS.map((k) => k + ' ' + (typeof baseline.phases[k] === 'number' ? baseline.phases[k].toFixed(1) : '?')).join(', ') +
+    (baseline.fattest && baseline.fattest.length ? '. FATTEST→leanest: ' + baseline.fattest.join(' > ') : '') + '.\n'
+  : 'LIVE BASELINE: wall p99 ' + (baseline.wall_p99_ms ?? '?') + ' ms (per-phase parse unavailable — fall back to the doc breakdown).\n'
+log('Baseline: wall p99 ' + (baseline.wall_p99_ms ?? '?') + ' ms; fattest ' + (baseline.fattest && baseline.fattest[0] || '?'))
+
+// ============================================================================
 phase('Recall')
 const brief = await agent(
-  'You are briefing a fleet of performance-optimization hunters for the Speciate Rust/Bevy ECS engine.\n' +
+  'You are briefing a fleet of performance-optimization hunters for the Speciate Rust/Bevy ECS engine.\n\n' +
+  liveProfile + '\nTARGET the fattest LIVE phases above. ' +
   'READ, in this order:\n' +
   '1. ' + LEDGER + ' (JSONL: every idea already tried + its verdict; DO_NOT_REVISIT and DONE are HARD exclusions. ' +
   'An entry with a "retest" field is RE-ELIGIBLE despite a DITCH verdict — it was ditched under the OLD noisier gate ' +
   'and the "retest" note says why it may now pass; surface these as PRIORITY re-tests, with their prior result as context)\n' +
   '2. ' + REPO + '/docs/scale/optimization-checklist.md (the Pass bar, attack order, ditched list, next levers)\n' +
-  '3. ' + REPO + '/docs/scale/path-to-one-million.md (current phase budget breakdown; which phase is fattest)\n' +
+  '3. ' + REPO + '/docs/scale/path-to-one-million.md (attack order + context — but its phase figures are HISTORICAL and may be stale; the LIVE BASELINE above overrides them for "which phase is fattest")\n' +
   '4. Skim the hot systems: apps/simulation/src/simulation/{perception,steering,movement}/ and spatial/.\n\n' +
-  'Produce a concise BRIEF (markdown, ~300 words) for the hunters covering: (a) the current per-phase time budget at ' +
-  FULL_POP + ' and which phases are fattest, (b) ideas already tried and their verdicts — explicitly the ones they MUST NOT ' +
+  'Produce a concise BRIEF (markdown, ~300 words) for the hunters covering: (a) the LIVE per-phase budget above and ' +
+  'which phases are fattest RIGHT NOW (target those), (b) ideas already tried and their verdicts — explicitly the ones they MUST NOT ' +
   're-propose, (c) the most promising untried levers per the checklist (T2.5, T3.1, T2.2, etc.), (d) ' + gateBrief,
   { label: 'recall-ledger', phase: 'Recall' }
 )
@@ -211,23 +251,11 @@ log('Implement: ' + ready.length + '/' + ideas.length + ' compiled + passed test
 phase('Measure')
 const idById = Object.fromEntries(ideas.map((i) => [i.id, i]))
 
-// Build ONCE on the clean (committed) tree and STASH the binary, so every candidate
-// can run it back-to-back without a rebuild. A back-to-back pair cancels machine drift.
-const baseline = await agent(
-  'Build and STASH the clean baseline binary for back-to-back A/B. Work in ' + SIM + ' (NO worktree); the tree is the ' +
-  'committed state — do not modify source.\n\n' +
-  '1. mkdir -p ' + ART + '\n' +
-  '2. CLEAN-TREE GUARD: from ' + REPO + ', run `git diff --quiet -- apps/simulation/src`. If it exits non-zero, source is dirty — return ok=false and STOP.\n' +
-  '3. Build: ' + BUILD + '\n' +
-  '4. Stash the binary so candidates run it without rebuilding: cp ' + RELEASE_BIN + ' ' + BASELINE_BIN + '\n' +
-  '5. Sanity run + record the number: ' + BASELINE_BIN + ' --seeds ' + SEEDS + ' --pop ' + FULL_POP + ' ' + WORLD + '\n\n' +
-  'Return ok=true and the baseline wall mean-of-p99s (ms) in notes. This run owns the machine; nothing else is running.',
-  { label: 'measure:baseline-stash', phase: 'Measure', schema: { type: 'object', properties: { ok: { type: 'boolean' }, wall_p99_ms: { type: 'number' }, notes: { type: 'string' } }, required: ['ok', 'notes'] } }
-)
-if (!baseline || !baseline.ok) {
-  log('Baseline build/stash failed (' + (baseline?.notes || 'agent died') + ') — aborting measure.')
-  return { aborted: 'baseline-failed', notes: baseline?.notes || 'baseline agent returned null' }
-}
+// The clean baseline binary was built, stashed (BASELINE_BIN) and profiled in the
+// Baseline phase up front — reuse it. The Implement worktrees build into the shared
+// target (overwriting RELEASE_BIN), but BASELINE_BIN is a stashed copy and survives;
+// each candidate rebuilds RELEASE_BIN for itself. So a back-to-back A/B against the
+// stashed baseline still cancels drift, with no second baseline build.
 
 const measured = []
 for (const cand of ready) {

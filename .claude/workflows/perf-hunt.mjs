@@ -107,10 +107,12 @@ const MEASURE_SCHEMA = {
 
 // ---- helpers ----------------------------------------------------------------
 const gateBrief =
-  'THE GATE (latency_lab --verdict runs the tested classify()): a change is judged by Δp99. ' +
-  'DETECT against the targeted phase own noise floor (Δphase ≤ −2×phase_noise). BANK against the wall ' +
-  'noise floor: KEEP if Δwall ≤ −2×wall_noise; DEFER if real-at-phase but within wall noise (parked for ' +
-  'stacking, NOT discarded); DITCH if it regresses the tick or any phase >2ms. There is no flat 3ms floor.'
+  'THE GATE (latency_lab --verdict runs the tested classify()): improvements are judged on the per-seed ' +
+  'MEDIAN, paired seed-for-seed (it is ~3-19× quieter run-to-run than p99). DETECT against the targeted ' +
+  'phase own median noise floor (Δphase_median ≤ −2×phase_noise). BANK against the wall median noise floor: ' +
+  'KEEP if Δwall_median ≤ −2×wall_noise; DEFER if real-at-phase but within wall noise (parked for stacking, ' +
+  'NOT discarded); DITCH if the wall median regresses or any phase p99 regresses >2ms (p99 is the strict ' +
+  'tail/SLO guard, NOT the detector). The VERDICT line prints dPhaseMedian/dWallMedian. No flat 3ms floor.'
 
 // ============================================================================
 phase('Recall')

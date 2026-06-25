@@ -32,17 +32,18 @@ Nothing is auto-merged. The human is the final gate.
 Encoded in `apps/simulation/src/bench_lab/verdict.rs` (`classify`), measured by
 `latency_lab --verdict --baseline base.json --candidate cand.json --phase <name>`:
 
-- **Detect against the targeted phase's own noise floor** (`Δp99_phase ≤ −2×noise_phase`) — a real win
-  in one phase isn't drowned by whole-tick noise.
-- **Bank against the wall floor:** KEEP if the tick visibly moves; DEFER if real-but-tick-invisible
-  (parked for stacking, never discarded as noise); DITCH if it regresses the tick or any phase >2 ms.
+- **Detect on the targeted phase's median** (`Δmedian_phase ≤ −2×noise_phase`) — a real win in one
+  phase isn't drowned by whole-tick noise, and the median is ~3–19× quieter run-to-run than p99.
+- **Bank on the wall median:** KEEP if the tick visibly moves; DEFER if real-but-tick-invisible
+  (parked for stacking, never discarded as noise); DITCH if the wall median regresses or any phase
+  **p99** regresses >2 ms (p99 is the strict tail/SLO guard, not the detector).
 
 The noise floor is the std of the **paired** per-seed A/B differences (Common Random Numbers), not a
-single arm's across-seed spread — shared world variance cancels (commit `505e591`). ⚠️ **Known limit:**
-at 1M the floor is dominated by run-to-run drift (±2.3 ms wall between two identical runs), which
-pairing cannot cancel — so sub-~2.3 ms wall wins are currently *unconfirmable*. See
-[`noise-characterization-2026-06-25.md`](noise-characterization-2026-06-25.md) for the data and the fix
-(detect on a stabler statistic than p99).
+single arm's across-seed spread — shared world variance cancels (commit `505e591`). Detection moved
+from p99 to the **median** (commit `8255f67`): on a real 1M null A/B the wall noise floor fell
+2340 µs → 124 µs, so sub-~2 ms wins p99 buried are now confirmable. ⚠️ **Residual:** ~120–810 µs of
+run-to-run drift remains (machine heat) and needs fixed clocks / in-process A/B — see
+[`noise-characterization-2026-06-25.md`](noise-characterization-2026-06-25.md).
 
 See `docs/scale/optimization-checklist.md` for the full Pass bar.
 

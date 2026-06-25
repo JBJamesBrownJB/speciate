@@ -193,19 +193,22 @@ Every item runs this before it earns ✅ KEEP. Build once: `cargo build --releas
 **Pass bar — phase-aware, encoded in `bench_lab::verdict::classify` (the doc and the code agree):**
 
 Judge in two tiers, because whole-tick noise (the sum of every phase's variance) drowns a real win
-in the one phase a change touches. Let `noise_phase` = the targeted phase's across-seed p99 std and
-`noise_wall` = the wall's.
+in the one phase a change touches. Detection/banking use the **paired per-seed MEDIAN** — run-to-run
+it is ~3–19× quieter than p99 (whose noise lives in 1–2 tail samples), measured 2026-06-25
+(`noise-characterization-2026-06-25.md`). Let `noise_phase` = the std of the targeted phase's paired
+per-seed median differences and `noise_wall` = the wall's.
 
-- **Detect (phase):** `Δp99_phase ≤ −2 × noise_phase`. The change must beat its *own* phase's noise.
-  Fail this → **DITCH** (indistinguishable from luck, or a regression).
+- **Detect (phase):** `Δmedian_phase ≤ −2 × noise_phase`. The change must beat its *own* phase's
+  median noise. Fail this → **DITCH** (indistinguishable from luck, or a regression).
 - **Bank (wall):** of the changes that pass detection —
-  - `Δp99_wall ≤ −2 × noise_wall` → **KEEP** (real *and* visibly moves the budget).
-  - `−2 × noise_wall < Δp99_wall < +2 × noise_wall` → **DEFER** (a genuine phase win the tick noise
-    hides; park it — don't discard it as noise).
-  - `Δp99_wall ≥ +2 × noise_wall` → **DITCH** (the phase win came with a hidden cost elsewhere).
-- **Always-ditch overrides:** any single phase regressing > 2 ms (`PHASE_REGRESSION_LIMIT_US`),
-  ceiling gain < 20K creatures, or any sweep density-inversion. Tier 2 adds the trophic-stability
-  canary (±20% population).
+  - `Δmedian_wall ≤ −2 × noise_wall` → **KEEP** (real *and* visibly moves the budget).
+  - `−2 × noise_wall < Δmedian_wall < +2 × noise_wall` → **DEFER** (a genuine phase win the tick
+    noise hides; park it — don't discard it as noise).
+  - `Δmedian_wall ≥ +2 × noise_wall` → **DITCH** (the phase win came with a hidden cost elsewhere).
+- **p99 is the strict tail/SLO guard, not the detector:** any single phase's **p99** regressing
+  > 2 ms (`PHASE_REGRESSION_LIMIT_US`) → **DITCH**, even with a real median win (no trading the tail
+  for the typical case). Plus: ceiling gain < 20K creatures, or any sweep density-inversion. Tier 2
+  adds the trophic-stability canary (±20% population).
 
 There is **no flat 3 ms floor** anymore: a confident phase win is banked even when small, because
 the phase floor (not the fatter wall floor) already proved it is real. The deliberate gap is DEFER,

@@ -81,4 +81,27 @@ of expected payoff:
 3. **Fixed clocks / turbo-off / core-pinning** — shrink drift at the source (and likely
    steadier on the undervolted dev rig). See `windows-parity-strategy.md`.
 
-This note is the rationale for pursuing (1) next.
+## What we measured before choosing (samples 60 vs 240, same null A/B)
+
+Per-seed **run-to-run paired-diff std** (the noise that limits detection), µs:
+
+| metric | p99 | p95 | median (p50) | mean |
+|---|--:|--:|--:|--:|
+| wall    | 2377 | 1786 | **812** | 832 |
+| steering |  546 |  377 | **250** | 235 |
+
+- The **median is ~2.3–2.9× quieter than p99** for the same signal; p95 is only a half-measure;
+  median ≈ mean. → detect on the median.
+- **More samples backfired:** at samples=240 every statistic's drift ballooned to ~2.5 ms — longer
+  runs heat the chip more. → don't sample harder on this rig.
+
+## ✅ Implemented (Tier 2) — median detection + p99 guard
+
+`classify` / `evidence_from_reports` now source detection (phase) and banking (wall) deltas + noise
+floors from the **paired per-seed median**; the per-phase **p99** means still drive the strict
+regression guard (commit `8255f67`). End-to-end on a real 1M null A/B, the gate's reported wall noise
+floor fell **2340 µs (p99 paired) → 124 µs (median paired)** — and the null change still correctly
+Ditches (no false positive). Sub-~2 ms median wins that p99 buried are now detectable.
+
+**Still open (the residual):** ~120–810 µs of run-to-run drift remains (varies with machine heat) and
+only Tier 4/5 (fixed clocks / in-process sample-level A/B) can take it. That is the next lever.

@@ -46,9 +46,9 @@ fn run_verdict(args: &[String]) -> ! {
     let ev = evidence_from_reports(&baseline, &candidate, phase);
     let verdict = classify(&ev);
     println!(
-        "VERDICT={:?} phase={phase_name} dPhaseP99={:.0}us phaseNoise={:.0}us dWallP99={:.0}us wallNoise={:.0}us worstPhaseRegression={:.0}us",
-        verdict, ev.phase_delta_p99_us, ev.phase_noise_floor_us,
-        ev.tick_delta_p99_us, ev.tick_noise_floor_us, ev.worst_phase_regression_us,
+        "VERDICT={:?} phase={phase_name} dPhaseMedian={:.0}us phaseNoise={:.0}us dWallMedian={:.0}us wallNoise={:.0}us worstPhaseP99Regression={:.0}us",
+        verdict, ev.phase_delta_us, ev.phase_noise_floor_us,
+        ev.tick_delta_us, ev.tick_noise_floor_us, ev.worst_phase_regression_us,
     );
     std::process::exit(match verdict {
         Verdict::Keep => 0,

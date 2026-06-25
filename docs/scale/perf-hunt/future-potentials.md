@@ -10,6 +10,34 @@ median gate (`bench_lab::verdict::classify`). Negative = faster. All three are *
 
 ---
 
+## 🚀 MERGE-NOW (implement ASAP) — `native-par-iter-kill-1m-collect` (−7.26 ms) · run `wf_fe2d76fc-fcf`
+
+**The biggest single win the hunt has ever produced.** KEEP'd 2026-06-26; replicated −7.345 ms.
+Behavior-preserving (`cells_queried` identical at triage). Moves the live 1M wall p99 from
+**~49.97 ms (at the 50 ms ceiling) → ~42.7 ms**, out of overrun.
+
+- **Mechanism:** replace the `iter_mut().collect() -> Vec` gather with native Bevy `par_iter_mut`
+  in **both** steering and movement — kills the per-tick 1M-entity `Vec` allocation in each. The
+  wall win (−7.26 ms) exceeds the steering phase win (−4.23 ms) because movement *also* shed its
+  gather. Requires the `multi_threaded` feature + `ComputeTaskPool` init, with the
+  `SingleThreaded` system executor retained for determinism.
+- **Full @1M (seeds 11,42,99,137,2025):** steering p99 13828→9702 µs, movement 9361→7183 µs,
+  wall p99 44268→37406 µs. Well above noise (wall noise 0.39 ms).
+- **🚧 GATE before merge (these ARE the tests — write them first):**
+  1. **Assert `ComputeTaskPool` thread count > 1** — a silent serial fallback here is a
+     catastrophic regression masquerading as the no-op path, not a win.
+  2. **Run the `cells_queried` determinism canary across all 5 seeds** — `par_iter_mut` changes
+     execution order; prove the sim does not diverge.
+- **⚠️ Diff NOT preserved in-repo.** Recover from the run journal (`wf_fe2d76fc-fcf`, idea id
+  `native-par-iter-kill-1m-collect`) or re-implement from this description + the ledger entry.
+- **Interaction:** mutually exclusive with `fuse-steering-integrate-system` below and the
+  DITCH'd "fuse behavior_transition into steering" (−2.576 ms) — all three attack the **same**
+  serial collect + fork-join barrier. par_iter wins; fuse is the fallback if par_iter ever fails
+  the gate. **Re-baseline the hunt after this lands** — perception & grid_rebuild (~8.4 ms)
+  become the new top targets.
+
+---
+
 ## ✅ MERGED — `perception-compact-active-set` (−2.57 ms) · `c9fe2a2`
 
 Hoist the throttle + `is_active` gate into the serial collect so the parallel dispatch shrinks

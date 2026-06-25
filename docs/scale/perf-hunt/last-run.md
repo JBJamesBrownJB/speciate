@@ -1,102 +1,97 @@
-# 🚧 Perf Hunt — Last Run (2026-06-25)
+# Perf Hunt — Run Report (2026-06-26)
 
-**Target:** 1,000,000 creatures, 20 Hz (50 ms tick budget). Decision metric is **wall p99**, measured 5-seed (11,42,99,137,2025), realistic-DNA, baseline-first back-to-back A/B through the phase-aware latency lab.
+🚧 In-progress NOW · Pillar 1 (Prove Scale)
 
-## Baseline this run
+**Config:** 10 ideas, all 10 implemented & measured. Full pop **1,000,000** · triage pop **500,000** · seeds `11,42,99,137,2025` · realistic DNA. Decision metric is **wall p99** through the phase-aware latency lab (baseline-first back-to-back A/B, serial).
 
-| Metric | Value |
-|---|---|
-| Wall p99 (mean-of-p99s) | **44.663 ms** (of 50 ms budget) |
-| Wall noise floor (σ) | 0.257 ms |
-| Wall mean | 42.965 ms |
+## Baseline (the wall we are pushing on)
 
-**Per-phase p99 (ms):** steering **13.635** · movement **9.601** · perception 7.512 · grid_rebuild 6.887 · behavior 4.671 · l1_aggregation 4.381.
+Wall **p99 = 49.97 ms** against a **50 ms** tick budget — the live baseline is *already at the ceiling*. Any regression overruns the tick, so this run's bar is high: only clear, above-noise wall wins count, and a "phase got faster but wall didn't" result is a Ditch.
 
-> Fattest phase is **steering at 13.6 ms (~30% of the wall budget)** — and that is where this hunt concentrated. We are ~10% of a tick budget from the 1M stretch target; nothing this run cleared the bank bar.
+Phase p99 breakdown (µs): **steering 14,971** (~30% of wall, the fat target) · movement 10,512 · perception 8,445 · grid_rebuild 8,410 · behavior 4,692 · l1_aggregation 4,647.
 
----
-
-## Headline: nothing merged
-
-5 ideas considered, 5 implemented, **0 KEEPs**. 2 parked as DEFER, 2 DITCHED, 1 failed to build. The bundle did not stack.
+## Scoreboard
 
 | Idea | Scope | Target phase | Verdict | Δwall p99 (ms) | Δphase (ms) |
 |---|---|---|---|---:|---:|
-| Movement: atan2-free turn-limit (dot/cross) | engine | movement | **DEFER** | −0.506 | −0.347 |
-| Movement: kill powf(1.0) + quartic max_speed | engine | movement | **DEFER** | +0.703 | −0.272 |
-| Bundle (kill-powf + atan2-free) | — | movement | **DEFER** (collapsed) | +0.143 | −0.296 |
-| Shared-collect two-pass steer/integrate | architectural | steering | **DITCH** (triage) | +0.482 | −1.926 |
-| Golden-Zone: giants ignore mice (size dominance) | biological | steering | **DITCH** (triage) | −0.125 | −0.050 |
-| Native Bevy par_iter steering+movement | architectural | steering | **ERROR** (no build) | — | — |
+| Native Bevy `par_iter_mut` — kill the 1M collect | architectural | steering | **KEEP** | **−7.258** | −4.230 |
+| Fuse behavior_transition into steering | architectural | steering | DITCH* | −2.576 | +1.284 |
+| Lower steering Rayon `min_len` (256→64) | architectural | steering | DITCH† | −2.218 | −0.492 |
+| Avoidance reaction-latency jitter (every-other-tick) | biological | steering | DITCH | −2.107 | +0.171 |
+| Branchless octant — kill perception atan2 | engine | perception | DITCH† | −1.479 | −0.761 |
+| BodySize powf→sqrt allometry | engine | steering | DITCH | −0.451 | −0.092 |
+| Hand-merged movement turn-limiter (powf+atan2-free) | engine | movement | DITCH | +0.321 | −0.199 |
+| max_accel from cached inv_sqrt_length | engine | steering | DITCH | +0.301 | +0.039 |
+| Cap tracked neighbors 7→5 | biological | steering | DITCH | +0.064 | −0.045 |
+| Skip no-op accel cap for wanderers/catatonic | engine | steering | DITCH | +1.011 | +0.574 |
 
-*Δphase is the verdict tool's median delta; Δwall is dWallMedian (the lab reports a median wall delta, not a separate p99 wall figure). Negative = faster.*
-
----
-
-## ✅ KEEPS
-
-**None this run.** No candidate produced a wall-p99 improvement that cleared its noise floor at full pop.
+Δwall is the wall-clock delta the verdict tool reported (median at triage-only rows, p99-class at escalated rows). Negative = faster. `*` and `†` explained below.
 
 ---
 
-## 📦 BUNDLE — did NOT stack (collapsed)
+## KEEP — merge candidate
 
-The two surviving DEFERs were union-tested. **Only 1 of 2 patches applied** — they are **mutually exclusive as authored**: both rewrite the *same* turn-rate-limiter block in `integrate_motion_system` (`apps/simulation/src/simulation/movement/systems.rs` ~L160–196) and both edit the same math `use` import (L9). `atan2-free` was authored against the clean baseline, so it cannot machine-merge onto the `kill-powf` tree (`git apply --check` and `--3way` both fail).
+### Native Bevy `par_iter_mut` for steering + movement — deletes the serial 1M collect
+**Δwall p99 −7.258 ms** (replicated −7.345 ms) · Δsteering −4.23 ms · phase noise 0.12 ms · wall noise 0.39 ms · **architectural · bit-identical**
 
-> The conflict **is** the answer: these are not additive — they compete for the exact same lines. Shipping both requires a hand-merge into a single rewritten loop.
+The biggest win of the run by a wide margin (>18× the wall noise floor). The old hot loop did `iter_mut().collect()` into a 1M-entity `Vec` every tick, then `par_iter_mut()` over that gather — once for steering, once for movement. Switching to native Bevy `par_iter_mut` (enabling the `multi_threaded` feature + `ComputeTaskPool` init, with the `SingleThreaded` *system* executor preserved for determinism) deletes the per-tick allocation in **both** phases. That is why the wall win (−7.26 ms) is larger than the steering-phase win (−4.23 ms): movement shed its gather too. At 1M: steering p99 13,828→9,702 µs, movement 9,361→7,183 µs, wall p99 44,268→37,406 µs.
 
-The union that did run (kill-powf only, full 5-seed 1M): movement phase −0.296 ms (~2.4× its 0.124 ms noise — real but small), but **wall p99 +0.143 ms against 0.553 ms noise** — no wall win outside noise. **Bank bar not cleared.**
-
----
-
-## 🅿️ DEFERS (parked — phase-real, wall-inconclusive)
-
-Both target **movement (9.6 ms)** and both shave the phase repeatably, but the saving is **smaller than wall noise at 1M**, so neither is distinguishable from drift end-to-end. Parked for a future *stacked* movement-loop rewrite (see "hunt next").
-
-### 1. Movement: atan2-free turn-rate limiting — Δphase −0.347 ms, Δwall −0.506 ms
-Replaces 2 `fast_atan2` calls on the turn-limit hot path with dot/cross + a single `sincos` only on the clamp branch. Phase win is real and repeatable at both pops (~0.35 ms, well above 0.118 ms phase noise). Wall delta is negative (−0.506 ms) but **inside** the 0.683 ms wall noise → Defer, not Keep.
-
-> **TRADEOFF — NOT bit-identical.** Clamped headings now come from a direct rotation instead of atan2/cos/sin composition, so numerics shift slightly. **Requires a determinism canary** (cells_queried identical + heading distribution within tolerance across all 5 seeds) before merge. Not a trophic canary — behavior *intent* is unchanged. Ships unit tests proving `limit_turn` matches the old atan2 reference within 1e-4 and leaves the no-clamp velocity path untouched.
-
-### 2. Movement: kill powf(1.0) + quartic max_speed — Δphase −0.272 ms, Δwall +0.703 ms
-Replaces `powf(0.25)` with `sqrt().sqrt()` and folds `powf(1.0)` to identity in the turn-rate base. Phase win real and consistent (−0.340 then −0.272 ms), but **wall p99 REGRESSED +0.703 ms** against 0.521 ms noise (~1.35× — not clearly real either direction). Phase-local win that doesn't carry to wall.
-
-> **TRADEOFF.** The turn-rate divide is **bit-identical, zero behavior risk**. The `max_speed` `sqrt().sqrt()` half perturbs results at ~1 ULP and could trip a strict spec expecting the exact `powf` value — **run the determinism canary before merging that half only.**
+**Tradeoff / cost the human is buying:**
+- **Behavior-preserving** — no gameplay change. Only a **determinism canary** is required before merge: `cells_queried` identical across all 5 seeds. *Not* a trophic canary (intent unchanged).
+- **Catastrophic-failure mode if mis-wired:** if `ComputeTaskPool` is not initialized with >1 thread, the phases silently run *serial* and you get a massive regression instead of a win. The merge MUST assert thread count > 1.
+- **Confidence caveat:** the earlier RCA (#47) attributed the wall cost to the fork-join **barrier**, not the collect — Bevy's batching barrier could in theory be heavier than the hand-tuned `with_min_len(256)` Rayon one. The measured result refutes that worry here, but it is the thing to watch if the win fails to reproduce on another machine.
 
 ---
 
-## 🗑️ DITCHED (with why)
+## BUNDLE — none assembled
 
-### Shared-collect two-pass steer/integrate — Δwall +0.482 ms, Δphase −1.926 ms *(triage-only)*
-The single biggest **phase** mover of the run: deletes a redundant 1M gather+reload, cutting ~3 ms across the two fused passes (triage steering p99 6.48→4.72 ms, movement 4.23→2.90 ms). **But wall p99 regressed** (base 21.7 ms vs cand 23.7 ms) with much higher candidate noise (σ 1.82 ms vs 0.38 ms). The per-phase savings **did not propagate to end-to-end latency**, so per protocol (Ditch + dWall not clearly negative) it was ditched at triage with no escalation.
+Only one KEEP this run, so there was nothing to stack and no additivity check to run.
 
-> **Diagnostic value:** this variant recovers the collect+reload but **retains the fork-join barrier**. Its failure to move wall isolates the **barrier**, not the redundant collect, as the real cost behind the previously-held −2.7 ms fuse. That's the load-bearing finding for any future steering-fuse attempt.
-
-### Golden-Zone: giants ignore mice — Δwall −0.125 ms, Δphase −0.050 ms *(triage-only)*
-A size-dominance early-out in the avoidance neighbor loop. **Both deltas sat at/under the noise floor** (phase 0.051 ms noise, wall 0.118 ms noise) — no measurable win — so escalation was skipped. Confirms **ledger #15** (avoidance-sqrt-free): per-neighbor branches **wash in dense convergent packs**; the win only materializes when real size disparity is present and even then didn't clear noise here.
-
-> **TRADEOFF (would have been a BEHAVIOR CHANGE, not bit-identical).** Large creatures stop deflecting around much smaller ones — intended size-dominance/trample pressure, but it removes a survival buffer for the smallest grazers, and `DOMINATION_RATIO` is a magic number that must migrate to DNA. **No trophic canary was run** (ditched before merge consideration). If ever revisited: must run under `--realistic-dna` with the trophic canary (apex & grazer populations each within ±20%) and log the gene range + ratio in `docs/biology/biology-notes.md`.
-
-### Native Bevy par_iter steering+movement — ERROR (no build)
-`cargo` exit 101: the diff references `bevy_ecs::query::BatchingStrategy`, which **does not exist at that path** in bevy_ecs 0.14.2 (E0433 at `steering/system.rs:170` and `movement/systems.rs:62`). In 0.14 the type is re-exported elsewhere. No measurement. Patch reverted clean.
-
-> **Fix-forward note:** re-author against the correct 0.14.2 import path before re-attempting — the idea (drop the serial 1M collect for Bevy-native parallel iteration) is untested, not refuted.
+**Important non-additivity note for the human:** the two strongest architectural results — the KEEP (`native par_iter`) and the DITCH* (`fuse behavior_transition`) — **attack the same resource**: the serial 1M collect + the fork-join barrier around steering. They are **mutually exclusive, not additive**. Pick one. The native-par-iter KEEP already delivers the larger wall win and is the recommended path; the fuse is the fallback if the par_iter thread-pool wiring proves fragile on a target machine.
 
 ---
 
-## ⭐ Recommend merging — shortlist
+## DEFERS — none
 
-**Nothing meets the bank bar this run.** Honest call: **merge nothing.** No candidate produced a wall-p99 win outside its noise floor at 1M.
-
-Closest-to-mergeable, if a movement-loop pass is opened deliberately:
-- **`movement-atan2-free-turn-limit`** — the only candidate with both phase *and* wall deltas pointing the right way; ships its own correctness unit tests. Merge *only* bundled into a single hand-merged movement-loop rewrite (it conflicts with kill-powf) **and after** the determinism canary passes. On its own it lands sub-noise on wall.
-- **`movement-kill-powf` (turn-rate divide half only)** — bit-identical, zero-risk; safe to fold opportunistically into the same rewrite. Skip the `max_speed` half unless the determinism canary clears it.
+No candidate landed in the "real phase win but sub-noise on wall, park for later" bucket this run. Every non-keep either regressed wall or washed out entirely.
 
 ---
 
-## 🎯 What to hunt next
+## DITCHED — and why (the instructive failures)
 
-1. **Attack the fork-join barrier in steering, not the collect.** The shared-collect ditch proved the redundant 1M gather is *not* the wall cost — the barrier is. Steering is still the fattest phase (13.6 ms). Hunt barrier elimination / phase fusion that removes the join, not just the gather.
-2. **Hand-merge the two movement DEFERs into one rewritten turn-limit loop and A/B the combined unit.** They're mutually exclusive as separate patches but together rewrite the whole hot block — the combined phase win (~0.3–0.6 ms) may finally clear wall noise where each half can't alone. Gate on the determinism canary.
-3. **Re-author the Bevy-native par_iter idea** against the correct bevy_ecs 0.14.2 import path — it never got a measurement and directly attacks the steering serial collect.
-4. Movement micro-ops are at the **noise floor**; further single-loop arithmetic wins are unlikely to bank alone. Bundle them or move up to the steering barrier for headline movement.
+### Fuse behavior_transition into steering — DITCH* (mechanically) but a real wall win
+**Δwall p99 −2.576 ms** (>20× wall noise) · Δsteering **+1.284 ms** · architectural · bit-identical
+
+**Read this one carefully.** The phase-targeted verdict tool returned DITCH because this is a *fusion*: the standalone `behavior_transition_system` is folded into the top of `update_steering_system`, so the behavior phase collapses to 0 and its ~4.7 ms reappears *inside* steering. By the steering-phase metric alone that looks like a +1.28 ms regression — hence the mechanical Ditch. **But the wall clock is the real signal and it is a clean −2.576 ms win** (removing one serial collect + one fork-join barrier; combined steering+behavior p99 18,285→14,933 µs). This is effectively a KEEP that the phase-scoped tooling can't score correctly. It loses the standalone behavior-phase timer (weakening per-phase detection on the leanest phase) and fattens the steering tuple with a `Brain` mut column (cache/register pressure — see ledger #36). **Mutually exclusive with the native-par-iter KEEP** (same barrier). Recommend: keep par_iter; hold this as the documented fallback.
+
+### Lower steering Rayon `min_len` 256→64 — DITCH† (not reproduced)
+**First run: Δwall p99 −2.218 ms (KEEP at 1M).** On replication it did **not reproduce** (dWall +0.657 ms). Bit-identical, zero behavior risk, but the signal is unstable — the finer batches' work-stealing win on the heavy-tailed avoidance loop is real on some runs and washed by per-batch scheduler overhead on others. Not safe to merge on one good run. Cheap to revisit *after* the par_iter KEEP lands, since par_iter changes the batching substrate entirely.
+
+### Avoidance reaction-latency jitter — DITCH (biological)
+**Δwall p99 −2.107 ms was a baseline-noise artifact.** One spiking baseline seed (grid_rebuild noise 1,081 µs) inflated the baseline p99; the robust *median* wall delta was −0.020 ms (flat) and the targeted steering phase actually *regressed* +0.171 ms. No real win. Tradeoff had it merged: **behavior change** — dodging lags up to one 50 ms tick, so fast predator-prey intercepts feel sluggish; would have required a **trophic canary** (apex & grazer within ±20%). Ditched on perf grounds before that cost was ever worth paying.
+
+### Branchless octant (kill perception atan2) — DITCH† (not reproduced)
+**First run −1.479 ms wall (KEEP, escalated).** On replication it dropped to −0.317 ms (DEFER-class). The one remaining transcendental in the perception hot loop; bit-identical iff the branchless wedge boundaries match `atan2+rem_euclid` at every angle (guarded by an exhaustive 0.5° sweep test). Genuinely promising but the win is smaller and less stable than first measured — re-measure on a quiet machine before trusting it.
+
+### The micro-op steering tweaks — all DITCH, all instructive
+`max_accel from cached inv_sqrt` (+0.301 ms), `BodySize powf→sqrt` (−0.451 ms within noise), `skip no-op accel cap for wanderers` (+1.011 ms, a real regression), `cap neighbors 7→5` (+0.064 ms). **Common lesson:** steering at this scale is **not ALU-bound** — it is dominated by neighbor-cache traversal in the avoidance branch. Strength-reducing the arithmetic (`powf`→`sqrt`, divides→cached reciprocals) gets folded by `-O3` anyway and registers nothing above noise; *adding* per-entity branches to skip work (the wanderer/catatonic gate) actively *costs* more than the work it skips, because the elided cap path was already cheap and branch-predicted. Confirms ledger #15/#19/#50: per-creature branch additions to this loop wash or regress.
+
+### Hand-merged movement turn-limiter — DITCH
+Δmovement −0.199 ms (a real but tiny phase win) but Δwall **+0.321 ms** — the movement phase got marginally faster while wall did not improve. The powf(1.0)→divide half is bit-identical; the atan2-free half is not (±1 ULP on clamped headings, would need a determinism canary). No wall payoff to justify the risk.
+
+### Cap tracked neighbors 7→5 — DITCH (biological)
+No measurable win (Δwall +0.064 ms, deep in noise). Would have been a **behavior change** (coarser dense-pack avoidance/schooling, smallest grazers lose an avoidance margin) requiring a trophic canary — all cost, no perf upside. Ditched.
+
+---
+
+## Recommend merging
+
+1. **Native Bevy `par_iter_mut` (kill the 1M collect)** — **−7.26 ms wall p99, replicated.** Bit-identical, behavior-preserving. The single highest-value, lowest-behavioral-risk change this run. *Gate:* assert `ComputeTaskPool` thread count > 1, and run the `cells_queried` determinism canary across all 5 seeds before merge. This alone moves the live baseline from 49.97 ms toward ~42.7 ms — out of overrun territory.
+
+That is the only merge-now item. **Do not also merge the fuse** — it fights the same barrier and is mutually exclusive.
+
+## What to hunt next
+
+- **Re-measure the two "not reproduced" candidates on the post-par_iter tree:** `min_len 256→64` and `branchless octant`. par_iter changes the batching substrate, so their economics shift — both are bit-identical and cheap to retry, and the octant kill is the last transcendental in perception.
+- **Stop micro-optimizing steering arithmetic.** This run proved it is memory/neighbor-cache-bound, not ALU-bound. The next steering win has to come from the **access pattern** (cache layout of the neighbor cache, SoA-ifying the avoidance read set) or from **doing less work biologically** (Golden-Zone skips that survive a trophic canary), not from shaving FLOPs.
+- **Re-profile after the KEEP lands.** Deleting ~7 ms reshapes the phase ranking; perception (8.4 ms) and grid_rebuild (8.4 ms) likely become the new joint-second targets behind a slimmer steering.

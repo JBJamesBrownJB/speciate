@@ -1114,6 +1114,85 @@ fn test_fov_variants_medium_90_crowd() {
     );
 }
 
+/// Guard for the active-set compaction (perception throttle+active gate hoisted
+/// into the serial collect, ahead of the parallel dispatch). Pins the `is_active`
+/// half of that gate at the system level: a behaviourally INACTIVE creature
+/// (Catatonic) must never be dispatched, so its NeighborCache stays empty even
+/// when surrounded by perceptible neighbors; an ACTIVE creature in the same
+/// situation perceives them. Dormant brains hold behaviour fixed
+/// (see behavior_transition_system::test_dormant_brain_stays_in_behavior), so the
+/// active/inactive split is deterministic across ticks.
+#[test]
+fn test_inactive_creatures_are_gated_out_of_perception() {
+    use crate::simulation::core::SimulationBuilder;
+    use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::{BehaviorMode, CritId};
+
+    let mut sim = SimulationBuilder::new().build();
+    sim.set_boundaries(200.0, 200.0);
+
+    // Active (Wandering) vs inactive (Catatonic); far enough apart not to perceive
+    // each other, so each result reflects only its own gating. No movement
+    // capabilities => they hold position, so the active one keeps its neighbors.
+    let active_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(60.0, 60.0)
+            .in_behavior(BehaviorMode::Wandering)
+            .with_dormant_brain(),
+    );
+    let inactive_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(140.0, 140.0)
+            .in_behavior(BehaviorMode::Catatonic)
+            .with_dormant_brain(),
+    );
+
+    // Ring of neighbors around BOTH focal creatures (radius 5 => same L0 cell).
+    for (cx, cy) in [(60.0, 60.0), (140.0, 140.0)] {
+        for angle_deg in (0..360).step_by(45) {
+            let r = (angle_deg as f32).to_radians();
+            sim.spawn_crit(
+                CritBuilder::new()
+                    .at(cx + 5.0 * r.cos(), cy + 5.0 * r.sin())
+                    .with_dormant_brain(),
+            );
+        }
+    }
+
+    // 16 ticks = 2 full throttle cycles (default perception_divisor = 8), so the
+    // active creature is guaranteed to be dispatched at least once.
+    for _ in 0..16 {
+        sim.update(0.016);
+    }
+
+    let world = sim.world_mut();
+    let (mut active, mut inactive) = (None, None);
+    for (e, id) in world.query::<(Entity, &CritId)>().iter(world) {
+        if id.0 == active_id {
+            active = Some(e);
+        } else if id.0 == inactive_id {
+            inactive = Some(e);
+        }
+    }
+    let active = active.expect("active creature should exist");
+    let inactive = inactive.expect("inactive creature should exist");
+
+    assert_eq!(
+        world.get::<CreatureState>(inactive).unwrap().behavior,
+        BehaviorMode::Catatonic,
+        "dormant brain must hold the inactive creature Catatonic for the test to be valid"
+    );
+    assert!(
+        world.get::<NeighborCache>(active).unwrap().neighbor_count() > 0,
+        "active creature must be dispatched and perceive its ring of neighbors"
+    );
+    assert_eq!(
+        world.get::<NeighborCache>(inactive).unwrap().neighbor_count(),
+        0,
+        "inactive (Catatonic) creature must be gated out of the dispatch -> no neighbors"
+    );
+}
+
 // ============================================================================
 // Category 4: Edge Cases
 // ============================================================================

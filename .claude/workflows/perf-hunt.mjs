@@ -188,9 +188,12 @@ const built = (await parallel(ideas.map((idea) => () =>
     '3. From ' + SIM + ', run `cargo test' + JOBS_FLAG + ' --target-dir ' + SHARED_TARGET + '` (default features). It MUST ' +
     'pass — fix your change until it does. A "Blocking waiting for file lock on build directory" message is NORMAL — another ' +
     'agent is compiling into the shared target; just wait for it.\n' +
-    '4. Capture the change as a unified diff: from ' + REPO + ' run `git diff` and put the FULL output in the diff field.\n\n' +
+    '4. Capture the change as a unified diff: from ' + REPO + ' run `git diff` and put the FULL output in the diff field.\n' +
+    '5. CLEANUP — REQUIRED: once the diff is captured in the field, restore this worktree to pristine so it auto-removes. ' +
+    'From ' + REPO + ' run `git reset --hard && git clean -fd`. Your edits are already saved in the diff field and applied ' +
+    'elsewhere by the harness; a dirty worktree leaks on disk and must not survive this agent.\n\n' +
     'Return compiles/tests_pass honestly. If you cannot make it compile or pass tests, return compiles/tests_pass=false, ' +
-    'diff="" and explain why in notes. id MUST equal "' + idea.id + '".',
+    'diff="" and explain why in notes (still run step 5). id MUST equal "' + idea.id + '".',
     { label: 'impl:' + idea.id, phase: 'Implement', schema: IMPL_SCHEMA, isolation: 'worktree' }
   )
 ))).filter(Boolean)

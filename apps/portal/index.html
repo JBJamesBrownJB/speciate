@@ -475,6 +475,86 @@
       position: static;
       transform: none;
     }
+
+    /* ── Sim-game toolbar ── */
+    #toolbar {
+      position: fixed;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 6px;
+      background: rgba(10, 16, 10, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(111, 184, 63, 0.25);
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+      z-index: 1000;
+    }
+
+    .toolbar-label {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-secondary);
+      margin-bottom: 2px;
+      opacity: 0.6;
+      user-select: none;
+    }
+
+    .tool-btn {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 0;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
+    }
+
+    .tool-btn:hover {
+      background: rgba(111, 184, 63, 0.10);
+      border-color: rgba(111, 184, 63, 0.35);
+      color: var(--text-accent);
+    }
+
+    .tool-btn.active {
+      background: rgba(111, 184, 63, 0.20);
+      border-color: var(--text-accent);
+      color: var(--text-accent);
+      box-shadow: 0 0 12px rgba(111, 184, 63, 0.22);
+    }
+
+    .tool-btn:focus-visible {
+      outline: 2px solid var(--text-accent);
+      outline-offset: 2px;
+    }
+
+    .tool-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .tool-name {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -506,6 +586,20 @@
     <div class="shortcut"><span class="key">R-Drag</span><span class="action">Pan</span></div>
     <div class="shortcut"><span class="key">Click</span><span class="action">Select creature</span></div>
     <div class="shortcut"><span class="key">G</span><span class="action">Toggle grid</span></div>
+    <div class="shortcut"><span class="key">P</span><span class="action">Plant tool</span></div>
+  </div>
+
+  <!-- Sim-game toolbar (left edge, vertically centred) -->
+  <div id="toolbar">
+    <span class="toolbar-label">Tools</span>
+    <button id="tool-plant" class="tool-btn" title="Plant tool — paint plants [P]">
+      <svg class="tool-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="22" x2="12" y2="11"/>
+        <path d="M12 11 C12 6 17 2 17 2 C17 2 21 8 16 11"/>
+        <path d="M12 15 C12 10 7 7 7 7 C7 7 3 13 8 15"/>
+      </svg>
+      <span class="tool-name">Plant</span>
+    </button>
   </div>
 
   <!-- Creature Inspection Panel (slide-in from left) -->

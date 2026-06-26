@@ -27,7 +27,9 @@ import { Minimap } from "@/rendering/minimap";
 import { CreatureInfoPanel } from "@/ui/CreatureInfoPanel";
 import { PauseControl } from "@/ui/PauseControl";
 import { TimeScaleControl } from "@/ui/TimeScaleControl";
+import { ToolsPanel } from "@/ui/ToolsPanel";
 import { InteractionManager } from "@/interaction";
+import { GridMode } from "@/rendering/overlays/SpatialGridOverlay";
 import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
@@ -199,6 +201,19 @@ async function main(): Promise<void> {
       ipcClient,
       getCreatures: () => latestCreatures,
     });
+
+    // Tools panel — manages active tool state and auto-switches grid mode
+    const toolsPanel = new ToolsPanel();
+    let savedGridMode: GridMode = GridMode.Off;
+    toolsPanel.onToolChange = (tool) => {
+      if (tool === 'plant') {
+        savedGridMode = spatialGridOverlay.getMode();
+        spatialGridOverlay.setMode(GridMode.P0);
+      } else {
+        spatialGridOverlay.setMode(savedGridMode);
+      }
+      interactionManager.setActiveTool(tool);
+    };
 
     // Plant renderer — added to worldContainer BEFORE creatures so it renders underneath.
     const plantRenderer = new PlantRenderer(worldContainer);
@@ -482,9 +497,12 @@ async function main(): Promise<void> {
       updateMinimapPosition();
     });
 
-    // Keyboard input for camera panning
+    // Keyboard input for camera panning and tool shortcuts
     window.addEventListener("keydown", (event: KeyboardEvent) => {
       inputManager.handleKeyDown(event.key);
+      if ((event.key === 'p' || event.key === 'P') && document.activeElement?.tagName !== 'INPUT') {
+        toolsPanel.toggleTool('plant');
+      }
     });
 
     window.addEventListener("keyup", (event: KeyboardEvent) => {

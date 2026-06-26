@@ -38,10 +38,9 @@ const MODE_ORDER: GridMode[] = [
   GridMode.Off,
   GridMode.L0,
   GridMode.L1,
-  GridMode.P0,
 ];
 
-const P0_CELL_SIZE = 4.0;
+export const P0_CELL_SIZE = 4.0;
 
 export class SpatialGridOverlay implements IOverlay {
   readonly config: OverlayConfig = {
@@ -163,6 +162,12 @@ export class SpatialGridOverlay implements IOverlay {
     this.p0Cells = parsePlantBuffer(buf);
   }
 
+  hasPlantAt(worldX: number, worldY: number): boolean {
+    const cx = Math.floor(worldX / P0_CELL_SIZE) * P0_CELL_SIZE + P0_CELL_SIZE / 2;
+    const cy = Math.floor(worldY / P0_CELL_SIZE) * P0_CELL_SIZE + P0_CELL_SIZE / 2;
+    return this.p0Cells.some(c => Math.abs(c.x - cx) < 0.1 && Math.abs(c.y - cy) < 0.1);
+  }
+
   handleP0Hover(worldX: number, worldY: number): void {
     if (this.currentMode !== GridMode.P0) return;
 
@@ -271,7 +276,7 @@ export class SpatialGridOverlay implements IOverlay {
     this.setMode(MODE_ORDER[nextIndex]);
   }
 
-  private setMode(mode: GridMode): void {
+  setMode(mode: GridMode): void {
     this.currentMode = mode;
     const isVisible = mode !== GridMode.Off;
     this.graphics.visible = isVisible;

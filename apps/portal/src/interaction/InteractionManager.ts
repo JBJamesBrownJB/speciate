@@ -1,9 +1,11 @@
 import { Container, Graphics, FederatedPointerEvent } from 'pixi.js';
 import type { SelectionManager } from '@/systems/SelectionManager';
 import type { SpatialGridOverlay } from '@/rendering/overlays/SpatialGridOverlay';
-import { GridMode } from '@/rendering/overlays/SpatialGridOverlay';
+import { GridMode, P0_CELL_SIZE } from '@/rendering/overlays/SpatialGridOverlay';
 import type { CreatureData } from '@/types/GameState';
 import type { IPCClient } from '@/infrastructure/ipc';
+
+type ActiveTool = 'plant' | null;
 
 const CLICK_RADIUS = 15;
 
@@ -23,6 +25,9 @@ export class InteractionManager {
   private getCreatures: () => CreatureData[];
 
   private hitArea: Graphics;
+  private activeTool: ActiveTool = null;
+  private isPainting = false;
+  private paintedThisStroke = new Set<string>();
 
   constructor(config: InteractionManagerConfig) {
     this.worldContainer = config.worldContainer;
@@ -38,6 +43,8 @@ export class InteractionManager {
     this.hitArea.on('pointerdown', this.handlePointerDown);
     this.hitArea.on('pointermove', this.handlePointerMove);
     this.hitArea.on('pointerout', this.handlePointerOut);
+    this.hitArea.on('pointerup', () => this.endStroke());
+    this.hitArea.on('pointerupoutside', () => this.endStroke());
 
     this.worldContainer.addChild(this.hitArea);
   }
@@ -56,7 +63,7 @@ export class InteractionManager {
     this.hitArea.fill({ color: 0x000000, alpha: 0.001 });
 
     const mode = this.gridOverlay.getMode();
-    if (mode === GridMode.L1 || mode === GridMode.P0) {
+    if (this.activeTool === 'plant' || mode === GridMode.L1 || mode === GridMode.P0) {
       this.hitArea.cursor = 'crosshair';
     } else {
       this.hitArea.cursor = 'default';
@@ -68,12 +75,14 @@ export class InteractionManager {
     const worldX = localPos.x;
     const worldY = localPos.y;
 
-    if (this.gridOverlay.getMode() === GridMode.L1) {
+    if (this.activeTool === 'plant') {
+      this.isPainting = true;
+      this.paintedThisStroke.clear();
+      this.tryPaintAt(worldX, worldY);
       return;
     }
 
-    if (this.gridOverlay.getMode() === GridMode.P0) {
-      window.electron?.spawnPlant?.(worldX, worldY);
+    if (this.gridOverlay.getMode() === GridMode.L1) {
       return;
     }
 
@@ -81,18 +90,51 @@ export class InteractionManager {
   };
 
   private handlePointerMove = (event: FederatedPointerEvent): void => {
+    const localPos = event.getLocalPosition(this.worldContainer);
+
+    if (this.isPainting && this.activeTool === 'plant') {
+      this.tryPaintAt(localPos.x, localPos.y);
+      return;
+    }
+
     const mode = this.gridOverlay.getMode();
     if (mode !== GridMode.L1 && mode !== GridMode.P0) {
       return;
     }
-
-    const localPos = event.getLocalPosition(this.worldContainer);
     this.gridOverlay.handleHover(localPos.x, localPos.y);
   };
 
   private handlePointerOut = (): void => {
     this.gridOverlay.clearHover();
   };
+
+  setActiveTool(tool: ActiveTool): void {
+    this.activeTool = tool;
+    if (!tool) {
+      this.isPainting = false;
+      this.paintedThisStroke.clear();
+    }
+  }
+
+  private tryPaintAt(worldX: number, worldY: number): void {
+    const cx = Math.floor(worldX / P0_CELL_SIZE) * P0_CELL_SIZE;
+    const cy = Math.floor(worldY / P0_CELL_SIZE) * P0_CELL_SIZE;
+    const key = `${cx}:${cy}`;
+    if (this.paintedThisStroke.has(key)) return;
+    const centerX = cx + P0_CELL_SIZE / 2;
+    const centerY = cy + P0_CELL_SIZE / 2;
+    if (this.gridOverlay.hasPlantAt(centerX, centerY)) {
+      this.paintedThisStroke.add(key);
+      return;
+    }
+    this.paintedThisStroke.add(key);
+    window.electron?.spawnPlant?.(centerX, centerY);
+  }
+
+  private endStroke(): void {
+    this.isPainting = false;
+    this.paintedThisStroke.clear();
+  }
 
   private handleCreatureClick(worldX: number, worldY: number): void {
     const creatures = this.getCreatures();
@@ -120,6 +162,8 @@ export class InteractionManager {
     this.hitArea.off('pointerdown', this.handlePointerDown);
     this.hitArea.off('pointermove', this.handlePointerMove);
     this.hitArea.off('pointerout', this.handlePointerOut);
+    this.hitArea.removeAllListeners('pointerup');
+    this.hitArea.removeAllListeners('pointerupoutside');
     this.hitArea.destroy();
   }
 }

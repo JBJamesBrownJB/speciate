@@ -3,8 +3,7 @@
 //! This replaces 4 separate systems (wander, seek, avoidance, flee) with 1 unified system.
 //! Performance gain comes from:
 //! - Single query setup instead of 4
-//! - Single Vec::collect() for Rayon instead of 4
-//! - Single Rayon sync barrier instead of 4
+//! - Native Bevy par_iter_mut (no per-tick 1M-entity Vec allocation)
 //! - Better cache utilization (each entity's components loaded once)
 
 use super::seek::{calculate_arrival, ArrivalParams};
@@ -18,7 +17,6 @@ use crate::simulation::creatures::constants::{SEEK_FORCE_MULT, WANDER_FORCE_MULT
 use crate::simulation::math::SteeringContext;
 use crate::simulation::perception::NeighborCache;
 use bevy_ecs::prelude::*;
-use rayon::prelude::*;
 
 /// Clamp acceleration vector to maximum magnitude.
 fn cap_acceleration(ax: f32, ay: f32, max_accel: f32) -> (f32, f32) {
@@ -160,21 +158,18 @@ pub fn update_steering_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "steering");
 
-    // Collect entities for parallel processing (required pattern for Rayon in NAPI context)
-    let mut entities: Vec<_> = query.iter_mut().collect();
-
-    // Parallel iteration with minimum batch size for efficiency
-    // Steering: Medium workload - moderate chunks balance load vs overhead
-    entities.par_iter_mut().with_min_len(256).for_each(
+    // Native Bevy par_iter_mut — eliminates the per-tick 1M-entity Vec allocation.
+    // ComputeTaskPool is initialised once in SimulationBuilder::new().
+    query.par_iter_mut().for_each(
         |(
             _entity,
             position,
             velocity,
             size,
-            acceleration,
-            creature_state,
+            mut acceleration,
+            mut creature_state,
             brain,
-            wander_state,
+            mut wander_state,
             _home,
             target,
             neighbor_cache,
@@ -197,12 +192,12 @@ pub fn update_steering_system(
 
             // 1. Primary behavior (mutually exclusive based on BehaviorMode)
             match creature_state.behavior {
-                BehaviorMode::Wandering if *can_wander => {
-                    let (ax, ay) = apply_wander(&ctx, wander_state);
+                BehaviorMode::Wandering if can_wander => {
+                    let (ax, ay) = apply_wander(&ctx, &mut wander_state);
                     acceleration.ax += ax;
                     acceleration.ay += ay;
                 }
-                BehaviorMode::Seeking if *can_seek => {
+                BehaviorMode::Seeking if can_seek => {
                     let result = apply_seek(position, velocity, target, size);
                     if result.arrived {
                         creature_state.behavior = BehaviorMode::Catatonic;
@@ -215,7 +210,7 @@ pub fn update_steering_system(
             }
 
             // 2. Avoidance (additive with primary behavior)
-            if *can_avoid && neighbor_cache.has_neighbors() {
+            if can_avoid && neighbor_cache.has_neighbors() {
                 let max_accel = size.max_force() / size.mass();
                 let (ax, ay) = apply_avoidance(
                     neighbor_cache,

@@ -1001,6 +1001,12 @@ impl SimulationEngine {
             eprintln!("✅ SaveStateWorker stopped");
         }
 
+        // Drop NAPI ThreadsafeFunctions so they release their event-loop ref-count.
+        // The Bevy thread's clones were already dropped when the thread exited above.
+        // Without this the Node.js event loop stays alive indefinitely after shutdown.
+        drop(self.telemetry_cb.take());
+        drop(self.buffer_ready_cb.take());
+
         Ok(())
     }
 

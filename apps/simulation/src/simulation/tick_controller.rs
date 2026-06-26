@@ -50,7 +50,7 @@ impl TickController {
 
     /// Set time scale (1.0 = normal, 2.0 = 2x speed, 0.5 = half speed)
     pub fn set_time_scale(&mut self, scale: f32) {
-        self.time_scale = scale.clamp(0.0, 10.0);
+        self.time_scale = scale.clamp(0.0, 1000.0);
     }
 
     /// Get current time scale
@@ -147,8 +147,8 @@ mod tests {
         controller.set_time_scale(-1.0);
         assert_eq!(controller.time_scale(), 0.0);
 
-        controller.set_time_scale(100.0);
-        assert_eq!(controller.time_scale(), 10.0);
+        controller.set_time_scale(1001.0);
+        assert_eq!(controller.time_scale(), 1000.0);
     }
 
     #[test]

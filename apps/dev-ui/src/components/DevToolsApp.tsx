@@ -19,6 +19,7 @@ import { snapshotToTelemetry } from '../utils/snapshotConverter';
 import { MetricsColumn } from './MetricsColumn';
 import type { SystemTimingsSnapshot, HardwareMetrics, ParallelizationMetrics, WindowsMetrics, RenderPipelineMetrics, TelemetryFrame, MetricsSnapshot, DnaData } from '../types';
 import { RenderPipelinePanel } from './RenderPipelinePanel';
+import { FastForwardControl } from './FastForwardControl';
 import '../styles/cockpit.css';
 
 const SAMPLE_DURATION_MS = 3000;
@@ -340,6 +341,11 @@ export const DevToolsApp: React.FC = () => {
         onRecordSnapshot={handleRecordSnapshot}
         onLoadSnapshot={handleLoadSnapshot}
         onClearSnapshot={handleClearSnapshot}
+      />
+
+      <FastForwardControl
+        disabled={!isConnected}
+        onTimeScaleChange={scale => window.electron?.setTimeScale?.(scale)}
       />
 
       <NAPIBufferPanel telemetry={currentTelemetry} />

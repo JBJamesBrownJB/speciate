@@ -571,6 +571,91 @@ mod tests {
     }
 
     #[test]
+    fn test_plant_round_trip_empty_grid_stays_empty() {
+        use crate::simulation::core::components::BoundaryConfig;
+        use crate::simulation::plants::PlantGrid;
+
+        let mut sim = SimulationBuilder::new().set_boundaries(100.0, 100.0).build();
+        {
+            let bounds = *sim.world.resource::<BoundaryConfig>();
+            sim.world.insert_resource(PlantGrid::from_bounds(&bounds));
+        }
+        let builder = CritBuilder::new().at(0.0, 0.0);
+        sim.spawn_crit(builder);
+
+        let save_state = sim.to_save_state().expect("save should succeed");
+        assert_eq!(save_state.plants.len(), 0, "no live cells means empty plants vec");
+
+        let restored = Simulation::from_save_state(save_state).expect("restore should succeed");
+        let grid = restored.world.resource::<PlantGrid>();
+        assert_eq!(grid.live_count(), 0, "empty grid should remain empty after restore");
+    }
+
+    #[test]
+    fn test_plant_save_state_backward_compat_missing_plants_field() {
+        // Simulate an old .msgpack file that has no `plants` field by constructing
+        // WorldSaveState directly without it and using serde round-trip via msgpack.
+        let mut sim = SimulationBuilder::new().set_boundaries(100.0, 100.0).build();
+        let builder = CritBuilder::new().at(0.0, 0.0);
+        sim.spawn_crit(builder);
+
+        // Build a save state and then manually remove the plants field by re-serialising
+        // as a map that omits `plants` — i.e., an old-format file.
+        let save_state = sim.to_save_state().expect("save should succeed");
+
+        // Serialise to msgpack, then patch: old files simply have no plants key.
+        // The easiest way to simulate this is to verify that deserialising a SavedPlant-free
+        // WorldSaveState doesn't panic — achieved by checking the #[serde(default)] path
+        // via a partial struct that omits plants, serialised and fed through rmp_serde.
+        #[derive(serde::Serialize)]
+        struct OldWorldSaveState<'a> {
+            metadata: &'a SaveStateMetadata,
+            world: &'a WorldConfig,
+            scene_ron: &'a str,
+            entity_id_map: &'a Vec<(u32, u32)>,
+            // plants field intentionally omitted
+        }
+        let old = OldWorldSaveState {
+            metadata: &save_state.metadata,
+            world: &save_state.world,
+            scene_ron: &save_state.scene_ron,
+            entity_id_map: &save_state.entity_id_map,
+        };
+        let bytes = rmp_serde::to_vec_named(&old).expect("old-format serialise");
+        let loaded: WorldSaveState =
+            rmp_serde::from_slice(&bytes).expect("should deserialise without plants field");
+        assert_eq!(loaded.plants.len(), 0, "missing field should default to empty vec");
+    }
+
+    #[test]
+    fn test_plant_density_and_type_survive_round_trip() {
+        use crate::simulation::core::components::BoundaryConfig;
+        use crate::simulation::plants::PlantGrid;
+
+        let mut sim = SimulationBuilder::new().set_boundaries(200.0, 200.0).build();
+        {
+            let bounds = *sim.world.resource::<BoundaryConfig>();
+            let mut grid = PlantGrid::from_bounds(&bounds);
+            grid.set_plant(0.0, 0.0, 0.75, 3);
+            sim.world.insert_resource(grid);
+        }
+        let builder = CritBuilder::new().at(50.0, 50.0);
+        sim.spawn_crit(builder);
+
+        let save_state = sim.to_save_state().expect("save should succeed");
+        assert_eq!(save_state.plants[0].density, 0.75);
+        assert_eq!(save_state.plants[0].plant_type, 3);
+
+        let restored = Simulation::from_save_state(save_state).expect("restore should succeed");
+        let grid = restored.world.resource::<PlantGrid>();
+        let cells_world = grid.live_cells_world();
+        assert_eq!(cells_world.len(), 1);
+        let (_, _, density, plant_type) = cells_world[0];
+        assert!((density - 0.75).abs() < 1e-5, "density preserved");
+        assert_eq!(plant_type, 3, "plant_type preserved");
+    }
+
+    #[test]
     fn test_save_state_reconstructs_l1_vision() {
         let mut sim = SimulationBuilder::new().build();
 

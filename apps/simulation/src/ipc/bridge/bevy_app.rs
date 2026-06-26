@@ -160,6 +160,13 @@ impl NapiApp {
             simulation.world.insert_resource(grid);
         }
 
+        // Prime the plant buffer so the frontend sees plants immediately on startup
+        // (without this, the buffer stays empty until the first SpawnPlant command).
+        {
+            let grid = simulation.world.resource::<PlantGrid>();
+            grid.write_sparse(&mut plant_buffer.lock());
+        }
+
         Self {
             simulation,
             command_rx,

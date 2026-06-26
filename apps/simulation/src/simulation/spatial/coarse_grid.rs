@@ -62,9 +62,10 @@ impl CoarseGrid {
         // Cache L0 grid origin so l0_to_l1_cell_index can convert L0 array indices
         // back to world cell coordinates without the L0 struct as an argument.
         // L0 cell size = L1_CELL_SIZE / 3 (hardcoded 3x ratio).
+        // Mirror SpatialGrid::recalculate_grid_dimensions exactly: floor(...) - 1 padding.
         let l0_cell_size = L1_CELL_SIZE / 3.0;
-        self.l0_min_cell_x = (min_x / l0_cell_size).floor() as i32;
-        self.l0_min_cell_y = (min_y / l0_cell_size).floor() as i32;
+        self.l0_min_cell_x = (min_x / l0_cell_size).floor() as i32 - 1;
+        self.l0_min_cell_y = (min_y / l0_cell_size).floor() as i32 - 1;
 
         let max_cell_x = (max_x * self.inv_cell_size).ceil() as i32;
         let max_cell_y = (max_y * self.inv_cell_size).ceil() as i32;
@@ -298,22 +299,22 @@ mod tests {
     #[test]
     fn l0_to_l1_cell_index_maps_correctly() {
         let mut grid = CoarseGrid::new();
-        // Set up so L1 has known dimensions
-        grid.set_world_bounds(0.0, 90.0, 0.0, 90.0); // 3×3 L1 cells at 30m
+        // Bounds (20, 200) → l0_min_cell_x = floor(20/20)−1 = 0, matching actual L0.
+        // Actual L0: min_cx=0, max_cx=ceil(200/20)+1=11, width=12.
+        // L1: min_cx=floor(20/60)=0, max_cx=ceil(200/60)=4, width=4.
+        grid.set_world_bounds(20.0, 200.0, 20.0, 200.0);
+        let l0_width = 12; // actual L0 width for these bounds
 
-        // L0 width = 90m / 10m = 9 cells
-        let l0_width = 9;
-
-        // L0 cell (0,0) -> L1 cell (0,0)
+        // L0 arr col 0 (world col 0) → L1 col 0
         assert_eq!(grid.l0_to_l1_cell_index(0, l0_width), 0);
 
-        // L0 cell (2,2) -> L1 cell (0,0) (same block)
+        // L0 arr col 2, row 2 (world col 2, row 2) → L1 cell (0,0) (same block)
         assert_eq!(grid.l0_to_l1_cell_index(2 + 2 * l0_width, l0_width), 0);
 
-        // L0 cell (3,0) -> L1 cell (1,0)
+        // L0 arr col 3 (world col 3) → L1 col 1
         assert_eq!(grid.l0_to_l1_cell_index(3, l0_width), 1);
 
-        // L0 cell (0,3) -> L1 cell (0,1)
+        // L0 arr col 0, row 3 (world row 3) → L1 row 1, col 0 = index grid.width
         assert_eq!(
             grid.l0_to_l1_cell_index(0 + 3 * l0_width, l0_width),
             grid.width

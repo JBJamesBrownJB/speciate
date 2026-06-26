@@ -19,6 +19,11 @@ pub struct CoarseGrid {
     world_min_y: f32,
     min_cell_x: i32,
     min_cell_y: i32,
+    /// Origin of the L0 grid in L0 cell coordinates (floor(world_min / L0_cell_size)).
+    /// Cached so l0_to_l1_cell_index can recover world coords from L0 array indices
+    /// without needing the L0 struct as an argument.
+    l0_min_cell_x: i32,
+    l0_min_cell_y: i32,
 }
 
 impl Default for CoarseGrid {
@@ -34,6 +39,8 @@ impl Default for CoarseGrid {
             world_min_y: 0.0,
             min_cell_x: 0,
             min_cell_y: 0,
+            l0_min_cell_x: 0,
+            l0_min_cell_y: 0,
         }
     }
 }
@@ -51,6 +58,13 @@ impl CoarseGrid {
 
         self.min_cell_x = (min_x * self.inv_cell_size).floor() as i32;
         self.min_cell_y = (min_y * self.inv_cell_size).floor() as i32;
+
+        // Cache L0 grid origin so l0_to_l1_cell_index can convert L0 array indices
+        // back to world cell coordinates without the L0 struct as an argument.
+        // L0 cell size = L1_CELL_SIZE / 3 (hardcoded 3x ratio).
+        let l0_cell_size = L1_CELL_SIZE / 3.0;
+        self.l0_min_cell_x = (min_x / l0_cell_size).floor() as i32;
+        self.l0_min_cell_y = (min_y / l0_cell_size).floor() as i32;
 
         let max_cell_x = (max_x * self.inv_cell_size).ceil() as i32;
         let max_cell_y = (max_y * self.inv_cell_size).ceil() as i32;
@@ -120,18 +134,26 @@ impl CoarseGrid {
 
     /// Convert L0 cell index to parent L1 cell index.
     /// L1 cells are 3×3 blocks of L0 cells.
+    ///
+    /// Correctness requirement: L0 array indices are relative to `l0_min_cell_x`
+    /// (the L0 grid origin in L0 cell coordinates), which is NOT necessarily
+    /// divisible by 3. We must convert to world cell coordinates first and use
+    /// `div_euclid` (floor division) before mapping to L1, so that negative world
+    /// columns round toward -inf rather than toward zero.
     #[inline]
     pub fn l0_to_l1_cell_index(&self, l0_cell_idx: usize, l0_width: usize) -> usize {
-        let l0_cx = l0_cell_idx % l0_width;
-        let l0_cy = l0_cell_idx / l0_width;
+        let l0_cx = (l0_cell_idx % l0_width) as i32;
+        let l0_cy = (l0_cell_idx / l0_width) as i32;
 
-        // L1 cell = L0 cell / 3 (hardcoded: fov_patterns.rs lookup tables assume 3×3)
-        let l1_cx = l0_cx / 3;
-        let l1_cy = l0_cy / 3;
+        // Recover world cell coordinates from L0 array coordinates.
+        let world_cx = l0_cx + self.l0_min_cell_x;
+        let world_cy = l0_cy + self.l0_min_cell_y;
 
-        // Clamp to valid L1 range
-        let l1_cx = l1_cx.min(self.width.saturating_sub(1));
-        let l1_cy = l1_cy.min(self.height.saturating_sub(1));
+        // Map to L1 array index. div_euclid = floor division, correct for negative coords.
+        let l1_cx = (world_cx.div_euclid(3) - self.min_cell_x)
+            .clamp(0, self.width.saturating_sub(1) as i32) as usize;
+        let l1_cy = (world_cy.div_euclid(3) - self.min_cell_y)
+            .clamp(0, self.height.saturating_sub(1) as i32) as usize;
 
         l1_cy * self.width + l1_cx
     }

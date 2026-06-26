@@ -45,6 +45,7 @@ export interface SystemTimingsSnapshot {
 export interface TelemetryFrame {
   tick: number;
   creatureCount: number;
+  plantCount?: number;
   tickRateHz: number;
   spatialGridCellSize: number;
   l1CellSize: number;

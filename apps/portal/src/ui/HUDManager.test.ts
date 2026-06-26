@@ -43,6 +43,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -51,6 +52,7 @@ describe('HUDManager', () => {
       expect(document.getElementById).toHaveBeenCalledWith('fps-value');
       expect(document.getElementById).toHaveBeenCalledWith('tick-rate-value');
       expect(document.getElementById).toHaveBeenCalledWith('creature-count');
+      expect(document.getElementById).toHaveBeenCalledWith('plant-count');
       expect(document.getElementById).toHaveBeenCalledWith('zoom-value');
     });
   });
@@ -62,6 +64,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -78,6 +81,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -100,6 +104,7 @@ describe('HUDManager', () => {
           fpsValue: 'missing',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -115,6 +120,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -138,6 +144,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -154,6 +161,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -170,6 +178,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -186,6 +195,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -208,6 +218,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'missing',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -224,6 +235,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -240,6 +252,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -256,6 +269,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -278,6 +292,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'missing',
+          plantCount: 'missing',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -294,6 +309,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -310,6 +326,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -326,6 +343,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -348,6 +366,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'missing',
           zoomValue: 'missing',
         },
         mockFpsSparkline
@@ -364,6 +383,7 @@ describe('HUDManager', () => {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
           creatureCount: 'creature-count',
+          plantCount: 'plant-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -389,6 +409,7 @@ describe('HUDManager', () => {
           fpsValue: 'missing',
           tickRateValue: 'missing',
           creatureCount: 'missing',
+          plantCount: 'missing',
           zoomValue: 'missing',
         },
         mockFpsSparkline

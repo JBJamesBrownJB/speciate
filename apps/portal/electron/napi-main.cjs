@@ -550,8 +550,12 @@ ipcMain.on('spawn-plant', (event, { worldX, worldY }) => {
   if (!simulationEngine) return;
   try {
     simulationEngine.spawnPlant(worldX, worldY);
-    // Push updated buffer immediately so overlay sees the new plant without waiting 2s
-    setTimeout(deliverPlants, 100);
+    // Push updated buffer immediately (deliverPlants is scoped to start-simulation callback,
+    // so inline the push here to avoid a ReferenceError)
+    const plantBuf = simulationEngine.getPlantBuffer();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('plant-buffer-update', plantBuf);
+    }
   } catch (error) {
     console.error('[Electron NAPI] Failed to spawn plant:', error);
   }

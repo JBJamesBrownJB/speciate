@@ -218,6 +218,7 @@ async function main(): Promise<void> {
         fpsValue: "fps-value",
         tickRateValue: "tick-rate-value",
         creatureCount: "creature-count",
+        plantCount: "plant-count",
         zoomValue: "zoom-value",
       },
       fpsSparkline
@@ -352,6 +353,9 @@ async function main(): Promise<void> {
             telemetry.spatialGridMinY,
             telemetry.spatialGridMaxY
           );
+        }
+        if (telemetry.plantCount !== undefined) {
+          hudManager.updatePlantCount(telemetry.plantCount);
         }
       });
 

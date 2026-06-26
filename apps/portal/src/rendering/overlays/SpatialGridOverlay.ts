@@ -6,7 +6,6 @@ import { parsePlantBuffer, type PlantCellData } from '@/rendering/PlantRenderer'
 const L0_GRID_LINE_COLOR = 0x444444;
 const L1_GRID_LINE_COLOR = 0x00aaff;
 const P0_GRID_LINE_COLOR = 0x226622;
-const P0_LIVE_CELL_COLOR = 0x2d8a4e;
 const GRID_LINE_ALPHA = 0.6;
 const CHECKED_CELL_COLOR = 0x22aa22;
 const CHECKED_CELL_ALPHA = 0.35;
@@ -463,18 +462,6 @@ export class SpatialGridOverlay implements IOverlay {
     const colCount = Math.ceil((worldRight - worldLeft) / cellSize);
     const rowCount = Math.ceil((worldBottom - worldTop) / cellSize);
     if (colCount * rowCount > 10000) return;
-
-    // Draw live cells (filled green, alpha proportional to density)
-    for (const cell of this.p0Cells) {
-      if (cell.x < worldLeft - cellSize || cell.x > worldRight + cellSize) continue;
-      if (cell.y < worldTop - cellSize || cell.y > worldBottom + cellSize) continue;
-
-      const rectX = cell.x - cellSize * 0.5;
-      const rectY = cell.y - cellSize * 0.5;
-      const alpha = Math.min(1.0, cell.density * 0.8 + 0.2);
-      this.cellGraphics.rect(rectX, rectY, cellSize, cellSize);
-      this.cellGraphics.fill({ color: P0_LIVE_CELL_COLOR, alpha });
-    }
 
     // Draw grid lines
     this.renderGridLines(cellSize, worldLeft, worldRight, worldTop, worldBottom, zoom, P0_GRID_LINE_COLOR);

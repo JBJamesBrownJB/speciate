@@ -24,6 +24,9 @@ declare global {
 
       onPerceptionDebugUpdate: (callback: (buffer: Float32Array) => void) => () => void;
 
+      /** Subscribe to P0 plant grid sparse buffer updates (~every 2s). */
+      onPlantBufferUpdate?: (callback: (buffer: Float32Array) => void) => () => void;
+
       setPaused: (paused: boolean) => void;
 
       setTimeScale: (scale: number) => void;

@@ -175,6 +175,23 @@ function startSimulation() {
       pollingInterval = setInterval(() => deliverFrame(simulationEngine.getTick()), pollIntervalMs);
     }
 
+    // Plant buffer: push sparse snapshot to renderer on startup and every 2s.
+    // Plants update slowly (CA ticks every 1-2s), so per-frame delivery is wasteful.
+    const deliverPlants = () => {
+      if (!simulationEngine || shuttingDown) return;
+      try {
+        const plantBuf = simulationEngine.getPlantBuffer();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('plant-buffer-update', plantBuf);
+        }
+      } catch (error) {
+        console.error('[Electron NAPI] Plant buffer error:', error);
+      }
+    };
+    // Deliver once at startup (after a short delay so the sim has seeded), then every 2s.
+    setTimeout(deliverPlants, 500);
+    setInterval(deliverPlants, 2000);
+
     // Telemetry/status heartbeat on its own light timer (~2x/sec), decoupled from the
     // position doorbell so a dropped frame never skips a status update.
     telemetryInterval = setInterval(() => {

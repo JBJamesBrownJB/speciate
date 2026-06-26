@@ -10,10 +10,11 @@
 use super::PerceptionDebugBuffer;
 use super::{DoubleBuffer, TelemetrySnapshot};
 use crate::ipc::SimCommand;
-use crate::simulation::core::components::{BodySize, Position, Rotation};
+use crate::simulation::core::components::{BodySize, BoundaryConfig, Position, Rotation};
 use crate::simulation::core::{Simulation, SimulationBuilder, MAX_WORLD_SIZE};
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::components::{BehaviorMode, CritId};
+use crate::simulation::plants::PlantGrid;
 use bevy_ecs::prelude::Resource;
 use crossbeam_channel::Receiver;
 use parking_lot::Mutex;
@@ -62,6 +63,9 @@ pub struct NapiApp {
     command_rx: Receiver<SimCommand>,
     paused: Option<Arc<AtomicBool>>,
     time_scale: Option<Arc<AtomicU32>>,
+    // Phase 1: only written at startup. Phase 3 CA tick will refresh this buffer.
+    #[allow(dead_code)]
+    plant_buffer: Arc<Mutex<Vec<f32>>>,
 }
 
 impl NapiApp {
@@ -74,6 +78,7 @@ impl NapiApp {
         initial_count: u32,
         assets_path: String,
         save_state_path: Option<String>,
+        plant_buffer: Arc<Mutex<Vec<f32>>>,
     ) -> Self {
         use crate::persistence::WorldSaveState;
         use std::path::Path;
@@ -150,11 +155,23 @@ impl NapiApp {
 
         simulation.world.insert_resource(ViewportBounds::default());
 
+        // Seed the P0 plant grid from world bounds and publish the initial sparse snapshot.
+        {
+            let bounds = *simulation.world.resource::<BoundaryConfig>();
+            let mut grid = PlantGrid::from_bounds(&bounds);
+            grid.seed_scattered(200, 1, 1.0, 42);
+            let mut buf = plant_buffer.lock();
+            grid.write_sparse(&mut buf);
+            drop(buf);
+            simulation.world.insert_resource(grid);
+        }
+
         Self {
             simulation,
             command_rx,
             paused: None,
             time_scale: None,
+            plant_buffer,
         }
     }
 

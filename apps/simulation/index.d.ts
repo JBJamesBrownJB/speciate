@@ -122,6 +122,14 @@ export declare class SimulationEngine {
    */
   fillBuffer(buffer: Float32Array): number
   /**
+   * Return the latest P0 plant grid snapshot as a sparse Float32Array.
+   *
+   * Format: `[count, x₀, y₀, density₀, type₀, x₁, ...]` — only live cells included.
+   * The snapshot is written once at startup and refreshed after each CA tick (Phase 3).
+   * Frontend should call this on startup and after receiving a plant-update notification.
+   */
+  getPlantBuffer(): Float32Array
+  /**
    * Get target simulation tick rate (Hz)
    *
    * JavaScript should query this to calculate appropriate polling rates.

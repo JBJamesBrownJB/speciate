@@ -4,6 +4,7 @@ pub mod creatures;
 pub mod math;
 pub mod movement;
 pub mod perception;
+pub mod plants;
 pub mod spatial;
 pub mod tick_controller;
 

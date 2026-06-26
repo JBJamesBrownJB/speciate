@@ -28,7 +28,7 @@ fn test_pause_command_sets_paused_flag() {
     let (tx, rx) = crossbeam_channel::bounded(128);
     let paused = Arc::new(AtomicBool::new(false));
 
-    let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 5, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
     app.set_paused_flag(Arc::clone(&paused));
 
     assert!(!paused.load(Ordering::SeqCst), "Should start unpaused");
@@ -49,7 +49,7 @@ fn test_resume_command_clears_paused_flag() {
     let (tx, rx) = crossbeam_channel::bounded(128);
     let paused = Arc::new(AtomicBool::new(false));
 
-    let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 5, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
     app.set_paused_flag(Arc::clone(&paused));
 
     tx.send(SimCommand::SetPaused(true))
@@ -73,7 +73,7 @@ fn test_pause_toggle_multiple_times() {
     let (tx, rx) = crossbeam_channel::bounded(128);
     let paused = Arc::new(AtomicBool::new(false));
 
-    let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 5, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
     app.set_paused_flag(Arc::clone(&paused));
 
     for _ in 0..5 {

@@ -15,4 +15,4 @@
 
 Also at this level: `biology-notes.md` — the zoologist consultation log (📖 reference-ish running notes), not a lifecycle feature.
 
-**What's in progress NOW?** Not biology directly. Biology and gameplay are largely **backlog (💡/📋) + already-shipped (✅)**. The active NOW pillars live in [`docs/scale/`](../scale/) (Prove Scale) and [`docs/visuals/`](../visuals/) (Prove Spectacle). See [`docs/ROADMAP.md`](../ROADMAP.md) for the authoritative NOW / NEXT / DREAM tiers — biology features are Pillar 3 (Play) fodder.
+**What's in progress NOW?** The P0 plant grid is the first step toward Pillar 3 (Play). Branch `feature/plant-p0-grid` contains the lean-slice implementation — P0 grid resource in Rust, sparse IPC, PixiJS renderer. See [`todo/plant-grid.md`](todo/plant-grid.md) for the full roadmap. All other biology is largely **backlog (💡/📋) + already-shipped (✅)**. The active NOW pillars live in [`docs/scale/`](../scale/) (Prove Scale) and [`docs/visuals/`](../visuals/) (Prove Spectacle). See [`docs/ROADMAP.md`](../ROADMAP.md) for the authoritative NOW / NEXT / DREAM tiers.

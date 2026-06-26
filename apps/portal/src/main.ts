@@ -12,6 +12,7 @@ import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
+import { PlantRenderer } from "@/rendering/PlantRenderer";
 import { interpDiag } from "@/rendering/InterpolationDiagnostics";
 import { ChangeDetector } from "@/core/ChangeDetection";
 import { SelectionManager } from "@/systems/SelectionManager";
@@ -197,6 +198,14 @@ async function main(): Promise<void> {
       selectionManager,
       ipcClient,
       getCreatures: () => latestCreatures,
+    });
+
+    // Plant renderer — added to worldContainer BEFORE creatures so it renders underneath.
+    const plantRenderer = new PlantRenderer(worldContainer);
+
+    // Subscribe to plant snapshot updates from Electron main (push every ~2s).
+    window.electron?.onPlantBufferUpdate?.((buf: Float32Array) => {
+      plantRenderer.updateFromBuffer(buf);
     });
 
     const creatureRenderer = new InterpolatedCreatureRenderer(texture, 200000);

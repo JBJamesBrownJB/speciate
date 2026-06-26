@@ -152,6 +152,13 @@ impl PlantGrid {
         buf[0] = count as f32;
     }
 
+    /// Remove all plants, resetting every cell to the default (bare ground).
+    pub fn clear(&mut self) {
+        for cell in &mut self.cells {
+            *cell = PlantCell::default();
+        }
+    }
+
     /// Return all live cells as world-space tuples `(x, y, density, plant_type)`.
     pub fn live_cells_world(&self) -> Vec<(f32, f32, f32, u8)> {
         self.cells
@@ -275,6 +282,33 @@ mod tests {
         assert!((energy - 3.0).abs() < 1e-5, "energy={energy}");
         let idx = grid.cell_idx(5.0, 5.0).unwrap();
         assert!((grid.cells[idx].density - 0.7).abs() < 1e-4);
+    }
+
+    #[test]
+    fn clear_removes_all_live_cells() {
+        let mut grid = PlantGrid::from_bounds(&test_bounds());
+        grid.seed_scattered(30, 1, 1.0, 42);
+        assert_eq!(grid.live_count(), 30);
+        grid.clear();
+        assert_eq!(grid.live_count(), 0);
+    }
+
+    #[test]
+    fn clear_on_empty_grid_is_a_noop() {
+        let mut grid = PlantGrid::from_bounds(&test_bounds());
+        grid.clear();
+        assert_eq!(grid.live_count(), 0);
+    }
+
+    #[test]
+    fn clear_write_sparse_produces_zero_count() {
+        let mut grid = PlantGrid::from_bounds(&test_bounds());
+        grid.seed_scattered(10, 1, 1.0, 1);
+        grid.clear();
+        let mut buf = Vec::new();
+        grid.write_sparse(&mut buf);
+        assert_eq!(buf[0] as usize, 0);
+        assert_eq!(buf.len(), 1);
     }
 
     #[test]

@@ -627,6 +627,23 @@ impl SimulationEngine {
         Ok(())
     }
 
+    /// Remove all plants from the P0 grid
+    ///
+    /// # Errors
+    /// * Simulation not started
+    /// * Command queue full
+    #[napi]
+    pub fn clear_all_plants(&self) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
+            .try_send(SimCommand::ClearAllPlants)
+            .map_err(|e| {
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
+            })?;
+        Ok(())
+    }
+
     /// Despawn all creatures
     ///
     /// # Errors

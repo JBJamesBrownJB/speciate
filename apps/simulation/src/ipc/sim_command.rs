@@ -54,6 +54,8 @@ pub enum SimCommand {
         x: f32,
         y: f32,
     },
+    /// Remove all plants from the P0 grid.
+    ClearAllPlants,
     /// Query L1 cell at world position (dev-tools only)
     #[cfg(feature = "dev-tools")]
     QueryL1Cell {

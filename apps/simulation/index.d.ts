@@ -187,6 +187,14 @@ export declare class SimulationEngine {
    */
   spawnCreatureAt(x: number, y: number, dnaSizeGene?: number | undefined | null, dnaFovGene?: number | undefined | null): void
   /**
+   * Remove all plants from the P0 grid
+   *
+   * # Errors
+   * * Simulation not started
+   * * Command queue full
+   */
+  clearAllPlants(): void
+  /**
    * Despawn all creatures
    *
    * # Errors

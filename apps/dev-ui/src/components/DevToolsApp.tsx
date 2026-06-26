@@ -295,6 +295,14 @@ export const DevToolsApp: React.FC = () => {
     }
   };
 
+  const handleClearPlants = () => {
+    if (window.confirm('Clear all plants? This cannot be undone.')) {
+      window.electron?.sendCommand?.({
+        type: 'dev_clear_plants',
+      });
+    }
+  };
+
   const handleRecordSnapshot = () => {
     if (!systemTimings) {
       alert('No metrics available to snapshot');
@@ -384,6 +392,13 @@ export const DevToolsApp: React.FC = () => {
           disabled={!isConnected}
         >
           Clear All Creatures
+        </button>
+        <button
+          className="danger"
+          onClick={handleClearPlants}
+          disabled={!isConnected}
+        >
+          Clear All Plants
         </button>
       </div>
 

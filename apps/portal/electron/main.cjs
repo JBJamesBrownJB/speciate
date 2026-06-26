@@ -325,6 +325,12 @@ const COMMAND_VALIDATORS = {
     }
     // Command is just { type: 'dev_clear_creatures' } - no additional validation needed
   },
+
+  dev_clear_plants: (params) => {
+    if (typeof params !== 'object' || params === null) {
+      throw new Error('dev_clear_plants: params must be an object');
+    }
+  },
 };
 
 /**

@@ -308,6 +308,14 @@ impl NapiApp {
                         }
                     }
                 }
+                SimCommand::ClearAllPlants => {
+                    if let Some(mut grid) =
+                        self.simulation.world.get_resource_mut::<PlantGrid>()
+                    {
+                        grid.clear();
+                        grid.write_sparse(&mut self.plant_buffer.lock());
+                    }
+                }
                 #[cfg(feature = "dev-tools")]
                 SimCommand::QueryL1Cell {
                     world_x,

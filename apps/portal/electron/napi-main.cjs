@@ -430,6 +430,11 @@ ipcMain.on('send-command', (event, command) => {
         console.log('[Electron NAPI] Cleared all creatures');
         break;
 
+      case 'dev_clear_plants':
+        simulationEngine.clearAllPlants();
+        console.log('[Electron NAPI] Cleared all plants');
+        break;
+
       case 'dev_load_trial':
         const randomize = command.randomizeDna || false;
         const trialSizeGene = command.dna?.size_gene ?? null;

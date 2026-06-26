@@ -8,7 +8,7 @@ export interface DnaData {
 }
 
 export interface DevCommand {
-  type: 'dev_spawn_creature' | 'dev_load_trial' | 'dev_clear_creatures' | 'dev_set_system_frequency';
+  type: 'dev_spawn_creature' | 'dev_load_trial' | 'dev_clear_creatures' | 'dev_clear_plants' | 'dev_set_system_frequency';
   x?: number;
   y?: number;
   dna?: DnaData;

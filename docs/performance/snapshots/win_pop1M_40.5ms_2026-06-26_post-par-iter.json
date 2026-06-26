@@ -1,0 +1,20 @@
+{
+  "label": "post-par-iter-kill-1m-collect",
+  "description": "1M realistic-DNA, 5 seeds, after merging native Bevy par_iter_mut (commit eba30db). Previous baseline: 46.2ms (post-L1-fix). Gain: ~5.7ms.",
+  "population": 1000000,
+  "seeds": [1, 2, 3, 4, 5],
+  "distribution": "realistic-dna",
+  "wall_p99_mean_of_p99s_us": 40486,
+  "wall_p99_std_us": 3304,
+  "wall_p99_worst_us": 44418,
+  "wall_mean_us": 32774,
+  "phases": {
+    "perception_p99_us": 10161,
+    "steering_p99_us": 9892,
+    "movement_p99_us": 7601,
+    "grid_rebuild_p99_us": 6883,
+    "l1_aggregation_p99_us": 5408,
+    "behavior_p99_us": 5700
+  },
+  "date": "2026-06-26"
+}

@@ -1,9 +1,12 @@
 import { Graphics, Container } from 'pixi.js';
 import type { QueriedCell, L1VisionDebugEntry } from '@/types/GameState';
 import type { IOverlay, OverlayConfig } from './IOverlay';
+import { parsePlantBuffer, type PlantCellData } from '@/rendering/PlantRenderer';
 
 const L0_GRID_LINE_COLOR = 0x444444;
 const L1_GRID_LINE_COLOR = 0x00aaff;
+const P0_GRID_LINE_COLOR = 0x226622;
+const P0_LIVE_CELL_COLOR = 0x2d8a4e;
 const GRID_LINE_ALPHA = 0.6;
 const CHECKED_CELL_COLOR = 0x22aa22;
 const CHECKED_CELL_ALPHA = 0.35;
@@ -29,13 +32,17 @@ export enum GridMode {
   Off = 'off',
   L0 = 'l0',
   L1 = 'l1',
+  P0 = 'p0',
 }
 
 const MODE_ORDER: GridMode[] = [
   GridMode.Off,
   GridMode.L0,
   GridMode.L1,
+  GridMode.P0,
 ];
+
+const P0_CELL_SIZE = 4.0;
 
 export class SpatialGridOverlay implements IOverlay {
   readonly config: OverlayConfig = {
@@ -63,9 +70,15 @@ export class SpatialGridOverlay implements IOverlay {
   // Info panel for L1 hover
   private infoPanel: HTMLDivElement | null = null;
 
+  // P0 plant cells (updated from sparse buffer pushed every ~2s)
+  private p0Cells: PlantCellData[] = [];
+
   // L1 hover state (managed by InteractionManager)
   private hoveredInfo: L1CellInfo | null = null;
   private hoverPending: boolean = false;
+
+  // P0 hover state (client-side lookup, no Rust round-trip)
+  private hoveredP0Info: { x: number; y: number; density: number; plantType: number } | null = null;
 
   constructor(container: Container) {
     this.cellGraphics = new Graphics();
@@ -102,6 +115,10 @@ export class SpatialGridOverlay implements IOverlay {
   }
 
   handleHover(worldX: number, worldY: number): void {
+    if (this.currentMode === GridMode.P0) {
+      this.handleP0Hover(worldX, worldY);
+      return;
+    }
     if (this.currentMode !== GridMode.L1) return;
     if (this.hoverPending) return;
 
@@ -137,15 +154,68 @@ export class SpatialGridOverlay implements IOverlay {
   clearHover(): void {
     this.hoveredInfo = null;
     this.hoverPending = false;
+    this.hoveredP0Info = null;
     if (this.infoPanel) {
       this.infoPanel.style.display = 'none';
     }
   }
 
+  updateP0Cells(buf: Float32Array): void {
+    this.p0Cells = parsePlantBuffer(buf);
+  }
+
+  handleP0Hover(worldX: number, worldY: number): void {
+    if (this.currentMode !== GridMode.P0) return;
+
+    // Snap to cell
+    const cellCol = Math.floor((worldX - this.gridMinX) / P0_CELL_SIZE);
+    const cellRow = Math.floor((worldY - this.gridMinY) / P0_CELL_SIZE);
+    const cellCenterX = this.gridMinX + (cellCol + 0.5) * P0_CELL_SIZE;
+    const cellCenterY = this.gridMinY + (cellRow + 0.5) * P0_CELL_SIZE;
+
+    // Find this cell in p0Cells (client-side lookup)
+    const found = this.p0Cells.find(
+      c => Math.abs(c.x - cellCenterX) < P0_CELL_SIZE * 0.5 &&
+           Math.abs(c.y - cellCenterY) < P0_CELL_SIZE * 0.5
+    );
+
+    this.hoveredP0Info = {
+      x: cellCenterX,
+      y: cellCenterY,
+      density: found?.density ?? 0,
+      plantType: found?.plantType ?? 0,
+    };
+    this.updateP0InfoPanel();
+  }
+
+  private updateP0InfoPanel(): void {
+    if (!this.infoPanel) return;
+
+    if (!this.hoveredP0Info || this.currentMode !== GridMode.P0) {
+      this.infoPanel.style.display = 'none';
+      return;
+    }
+
+    const info = this.hoveredP0Info;
+    const status = info.density > 0 ? `Type ${info.plantType} — density: ${info.density.toFixed(2)}` : 'Empty — density: 0';
+    this.infoPanel.innerHTML = `
+      <div style="font-weight: bold; margin-bottom: 8px; color: #2d8a4e; border-bottom: 1px solid #2d8a4e40; padding-bottom: 6px;">
+        P0 Plant Cell
+      </div>
+      <div style="display: grid; grid-template-columns: auto auto; gap: 4px 12px;">
+        <span style="color: #888;">World:</span>
+        <span style="text-align: right;">(${info.x.toFixed(1)}, ${info.y.toFixed(1)})</span>
+        <span style="color: #888;">Status:</span>
+        <span style="text-align: right; color: ${info.density > 0 ? '#2d8a4e' : '#888'};">${status}</span>
+      </div>
+    `;
+    this.infoPanel.style.display = 'block';
+  }
+
   private updateInfoPanel(): void {
     if (!this.infoPanel) return;
 
-    if (!this.hoveredInfo || this.currentMode !== GridMode.L1) {
+    if (!this.hoveredInfo || (this.currentMode !== GridMode.L1)) {
       this.infoPanel.style.display = 'none';
       return;
     }
@@ -208,8 +278,8 @@ export class SpatialGridOverlay implements IOverlay {
     this.graphics.visible = isVisible;
     this.cellGraphics.visible = isVisible;
 
-    // Clear hover state when leaving L1 mode
-    if (mode !== GridMode.L1) {
+    // Clear hover state when leaving L1 or P0 mode
+    if (mode !== GridMode.L1 && mode !== GridMode.P0) {
       this.clearHover();
     }
   }
@@ -267,6 +337,9 @@ export class SpatialGridOverlay implements IOverlay {
         break;
       case GridMode.L1:
         this.renderL1Grid(cameraX, cameraY, zoom, viewportWidth, viewportHeight);
+        break;
+      case GridMode.P0:
+        this.renderP0Grid(cameraX, cameraY, zoom, viewportWidth, viewportHeight);
         break;
     }
   }
@@ -367,6 +440,44 @@ export class SpatialGridOverlay implements IOverlay {
     }
 
     this.renderGridLines(cellSize, worldLeft, worldRight, worldTop, worldBottom, zoom, L1_GRID_LINE_COLOR);
+  }
+
+  private renderP0Grid(
+    cameraX: number,
+    cameraY: number,
+    zoom: number,
+    viewportWidth: number,
+    viewportHeight: number
+  ): void {
+    this.graphics.clear();
+    this.cellGraphics.clear();
+
+    const cellSize = P0_CELL_SIZE;
+    const { worldLeft, worldRight, worldTop, worldBottom } = this.getViewBounds(
+      cameraX, cameraY, zoom, viewportWidth, viewportHeight
+    );
+
+    if (worldLeft >= worldRight || worldTop >= worldBottom) return;
+
+    // Skip grid lines if too many cells would need drawing (zoomed too far out)
+    const colCount = Math.ceil((worldRight - worldLeft) / cellSize);
+    const rowCount = Math.ceil((worldBottom - worldTop) / cellSize);
+    if (colCount * rowCount > 10000) return;
+
+    // Draw live cells (filled green, alpha proportional to density)
+    for (const cell of this.p0Cells) {
+      if (cell.x < worldLeft - cellSize || cell.x > worldRight + cellSize) continue;
+      if (cell.y < worldTop - cellSize || cell.y > worldBottom + cellSize) continue;
+
+      const rectX = cell.x - cellSize * 0.5;
+      const rectY = cell.y - cellSize * 0.5;
+      const alpha = Math.min(1.0, cell.density * 0.8 + 0.2);
+      this.cellGraphics.rect(rectX, rectY, cellSize, cellSize);
+      this.cellGraphics.fill({ color: P0_LIVE_CELL_COLOR, alpha });
+    }
+
+    // Draw grid lines
+    this.renderGridLines(cellSize, worldLeft, worldRight, worldTop, worldBottom, zoom, P0_GRID_LINE_COLOR);
   }
 
   private getViewBounds(

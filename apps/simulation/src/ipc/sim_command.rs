@@ -49,6 +49,11 @@ pub enum SimCommand {
         max_y: f32,
         margin: f32,
     },
+    /// Spawn a plant at a world position (snapped to the nearest P0 cell).
+    SpawnPlant {
+        x: f32,
+        y: f32,
+    },
     /// Query L1 cell at world position (dev-tools only)
     #[cfg(feature = "dev-tools")]
     QueryL1Cell {

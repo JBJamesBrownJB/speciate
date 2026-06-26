@@ -544,6 +544,20 @@ ipcMain.on('set-viewport-bounds', (event, bounds) => {
 });
 
 /**
+ * IPC handler: Spawn a plant at world position (portal P0 mode click)
+ */
+ipcMain.on('spawn-plant', (event, { worldX, worldY }) => {
+  if (!simulationEngine) return;
+  try {
+    simulationEngine.spawnPlant(worldX, worldY);
+    // Push updated buffer immediately so overlay sees the new plant without waiting 2s
+    setTimeout(deliverPlants, 100);
+  } catch (error) {
+    console.error('[Electron NAPI] Failed to spawn plant:', error);
+  }
+});
+
+/**
  * IPC handler: Query L1 cell at world position (dev-tools only)
  *
  * Returns cell metadata (creature count, mass, sizes) for the cell at the given position.

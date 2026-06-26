@@ -53,6 +53,7 @@ pub struct L1CellData {
 pub struct TelemetrySnapshot {
     pub tick: u64,
     pub creature_count: usize,
+    pub plant_count: usize,
     pub tick_rate_hz: f32,
     pub spatial_grid_cell_size: f32,
     pub l1_cell_size: f32,
@@ -119,6 +120,7 @@ impl TelemetrySnapshot {
     pub fn new(
         tick: u64,
         creature_count: usize,
+        plant_count: usize,
         tick_rate_hz: f32,
         spatial_grid_cell_size: f32,
         l1_cell_size: f32,
@@ -130,6 +132,7 @@ impl TelemetrySnapshot {
         Self {
             tick,
             creature_count,
+            plant_count,
             tick_rate_hz,
             spatial_grid_cell_size,
             l1_cell_size,
@@ -162,6 +165,7 @@ impl Default for TelemetrySnapshot {
         Self {
             tick: 0,
             creature_count: 0,
+            plant_count: 0,
             tick_rate_hz: 0.0,
             spatial_grid_cell_size: crate::simulation::spatial::CELL_SIZE,
             l1_cell_size: L1_CELL_SIZE,
@@ -201,6 +205,7 @@ mod tests {
 
         assert!(json.contains("tick"));
         assert!(json.contains("creatureCount"));
+        assert!(json.contains("plantCount"));
         assert!(json.contains("systemTimings"));
         assert!(json.contains("hardwareMetrics"));
         assert!(json.contains("parallelizationMetrics"));
@@ -246,6 +251,7 @@ mod tests {
         let snapshot = TelemetrySnapshot::new(
             42,
             1000,
+            5,
             29.5,
             50.0,                           // spatial_grid_cell_size (L0)
             30.0,                           // l1_cell_size

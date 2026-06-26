@@ -63,8 +63,6 @@ pub struct NapiApp {
     command_rx: Receiver<SimCommand>,
     paused: Option<Arc<AtomicBool>>,
     time_scale: Option<Arc<AtomicU32>>,
-    // Phase 1: only written at startup. Phase 3 CA tick will refresh this buffer.
-    #[allow(dead_code)]
     plant_buffer: Arc<Mutex<Vec<f32>>>,
 }
 
@@ -155,14 +153,10 @@ impl NapiApp {
 
         simulation.world.insert_resource(ViewportBounds::default());
 
-        // Seed the P0 plant grid from world bounds and publish the initial sparse snapshot.
+        // Insert an empty P0 plant grid. Plants are placed by SpawnPlant commands only.
         {
             let bounds = *simulation.world.resource::<BoundaryConfig>();
-            let mut grid = PlantGrid::from_bounds(&bounds);
-            grid.seed_scattered(200, 1, 1.0, 42);
-            let mut buf = plant_buffer.lock();
-            grid.write_sparse(&mut buf);
-            drop(buf);
+            let grid = PlantGrid::from_bounds(&bounds);
             simulation.world.insert_resource(grid);
         }
 
@@ -295,6 +289,14 @@ impl NapiApp {
                         bounds.max_y = max_y;
                         bounds.margin = margin;
                         bounds.enabled = true;
+                    }
+                }
+                SimCommand::SpawnPlant { x, y } => {
+                    if let Some(mut grid) =
+                        self.simulation.world.get_resource_mut::<PlantGrid>()
+                    {
+                        grid.set_plant(x, y, 1.0, 1);
+                        grid.write_sparse(&mut self.plant_buffer.lock());
                     }
                 }
                 #[cfg(feature = "dev-tools")]
@@ -504,6 +506,12 @@ impl NapiApp {
 
         // Note: L1 cell data now sent via separate binary buffer (see fill_l1_buffer)
 
+        let plant_count = self
+            .simulation
+            .world
+            .get_resource::<PlantGrid>()
+            .map_or(0, |g| g.live_count());
+
         #[allow(unused_mut)] // `mut` is only needed on Windows (see below)
         #[cfg(feature = "dev-tools")]
         let mut snapshot = {
@@ -513,6 +521,7 @@ impl NapiApp {
             TelemetrySnapshot::new(
                 tick,
                 count,
+                plant_count,
                 tick_rate_hz,
                 cell_size,
                 l1_cell_size,
@@ -528,6 +537,7 @@ impl NapiApp {
         let mut snapshot = TelemetrySnapshot::new(
             tick,
             count,
+            plant_count,
             tick_rate_hz,
             cell_size,
             l1_cell_size,

@@ -29,6 +29,7 @@ export const DevToolsApp: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [tick, setTick] = useState(0);
   const [creatureCount, setCreatureCount] = useState(0);
+  const [plantCount, setPlantCount] = useState(0);
   const [tickRateHz, setTickRateHz] = useState(0);
   const [systemTimings, setSystemTimings] = useState<SystemTimingsSnapshot | undefined>(undefined);
   const [rawHardwareMetrics, setRawHardwareMetrics] = useState<HardwareMetrics | undefined>(undefined);
@@ -198,6 +199,7 @@ export const DevToolsApp: React.FC = () => {
     const handleTelemetryUpdate = (telemetry: TelemetryFrame) => {
       setTick(telemetry.tick);
       setCreatureCount(telemetry.creatureCount);
+      setPlantCount(telemetry.plantCount ?? 0);
       setTickRateHz(telemetry.tickRateHz);
       setSystemTimings(telemetry.systemTimings);
       setCurrentTelemetry(telemetry);
@@ -334,6 +336,7 @@ export const DevToolsApp: React.FC = () => {
         isConnected={isConnected}
         tick={tick}
         creatureCount={creatureCount}
+        plantCount={plantCount}
         isSampling={isSampling}
         sampleCount={sampleCount}
         systemTimings={systemTimings}

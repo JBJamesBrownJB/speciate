@@ -320,4 +320,18 @@ contextBridge.exposeInMainWorld('electron', {
     }
     return await ipcRenderer.invoke('query-l1-cell', worldX, worldY);
   },
+
+  /**
+   * Spawn a plant at the given world position (P0 mode click).
+   * The position is snapped to the nearest P0 cell on the Rust side.
+   *
+   * @param {number} worldX - X coordinate in world units
+   * @param {number} worldY - Y coordinate in world units
+   */
+  spawnPlant: (worldX, worldY) => {
+    if (typeof worldX !== 'number' || typeof worldY !== 'number') {
+      throw new Error('spawnPlant: worldX and worldY must be numbers');
+    }
+    ipcRenderer.send('spawn-plant', { worldX, worldY });
+  },
 });

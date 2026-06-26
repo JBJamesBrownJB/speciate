@@ -502,6 +502,29 @@ impl SimulationEngine {
         creature_count as i32
     }
 
+    /// Spawn a plant at the given world position.
+    ///
+    /// The position is snapped to the nearest P0 cell. Plant type is always 1
+    /// (grass) and density 1.0 for now — future commands will expose these.
+    ///
+    /// # Errors
+    /// * Simulation not started
+    /// * Command queue full
+    #[napi]
+    pub fn spawn_plant(&self, x: f64, y: f64) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
+            .try_send(SimCommand::SpawnPlant {
+                x: x as f32,
+                y: y as f32,
+            })
+            .map_err(|e| {
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
+            })?;
+        Ok(())
+    }
+
     /// Return the latest P0 plant grid snapshot as a sparse Float32Array.
     ///
     /// Format: `[count, x₀, y₀, density₀, type₀, x₁, ...]` — only live cells included.

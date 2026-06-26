@@ -55,7 +55,8 @@ export class InteractionManager {
     this.hitArea.rect(worldLeft, worldTop, worldWidth, worldHeight);
     this.hitArea.fill({ color: 0x000000, alpha: 0.001 });
 
-    if (this.gridOverlay.getMode() === GridMode.L1) {
+    const mode = this.gridOverlay.getMode();
+    if (mode === GridMode.L1 || mode === GridMode.P0) {
       this.hitArea.cursor = 'crosshair';
     } else {
       this.hitArea.cursor = 'default';
@@ -71,11 +72,17 @@ export class InteractionManager {
       return;
     }
 
+    if (this.gridOverlay.getMode() === GridMode.P0) {
+      window.electron?.spawnPlant?.(worldX, worldY);
+      return;
+    }
+
     this.handleCreatureClick(worldX, worldY);
   };
 
   private handlePointerMove = (event: FederatedPointerEvent): void => {
-    if (this.gridOverlay.getMode() !== GridMode.L1) {
+    const mode = this.gridOverlay.getMode();
+    if (mode !== GridMode.L1 && mode !== GridMode.P0) {
       return;
     }
 

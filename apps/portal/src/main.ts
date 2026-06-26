@@ -232,8 +232,10 @@ async function main(): Promise<void> {
       {
         fpsValue: "fps-value",
         tickRateValue: "tick-rate-value",
-        creatureCount: "creature-count",
-        plantCount: "plant-count",
+        creatureWorldCount: "creature-world-count",
+        creatureScreenCount: "creature-screen-count",
+        plantWorldCount: "plant-world-count",
+        plantScreenCount: "plant-screen-count",
         zoomValue: "zoom-value",
       },
       fpsSparkline
@@ -369,9 +371,8 @@ async function main(): Promise<void> {
             telemetry.spatialGridMaxY
           );
         }
-        if (telemetry.plantCount !== undefined) {
-          hudManager.updatePlantCount(telemetry.plantCount);
-        }
+        hudManager.updatePlantWorldCount(telemetry.plantCount ?? 0);
+        hudManager.updateCreatureWorldCount(telemetry.creatureCount ?? 0);
       });
 
       window.addEventListener("beforeunload", async () => {
@@ -422,6 +423,14 @@ async function main(): Promise<void> {
       camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
       scaleBarManager.update(camera.zoom);
 
+      // Cull plants to visible world area
+      const halfW = viewportWidth / 2 / camera.zoom;
+      const halfH = viewportHeight / 2 / camera.zoom;
+      plantRenderer.setViewportBounds(
+        camera.x - halfW, camera.x + halfW,
+        camera.y - halfH, camera.y + halfH
+      );
+
       // Update viewport bounds for backend culling
       sendViewportBounds();
 
@@ -429,7 +438,8 @@ async function main(): Promise<void> {
       const state = ipcClient?.getLatestState();
       if (state) {
         hudManager.updateTickRate(state.tickRateHz || 0);
-        hudManager.updateCreatureCount(currentCreatureCount);
+        hudManager.updateCreatureScreenCount(currentCreatureCount);
+        hudManager.updatePlantScreenCount(plantRenderer.visibleCount);
         hudManager.updateZoom(camera.zoom);
       }
 

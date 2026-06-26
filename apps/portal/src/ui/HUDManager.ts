@@ -3,8 +3,10 @@ import type { FPSSparkline } from "./FPSSparkline";
 interface HUDElements {
   fpsValue: HTMLElement | null;
   tickRateValue: HTMLElement | null;
-  creatureCount: HTMLElement | null;
-  plantCount: HTMLElement | null;
+  creatureWorldCount: HTMLElement | null;
+  creatureScreenCount: HTMLElement | null;
+  plantWorldCount: HTMLElement | null;
+  plantScreenCount: HTMLElement | null;
   zoomValue: HTMLElement | null;
 }
 
@@ -16,8 +18,10 @@ export class HUDManager {
     elementIds: {
       fpsValue: string;
       tickRateValue: string;
-      creatureCount: string;
-      plantCount: string;
+      creatureWorldCount: string;
+      creatureScreenCount: string;
+      plantWorldCount: string;
+      plantScreenCount: string;
       zoomValue: string;
     },
     fpsSparkline: FPSSparkline
@@ -25,8 +29,10 @@ export class HUDManager {
     this.elements = {
       fpsValue: document.getElementById(elementIds.fpsValue),
       tickRateValue: document.getElementById(elementIds.tickRateValue),
-      creatureCount: document.getElementById(elementIds.creatureCount),
-      plantCount: document.getElementById(elementIds.plantCount),
+      creatureWorldCount: document.getElementById(elementIds.creatureWorldCount),
+      creatureScreenCount: document.getElementById(elementIds.creatureScreenCount),
+      plantWorldCount: document.getElementById(elementIds.plantWorldCount),
+      plantScreenCount: document.getElementById(elementIds.plantScreenCount),
       zoomValue: document.getElementById(elementIds.zoomValue),
     };
     this.fpsSparkline = fpsSparkline;
@@ -46,15 +52,27 @@ export class HUDManager {
     }
   }
 
-  updateCreatureCount(count: number): void {
-    if (this.elements.creatureCount) {
-      this.elements.creatureCount.textContent = count.toString();
+  updateCreatureWorldCount(count: number): void {
+    if (this.elements.creatureWorldCount) {
+      this.elements.creatureWorldCount.textContent = count.toString();
     }
   }
 
-  updatePlantCount(count: number): void {
-    if (this.elements.plantCount) {
-      this.elements.plantCount.textContent = count.toString();
+  updateCreatureScreenCount(count: number): void {
+    if (this.elements.creatureScreenCount) {
+      this.elements.creatureScreenCount.textContent = count.toString();
+    }
+  }
+
+  updatePlantWorldCount(count: number): void {
+    if (this.elements.plantWorldCount) {
+      this.elements.plantWorldCount.textContent = count.toString();
+    }
+  }
+
+  updatePlantScreenCount(count: number): void {
+    if (this.elements.plantScreenCount) {
+      this.elements.plantScreenCount.textContent = count.toString();
     }
   }
 

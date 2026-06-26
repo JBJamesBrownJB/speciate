@@ -141,6 +141,11 @@
     #hud .stat:last-child { margin-bottom: 0; }
     #hud .label { color: var(--text-secondary); font-weight: 600; letter-spacing: 0.5px; }
     #hud .value { color: var(--text-accent); font-weight: 500; }
+    #hud .stat-group { margin-bottom: 6px; }
+    #hud .stat-group:last-child { margin-bottom: 0; }
+    #hud .stat-group .group-label { color: var(--text-secondary); font-weight: 600; letter-spacing: 0.5px; display: block; margin-bottom: 2px; }
+    #hud .sub-stat { padding-left: 10px; margin-bottom: 3px; }
+    #hud .sub-stat:last-child { margin-bottom: 0; }
     #hud .value.connected { color: var(--color-life); }
     #hud .value.disconnected { color: var(--color-danger); }
     #hud .value.reconnecting { color: var(--color-warning); }
@@ -571,8 +576,16 @@
     <div class="section">
       <div class="section-title">World</div>
       <div class="stat"><span class="label">Tick Rate:</span><span class="value" id="tick-rate-value">0 Hz</span></div>
-      <div class="stat"><span class="label">Creatures:</span><span class="value" id="creature-count">0</span></div>
-      <div class="stat"><span class="label">Plants:</span><span class="value" id="plant-count">0</span></div>
+      <div class="stat-group">
+        <span class="group-label">Creatures</span>
+        <div class="stat sub-stat"><span class="label">World:</span><span class="value" id="creature-world-count">0</span></div>
+        <div class="stat sub-stat"><span class="label">Screen:</span><span class="value" id="creature-screen-count">0</span></div>
+      </div>
+      <div class="stat-group">
+        <span class="group-label">Plants</span>
+        <div class="stat sub-stat"><span class="label">World:</span><span class="value" id="plant-world-count">0</span></div>
+        <div class="stat sub-stat"><span class="label">Screen:</span><span class="value" id="plant-screen-count">0</span></div>
+      </div>
       <div class="stat"><span class="label">Zoom:</span><span class="value" id="zoom-value">0x</span></div>
     </div>
   </div>

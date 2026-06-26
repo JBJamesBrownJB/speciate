@@ -7,7 +7,10 @@ describe('HUDManager', () => {
   let mockElements: {
     fpsValue: HTMLElement;
     tickRateValue: HTMLElement;
-    creatureCount: HTMLElement;
+    creatureWorldCount: HTMLElement;
+    creatureScreenCount: HTMLElement;
+    plantWorldCount: HTMLElement;
+    plantScreenCount: HTMLElement;
     zoomValue: HTMLElement;
   };
   let mockFpsSparkline: FPSSparkline;
@@ -16,7 +19,10 @@ describe('HUDManager', () => {
     mockElements = {
       fpsValue: createMockElement(),
       tickRateValue: createMockElement(),
-      creatureCount: createMockElement(),
+      creatureWorldCount: createMockElement(),
+      creatureScreenCount: createMockElement(),
+      plantWorldCount: createMockElement(),
+      plantScreenCount: createMockElement(),
       zoomValue: createMockElement(),
     };
 
@@ -27,7 +33,10 @@ describe('HUDManager', () => {
     mockDocumentGetElementById({
       'fps-value': mockElements.fpsValue,
       'tick-rate-value': mockElements.tickRateValue,
-      'creature-count': mockElements.creatureCount,
+      'creature-world-count': mockElements.creatureWorldCount,
+      'creature-screen-count': mockElements.creatureScreenCount,
+      'plant-world-count': mockElements.plantWorldCount,
+      'plant-screen-count': mockElements.plantScreenCount,
       'zoom-value': mockElements.zoomValue,
     });
   });
@@ -42,8 +51,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -51,9 +62,29 @@ describe('HUDManager', () => {
 
       expect(document.getElementById).toHaveBeenCalledWith('fps-value');
       expect(document.getElementById).toHaveBeenCalledWith('tick-rate-value');
-      expect(document.getElementById).toHaveBeenCalledWith('creature-count');
-      expect(document.getElementById).toHaveBeenCalledWith('plant-count');
+      expect(document.getElementById).toHaveBeenCalledWith('creature-world-count');
+      expect(document.getElementById).toHaveBeenCalledWith('creature-screen-count');
+      expect(document.getElementById).toHaveBeenCalledWith('plant-world-count');
+      expect(document.getElementById).toHaveBeenCalledWith('plant-screen-count');
       expect(document.getElementById).toHaveBeenCalledWith('zoom-value');
+    });
+
+    it('constructor resolves all four new IDs via getElementById and does not reference creature-count or plant-count', () => {
+      new HUDManager(
+        {
+          fpsValue: 'fps-value',
+          tickRateValue: 'tick-rate-value',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
+          zoomValue: 'zoom-value',
+        },
+        mockFpsSparkline
+      );
+
+      expect(document.getElementById).not.toHaveBeenCalledWith('creature-count');
+      expect(document.getElementById).not.toHaveBeenCalledWith('plant-count');
     });
   });
 
@@ -63,8 +94,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -80,8 +113,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -95,7 +130,10 @@ describe('HUDManager', () => {
     it('should handle null FPS element', () => {
       mockDocumentGetElementById({
         'tick-rate-value': mockElements.tickRateValue,
-        'creature-count': mockElements.creatureCount,
+        'creature-world-count': mockElements.creatureWorldCount,
+        'creature-screen-count': mockElements.creatureScreenCount,
+        'plant-world-count': mockElements.plantWorldCount,
+        'plant-screen-count': mockElements.plantScreenCount,
         'zoom-value': mockElements.zoomValue,
       });
 
@@ -103,8 +141,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'missing',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -119,8 +159,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -143,8 +185,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -160,8 +204,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -177,8 +223,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -194,8 +242,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -209,7 +259,10 @@ describe('HUDManager', () => {
     it('should handle null tick rate element', () => {
       mockDocumentGetElementById({
         'fps-value': mockElements.fpsValue,
-        'creature-count': mockElements.creatureCount,
+        'creature-world-count': mockElements.creatureWorldCount,
+        'creature-screen-count': mockElements.creatureScreenCount,
+        'plant-world-count': mockElements.plantWorldCount,
+        'plant-screen-count': mockElements.plantScreenCount,
         'zoom-value': mockElements.zoomValue,
       });
 
@@ -217,8 +270,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'missing',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -228,22 +283,24 @@ describe('HUDManager', () => {
     });
   });
 
-  describe('updateCreatureCount', () => {
-    it('should update creature count element', () => {
+  describe('updateCreatureWorldCount', () => {
+    it('updateCreatureWorldCount sets textContent on the creature-world-count element', () => {
       const hud = new HUDManager(
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
       );
 
-      hud.updateCreatureCount(42);
+      hud.updateCreatureWorldCount(42);
 
-      expect(mockElements.creatureCount.textContent).toBe('42');
+      expect(mockElements.creatureWorldCount.textContent).toBe('42');
     });
 
     it('should handle zero creatures', () => {
@@ -251,16 +308,18 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
       );
 
-      hud.updateCreatureCount(0);
+      hud.updateCreatureWorldCount(0);
 
-      expect(mockElements.creatureCount.textContent).toBe('0');
+      expect(mockElements.creatureWorldCount.textContent).toBe('0');
     });
 
     it('should handle large creature counts', () => {
@@ -268,22 +327,27 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
       );
 
-      hud.updateCreatureCount(10000);
+      hud.updateCreatureWorldCount(1000000);
 
-      expect(mockElements.creatureCount.textContent).toBe('10000');
+      expect(mockElements.creatureWorldCount.textContent).toBe('1000000');
     });
 
-    it('should handle null creature count element', () => {
+    it('should handle null creature world count element', () => {
       mockDocumentGetElementById({
         'fps-value': mockElements.fpsValue,
         'tick-rate-value': mockElements.tickRateValue,
+        'creature-screen-count': mockElements.creatureScreenCount,
+        'plant-world-count': mockElements.plantWorldCount,
+        'plant-screen-count': mockElements.plantScreenCount,
         'zoom-value': mockElements.zoomValue,
       });
 
@@ -291,14 +355,157 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'missing',
-          plantCount: 'missing',
+          creatureWorldCount: 'missing',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
       );
 
-      expect(() => hud.updateCreatureCount(42)).not.toThrow();
+      expect(() => hud.updateCreatureWorldCount(42)).not.toThrow();
+    });
+  });
+
+  describe('updateCreatureScreenCount', () => {
+    it('updateCreatureScreenCount sets textContent on the creature-screen-count element', () => {
+      const hud = new HUDManager(
+        {
+          fpsValue: 'fps-value',
+          tickRateValue: 'tick-rate-value',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
+          zoomValue: 'zoom-value',
+        },
+        mockFpsSparkline
+      );
+
+      hud.updateCreatureScreenCount(7);
+
+      expect(mockElements.creatureScreenCount.textContent).toBe('7');
+    });
+
+    it('should handle null creature screen count element', () => {
+      mockDocumentGetElementById({
+        'fps-value': mockElements.fpsValue,
+        'tick-rate-value': mockElements.tickRateValue,
+        'creature-world-count': mockElements.creatureWorldCount,
+        'plant-world-count': mockElements.plantWorldCount,
+        'plant-screen-count': mockElements.plantScreenCount,
+        'zoom-value': mockElements.zoomValue,
+      });
+
+      const hud = new HUDManager(
+        {
+          fpsValue: 'fps-value',
+          tickRateValue: 'tick-rate-value',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'missing',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
+          zoomValue: 'zoom-value',
+        },
+        mockFpsSparkline
+      );
+
+      expect(() => hud.updateCreatureScreenCount(7)).not.toThrow();
+    });
+  });
+
+  describe('updatePlantWorldCount', () => {
+    it('updatePlantWorldCount sets textContent on the plant-world-count element', () => {
+      const hud = new HUDManager(
+        {
+          fpsValue: 'fps-value',
+          tickRateValue: 'tick-rate-value',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
+          zoomValue: 'zoom-value',
+        },
+        mockFpsSparkline
+      );
+
+      hud.updatePlantWorldCount(500);
+
+      expect(mockElements.plantWorldCount.textContent).toBe('500');
+    });
+
+    it('should handle null plant world count element', () => {
+      mockDocumentGetElementById({
+        'fps-value': mockElements.fpsValue,
+        'tick-rate-value': mockElements.tickRateValue,
+        'creature-world-count': mockElements.creatureWorldCount,
+        'creature-screen-count': mockElements.creatureScreenCount,
+        'plant-screen-count': mockElements.plantScreenCount,
+        'zoom-value': mockElements.zoomValue,
+      });
+
+      const hud = new HUDManager(
+        {
+          fpsValue: 'fps-value',
+          tickRateValue: 'tick-rate-value',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'missing',
+          plantScreenCount: 'plant-screen-count',
+          zoomValue: 'zoom-value',
+        },
+        mockFpsSparkline
+      );
+
+      expect(() => hud.updatePlantWorldCount(500)).not.toThrow();
+    });
+  });
+
+  describe('updatePlantScreenCount', () => {
+    it('updatePlantScreenCount sets textContent on the plant-screen-count element', () => {
+      const hud = new HUDManager(
+        {
+          fpsValue: 'fps-value',
+          tickRateValue: 'tick-rate-value',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
+          zoomValue: 'zoom-value',
+        },
+        mockFpsSparkline
+      );
+
+      hud.updatePlantScreenCount(200);
+
+      expect(mockElements.plantScreenCount.textContent).toBe('200');
+    });
+
+    it('should handle null plant screen count element', () => {
+      mockDocumentGetElementById({
+        'fps-value': mockElements.fpsValue,
+        'tick-rate-value': mockElements.tickRateValue,
+        'creature-world-count': mockElements.creatureWorldCount,
+        'creature-screen-count': mockElements.creatureScreenCount,
+        'plant-world-count': mockElements.plantWorldCount,
+        'zoom-value': mockElements.zoomValue,
+      });
+
+      const hud = new HUDManager(
+        {
+          fpsValue: 'fps-value',
+          tickRateValue: 'tick-rate-value',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'missing',
+          zoomValue: 'zoom-value',
+        },
+        mockFpsSparkline
+      );
+
+      expect(() => hud.updatePlantScreenCount(200)).not.toThrow();
     });
   });
 
@@ -308,8 +515,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -325,8 +534,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -342,8 +553,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -358,15 +571,20 @@ describe('HUDManager', () => {
       mockDocumentGetElementById({
         'fps-value': mockElements.fpsValue,
         'tick-rate-value': mockElements.tickRateValue,
-        'creature-count': mockElements.creatureCount,
+        'creature-world-count': mockElements.creatureWorldCount,
+        'creature-screen-count': mockElements.creatureScreenCount,
+        'plant-world-count': mockElements.plantWorldCount,
+        'plant-screen-count': mockElements.plantScreenCount,
       });
 
       const hud = new HUDManager(
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'missing',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'missing',
         },
         mockFpsSparkline
@@ -382,8 +600,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'fps-value',
           tickRateValue: 'tick-rate-value',
-          creatureCount: 'creature-count',
-          plantCount: 'plant-count',
+          creatureWorldCount: 'creature-world-count',
+          creatureScreenCount: 'creature-screen-count',
+          plantWorldCount: 'plant-world-count',
+          plantScreenCount: 'plant-screen-count',
           zoomValue: 'zoom-value',
         },
         mockFpsSparkline
@@ -391,12 +611,18 @@ describe('HUDManager', () => {
 
       hud.updateFPS(60);
       hud.updateTickRate(15.5);
-      hud.updateCreatureCount(1000);
+      hud.updateCreatureWorldCount(1000);
+      hud.updateCreatureScreenCount(50);
+      hud.updatePlantWorldCount(5000);
+      hud.updatePlantScreenCount(200);
       hud.updateZoom(10.5);
 
       expect(mockElements.fpsValue.textContent).toBe('60');
       expect(mockElements.tickRateValue.textContent).toBe('15.5 Hz');
-      expect(mockElements.creatureCount.textContent).toBe('1000');
+      expect(mockElements.creatureWorldCount.textContent).toBe('1000');
+      expect(mockElements.creatureScreenCount.textContent).toBe('50');
+      expect(mockElements.plantWorldCount.textContent).toBe('5000');
+      expect(mockElements.plantScreenCount.textContent).toBe('200');
       expect(mockElements.zoomValue.textContent).toBe('10.50x');
       expect(mockFpsSparkline.update).toHaveBeenCalledWith(60);
     });
@@ -408,8 +634,10 @@ describe('HUDManager', () => {
         {
           fpsValue: 'missing',
           tickRateValue: 'missing',
-          creatureCount: 'missing',
-          plantCount: 'missing',
+          creatureWorldCount: 'missing',
+          creatureScreenCount: 'missing',
+          plantWorldCount: 'missing',
+          plantScreenCount: 'missing',
           zoomValue: 'missing',
         },
         mockFpsSparkline
@@ -418,7 +646,10 @@ describe('HUDManager', () => {
       expect(() => {
         hud.updateFPS(60);
         hud.updateTickRate(15);
-        hud.updateCreatureCount(100);
+        hud.updateCreatureWorldCount(100);
+        hud.updateCreatureScreenCount(10);
+        hud.updatePlantWorldCount(500);
+        hud.updatePlantScreenCount(50);
         hud.updateZoom(10);
       }).not.toThrow();
     });

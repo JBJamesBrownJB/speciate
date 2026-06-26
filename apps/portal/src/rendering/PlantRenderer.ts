@@ -41,6 +41,13 @@ export function parsePlantBuffer(buf: Float32Array): PlantCellData[] {
   return result;
 }
 
+interface ViewportBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
 /**
  * Renders the P0 plant grid as simple coloured circles in world space.
  *
@@ -50,6 +57,9 @@ export function parsePlantBuffer(buf: Float32Array): PlantCellData[] {
  */
 export class PlantRenderer {
   private graphics: Graphics;
+  private allCells: PlantCellData[] = [];
+  private viewportBounds: ViewportBounds | null = null;
+  private _visibleCount = 0;
 
   constructor(container: Container) {
     this.graphics = new Graphics();
@@ -61,15 +71,46 @@ export class PlantRenderer {
    * Called whenever the Electron main process delivers a new plant update.
    */
   updateFromBuffer(buf: Float32Array): void {
-    this.graphics.clear();
+    this.allCells = parsePlantBuffer(buf);
+    this.renderVisible();
+  }
 
-    const cells = parsePlantBuffer(buf);
+  /**
+   * Set the world-space viewport bounds for culling.
+   * Only cells whose centre falls within [minX, maxX] × [minY, maxY]
+   * (inclusive) will be drawn. Triggers an immediate re-filter and redraw.
+   */
+  setViewportBounds(minX: number, maxX: number, minY: number, maxY: number): void {
+    this.viewportBounds = { minX, maxX, minY, maxY };
+    this.renderVisible();
+  }
+
+  /** Number of plant cells currently rendered (within viewport bounds). */
+  get visibleCount(): number {
+    return this._visibleCount;
+  }
+
+  /**
+   * Filter allCells to the current viewport bounds (inclusive) and redraw.
+   * When no bounds are set every cell is rendered — backward-compatible.
+   */
+  private renderVisible(): void {
+    const cells =
+      this.viewportBounds === null
+        ? this.allCells
+        : this.allCells.filter(({ x, y }) => {
+            const { minX, maxX, minY, maxY } = this.viewportBounds!;
+            return x >= minX && x <= maxX && y >= minY && y <= maxY;
+          });
+
+    this.graphics.clear();
     for (const { x, y, density } of cells) {
       const alpha = Math.min(1, density * 0.7 + 0.3);
       this.graphics.fill({ color: 0x2d8a4e, alpha });
       this.graphics.circle(x, y, 2);
       this.graphics.fill();
     }
+    this._visibleCount = cells.length;
   }
 
   destroy(): void {

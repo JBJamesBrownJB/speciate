@@ -29,7 +29,7 @@ import { PauseControl } from "@/ui/PauseControl";
 import { TimeScaleControl } from "@/ui/TimeScaleControl";
 import { ToolsPanel } from "@/ui/ToolsPanel";
 import { InteractionManager } from "@/interaction";
-import { GridMode } from "@/rendering/overlays/SpatialGridOverlay";
+import { GridMode, P0_CELL_SIZE } from "@/rendering/overlays/SpatialGridOverlay";
 import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
@@ -423,12 +423,12 @@ async function main(): Promise<void> {
       camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
       scaleBarManager.update(camera.zoom);
 
-      // Cull plants to visible world area
+      // Cull plants to visible world area (+1 cell margin so edge cells never vanish)
       const halfW = viewportWidth / 2 / camera.zoom;
       const halfH = viewportHeight / 2 / camera.zoom;
       plantRenderer.setViewportBounds(
-        camera.x - halfW, camera.x + halfW,
-        camera.y - halfH, camera.y + halfH
+        camera.x - halfW - P0_CELL_SIZE, camera.x + halfW + P0_CELL_SIZE,
+        camera.y - halfH - P0_CELL_SIZE, camera.y + halfH + P0_CELL_SIZE
       );
 
       // Update viewport bounds for backend culling

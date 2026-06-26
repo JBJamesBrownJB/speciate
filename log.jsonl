@@ -96,3 +96,4 @@
 {"id":"019f05f9-6d01-7700-988b-1112a4026a92","author":"JB","kind":"prompt","text":"works for npm run dev but still same issue for npm run dev:release","ts":"2026-06-26T22:07:39Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
 {"id":"019f05f9-ef6a-7323-8a8c-046308751572","author":"JB","kind":"summary","text":"Fixed. `dev:release` and `dev:tools` now have `--race` too. All three parallel-launch scripts will terminate the Vite servers when Electron closes.","ts":"2026-06-26T22:08:13Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
 {"id":"019f05fa-4e02-7821-8dc8-ebe16922477a","author":"JB","kind":"prompt","text":"yup you got it, any cleanup needed?","ts":"2026-06-26T22:08:37Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
+{"id":"019f05fa-b041-72e0-a4f1-e66b2b5f50db","author":"JB","kind":"summary","text":"You're clean.","ts":"2026-06-26T22:09:03Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}

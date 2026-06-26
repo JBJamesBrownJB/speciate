@@ -98,3 +98,4 @@
 {"id":"019f05fa-4e02-7821-8dc8-ebe16922477a","author":"JB","kind":"prompt","text":"yup you got it, any cleanup needed?","ts":"2026-06-26T22:08:37Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
 {"id":"019f05fa-b041-72e0-a4f1-e66b2b5f50db","author":"JB","kind":"summary","text":"You're clean.","ts":"2026-06-26T22:09:03Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
 {"id":"019f05fb-bb11-78a0-9c37-ef113715b4c3","author":"JB","kind":"prompt","text":"ok well commmit, push","ts":"2026-06-26T22:10:10Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
+{"id":"019f05fb-f516-7d82-97cf-be0e091d4155","author":"JB","kind":"summary","text":"Pushed. Two commits landed: the `--race` fix for `dev`, and the same for `dev:release` and `dev:tools`.","ts":"2026-06-26T22:10:26Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}

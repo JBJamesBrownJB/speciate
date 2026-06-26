@@ -4,10 +4,10 @@ Active bugs discovered during testing. Fix before merge to main when flagged URG
 
 ---
 
-## BUG-001 — L1 grid biomass stats attributed to wrong cell [URGENT]
+## BUG-001 — L1 grid biomass stats attributed to wrong cell [RESOLVED]
 
 **Discovered:** 2026-06-26  
-**Status:** Open  
+**Status:** Fixed — merged 2026-06-26 (fix/l1-cell-index-rca → main)  
 **Area:** `apps/simulation/src/simulation/spatial/` — L1 aggregation  
 
 **Observed behaviour:**  

@@ -38,6 +38,7 @@ export interface SystemTimingsSnapshot {
   behaviorTransitionUs: number;
   steeringUs: number; // Fused steering system (Sprint 20)
   captureDebugAccelUs: number;
+  plantUs: number;
   archetypeCount: number;
   entityCount: number;
 }

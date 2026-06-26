@@ -243,6 +243,7 @@ mod tests {
             steering_us: 230,
             capture_debug_accel_us: 5,
             export_positions_us: 135,
+            plant_us: 0,
             cells_queried_total: 4500,
             archetype_count: 10,
             entity_count: 1000,

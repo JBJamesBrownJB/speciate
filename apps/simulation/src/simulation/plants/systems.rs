@@ -1,5 +1,7 @@
-use bevy_ecs::prelude::ResMut;
+use bevy_ecs::prelude::*;
 use super::grid::PlantGrid;
+#[cfg(feature = "dev-tools")]
+use crate::instrumentation::SystemTimings;
 
 /// Runs every tick — owns all plant lifecycle logic.
 ///
@@ -7,7 +9,13 @@ use super::grid::PlantGrid;
 /// test simulations that don't insert the resource. Future additions: density growth,
 /// seed dispersal, cell death when density reaches zero, and depletion signals from
 /// creature feeding.
-pub fn update_plants(_grid: Option<ResMut<PlantGrid>>) {}
+pub fn update_plants(
+    _grid: Option<ResMut<PlantGrid>>,
+    #[cfg(feature = "dev-tools")] timings: Res<SystemTimings>,
+) {
+    #[cfg(feature = "dev-tools")]
+    crate::time_system!(timings, "plants");
+}
 
 #[cfg(test)]
 mod tests {

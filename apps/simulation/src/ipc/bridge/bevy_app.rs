@@ -153,8 +153,8 @@ impl NapiApp {
 
         simulation.world.insert_resource(ViewportBounds::default());
 
-        // Insert an empty P0 plant grid. Plants are placed by SpawnPlant commands only.
-        {
+        // Insert an empty P0 plant grid only on a fresh start; save-state restores populate it.
+        if !simulation.world.contains_resource::<PlantGrid>() {
             let bounds = *simulation.world.resource::<BoundaryConfig>();
             let grid = PlantGrid::from_bounds(&bounds);
             simulation.world.insert_resource(grid);

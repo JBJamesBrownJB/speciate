@@ -152,6 +152,19 @@ impl PlantGrid {
         buf[0] = count as f32;
     }
 
+    /// Return all live cells as world-space tuples `(x, y, density, plant_type)`.
+    pub fn live_cells_world(&self) -> Vec<(f32, f32, f32, u8)> {
+        self.cells
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.is_live())
+            .map(|(idx, c)| {
+                let (x, y) = self.cell_centre(idx);
+                (x, y, c.density, c.plant_type)
+            })
+            .collect()
+    }
+
     pub fn live_count(&self) -> usize {
         self.cells.iter().filter(|c| c.is_live()).count()
     }

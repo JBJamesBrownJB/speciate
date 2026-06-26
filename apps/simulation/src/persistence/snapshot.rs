@@ -1,5 +1,6 @@
 use crate::simulation::creatures::components::CritId;
 use crate::simulation::creatures::systems::NextCreatureId;
+use crate::simulation::plants::PlantGrid;
 use crate::simulation::{Simulation, SimulationBuilder};
 use bevy_ecs::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -24,11 +25,22 @@ pub struct WorldConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedPlant {
+    pub x: f32,
+    pub y: f32,
+    pub density: f32,
+    pub plant_type: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldSaveState {
     pub metadata: SaveStateMetadata,
     pub world: WorldConfig,
     pub scene_ron: String,
     pub entity_id_map: Vec<(u32, u32)>,
+    /// Sparse list of live plant cells — absent in old saves (defaults to empty).
+    #[serde(default)]
+    pub plants: Vec<SavedPlant>,
 }
 
 #[derive(Debug)]
@@ -164,6 +176,17 @@ impl Simulation {
 
         drop(type_registry_guard);
 
+        let plants: Vec<SavedPlant> = self
+            .world
+            .get_resource::<PlantGrid>()
+            .map(|grid| {
+                grid.live_cells_world()
+                    .into_iter()
+                    .map(|(x, y, density, plant_type)| SavedPlant { x, y, density, plant_type })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         Ok(WorldSaveState {
             metadata: SaveStateMetadata {
                 version: "2.0.0".to_string(),
@@ -174,6 +197,7 @@ impl Simulation {
             world: WorldConfig { extent_x, extent_y },
             scene_ron,
             entity_id_map,
+            plants,
         })
     }
 
@@ -259,6 +283,18 @@ impl Simulation {
                 .world
                 .entity_mut(entity)
                 .insert(L1Vision::new());
+        }
+
+        // Restore plant grid.  build from world bounds (already set above), then
+        // replay the sparse live-cell list from the save.
+        {
+            use crate::simulation::core::components::BoundaryConfig;
+            let bounds = *simulation.world.resource::<BoundaryConfig>();
+            let mut grid = PlantGrid::from_bounds(&bounds);
+            for p in &save_state.plants {
+                grid.set_plant(p.x, p.y, p.density, p.plant_type);
+            }
+            simulation.world.insert_resource(grid);
         }
 
         Ok(simulation)
@@ -499,6 +535,39 @@ mod tests {
             !neighbor_caches[0].has_neighbors(),
             "Fresh NeighborCache should have no neighbors"
         );
+    }
+
+    #[test]
+    fn test_plant_round_trip_preserves_live_cells() {
+        use crate::simulation::core::components::BoundaryConfig;
+        use crate::simulation::plants::{PlantGrid, P0_CELL_SIZE};
+
+        let mut sim = SimulationBuilder::new().set_boundaries(200.0, 150.0).build();
+        // Plant grid is not inserted by SimulationBuilder — insert manually as bevy_app.rs does.
+        {
+            let bounds = *sim.world.resource::<BoundaryConfig>();
+            let mut grid = PlantGrid::from_bounds(&bounds);
+            grid.set_plant(10.0, 20.0, 0.8, 1);
+            grid.set_plant(-50.0, 30.0, 0.5, 2);
+            sim.world.insert_resource(grid);
+        }
+        // Need at least one creature for the save to succeed.
+        let builder = CritBuilder::new().at(0.0, 0.0);
+        sim.spawn_crit(builder);
+
+        let save_state = sim.to_save_state().expect("save should succeed");
+        assert_eq!(save_state.plants.len(), 2, "two live cells should be saved");
+
+        let restored =
+            Simulation::from_save_state(save_state).expect("restore should succeed");
+
+        let grid = restored.world.resource::<PlantGrid>();
+        assert_eq!(grid.live_count(), 2, "both plants should be restored");
+        // Verify one known position round-trips correctly
+        let idx = grid.cell_idx(10.0, 20.0).expect("cell (10,20) should be in bounds");
+        let (cx, cy) = grid.cell_centre(idx);
+        assert!((cx - 10.0).abs() < P0_CELL_SIZE, "x within one cell of original");
+        assert!((cy - 20.0).abs() < P0_CELL_SIZE, "y within one cell of original");
     }
 
     #[test]

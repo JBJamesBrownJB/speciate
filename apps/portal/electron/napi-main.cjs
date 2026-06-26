@@ -188,7 +188,7 @@ function startSimulation() {
         console.error('[Electron NAPI] Plant buffer error:', error);
       }
     };
-    // Deliver once at startup (after a short delay so the sim has seeded), then every 2s.
+    // Deliver once at startup (allow sim a moment to initialize), then every 2s.
     setTimeout(deliverPlants, 500);
     setInterval(deliverPlants, 2000);
 

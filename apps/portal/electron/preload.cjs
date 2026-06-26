@@ -329,8 +329,8 @@ contextBridge.exposeInMainWorld('electron', {
    * @param {number} worldY - Y coordinate in world units
    */
   spawnPlant: (worldX, worldY) => {
-    if (typeof worldX !== 'number' || typeof worldY !== 'number') {
-      throw new Error('spawnPlant: worldX and worldY must be numbers');
+    if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) {
+      throw new Error('spawnPlant: worldX and worldY must be finite numbers');
     }
     ipcRenderer.send('spawn-plant', { worldX, worldY });
   },

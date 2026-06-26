@@ -292,11 +292,13 @@ impl NapiApp {
                     }
                 }
                 SimCommand::SpawnPlant { x, y } => {
-                    if let Some(mut grid) =
-                        self.simulation.world.get_resource_mut::<PlantGrid>()
-                    {
-                        grid.set_plant(x, y, 1.0, 1);
-                        grid.write_sparse(&mut self.plant_buffer.lock());
+                    if x.is_finite() && y.is_finite() {
+                        if let Some(mut grid) =
+                            self.simulation.world.get_resource_mut::<PlantGrid>()
+                        {
+                            grid.set_plant(x, y, 1.0, 1);
+                            grid.write_sparse(&mut self.plant_buffer.lock());
+                        }
                     }
                 }
                 #[cfg(feature = "dev-tools")]

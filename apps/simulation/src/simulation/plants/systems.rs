@@ -20,7 +20,6 @@ pub fn update_plants(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy_ecs::prelude::*;
     use crate::simulation::core::components::BoundaryConfig;
     use crate::simulation::plants::PlantGrid;
 

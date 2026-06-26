@@ -13,3 +13,4 @@
 {"id":"019f0439-892f-7e92-93a1-60df8763928b","author":"JB","kind":"summary","text":"I don't see a screenshot attached to your message — can you share it again?","ts":"2026-06-26T13:58:27Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
 {"id":"019f0474-023b-72a0-a6f4-1ce15dfab91c","author":"JB","kind":"prompt","text":"its in the repo fool!","ts":"2026-06-26T15:02:18Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
 {"id":"019f0479-7c07-7591-becf-5c887d139521","author":"JB","kind":"summary","text":"That's now fixed and pushed. **Do `npm run dev:release` to rebuild with the correct fix, then test visually.**","ts":"2026-06-26T15:08:18Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}
+{"id":"019f0485-65bd-7e50-bf1b-2523aaa495a8","author":"JB","kind":"prompt","text":"erm, what do you mean the screenshot was showing the old bug!? I literally ran it just now!, ill run it again to prove it","ts":"2026-06-26T15:21:18Z","turn":"ffc98449-c846-4e66-a881-678f264a0c07"}

@@ -156,6 +156,7 @@ fn test_gamestate_includes_timing_fields() {
             perception_us: 250,
             spatial_grid_rebuild_us: 50,
             l1_aggregation_us: 20,
+            l2_aggregation_us: 0,
             behavior_transition_us: 50,
             steering_us: 85,
             capture_debug_accel_us: 2,

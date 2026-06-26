@@ -29,6 +29,10 @@ pub struct SimulationBuilder {
 
 impl SimulationBuilder {
     pub fn new() -> Self {
+        // Required for query.par_iter_mut() in steering and movement systems.
+        // get_or_init is idempotent — safe to call multiple times.
+        bevy_tasks::ComputeTaskPool::get_or_init(bevy_tasks::TaskPool::default);
+
         let mut world = World::new();
         let mut schedule = Schedule::default();
 
@@ -673,5 +677,51 @@ mod tests {
             .iter(sim.world_mut())
             .count();
         assert_eq!(count, 0, "Should still be 0 after multiple clears");
+    }
+
+    // ── par_iter_mut gate tests ────────────────────────────────────────────────
+    // These prove the two preconditions that make native Bevy par_iter_mut safe.
+    // If either fails, revert steering/movement to the collect+Rayon fallback.
+
+    #[test]
+    fn compute_task_pool_has_multiple_threads() {
+        // Gate 1: silent serial fallback = −7 ms gain becomes a hidden regression.
+        // get_or_init mirrors what SimulationBuilder::new() does at runtime.
+        let pool = bevy_tasks::ComputeTaskPool::get_or_init(bevy_tasks::TaskPool::default);
+        let n = pool.thread_num();
+        assert!(
+            n > 1,
+            "ComputeTaskPool has only {n} thread(s) — par_iter_mut will run \
+             single-threaded, erasing the −7 ms gain. Check bevy_tasks \
+             multi_threaded feature and TaskPool::default thread count."
+        );
+    }
+
+    #[test]
+    fn par_iter_mut_produces_valid_positions_after_ticks() {
+        // Gate 2: par_iter_mut must not corrupt position data (NaN/Inf).
+        // Full cross-seed determinism is verified by latency_lab --cells-queried.
+        use crate::simulation::core::components::Position;
+        let mut sim = SimulationBuilder::new()
+            .set_boundaries(500.0, 500.0)
+            .with_deterministic_movement()
+            .build();
+        for i in 0..20 {
+            sim.spawn_crit_at(i as f32 * 20.0, 0.0);
+        }
+        for _ in 0..10 {
+            sim.update(0.05);
+        }
+        let positions: Vec<(f32, f32)> = sim
+            .world_mut()
+            .query::<&Position>()
+            .iter(sim.world_mut())
+            .map(|p| (p.x, p.y))
+            .collect();
+        assert_eq!(positions.len(), 20);
+        for (x, y) in &positions {
+            assert!(x.is_finite(), "position.x is not finite: {x}");
+            assert!(y.is_finite(), "position.y is not finite: {y}");
+        }
     }
 }

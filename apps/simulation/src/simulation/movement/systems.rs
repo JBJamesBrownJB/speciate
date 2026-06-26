@@ -12,7 +12,6 @@ use crate::simulation::creatures::constants::{
 use crate::simulation::math::{fast_atan2, normalize_angle};
 use crate::simulation::movement::noise::NoiseTable;
 use bevy_ecs::prelude::*;
-use rayon::prelude::*;
 pub fn integrate_motion_system(
     mut query: Query<(
         Entity,
@@ -50,15 +49,12 @@ pub fn integrate_motion_system(
     // Get reference to noise table for parallel access
     let noise_ref = &*noise_table;
 
-    // Collect entities into Vec for Rayon parallel processing
-    let mut entities: Vec<_> = query.iter_mut().collect();
-
     let stopped_threshold_sq = STOPPED_THRESHOLD * STOPPED_THRESHOLD;
 
-    // Parallel physics integration + boundary enforcement + rotation (merged into single loop)
-    // Movement: Light, uniform workload - moderate chunks for efficiency
-    entities.par_iter_mut().with_min_len(256).for_each(
-        |(entity, size, position, velocity, acceleration, creature_state, rotation)| {
+    // Native Bevy par_iter_mut — eliminates the per-tick 1M-entity Vec allocation.
+    // ComputeTaskPool is initialised once in SimulationBuilder::new().
+    query.par_iter_mut().for_each(
+        |(entity, size, mut position, mut velocity, mut acceleration, creature_state, mut rotation)| {
             if creature_state.behavior == BehaviorMode::Catatonic {
                 acceleration.ax = 0.0;
                 acceleration.ay = 0.0;

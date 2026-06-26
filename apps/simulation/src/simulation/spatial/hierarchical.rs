@@ -123,4 +123,44 @@ mod tests {
         assert!(grid.l1.width() >= 6, "Expected L1 width >= 6, got {}", grid.l1.width());
         assert!(grid.l1.height() >= 6, "Expected L1 height >= 6, got {}", grid.l1.height());
     }
+
+    /// RED TEST — proves that aggregate_l1 writes biomass to the WRONG L1 cell when
+    /// the world origin is not aligned to a 3×L0-cell (60 m) boundary.
+    ///
+    /// With bounds (−80, 80) the SpatialGrid padding rule yields
+    /// l0.min_cell_x = −5, and −5 % 3 = −2 ≠ 0, so `l0_to_l1_cell_index` maps
+    /// the L0 array column to the wrong L1 column.  Biomass accumulates in the
+    /// *adjacent* L1 cell rather than the cell that actually contains the creature.
+    ///
+    /// This test MUST FAIL until the fix lands.
+    #[test]
+    fn aggregate_l1_places_biomass_in_correct_l1_cell() {
+        use bevy_ecs::prelude::Entity;
+
+        // (−80, 80, −80, 80): SpatialGrid ±1 padding gives L0 min_cell_x = −5.
+        // −5 % 3 = −2 ≠ 0  →  l0_to_l1_cell_index bug is live.
+        let mut hgrid = HierarchicalGrid::with_fixed_bounds(-80.0, 80.0, -80.0, 80.0);
+
+        // Populate the L0 *back* buffer (write_grid) with one creature at world (1.0, 1.0).
+        // rebuild_parallel requires fixed_bounds = true, which with_fixed_bounds guarantees.
+        hgrid.l0.write_grid().rebuild_parallel(std::iter::once(
+            (Entity::from_raw(1), 1.0_f32, 1.0_f32, 0.0_f32, 0.0_f32, 2.0_f32),
+        ));
+
+        // aggregate_l1 reads the back buffer and maps L0 cells → L1 cells.
+        // Due to the bug, the creature at L0 arr col 5 is aggregated into
+        // L1 arr idx 5 (world cell (−1,−1)) instead of correct idx 10 (world cell (0,0)).
+        hgrid.aggregate_l1();
+
+        // The creature at world (1,1) belongs to L1 world cell (0,0).
+        // If the bug is present, get_biosignature_at(1,1) reads L1 arr idx 10 which is empty.
+        let sig = hgrid.l1.get_biosignature_at(1.0, 1.0);
+        assert!(
+            sig.creature_count > 0,
+            "L1 cell at world (1,1) should contain the creature after aggregate_l1 \
+             (creature_count={}). Bug: l0_to_l1_cell_index maps L0 arr col to the wrong \
+             L1 cell when l0.min_cell_x is not divisible by 3.",
+            sig.creature_count,
+        );
+    }
 }

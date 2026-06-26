@@ -993,8 +993,9 @@ impl SimulationEngine {
             eprintln!("✅ Bevy thread stopped cleanly");
         }
 
-        // THEN shutdown save state worker (after Bevy thread has queued its shutdown save)
-        if let Some(ref worker) = self.save_state_worker {
+        // THEN shutdown save state worker (after Bevy thread has queued its shutdown save).
+        // .take() so the Drop impl sees None and doesn't double-shutdown (which hangs).
+        if let Some(worker) = self.save_state_worker.take() {
             eprintln!("🛑 Shutting down SaveStateWorker...");
             worker.lock().shutdown();
             eprintln!("✅ SaveStateWorker stopped");
@@ -1178,8 +1179,9 @@ impl Drop for SimulationEngine {
             }
         }
 
-        // THEN shutdown save state worker (after Bevy thread has queued its shutdown save)
-        if let Some(ref worker) = self.save_state_worker {
+        // THEN shutdown save state worker (after Bevy thread has queued its shutdown save).
+        // .take() is idempotent: if stop() already ran, this is None and is a no-op.
+        if let Some(worker) = self.save_state_worker.take() {
             eprintln!("🧹 Drop: Shutting down SaveStateWorker...");
             worker.lock().shutdown();
         }

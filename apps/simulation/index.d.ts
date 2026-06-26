@@ -122,6 +122,17 @@ export declare class SimulationEngine {
    */
   fillBuffer(buffer: Float32Array): number
   /**
+   * Spawn a plant at the given world position.
+   *
+   * The position is snapped to the nearest P0 cell. Plant type is always 1
+   * (grass) and density 1.0 for now — future commands will expose these.
+   *
+   * # Errors
+   * * Simulation not started
+   * * Command queue full
+   */
+  spawnPlant(x: number, y: number): void
+  /**
    * Return the latest P0 plant grid snapshot as a sparse Float32Array.
    *
    * Format: `[count, x₀, y₀, density₀, type₀, x₁, ...]` — only live cells included.

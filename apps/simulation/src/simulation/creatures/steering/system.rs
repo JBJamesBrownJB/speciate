@@ -487,4 +487,61 @@ mod tests {
             max_accel
         );
     }
+
+    #[test]
+    fn avoidance_fires_at_spawn_energy() {
+        // Regression guard: avoidance must fire for a creature at real spawn energy
+        // (DEFAULT_ENERGY = 100.0) when an approaching neighbor is present.
+        // Any behavioral gate on energy with a threshold between 0 and DEFAULT_ENERGY
+        // would suppress avoidance for every freshly spawned creature — this test
+        // would have caught the hunger-gated-avoidance regression (2026-06-26).
+        //
+        // Uses Catatonic so wander/seek forces are zero: avoidance is the sole
+        // contributor, making a non-zero magnitude an unambiguous avoidance signal.
+        use crate::simulation::creatures::constants::DEFAULT_ENERGY;
+        use crate::simulation::perception::components::NeighborData;
+
+        let mut cache = NeighborCache::new();
+        cache.add_neighbor(NeighborData {
+            entity: Entity::PLACEHOLDER,
+            x: 10.0,
+            y: 0.0,
+            vx: -5.0, // approaching fast
+            vy: 0.0,
+            radius: 0.5,
+        });
+
+        let mut world = World::new();
+        let entity = world
+            .spawn((
+                Position { x: 0.0, y: 0.0 },
+                Velocity { vx: 0.0, vy: 0.0 },
+                Acceleration::default(),
+                BodySize::default(),
+                Brain::default(),
+                test_wander_state(),
+                HomePosition::new(0.0, 0.0),
+                Target::at_point(0.0, 0.0),
+                cache,
+                CreatureState {
+                    behavior: BehaviorMode::Catatonic,
+                    energy: DEFAULT_ENERGY,
+                    ..Default::default()
+                },
+                CanWander,
+                CanSeek,
+                CanAvoidObstacles,
+            ))
+            .id();
+
+        run_system(&mut world);
+
+        let accel = world.get::<Acceleration>(entity).unwrap();
+        let mag = (accel.ax * accel.ax + accel.ay * accel.ay).sqrt();
+        assert!(
+            mag > 0.0,
+            "Creature at spawn energy ({DEFAULT_ENERGY}) with approaching neighbor must produce \
+             avoidance acceleration — got zero (avoidance is being gated or neighbor not seen)"
+        );
+    }
 }

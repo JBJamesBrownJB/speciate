@@ -761,15 +761,6 @@ app.on('before-quit', (event) => {
   } finally {
     simulationEngine = null;
     shuttingDown = false;
-
-    // Diagnostic: dump active handles so we know exactly what's keeping the process alive
-    const handles = process._getActiveHandles();
-    const requests = process._getActiveRequests();
-    console.log(`[Shutdown diag] Active handles (${handles.length}):`);
-    handles.forEach((h, i) => console.log(`  [${i}] ${h.constructor.name}`, h._type || '', h.fd || ''));
-    console.log(`[Shutdown diag] Active requests (${requests.length}):`);
-    requests.forEach((r, i) => console.log(`  [${i}] ${r.constructor.name}`));
-
     app.quit();
   }
 });

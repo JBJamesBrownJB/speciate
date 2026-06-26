@@ -19,6 +19,11 @@ pub struct CoarseGrid {
     world_min_y: f32,
     min_cell_x: i32,
     min_cell_y: i32,
+    /// Origin of the L0 grid in L0 cell coordinates (floor(world_min / L0_cell_size)).
+    /// Cached so l0_to_l1_cell_index can recover world coords from L0 array indices
+    /// without needing the L0 struct as an argument.
+    l0_min_cell_x: i32,
+    l0_min_cell_y: i32,
 }
 
 impl Default for CoarseGrid {
@@ -34,6 +39,8 @@ impl Default for CoarseGrid {
             world_min_y: 0.0,
             min_cell_x: 0,
             min_cell_y: 0,
+            l0_min_cell_x: 0,
+            l0_min_cell_y: 0,
         }
     }
 }
@@ -51,6 +58,14 @@ impl CoarseGrid {
 
         self.min_cell_x = (min_x * self.inv_cell_size).floor() as i32;
         self.min_cell_y = (min_y * self.inv_cell_size).floor() as i32;
+
+        // Cache L0 grid origin so l0_to_l1_cell_index can convert L0 array indices
+        // back to world cell coordinates without the L0 struct as an argument.
+        // L0 cell size = L1_CELL_SIZE / 3 (hardcoded 3x ratio).
+        // Mirror SpatialGrid::recalculate_grid_dimensions exactly: floor(...) - 1 padding.
+        let l0_cell_size = L1_CELL_SIZE / 3.0;
+        self.l0_min_cell_x = (min_x / l0_cell_size).floor() as i32 - 1;
+        self.l0_min_cell_y = (min_y / l0_cell_size).floor() as i32 - 1;
 
         let max_cell_x = (max_x * self.inv_cell_size).ceil() as i32;
         let max_cell_y = (max_y * self.inv_cell_size).ceil() as i32;
@@ -120,18 +135,26 @@ impl CoarseGrid {
 
     /// Convert L0 cell index to parent L1 cell index.
     /// L1 cells are 3×3 blocks of L0 cells.
+    ///
+    /// Correctness requirement: L0 array indices are relative to `l0_min_cell_x`
+    /// (the L0 grid origin in L0 cell coordinates), which is NOT necessarily
+    /// divisible by 3. We must convert to world cell coordinates first and use
+    /// `div_euclid` (floor division) before mapping to L1, so that negative world
+    /// columns round toward -inf rather than toward zero.
     #[inline]
     pub fn l0_to_l1_cell_index(&self, l0_cell_idx: usize, l0_width: usize) -> usize {
-        let l0_cx = l0_cell_idx % l0_width;
-        let l0_cy = l0_cell_idx / l0_width;
+        let l0_cx = (l0_cell_idx % l0_width) as i32;
+        let l0_cy = (l0_cell_idx / l0_width) as i32;
 
-        // L1 cell = L0 cell / 3 (hardcoded: fov_patterns.rs lookup tables assume 3×3)
-        let l1_cx = l0_cx / 3;
-        let l1_cy = l0_cy / 3;
+        // Recover world cell coordinates from L0 array coordinates.
+        let world_cx = l0_cx + self.l0_min_cell_x;
+        let world_cy = l0_cy + self.l0_min_cell_y;
 
-        // Clamp to valid L1 range
-        let l1_cx = l1_cx.min(self.width.saturating_sub(1));
-        let l1_cy = l1_cy.min(self.height.saturating_sub(1));
+        // Map to L1 array index. div_euclid = floor division, correct for negative coords.
+        let l1_cx = (world_cx.div_euclid(3) - self.min_cell_x)
+            .clamp(0, self.width.saturating_sub(1) as i32) as usize;
+        let l1_cy = (world_cy.div_euclid(3) - self.min_cell_y)
+            .clamp(0, self.height.saturating_sub(1) as i32) as usize;
 
         l1_cy * self.width + l1_cx
     }
@@ -276,25 +299,89 @@ mod tests {
     #[test]
     fn l0_to_l1_cell_index_maps_correctly() {
         let mut grid = CoarseGrid::new();
-        // Set up so L1 has known dimensions
-        grid.set_world_bounds(0.0, 90.0, 0.0, 90.0); // 3×3 L1 cells at 30m
+        // Bounds (20, 200) → l0_min_cell_x = floor(20/20)−1 = 0, matching actual L0.
+        // Actual L0: min_cx=0, max_cx=ceil(200/20)+1=11, width=12.
+        // L1: min_cx=floor(20/60)=0, max_cx=ceil(200/60)=4, width=4.
+        grid.set_world_bounds(20.0, 200.0, 20.0, 200.0);
+        let l0_width = 12; // actual L0 width for these bounds
 
-        // L0 width = 90m / 10m = 9 cells
-        let l0_width = 9;
-
-        // L0 cell (0,0) -> L1 cell (0,0)
+        // L0 arr col 0 (world col 0) → L1 col 0
         assert_eq!(grid.l0_to_l1_cell_index(0, l0_width), 0);
 
-        // L0 cell (2,2) -> L1 cell (0,0) (same block)
+        // L0 arr col 2, row 2 (world col 2, row 2) → L1 cell (0,0) (same block)
         assert_eq!(grid.l0_to_l1_cell_index(2 + 2 * l0_width, l0_width), 0);
 
-        // L0 cell (3,0) -> L1 cell (1,0)
+        // L0 arr col 3 (world col 3) → L1 col 1
         assert_eq!(grid.l0_to_l1_cell_index(3, l0_width), 1);
 
-        // L0 cell (0,3) -> L1 cell (0,1)
+        // L0 arr col 0, row 3 (world row 3) → L1 row 1, col 0 = index grid.width
         assert_eq!(
             grid.l0_to_l1_cell_index(0 + 3 * l0_width, l0_width),
             grid.width
+        );
+    }
+
+    /// RED TEST — proves the L1 cell-index origin bug (coarse_grid.rs:129).
+    ///
+    /// Root cause: `l0_to_l1_cell_index` divides the *array-relative* L0 column by 3
+    /// to derive the L1 column.  Division by 3 is only correct when
+    /// `l0.min_cell_x % 3 == 0`.  With default world bounds (min_x = −5000 →
+    /// l0.min_cell_x = −250, and −250 % 3 = −1 ≠ 0) the bug fires on every run.
+    ///
+    /// Here we use bounds (−80, 80) so that the SpatialGrid padding rule gives
+    /// l0.min_cell_x = floor(−80/20) − 1 = −5.  Since −5 % 3 = −2 ≠ 0, two of
+    /// every three L0 columns map to the wrong L1 cell.
+    ///
+    /// This test MUST FAIL until the fix (use div_euclid + world-coord offset) lands.
+    #[test]
+    fn l0_to_l1_cell_index_wrong_with_nonzero_origin() {
+        // L1 (CoarseGrid) — same world bounds, cell_size = 60 m
+        //   min_cell_x = floor(−80/60) = −2,  width = 4
+        let mut l1 = CoarseGrid::new();
+        l1.set_world_bounds(-80.0, 80.0, -80.0, 80.0);
+
+        // L0 parameters as SpatialGrid::recalculate_grid_dimensions would compute
+        // for the same world bounds (cell_size = 20 m, ±1 cell padding):
+        //   min_cell_x = floor(−80/20) − 1 = −5
+        //   max_cell_x = ceil(80/20)  + 1 =  5
+        //   width = (5 − (−5) + 1) = 11
+        let l0_min_cell_x: i32 = ((-80.0_f32 / 20.0).floor() as i32) - 1; // = −5
+        let l0_max_cell_x: i32 = ((80.0_f32 / 20.0).ceil() as i32) + 1;   // =  5
+        let l0_width: usize = (l0_max_cell_x - l0_min_cell_x + 1) as usize; // = 11
+
+        // Creature at world (1.0, 1.0) — sits inside L1 world cell (0, 0).
+        // L0 world col = floor(1/20) = 0  →  L0 arr col = 0 − (−5) = 5
+        // L0 world row = floor(1/20) = 0  →  L0 arr row = 5
+        // L0 cell idx  = 5 × 11 + 5 = 60
+        let world_x = 1.0_f32;
+        let world_y = 1.0_f32;
+        let l0_world_col = (world_x / 20.0).floor() as i32; // = 0
+        let l0_world_row = (world_y / 20.0).floor() as i32; // = 0
+        let l0_arr_col = (l0_world_col - l0_min_cell_x) as usize; // = 5
+        let l0_arr_row = (l0_world_row - l0_min_cell_x) as usize; // = 5 (symmetric bounds)
+        let l0_cell_idx = l0_arr_row * l0_width + l0_arr_col;     // = 60
+
+        // The correct L1 index — derived via the already-working position_to_cell_index:
+        //   cx = floor(1/60) − (−2) = 0 + 2 = 2
+        //   cy = 2
+        //   idx = 2 × 4 + 2 = 10
+        let l1_width = l1.width();
+        let expected = l1.position_to_cell_index(world_x, world_y); // = 10
+
+        // The buggy function:
+        //   l0_cx = 60 % 11 = 5  →  l1_cx = 5 / 3 = 1  (should be 2)
+        //   l0_cy = 60 / 11 = 5  →  l1_cy = 5 / 3 = 1  (should be 2)
+        //   returns 1 × 4 + 1 = 5   ← WRONG (off by one L1 cell in both axes)
+        let actual = l1.l0_to_l1_cell_index(l0_cell_idx, l0_width);
+
+        assert_eq!(
+            actual, expected,
+            "l0_to_l1_cell_index returned {actual} but correct L1 idx is {expected} \
+             (world ({world_x},{world_y}), L0 arr col {l0_arr_col}, l1_width {l1_width}): \
+             array-based /3 gives L1 arr col {} instead of correct {}, \
+             because l0.min_cell_x={l0_min_cell_x} is not divisible by 3",
+            l0_arr_col / 3,
+            expected % l1_width,
         );
     }
 }

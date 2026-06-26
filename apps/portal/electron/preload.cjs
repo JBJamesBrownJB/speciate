@@ -187,6 +187,25 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   /**
+   * Subscribe to P0 plant grid snapshot updates.
+   * Callback receives a Float32Array in sparse format:
+   *   [count, x₀, y₀, density₀, type₀, x₁, y₁, density₁, type₁, ...]
+   * Pushed at startup and after each CA tick (~every 2s). Frontend should cache
+   * the last snapshot and re-render on each update.
+   *
+   * @param {Function} callback - called with each Float32Array snapshot
+   * @returns {Function} Unsubscribe function
+   */
+  onPlantBufferUpdate: (callback) => {
+    if (typeof callback !== 'function') {
+      throw new Error('onPlantBufferUpdate: callback must be a function');
+    }
+    const handler = (_event, buffer) => callback(buffer);
+    ipcRenderer.on('plant-buffer-update', handler);
+    return () => ipcRenderer.removeListener('plant-buffer-update', handler);
+  },
+
+  /**
    * Subscribe to perception debug buffer updates
    * Callback receives Float32Array with perception debug data
    *
@@ -300,5 +319,19 @@ contextBridge.exposeInMainWorld('electron', {
       throw new Error('queryL1Cell: worldX and worldY must be numbers');
     }
     return await ipcRenderer.invoke('query-l1-cell', worldX, worldY);
+  },
+
+  /**
+   * Spawn a plant at the given world position (P0 mode click).
+   * The position is snapped to the nearest P0 cell on the Rust side.
+   *
+   * @param {number} worldX - X coordinate in world units
+   * @param {number} worldY - Y coordinate in world units
+   */
+  spawnPlant: (worldX, worldY) => {
+    if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) {
+      throw new Error('spawnPlant: worldX and worldY must be finite numbers');
+    }
+    ipcRenderer.send('spawn-plant', { worldX, worldY });
   },
 });

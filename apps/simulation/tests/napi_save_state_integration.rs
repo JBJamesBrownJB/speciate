@@ -28,7 +28,7 @@ fn test_napi_periodic_saves_with_2_second_interval() {
 
     // Create NapiApp (no save state to load)
     let (_tx, rx) = crossbeam_channel::bounded(128);
-    let mut app = NapiApp::new(rx, 10, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 10, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
 
     // Run simulation for 5 seconds with periodic saves
     let start = Instant::now();
@@ -85,7 +85,7 @@ fn test_napi_shutdown_save_creates_latest() {
 
     // Create NapiApp and run briefly
     let (_tx, rx) = crossbeam_channel::bounded(128);
-    let mut app = NapiApp::new(rx, 10, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 10, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
 
     // Run for 1 second
     for _ in 0..22 {
@@ -135,7 +135,7 @@ fn test_napi_disabled_config_prevents_saves() {
 
     // Create NapiApp and run
     let (_tx, rx) = crossbeam_channel::bounded(128);
-    let mut app = NapiApp::new(rx, 10, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 10, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
 
     // Run for 3 seconds (should NOT create saves)
     for _ in 0..66 {
@@ -177,7 +177,7 @@ fn test_napi_cleanup_keeps_last_n() {
 
     // Create NapiApp (no save state to load)
     let (_tx, rx) = crossbeam_channel::bounded(128);
-    let mut app = NapiApp::new(rx, 10, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 10, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
 
     // Run for 7 seconds to create ~7 saves (should keep only 3)
     let start = Instant::now();

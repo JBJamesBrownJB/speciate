@@ -16,7 +16,7 @@ use std::sync::Arc;
 fn test_select_creature_debug_command_populates_buffer() {
     // 1. Create NapiApp with 5 creatures
     let (tx, rx) = crossbeam_channel::bounded(128);
-    let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 5, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
 
     // 2. Run one tick to ensure creatures are fully initialized
     app.update(0.045);
@@ -83,7 +83,7 @@ fn test_select_creature_debug_command_populates_buffer() {
 fn test_select_creature_debug_null_clears_selection() {
     // 1. Create NapiApp with creatures
     let (tx, rx) = crossbeam_channel::bounded(128);
-    let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 5, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
     app.update(0.045);
 
     // 2. Get a creature's CritId and select it
@@ -141,7 +141,7 @@ fn test_acceleration_is_captured_for_active_creature() {
 
     // 1. Create NapiApp with creatures in Wandering mode
     let (tx, rx) = crossbeam_channel::bounded(128);
-    let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 5, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
 
     // Run initial tick
     app.update(0.045);
@@ -225,7 +225,7 @@ fn test_acceleration_is_captured_for_active_creature() {
 fn test_select_nonexistent_creature_returns_empty() {
     // 1. Create NapiApp with creatures
     let (tx, rx) = crossbeam_channel::bounded(128);
-    let mut app = NapiApp::new(rx, 5, ".".to_string(), None);
+    let mut app = NapiApp::new(rx, 5, ".".to_string(), None, std::sync::Arc::new(parking_lot::Mutex::new(Vec::new())));
     app.update(0.045);
 
     // 2. Send SelectCreatureDebug with a nonexistent CritId

@@ -80,6 +80,9 @@ pub struct SimulationEngine {
     buffer_creature_count: Arc<AtomicU64>,
     save_state_worker: Option<Arc<Mutex<SaveStateWorker>>>,
     save_state_config: SaveStateConfig,
+    /// Sparse P0 plant grid snapshot: [count, x₀, y₀, density₀, type₀, ...].
+    /// Filled once at startup; will be refreshed after each CA tick in Phase 3.
+    plant_buffer: Arc<Mutex<Vec<f32>>>,
     #[cfg(feature = "dev-tools")]
     perception_debug_buffer: Arc<Mutex<PerceptionDebugBuffer>>,
 }
@@ -128,6 +131,7 @@ impl SimulationEngine {
             buffer_creature_count: Arc::new(AtomicU64::new(0)),
             save_state_worker,
             save_state_config,
+            plant_buffer: Arc::new(Mutex::new(Vec::new())),
             #[cfg(feature = "dev-tools")]
             perception_debug_buffer: Arc::new(Mutex::new(PerceptionDebugBuffer::new())),
         }
@@ -220,6 +224,7 @@ impl SimulationEngine {
         let assets_path_owned = assets_path.clone();
         let save_state_config = self.save_state_config.clone();
         let save_state_worker_ref = self.save_state_worker.clone();
+        let plant_buffer_ref = Arc::clone(&self.plant_buffer);
         #[cfg(feature = "dev-tools")]
         let perception_debug_buffer_ref = Arc::clone(&self.perception_debug_buffer);
 
@@ -234,7 +239,7 @@ impl SimulationEngine {
                 }
 
                 // Initialize Bevy App (with optional save state path)
-                let mut app = NapiApp::new(rx, count, assets_path_owned.clone(), save_state_path);
+                let mut app = NapiApp::new(rx, count, assets_path_owned.clone(), save_state_path, Arc::clone(&plant_buffer_ref));
                 app.set_paused_flag(Arc::clone(&paused_ref));
                 app.set_time_scale_flag(Arc::clone(&time_scale_ref));
 
@@ -495,6 +500,44 @@ impl SimulationEngine {
 
         dest[..active_size].copy_from_slice(&read_slice[..active_size]);
         creature_count as i32
+    }
+
+    /// Spawn a plant at the given world position.
+    ///
+    /// The position is snapped to the nearest P0 cell. Plant type is always 1
+    /// (grass) and density 1.0 for now — future commands will expose these.
+    ///
+    /// # Errors
+    /// * Simulation not started
+    /// * Command queue full
+    #[napi]
+    pub fn spawn_plant(&self, x: f64, y: f64) -> Result<()> {
+        self.command_sender
+            .as_ref()
+            .ok_or(Error::new(Status::GenericFailure, "Simulation not started"))?
+            .try_send(SimCommand::SpawnPlant {
+                x: x as f32,
+                y: y as f32,
+            })
+            .map_err(|e| {
+                Error::new(Status::GenericFailure, format!("Command queue full: {}", e))
+            })?;
+        Ok(())
+    }
+
+    /// Return the latest P0 plant grid snapshot as a sparse Float32Array.
+    ///
+    /// Format: `[count, x₀, y₀, density₀, type₀, x₁, ...]` — only live cells included.
+    /// The snapshot is written once at startup and refreshed after each CA tick (Phase 3).
+    /// Frontend should call this on startup and after receiving a plant-update notification.
+    #[napi]
+    pub fn get_plant_buffer(&self) -> Float32Array {
+        let buf = self.plant_buffer.lock();
+        if buf.is_empty() {
+            Float32Array::new(vec![0.0])
+        } else {
+            Float32Array::new(buf.clone())
+        }
     }
 
     /// Get target simulation tick rate (Hz)

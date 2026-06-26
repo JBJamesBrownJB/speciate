@@ -2,6 +2,7 @@ use super::components::{ActualTickRate, BoundaryConfig, DeltaTime, FreqConfig, P
 use super::world_bounds::WorldBounds;
 use crate::config::MovementConfig;
 use crate::simulation::creatures::behaviors::behavior_transition_system;
+use crate::simulation::plants::update_plants;
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::dna::Dna;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
@@ -94,6 +95,9 @@ impl SimulationBuilder {
             integrate_motion_system.after(update_steering_system),
             // Swap grid buffers at END of tick - next tick sees newly rebuilt grid
             swap_spatial_grid_buffers_system.after(integrate_motion_system),
+            // Plant lifecycle: runs after motion integration so positions are final.
+            // Owns growth, seed dispersal, and depletion from creature feeding.
+            update_plants.after(integrate_motion_system),
         ));
 
         // Debug acceleration capture runs AFTER steering (which includes capping) but BEFORE movement integration

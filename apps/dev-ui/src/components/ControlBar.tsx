@@ -7,6 +7,7 @@ interface ControlBarProps {
   isConnected: boolean;
   tick: number;
   creatureCount: number;
+  plantCount?: number;
   isSampling: boolean;
   sampleCount: number;
   systemTimings?: SystemTimingsSnapshot;
@@ -20,6 +21,7 @@ export const ControlBar: React.FC<ControlBarProps> = ({
   isConnected,
   tick,
   creatureCount,
+  plantCount,
   isSampling,
   sampleCount,
   systemTimings,
@@ -35,7 +37,7 @@ export const ControlBar: React.FC<ControlBarProps> = ({
         <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
       </div>
       <div>
-        Tick: {tick} | Creatures: {creatureCount}
+        Tick: {tick} | Creatures: {creatureCount} | Plants: {plantCount ?? 0}
       </div>
       <button
         onClick={onRecordSnapshot}

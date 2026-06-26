@@ -4,6 +4,7 @@ interface HUDElements {
   fpsValue: HTMLElement | null;
   tickRateValue: HTMLElement | null;
   creatureCount: HTMLElement | null;
+  plantCount: HTMLElement | null;
   zoomValue: HTMLElement | null;
 }
 
@@ -16,6 +17,7 @@ export class HUDManager {
       fpsValue: string;
       tickRateValue: string;
       creatureCount: string;
+      plantCount: string;
       zoomValue: string;
     },
     fpsSparkline: FPSSparkline
@@ -24,6 +26,7 @@ export class HUDManager {
       fpsValue: document.getElementById(elementIds.fpsValue),
       tickRateValue: document.getElementById(elementIds.tickRateValue),
       creatureCount: document.getElementById(elementIds.creatureCount),
+      plantCount: document.getElementById(elementIds.plantCount),
       zoomValue: document.getElementById(elementIds.zoomValue),
     };
     this.fpsSparkline = fpsSparkline;
@@ -46,6 +49,12 @@ export class HUDManager {
   updateCreatureCount(count: number): void {
     if (this.elements.creatureCount) {
       this.elements.creatureCount.textContent = count.toString();
+    }
+  }
+
+  updatePlantCount(count: number): void {
+    if (this.elements.plantCount) {
+      this.elements.plantCount.textContent = count.toString();
     }
   }
 

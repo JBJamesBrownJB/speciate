@@ -24,6 +24,12 @@ declare global {
 
       onPerceptionDebugUpdate: (callback: (buffer: Float32Array) => void) => () => void;
 
+      /** Subscribe to P0 plant grid sparse buffer updates (~every 2s). */
+      onPlantBufferUpdate?: (callback: (buffer: Float32Array) => void) => () => void;
+
+      /** Spawn a plant at a world position (P0 mode click). Snapped to nearest P0 cell. */
+      spawnPlant?: (worldX: number, worldY: number) => void;
+
       setPaused: (paused: boolean) => void;
 
       setTimeScale: (scale: number) => void;

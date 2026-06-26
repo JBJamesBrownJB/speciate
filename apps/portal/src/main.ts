@@ -12,6 +12,7 @@ import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
+import { PlantRenderer } from "@/rendering/PlantRenderer";
 import { interpDiag } from "@/rendering/InterpolationDiagnostics";
 import { ChangeDetector } from "@/core/ChangeDetection";
 import { SelectionManager } from "@/systems/SelectionManager";
@@ -199,6 +200,15 @@ async function main(): Promise<void> {
       getCreatures: () => latestCreatures,
     });
 
+    // Plant renderer — added to worldContainer BEFORE creatures so it renders underneath.
+    const plantRenderer = new PlantRenderer(worldContainer);
+
+    // Subscribe to plant snapshot updates from Electron main (push every ~2s).
+    window.electron?.onPlantBufferUpdate?.((buf: Float32Array) => {
+      plantRenderer.updateFromBuffer(buf);
+      spatialGridOverlay.updateP0Cells(buf);
+    });
+
     const creatureRenderer = new InterpolatedCreatureRenderer(texture, 200000);
     worldContainer.addChild(creatureRenderer.getMesh());
 
@@ -208,6 +218,7 @@ async function main(): Promise<void> {
         fpsValue: "fps-value",
         tickRateValue: "tick-rate-value",
         creatureCount: "creature-count",
+        plantCount: "plant-count",
         zoomValue: "zoom-value",
       },
       fpsSparkline
@@ -342,6 +353,9 @@ async function main(): Promise<void> {
             telemetry.spatialGridMinY,
             telemetry.spatialGridMaxY
           );
+        }
+        if (telemetry.plantCount !== undefined) {
+          hudManager.updatePlantCount(telemetry.plantCount);
         }
       });
 

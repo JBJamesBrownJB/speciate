@@ -9,6 +9,7 @@ let devToolsWindow = null;
 let simulationEngine = null;
 let pollingInterval = null; // legacy fallback poll (only when push-on-swap unavailable)
 let telemetryInterval = null; // status heartbeat (decoupled from the position doorbell)
+let plantInterval = null; // plant buffer push every 2s
 let shuttingDown = false;
 
 // Buffer layout (FLOATS_PER_CREATURE, MAX_CREATURES) is sourced from bufferLayout.cjs
@@ -190,7 +191,7 @@ function startSimulation() {
     };
     // Deliver once at startup (allow sim a moment to initialize), then every 2s.
     setTimeout(deliverPlants, 500);
-    setInterval(deliverPlants, 2000);
+    plantInterval = setInterval(deliverPlants, 2000);
 
     // Telemetry/status heartbeat on its own light timer (~2x/sec), decoupled from the
     // position doorbell so a dropped frame never skips a status update.
@@ -737,7 +738,7 @@ app.on('before-quit', (event) => {
 
   console.log('[Electron NAPI] Shutting down simulation...');
 
-  // Clear timers (fallback poll + telemetry heartbeat)
+  // Clear all timers (fallback poll + telemetry heartbeat + plant push)
   if (pollingInterval) {
     clearInterval(pollingInterval);
     pollingInterval = null;
@@ -745,6 +746,10 @@ app.on('before-quit', (event) => {
   if (telemetryInterval) {
     clearInterval(telemetryInterval);
     telemetryInterval = null;
+  }
+  if (plantInterval) {
+    clearInterval(plantInterval);
+    plantInterval = null;
   }
 
   // Stop simulation gracefully

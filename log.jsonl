@@ -137,3 +137,4 @@
 {"id":"019f09a8-19f8-7a12-b84b-93d04f594600","author":"JB","kind":"prompt","text":"nope, just tested, added a crit with narrow fov, stopped sim, started, it had now the default fov","ts":"2026-06-27T15:17:19Z","turn":"db3cb0e8-9655-4ed3-8d65-6008c0ec1ebc"}
 {"id":"019f09aa-9e89-74c1-8d8b-fee2bfd1e845","author":"JB","kind":"prompt","text":"sorry, carry on","ts":"2026-06-27T15:20:04Z","turn":"db3cb0e8-9655-4ed3-8d65-6008c0ec1ebc"}
 {"id":"019f09af-aae9-7ea1-a681-3615bd9050e7","author":"JB","kind":"summary","text":"The old save-state files in `save-states/` are a dead end for recovering prior DNA (data was never there). But all new saves from this fix forward will correctly persist DNA genes.","ts":"2026-06-27T15:25:35Z","turn":"db3cb0e8-9655-4ed3-8d65-6008c0ec1ebc"}
+{"id":"019f09b3-4831-7a53-85fa-a9f5de636a14","author":"JB","kind":"prompt","text":"nope, still same, wtf!","ts":"2026-06-27T15:29:31Z","turn":"db3cb0e8-9655-4ed3-8d65-6008c0ec1ebc"}

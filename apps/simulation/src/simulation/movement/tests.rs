@@ -416,44 +416,51 @@ fn test_small_turns_not_affected() {
 }
 
 #[test]
-fn test_stopped_creatures_can_turn_freely() {
-    let mut world = World::new();
-    world.insert_resource(DeltaTime(0.05));
-    world.insert_resource(PhysicsTick(0));
-    world.insert_resource(crate::simulation::core::WorldBounds::new(
-        -1000.0, 1000.0, -1000.0, 1000.0,
-    ));
-    // Disable noise so it doesn't interfere with turn test
-    world.insert_resource(MovementConfig {
-        locomotion_noise_base: 0.0,
-        ..Default::default()
-    });
-    world.insert_resource(NoiseTable::default());
-    #[cfg(feature = "dev-tools")]
-    world.insert_resource(crate::instrumentation::SystemTimings::new());
-
-    let mut state = CreatureState::default();
-    state.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+fn test_stopped_creature_heading_constrained_from_stored_angle() {
+    // After the NaN-bypass fix: a truly stopped creature (vx=0, vy=0) has a stored
+    // heading from rotation.radians (defaults to East, 0 rad). When it receives a
+    // full-power North force, the heading is rate-limited from East — it cannot snap
+    // instantly to North. The velocity after one tick must have a large East component
+    // and a small (rate-limited) North component.
+    let mut world = make_integration_world(0.05, 0.0);
 
     let entity = world
         .spawn((
             BodySize::new(1.0),
             Position { x: 0.0, y: 0.0 },
-            Velocity { vx: 0.0, vy: 0.0 },
-            Acceleration { ax: 0.0, ay: 10.0 },
-            Rotation::default(),
-            state,
+            Velocity { vx: 0.0, vy: 0.0 },     // Truly stopped
+            Acceleration { ax: 0.0, ay: 10.0 }, // Full-power North force
+            Rotation::new(0.0),                  // Stored heading: East (0 rad)
+            wandering_state(),
         ))
         .id();
 
-    use bevy_ecs::system::IntoSystem;
-    let mut system = IntoSystem::into_system(integrate_motion_system);
-    system.initialize(&mut world);
-    system.run((), &mut world);
+    run_integration(&mut world);
 
     let vel = world.get::<Velocity>(entity).unwrap();
-    assert!(vel.vy > 0.0, "Should be moving up");
-    assert!(vel.vx.abs() < 0.001, "Should not have horizontal component");
+    let rot = world.get::<Rotation>(entity).unwrap();
+
+    // Creature has some net speed (the force did accelerate it)
+    let speed = (vel.vx * vel.vx + vel.vy * vel.vy).sqrt();
+    assert!(speed > 0.0, "Creature should have started moving");
+
+    // Heading must be constrained to < ~10° from stored East — NOT 90° (North).
+    // size=1m: base_turn_rate=180 deg/s, speed_factor≈1.0, max_delta≈9° at dt=0.05.
+    assert!(
+        rot.radians.abs() < 0.20, // < ~11.5° from East
+        "Heading should be constrained to within ~10° of stored East heading. \
+         Got {:.1}° — a value near 90° means rate-limiting from stored angle isn't working.",
+        rot.radians.to_degrees()
+    );
+
+    // As a consequence, vx (East) should dominate over vy (North)
+    assert!(
+        vel.vx > vel.vy.abs(),
+        "Eastward (stored heading) component should dominate after one tick of rate-limiting. \
+         vx={:.4}, vy={:.4}",
+        vel.vx,
+        vel.vy
+    );
 }
 
 #[test]
@@ -753,5 +760,198 @@ fn test_180_degree_reversal_is_gradual() {
         vel.vx > 0.0,
         "Should still be moving right after one tick, got vx={}",
         vel.vx
+    );
+}
+
+// =============================================================================
+// STOPPED-THRESHOLD HEADING BUG REGRESSION TESTS
+// =============================================================================
+// Root cause: when speed < STOPPED_THRESHOLD, old_angle was set to NaN,
+// bypassing the `old_angle.is_finite()` guard in turn rate limiting.
+// In tight crowds, opposing avoidance forces cancel → drag slows creature below
+// threshold → NaN bypass → next tick's force snaps heading 180° unconstrained.
+// Fix: use rotation.radians (last stored heading) instead of NaN.
+
+/// Build a World with all resources needed by integrate_motion_system.
+/// Also initialises the Bevy ComputeTaskPool (idempotent, required for par_iter_mut).
+fn make_integration_world(dt: f32, noise: f32) -> World {
+    bevy_tasks::ComputeTaskPool::get_or_init(bevy_tasks::TaskPool::default);
+    let mut world = World::new();
+    world.insert_resource(DeltaTime(dt));
+    world.insert_resource(PhysicsTick(0));
+    world.insert_resource(crate::simulation::core::WorldBounds::new(
+        -1000.0, 1000.0, -1000.0, 1000.0,
+    ));
+    world.insert_resource(MovementConfig {
+        locomotion_noise_base: noise,
+        ..Default::default()
+    });
+    world.insert_resource(NoiseTable::default());
+    #[cfg(feature = "dev-tools")]
+    world.insert_resource(crate::instrumentation::SystemTimings::new());
+    world
+}
+
+fn run_integration(world: &mut World) {
+    use bevy_ecs::system::IntoSystem;
+    let mut system = IntoSystem::into_system(integrate_motion_system);
+    system.initialize(world);
+    system.run((), world);
+}
+
+fn wandering_state() -> CreatureState {
+    let mut s = CreatureState::default();
+    s.behavior = crate::simulation::creatures::components::BehaviorMode::Wandering;
+    s
+}
+
+#[test]
+fn stopped_creature_heading_constrained_by_turn_rate_on_restart() {
+    // A creature below STOPPED_THRESHOLD whose stored heading is East receives a
+    // full-power due-West force. With the bug, heading snaps 180° in one tick.
+    // With the fix, it can only rotate at most MAX_TURN_RATE * dt (~8° for 1m, dt=0.05).
+    let mut world = make_integration_world(0.05, 0.0);
+
+    // Speed 0.01 m/s is below STOPPED_THRESHOLD (0.05), so old_angle = NaN in
+    // the buggy code. Rotation::new(0.0) stores the last valid heading (East).
+    let entity = world
+        .spawn((
+            BodySize::new(1.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity {
+                vx: 0.01, // Below STOPPED_THRESHOLD — triggers the NaN bypass
+                vy: 0.0,
+            },
+            Acceleration {
+                ax: -100.0, // Full-power due-West force: tries to snap heading 180°
+                ay: 0.0,
+            },
+            Rotation::new(0.0), // Last stored heading: due East
+            wandering_state(),
+        ))
+        .id();
+
+    run_integration(&mut world);
+
+    let rot = world.get::<Rotation>(entity).unwrap();
+
+    // Bug path:  old_angle = NaN → turn limiting skipped → rotation snaps to ~π (West)
+    // Fixed path: old_angle = 0.0 (East) → max change ≈ 8° at dt=0.05, size=1m
+    //
+    // 20° threshold (0.35 rad) sits between the ~8° the fix allows and the 180° the bug
+    // produces — no ambiguity in pass/fail.
+    assert!(
+        rot.radians.abs() < 0.35,
+        "Heading should be constrained by turn rate to <20° from stored East heading. \
+         Got {:.1}° — a value near ±180° means the NaN bypass is still active.",
+        rot.radians.to_degrees()
+    );
+}
+
+#[test]
+fn stopped_creature_heading_constrained_across_multiple_directions() {
+    // Same bug, but with stored heading North (PI/2) and a due-South reversal force.
+    // Verifies the fix works for non-zero stored headings.
+    use std::f32::consts::FRAC_PI_2;
+
+    let mut world = make_integration_world(0.05, 0.0);
+
+    let entity = world
+        .spawn((
+            BodySize::new(1.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity {
+                vx: 0.0,
+                vy: 0.02, // Below STOPPED_THRESHOLD, heading North
+            },
+            Acceleration {
+                ax: 0.0,
+                ay: -100.0, // Full-power due-South reversal
+            },
+            Rotation::new(FRAC_PI_2), // Last stored heading: due North
+            wandering_state(),
+        ))
+        .id();
+
+    run_integration(&mut world);
+
+    let rot = world.get::<Rotation>(entity).unwrap();
+
+    // Bug: snaps to -PI/2 (South), delta from North = π ≈ 180°
+    // Fix: constrained to within ~8° of North (PI/2)
+    let delta_from_north = (rot.radians - FRAC_PI_2).abs();
+    assert!(
+        delta_from_north < 0.35, // <20° from North
+        "Heading should stay near North (delta <20°). Got heading {:.1}°, delta {:.1}°. \
+         A delta near 180° means the NaN bypass is still active.",
+        rot.radians.to_degrees(),
+        delta_from_north.to_degrees()
+    );
+}
+
+#[test]
+fn zero_crossing_preserves_rotation_for_large_creature() {
+    // Bug 2 (the crowd oscillation root cause):
+    //
+    // When an avoidance impulse drives a large creature's speed from just above
+    // STOPPED_THRESHOLD to just below it (a "zero-crossing"), two things go wrong:
+    //   1. Turn rate limiting is skipped because speed_sq < threshold AFTER integration.
+    //   2. set_from_velocity stores the reversed tiny velocity as rotation.radians.
+    //
+    // Next tick, old_angle = rotation.radians = backward direction → creature is
+    // rate-limited FROM the wrong heading for up to 10 seconds (0.9°/tick for size 10).
+    //
+    // The fix: gate set_from_velocity on final_speed_sq > stopped_threshold_sq.
+    // When speed drops below threshold, rotation.radians is PRESERVED (not overwritten).
+    //
+    // Test setup: size-10 creature moving East at 0.12 m/s (above threshold 0.05 m/s).
+    // Avoidance-magnitude West force (max_accel for size 10 = 3.162 m/s²):
+    //   new_vx = (0.12 - 3.162 × 0.05) × drag ≈ -0.037 m/s  (below threshold)
+    // With bug: set_from_velocity(-0.037, 0) → rotation.radians = π (West) — WRONG.
+    // With fix: set_from_velocity not called → rotation.radians stays East — CORRECT.
+
+    let mut world = make_integration_world(0.05, 0.0);
+
+    // size-10 creature moving East at 0.12 m/s (just above threshold),
+    // stored heading East (0 rad).
+    // Force: West at max avoidance acceleration for size-10 (10 / sqrt(10) ≈ 3.162 m/s²)
+    // After one tick: (0.12 - 3.162×0.05) × exp(-0.025) ≈ -0.037 m/s (below threshold)
+    let entity = world
+        .spawn((
+            BodySize::new(10.0),
+            Position { x: 0.0, y: 0.0 },
+            Velocity { vx: 0.12, vy: 0.0 }, // Just above STOPPED_THRESHOLD (0.05)
+            Acceleration {
+                ax: -3.162, // Max avoidance accel for size-10: enough to zero-cross
+                ay: 0.0,
+            },
+            Rotation::new(0.0), // Stored heading: due East
+            wandering_state(),
+        ))
+        .id();
+
+    run_integration(&mut world);
+
+    let vel = world.get::<Velocity>(entity).unwrap();
+    let rot = world.get::<Rotation>(entity).unwrap();
+
+    // Confirm the zero-crossing happened — new speed IS below threshold.
+    let new_speed = (vel.vx * vel.vx + vel.vy * vel.vy).sqrt();
+    assert!(
+        new_speed < 0.05,
+        "Test precondition: new speed should be below STOPPED_THRESHOLD. Got {:.4} m/s",
+        new_speed
+    );
+
+    // With the bug:  rotation.radians = π (West) — stored from the tiny reversed velocity
+    // With the fix:  rotation.radians ≈ 0.0 (East) — preserved, not overwritten
+    //
+    // 0.35 rad (20°) is the threshold: fix → ~0°, bug → ~180°.
+    assert!(
+        rot.radians.abs() < 0.35,
+        "Stored heading should be preserved at East when speed zero-crosses below \
+         threshold. Got {:.1}° — a value near ±180° means set_from_velocity is still \
+         being called with the reversed tiny velocity.",
+        rot.radians.to_degrees()
     );
 }

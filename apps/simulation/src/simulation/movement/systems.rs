@@ -94,11 +94,13 @@ pub fn integrate_motion_system(
             }
 
             // Capture old heading before velocity changes (fast_atan2: ~5x faster)
+            // Use stored rotation.radians when below STOPPED_THRESHOLD rather than NaN —
+            // NaN bypasses turn rate limiting entirely, allowing 180° snaps in one tick.
             let old_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
             let old_angle = if old_speed_sq > stopped_threshold_sq {
                 fast_atan2(velocity.vy, velocity.vx)
             } else {
-                f32::NAN
+                rotation.radians
             };
 
             velocity.vx += acceleration.ax * dt;
@@ -153,7 +155,7 @@ pub fn integrate_motion_system(
 
             // Size-dependent turn rate limiting
             // Biological basis: turn_rate ∝ 1/size^1.33 (moment of inertia vs muscle torque)
-            if old_angle.is_finite() && speed_sq > stopped_threshold_sq {
+            if speed_sq > stopped_threshold_sq {
                 // Calculate size-dependent base turn rate (deg/s)
                 let base_turn_rate_deg = (MAX_TURN_RATE
                     / size.length.powf(TURN_RATE_SIZE_EXPONENT))
@@ -209,8 +211,15 @@ pub fn integrate_motion_system(
                 velocity.vy = velocity.vy.min(0.0);
             }
 
-            // Rotation update (fused for parallelization - vx/vy already in cache)
-            rotation.set_from_velocity(velocity.vx, velocity.vy);
+            // Rotation update: only store heading when meaningfully moving.
+            // If an avoidance impulse zero-crosses the threshold (old speed above,
+            // new speed below), set_from_velocity would store the reversed tiny velocity
+            // as rotation.radians — corrupting old_angle on the next tick and rate-limiting
+            // recovery from the wrong direction for up to 10 s (size-10: 0.9°/tick).
+            let final_speed_sq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+            if final_speed_sq > stopped_threshold_sq {
+                rotation.set_from_velocity(velocity.vx, velocity.vy);
+            }
         },
     );
 }

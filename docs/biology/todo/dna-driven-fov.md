@@ -22,6 +22,57 @@ Vision systems are expensive: retina is brain tissue, visual processing consumes
 
 ---
 
+## Trophic Gating — Decision (2026-06-27)
+
+**Decision: Do NOT hard-gate FOV range by trophic position. Use soft coupling via emergent cost.**
+
+The instinct to reserve narrow FOV for carnivores and wide FOV for herbivores is biologically well-motivated but mechanistically wrong. **Trophic role does not cause FOV — eye placement does.** The real causal axis is binocular overlap (frontal eyes → depth perception) vs panoramic coverage (lateral eyes → rear vigilance). Trophic role is a strong *correlate* of that axis, not the mechanism.
+
+Counter-examples that a hard clamp would forbid:
+- **Tarsier** — insectivore but heavily preyed upon; narrow frontal vision for 3D arboreal leaping. Prey with narrow FOV.
+- **Dragonfly** — apex aerial predator with ~360° compound vision. Predator with panoramic FOV.
+- **Praying mantis** — predator with wide panoramic field + narrow binocular wedge for the strike.
+- **Pig** — omnivore with ~310° FOV.
+
+**The correct model:** Keep `fov_gene` full-range (160°–340°), derive two *opposing costs* from it, and let trophic position and FOV co-evolve under selection pressure. The predator-narrow / prey-wide correlation emerges as a *simulation output*, not a constraint baked into the gene.
+
+### Emergent Costs (not config values — pure geometry)
+
+**1. Frontal blind spot grows with width**
+Above ~300° total FOV, open a small frontal blind cone (rabbits and horses both have this):
+```
+frontal_blind_angle = max(0, (fov_angle - 300°) × 0.5)
+```
+A wide-FOV predator literally loses sight of prey at strike range → misses → starves. This is why predators drift narrow under selection pressure — *without being told to*.
+
+**2. Binocular overlap (depth / strike accuracy) scales inversely with total FOV**
+```
+binocular_overlap_angle = max(0, 180° - fov_angle × 0.4)
+```
+Narrow FOV → high binocular overlap → accurate 3D judgment for striking and arboreal navigation.
+Wide FOV → near-zero overlap → can detect anything, but cannot accurately judge closing distance.
+Hook this into capture/strike success probability in the perception/combat system.
+
+**3. Rear blind arc = ambush vulnerability**
+```
+rear_blind_angle = 360° - fov_angle
+```
+Narrow FOV → large rear blind arc → high surprise risk. This pushes prey toward width naturally.
+
+With these three costs live, run:
+- A predator lineage with wide FOV → misses strikes → culled → lineage drifts narrow
+- A prey lineage with narrow FOV → gets ambushed from behind → culled → lineage drifts wide
+- But a dragonfly-style wide-FOV ambush predator or a tarsier-style narrow-FOV arboreal prey remains *reachable* if the rest of the genome supports it
+
+**Optional soft bias (not a clamp):** A mutation distribution mean can be nudged toward the trophic-appropriate band (carnivore prior = lower FOV mean; herbivore prior = higher FOV mean) without closing off the tails. This gives faster convergence while preserving the full space of viable archetypes.
+
+### Floor correction
+`MIN_FOV_DEGREES = 45.0` in `perception/constants.rs` is biologically wrong if interpreted as total anatomical FOV (no vertebrate reaches 45° total). The sim's FOV is an *attentional cone* (directional perception field), so 45° is defensible as an extreme specialist value — but treat anything below 90° as an exotic rare adaptation requiring high metabolic cost, not a common predator trait. Realistic carnivore predators cluster at 160–220°.
+
+---
+
+---
+
 ## Three Core Vision Genes
 
 ### 1. visual_range_multiplier: f32 (4.0-25.0, default 10.0)

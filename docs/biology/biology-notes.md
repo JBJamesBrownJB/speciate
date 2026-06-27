@@ -77,3 +77,47 @@ Implemented in the ABC Super Sprint (see `sprint_summaries/abc-super-sprint_summ
 - Why: body size is multiplicative; log-normal matches the real mammal size spectrum and restores a functional energy pyramid / trophic stack (vs the uniform "half are giants" smear). Side effect: large perception-cost reduction (giants dominate the L1 cone scan).
 - Scope: spawner sampling only; the genome gene stays a normalized [0,1] primitive so mutation/inheritance keep operating on the raw gene.
 - Tuning knobs: raise median → bigger world; raise sigma_log10 → fatter giant tail. Impl: rand_distr 0.4 LogNormal (pinned for determinism).
+
+---
+
+## FOV ↔ Trophic Position — Do Not Hard-Gate (2026-06-27)
+
+**Decision:** `fov_gene` remains full-range (160°–340° attentional cone) for all creatures. No trophic clamp.
+
+**Why:** Trophic role correlates with FOV but doesn't cause it — eye placement (frontal vs lateral) is the real driver. Hard-gating would forbid real archetypes: tarsier (prey, narrow FOV for arboreal depth), dragonfly (apex predator, ~360° panoramic), praying mantis (predator, wide + binocular wedge). The correlation should emerge from fitness pressure, not gene range restriction.
+
+**How to get the correlation emergently — three opposing costs derived from `fov_gene`:**
+1. **Frontal blind spot** grows above ~300° (rabbit/horse model) → wide-FOV predators miss strikes
+2. **Binocular overlap** (depth/strike accuracy) scales inversely with FOV → narrow = accurate closing, wide = can't judge distance
+3. **Rear blind arc** = 360° − FOV → narrow-FOV prey get ambushed, drifting lineages wide
+
+**Floor note:** `MIN_FOV_DEGREES = 45.0` is defensible as an attentional-cone floor but should be treated as an exotic rare adaptation; realistic carnivore cluster is 160–220°.
+
+**Optional:** Soft mutation bias toward trophic-appropriate band without closing off the full range (not a clamp, just a prior).
+
+**Full design:** `docs/biology/todo/dna-driven-fov.md` (Trophic Gating section)
+
+---
+
+## Feeding-State Vigilance & Threat Modulation (2026-06-27)
+
+**Topic:** How active eating changes perception/FOV, and how hunger modulates threat-flee threshold.
+
+**Key findings:**
+
+- **Feeding and vigilance are mechanically incompatible** — head-down posture collapses the forward detection cone. Model as `feeding_fov_multiplier` applied during bite bouts only.
+- **Herbivores:** 50–70% effective FOV reduction during bite; BUT retain wide peripheral arc (laterally-placed eyes, 270–340° natural). Interrupt to scan every 4–10s. Ungulate vigilance: 20–50% of foraging time head-up.
+- **Carnivores at kill:** 70–90% reduction; frontal eyes → no panoramic fallback. Vigilance: 5–15% of feeding time. NOT globally blind — still actively track same-tier/competitor threats (kleptoparasitism). Use threat-type selectivity, not global perception collapse.
+- **Startle asymmetry:** Detection frequency ↓ during feeding, but response magnitude ↑ on successful detect. Apply `FEEDING_STARTLE_MULTIPLIER` (~1.4–1.8×) when threat breaks through during bite bout.
+- **Reluctance to leave food = ghrelin vs cortisol tug-of-war.** Not a special state — emerges from: `flee_threshold = base + hunger_risk_tolerance × (1 - energy_fraction)`. Starving animal tolerates moderate threats; satiated animal (leptin↑) flees readily. Continuous, not binary.
+- **Satiety flightiness** (leptin): well-fed animals flee at lower threat level. Model: `flee_threshold -= satiety_flightiness × energy_fraction`.
+- **Many-eyes effect:** Individual vigilance ∝ 1/conspecific_density. Thomson's gazelle drops from ~40% solo to ~10% in groups of 20+. Also a Golden Zone: herd members run fewer perception evaluations.
+- **Satiated carnivores lift head:** as energy fills (leptin rises), feeding intensity drops, vigilance returns, animal guards rather than eats. Natural from `feeding_intensity = (1 - energy_fraction)`.
+
+**Recommended DNA genes:** `feeding_fov_multiplier` (0.1–0.6), `vigilance_interval` (1–60s), `hunger_risk_tolerance` (0.0–1.0), `satiety_flightiness` (0.0–0.8), `social_vigilance_sensitivity` (0.0–1.0).
+
+**Herbivore/carnivore split emerges** from these genes + `trophic_position` — no species flag needed.
+
+**Golden Zone:** While `is_feeding`, skip long-range scan; run only short-range + same-tier threat filter. Full scan on vigilance interrupt only.
+
+**Full design:** `docs/biology/ideas/feeding-vigilance.md`

@@ -372,6 +372,56 @@ fn bench_random_dna_scaling(c: &mut Criterion) {
     group.finish();
 }
 
+/// Dense crowd tick benchmark — regression guard for the 180° oscillation fix.
+///
+/// Packs creatures into a tight grid so many are simultaneously below STOPPED_THRESHOLD
+/// and facing forces in conflicting directions. Before the fix, these creatures would
+/// 180°-snap every tick (NaN bypass). After the fix, heading is rate-limited from
+/// rotation.radians, eliminating the spam. This bench catches any regression where
+/// turn-rate-limiting is removed or disabled for stopped creatures.
+///
+/// Run with: cargo bench --bench simulation_bench -- dense_crowd
+fn bench_dense_crowd_turn_limiting(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dense_crowd");
+    group.sample_size(20);
+    group.measurement_time(std::time::Duration::from_secs(15));
+
+    // 5 000 creatures packed into a 100×100 grid (2 m spacing) — guaranteed crowd collisions
+    let count = 5_000;
+    let spacing = 2.0_f32;
+    let side = (count as f32).sqrt() as usize;
+    let world_size = side as f32 * spacing * 2.0;
+
+    let mut sim = SimulationBuilder::new()
+        .set_boundaries(world_size, world_size)
+        .build();
+
+    for row in 0..side {
+        for col in 0..side {
+            let x = (col as f32 - side as f32 * 0.5) * spacing;
+            let y = (row as f32 - side as f32 * 0.5) * spacing;
+            let builder = CritBuilder::new()
+                .at(x, y)
+                .with_all_capabilities()
+                .in_behavior(speciate::BehaviorMode::Wandering);
+            sim.spawn_crit(builder);
+        }
+    }
+
+    // Warm-up: let creatures interact and reach sub-threshold speeds
+    for _ in 0..20 {
+        sim.update(TICK_DELTA);
+    }
+
+    group.bench_function("tick_5k_packed", |b| {
+        b.iter(|| {
+            sim.update(black_box(TICK_DELTA));
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_tick_scaling,
@@ -380,6 +430,7 @@ criterion_group!(
     bench_perception,
     bench_export_sort,
     bench_100k_random_dna,
-    bench_random_dna_scaling
+    bench_random_dna_scaling,
+    bench_dense_crowd_turn_limiting
 );
 criterion_main!(benches);

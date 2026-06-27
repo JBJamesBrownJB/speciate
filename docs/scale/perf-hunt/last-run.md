@@ -1,97 +1,135 @@
-# Perf Hunt — Run Report (2026-06-26)
+# Perf Hunt Report — 2026-06-27
 
-🚧 In-progress NOW · Pillar 1 (Prove Scale)
-
-**Config:** 10 ideas, all 10 implemented & measured. Full pop **1,000,000** · triage pop **500,000** · seeds `11,42,99,137,2025` · realistic DNA. Decision metric is **wall p99** through the phase-aware latency lab (baseline-first back-to-back A/B, serial).
-
-## Baseline (the wall we are pushing on)
-
-Wall **p99 = 49.97 ms** against a **50 ms** tick budget — the live baseline is *already at the ceiling*. Any regression overruns the tick, so this run's bar is high: only clear, above-noise wall wins count, and a "phase got faster but wall didn't" result is a Ditch.
-
-Phase p99 breakdown (µs): **steering 14,971** (~30% of wall, the fat target) · movement 10,512 · perception 8,445 · grid_rebuild 8,410 · behavior 4,692 · l1_aggregation 4,647.
-
-## Scoreboard
-
-| Idea | Scope | Target phase | Verdict | Δwall p99 (ms) | Δphase (ms) |
-|---|---|---|---|---:|---:|
-| Native Bevy `par_iter_mut` — kill the 1M collect | architectural | steering | **KEEP** | **−7.258** | −4.230 |
-| Fuse behavior_transition into steering | architectural | steering | DITCH* | −2.576 | +1.284 |
-| Lower steering Rayon `min_len` (256→64) | architectural | steering | DITCH† | −2.218 | −0.492 |
-| Avoidance reaction-latency jitter (every-other-tick) | biological | steering | DITCH | −2.107 | +0.171 |
-| Branchless octant — kill perception atan2 | engine | perception | DITCH† | −1.479 | −0.761 |
-| BodySize powf→sqrt allometry | engine | steering | DITCH | −0.451 | −0.092 |
-| Hand-merged movement turn-limiter (powf+atan2-free) | engine | movement | DITCH | +0.321 | −0.199 |
-| max_accel from cached inv_sqrt_length | engine | steering | DITCH | +0.301 | +0.039 |
-| Cap tracked neighbors 7→5 | biological | steering | DITCH | +0.064 | −0.045 |
-| Skip no-op accel cap for wanderers/catatonic | engine | steering | DITCH | +1.011 | +0.574 |
-
-Δwall is the wall-clock delta the verdict tool reported (median at triage-only rows, p99-class at escalated rows). Negative = faster. `*` and `†` explained below.
+**Baseline:** 1M pop, 5 seeds (11/42/99/137/2025), realistic-dna, half-world 5000x5000.
+Wall p99 mean-of-p99s = **35.529 ms** (std 2.923 ms, worst seed 40.026 ms).
+Ideas considered: 12 | Implemented: 12 | Keeps: 1 | Defers: 1 | Ditches: 10 | Bundle: none (mutually exclusive pair).
 
 ---
 
-## KEEP — merge candidate
+## Headline Table
 
-### Native Bevy `par_iter_mut` for steering + movement — deletes the serial 1M collect
-**Δwall p99 −7.258 ms** (replicated −7.345 ms) · Δsteering −4.23 ms · phase noise 0.12 ms · wall noise 0.39 ms · **architectural · bit-identical**
-
-The biggest win of the run by a wide margin (>18× the wall noise floor). The old hot loop did `iter_mut().collect()` into a 1M-entity `Vec` every tick, then `par_iter_mut()` over that gather — once for steering, once for movement. Switching to native Bevy `par_iter_mut` (enabling the `multi_threaded` feature + `ComputeTaskPool` init, with the `SingleThreaded` *system* executor preserved for determinism) deletes the per-tick allocation in **both** phases. That is why the wall win (−7.26 ms) is larger than the steering-phase win (−4.23 ms): movement shed its gather too. At 1M: steering p99 13,828→9,702 µs, movement 9,361→7,183 µs, wall p99 44,268→37,406 µs.
-
-**Tradeoff / cost the human is buying:**
-- **Behavior-preserving** — no gameplay change. Only a **determinism canary** is required before merge: `cells_queried` identical across all 5 seeds. *Not* a trophic canary (intent unchanged).
-- **Catastrophic-failure mode if mis-wired:** if `ComputeTaskPool` is not initialized with >1 thread, the phases silently run *serial* and you get a massive regression instead of a win. The merge MUST assert thread count > 1.
-- **Confidence caveat:** the earlier RCA (#47) attributed the wall cost to the fork-join **barrier**, not the collect — Bevy's batching barrier could in theory be heavier than the hand-tuned `with_min_len(256)` Rayon one. The measured result refutes that worry here, but it is the thing to watch if the win fails to reproduce on another machine.
-
----
-
-## BUNDLE — none assembled
-
-Only one KEEP this run, so there was nothing to stack and no additivity check to run.
-
-**Important non-additivity note for the human:** the two strongest architectural results — the KEEP (`native par_iter`) and the DITCH* (`fuse behavior_transition`) — **attack the same resource**: the serial 1M collect + the fork-join barrier around steering. They are **mutually exclusive, not additive**. Pick one. The native-par-iter KEEP already delivers the larger wall win and is the recommended path; the fuse is the fallback if the par_iter thread-pool wiring proves fragile on a target machine.
+| Idea | Scope | Phase | Verdict | Dwall p99 (ms) | Dphase (ms) |
+|------|-------|-------|---------|---------------|-------------|
+| Pre-filter behavior_transition (compact-active-set) | engine | behavior | **KEEP** | **-4.882** | **-2.375** |
+| Fuse behavior_transition into steering | architectural | behavior | DEFER | -5.681 | -3.858 |
+| GridFixed ZST marker for catatonic grid skip | architectural | grid_rebuild | DITCH | +1.217 | +0.364 |
+| Perception radius prefilter (cbrt threshold) | biological | perception | DITCH | +0.096 | +0.096 |
+| Motion camouflage / freeze-skip | biological | perception | DITCH | -0.095 | +0.048 |
+| Avoidance skip for catatonic/waiting creatures | engine | steering | DITCH | +1.921 | +0.779 |
+| FOV squared-distance (kill sqrt in collect_cells) | engine | perception | DITCH | -0.049 | -0.052 |
+| Bounded K-slot neighbor buffer (kill partial sort) | engine | perception | DITCH | -0.302 | +0.189 |
+| Hunger-gated L1 range halving | biological | perception | DITCH | +1.156 | 0.000 |
+| Hoist max_force/mass/max_speed CSE scalars | engine | steering | DITCH | +1.125 | +0.045 |
+| Sort L0 cells by L1 parent before aggregation | architectural | l1_aggregation | DITCH | +14.832 | +15.027 |
+| fast_inv_sqrt in L1 cone normalization | engine | perception | DITCH | -2.274 | -0.831 |
 
 ---
 
-## DEFERS — none
+## KEEPS
 
-No candidate landed in the "real phase win but sub-noise on wall, park for later" bucket this run. Every non-keep either regressed wall or washed out entirely.
+### behavior-compact-active-set — Pre-filter behavior_transition before par_iter_mut dispatch
 
----
+**Wall p99 delta: -4.882 ms (replicated -4.951 ms). Phase delta: -2.375 ms. Phase SNR: 30x.**
 
-## DITCHED — and why (the instructive failures)
+**What it does.** Before the `par_iter_mut` dispatch in `behavior_transition_system`, it compacts the ECS entity list down to only those in the current throttle bucket — the ~1/behavior_divisor entities due to run this tick. The remaining ~(behavior_divisor-1)/behavior_divisor no-op Rayon work units are never dispatched.
 
-### Fuse behavior_transition into steering — DITCH* (mechanically) but a real wall win
-**Δwall p99 −2.576 ms** (>20× wall noise) · Δsteering **+1.284 ms** · architectural · bit-identical
+**Why it works beyond the phase.** The `behavior` phase directly measured -2.375 ms. The wall improvement (-4.882 ms) is ~2x larger than the phase saving, because eliminating no-op Rayon tasks frees CPU cache and scheduler headroom that benefits the downstream perception, steering, and movement phases within the same tick.
 
-**Read this one carefully.** The phase-targeted verdict tool returned DITCH because this is a *fusion*: the standalone `behavior_transition_system` is folded into the top of `update_steering_system`, so the behavior phase collapses to 0 and its ~4.7 ms reappears *inside* steering. By the steering-phase metric alone that looks like a +1.28 ms regression — hence the mechanical Ditch. **But the wall clock is the real signal and it is a clean −2.576 ms win** (removing one serial collect + one fork-join barrier; combined steering+behavior p99 18,285→14,933 µs). This is effectively a KEEP that the phase-scoped tooling can't score correctly. It loses the standalone behavior-phase timer (weakening per-phase detection on the leanest phase) and fattens the steering tuple with a `Brain` mut column (cache/register pressure — see ledger #36). **Mutually exclusive with the native-par-iter KEEP** (same barrier). Recommend: keep par_iter; hold this as the documented fallback.
+**Tradeoffs / costs:**
 
-### Lower steering Rayon `min_len` 256→64 — DITCH† (not reproduced)
-**First run: Δwall p99 −2.218 ms (KEEP at 1M).** On replication it did **not reproduce** (dWall +0.657 ms). Bit-identical, zero behavior risk, but the signal is unstable — the finer batches' work-stealing win on the heavy-tailed avoidance loop is real on some runs and washed by per-batch scheduler overhead on others. Not safe to merge on one good run. Cheap to revisit *after* the par_iter KEEP lands, since par_iter changes the batching substrate entirely.
+- The serial ECS row scan to build the compact set is still O(1M) — unavoidable until the ECS natively exposes the throttle bucket as a column. This is a roughly constant overhead of a few hundred microseconds regardless of behavior_divisor.
+- At `behavior_divisor=1` (every entity runs every tick) the filter is a no-op and returns the full list — zero harm but zero gain. Verify the production benchmark config has `behavior_divisor > 1` before landing.
+- **Mutually exclusive with fuse-behavior-transition-into-steering (below).** Both attack the same `behavior_transition_system`. Implement exactly one.
 
-### Avoidance reaction-latency jitter — DITCH (biological)
-**Δwall p99 −2.107 ms was a baseline-noise artifact.** One spiking baseline seed (grid_rebuild noise 1,081 µs) inflated the baseline p99; the robust *median* wall delta was −0.020 ms (flat) and the targeted steering phase actually *regressed* +0.171 ms. No real win. Tradeoff had it merged: **behavior change** — dodging lags up to one 50 ms tick, so fast predator-prey intercepts feel sluggish; would have required a **trophic canary** (apex & grazer within ±20%). Ditched on perf grounds before that cost was ever worth paying.
+**No biology change.** The entities processed are identical — just filtered to the same subset that would have been processed anyway. Bit-identical output. No trophic canary required.
 
-### Branchless octant (kill perception atan2) — DITCH† (not reproduced)
-**First run −1.479 ms wall (KEEP, escalated).** On replication it dropped to −0.317 ms (DEFER-class). The one remaining transcendental in the perception hot loop; bit-identical iff the branchless wedge boundaries match `atan2+rem_euclid` at every angle (guarded by an exhaustive 0.5° sweep test). Genuinely promising but the win is smaller and less stable than first measured — re-measure on a quiet machine before trusting it.
-
-### The micro-op steering tweaks — all DITCH, all instructive
-`max_accel from cached inv_sqrt` (+0.301 ms), `BodySize powf→sqrt` (−0.451 ms within noise), `skip no-op accel cap for wanderers` (+1.011 ms, a real regression), `cap neighbors 7→5` (+0.064 ms). **Common lesson:** steering at this scale is **not ALU-bound** — it is dominated by neighbor-cache traversal in the avoidance branch. Strength-reducing the arithmetic (`powf`→`sqrt`, divides→cached reciprocals) gets folded by `-O3` anyway and registers nothing above noise; *adding* per-entity branches to skip work (the wanderer/catatonic gate) actively *costs* more than the work it skips, because the elided cap path was already cheap and branch-predicted. Confirms ledger #15/#19/#50: per-creature branch additions to this loop wash or regress.
-
-### Hand-merged movement turn-limiter — DITCH
-Δmovement −0.199 ms (a real but tiny phase win) but Δwall **+0.321 ms** — the movement phase got marginally faster while wall did not improve. The powf(1.0)→divide half is bit-identical; the atan2-free half is not (±1 ULP on clamped headings, would need a determinism canary). No wall payoff to justify the risk.
-
-### Cap tracked neighbors 7→5 — DITCH (biological)
-No measurable win (Δwall +0.064 ms, deep in noise). Would have been a **behavior change** (coarser dense-pack avoidance/schooling, smallest grazers lose an avoidance margin) requiring a trophic canary — all cost, no perf upside. Ditched.
+**Branch:** ready to merge. No hold.
 
 ---
 
-## Recommend merging
+## DEFERS (parked — re-measure before deciding)
 
-1. **Native Bevy `par_iter_mut` (kill the 1M collect)** — **−7.26 ms wall p99, replicated.** Bit-identical, behavior-preserving. The single highest-value, lowest-behavioral-risk change this run. *Gate:* assert `ComputeTaskPool` thread count > 1, and run the `cells_queried` determinism canary across all 5 seeds before merge. This alone moves the live baseline from 49.97 ms toward ~42.7 ms — out of overrun territory.
+### fuse-behavior-transition-into-steering — Fold behavior_transition into the steering closure
 
-That is the only merge-now item. **Do not also merge the fuse** — it fights the same barrier and is mutually exclusive.
+**Wall p99 delta: -5.681 ms (tool median). Raw 1M signal: ~7.7 ms (36503->28840 us). Phase delta: -3.858 ms.**
 
-## What to hunt next
+**Signal is real, noise is the problem.** The behavior phase collapsed entirely (4874 us -> 0 us) and the wall dropped ~7.7 ms raw. The DEFER verdict is purely a baseline stability issue: the baseline run had a worst seed at 42306 us vs a mean of 36503 us (std 3366 us). The candidate run had std 703 us — the candidate is rock-solid, the baseline was noisy. Wall noise of 3.396 ms exceeds the median improvement by the tool's 2x threshold.
 
-- **Re-measure the two "not reproduced" candidates on the post-par_iter tree:** `min_len 256→64` and `branchless octant`. par_iter changes the batching substrate, so their economics shift — both are bit-identical and cheap to retry, and the octant kill is the last transcendental in perception.
-- **Stop micro-optimizing steering arithmetic.** This run proved it is memory/neighbor-cache-bound, not ALU-bound. The next steering win has to come from the **access pattern** (cache layout of the neighbor cache, SoA-ifying the avoidance read set) or from **doing less work biologically** (Golden-Zone skips that survive a trophic canary), not from shaving FLOPs.
-- **Re-profile after the KEEP lands.** Deleting ~7 ms reshapes the phase ranking; perception (8.4 ms) and grid_rebuild (8.4 ms) likely become the new joint-second targets behind a slimmer steering.
+**Triage (500k) returned KEEP** with dWallMedian -2.024 ms / dPhase -1.656 ms at much lower noise. The directional signal is consistent from 500k triage through 1M escalation.
+
+**What it does.** Eliminates one serial 1M-entity `Vec::collect()` and one full Rayon fork-join barrier per tick by running the behavior-transition logic inside the existing steering `par_iter_mut` closure at the top of each per-entity call.
+
+**Tradeoffs / costs:**
+
+- `behavior` and `movement` phase metrics are lost as diagnostic signals — both phases collapse to 0, making future per-phase regression detection blind in those dimensions. You would bank entirely on the wall median.
+- `Brain` gains a `mut` borrow inside the steering query — verify no other system holds a conflicting borrow on `Brain` mid-tick in the same schedule.
+- If `behavior_divisor` and steering divisor ever need to differ, the fused body must be split back out.
+- **Mutually exclusive with behavior-compact-active-set.** The directional wall win here is slightly larger (-5.681 ms vs -4.882 ms) but compact-active-set is clean and measurable today. If the fuse re-measures KEEP on a stable baseline, it supersedes the compact approach.
+
+**Action:** Re-measure after the machine baseline is calm (baseline std < 1 ms). The raw -7.7 ms signal would make this the second-largest single-run win in the ledger after native-par-iter (#58).
+
+---
+
+## DITCHED — With Brief Cause
+
+### grid-rebuild-gridfix-marker (+1.217 ms wall, +0.364 ms phase — triage false positive)
+Triage (500k) looked promising (dPhase -0.237 ms, dWall -2.755 ms) but full-pop (1M, 5 seeds) flipped to a clear regression above noise on both metrics. Adding lifecycle systems to maintain a `GridFixed` ZST marker (`sync_grid_fixed_removals`, `tag_stopped_catatonics`, `untag_on_behavior_change`) plus a cache `Vec` and `retain()` scan costs more than skipping the occasional catatonic entity. The stopped-catatonic cohort is too thin at 1M realistic-dna to offset the constant overhead of marker bookkeeping.
+
+### perception-radius-prefilter (+0.096 ms, triage)
+`cbrt()` is a transcendental (~30 cycles) called once per creature outside the inner scan. With realistic-dna population mix most proxies are not extremely small, so the prefilter rarely fires — constant cost, near-zero rejection savings. Benefit would only appear in heavily size-polarised populations the benchmark does not produce.
+
+### motion-camouflage-freeze-skip (+0.048 ms phase, triage)
+Two FP multiplies and a compare added per proxy to detect near-stationarity. With realistic-dna the vast majority of creatures are actively wandering; the frozen cohort is too small to recover the per-proxy overhead. Matches the failure mode predicted in `biology-notes.md`. Trophic canary was never reached.
+
+### avoidance-skip-catatonic (+1.921 ms at 1M — triage false positive)
+Triage showed -1.254 ms which triggered escalation to 1M. At 1M the signal reversed cleanly within noise. The inactive/catatonic fraction in realistic-dna is too small to produce measurable savings. Logically sound (movement zeros their accel anyway) but economically invisible.
+
+### collect-cells-fov-squared-dist (-0.052 ms phase, noise floor)
+Only ~10 cells per creature are processed here; the saved `sqrt` is unmeasurable at the per-creature level. The restructured three-branch comparison introduces extra branching correlating with worstPhaseP99Regression +0.492 ms. Wall delta -0.049 ms vs noise 1.139 ms is indistinguishable from noise.
+
+### perception-bounded-k-min-buffer (+0.189 ms phase, triage)
+The O(K) worst-slot linear scan over 7 elements per insertion exceeds the cost of the lazy partial-sort it replaces. Win only materialises when accepted candidates >> K, which does not happen in the typical per-perceiver cell scan at this density.
+
+### hunger-gated-l1-range-halving (+1.156 ms wall, triage)
+Energy branch inside the hot parallel L1 scan adds branch-prediction pressure on the ~95%+ of entities not in the hungry cohort. Bench population does not drain energy to the low-energy threshold fast enough during the measurement window. Same pattern as ledger #17 (sated cohort too thin).
+
+### steering-local-cse-scalars (+1.125 ms wall, triage)
+LLVM under `-O3` already CSEs `mass()`, `max_force()`, `max_speed()` since they are small fully-inlined methods. Consistent with ledger #36 and #55. Steering is memory/bandwidth-bound at 1M, not arithmetic-bound. Suggest DO_NOT_REVISIT for pure CSE micro-ops in the steering closure.
+
+### l1-aggregation-l0-sort-by-parent (+14.832 ms wall, +15.027 ms phase — massive regression, stopped at triage)
+`sort_unstable_by_key` over all non-empty L0 cells is O(N log N) ~ 3.4M comparisons at 500k pop. This single sort turns a ~3.4 ms phase into a ~19 ms phase. The L1 data path is memory-bandwidth-bound, not CPU-compute-bound — structural transforms that add CPU work to save cache bandwidth do not help. Same lesson as ledger #9 (parallel L1 aggregation). Do not revisit sort-based L1 locality approaches.
+
+### l1-cone-fast-inv-sqrt (-2.274 ms raw p99, median sub-noise)
+Raw p99 numbers look attractive but the median-level gate correctly rejects: dPhaseMedian +154 us vs phaseNoise 214 us; dWallMedian -405 us vs wallNoise 727 us. The L1 cone scan is low-frequency (only `CanStrategicVision` giants, only cells passing range+FOV). The compiler already lowers `recip()` to an efficient reciprocal sequence. Consistent with ledger #2.
+
+---
+
+## Bundle
+
+No bundle A/B run. The only KEEP (`behavior-compact-active-set`) and the only DEFER (`fuse-behavior-transition-into-steering`) are **mutually exclusive** — both modify `behavior_transition_system` and a stacked union is incoherent. Pick one.
+
+---
+
+## Recommend Merging
+
+| Priority | ID | Justification |
+|----------|----|---------------|
+| 1 | **behavior-compact-active-set** | -4.882 ms wall (replicated -4.951 ms), 30x phase SNR, no biology change, no hold, no canary required. Ready to land. |
+
+**Fuse revisit:** If machine noise settles (baseline std < 1 ms), re-run `fuse-behavior-transition-into-steering`. The directional signal is -5.681 ms median / ~7.7 ms raw at 1M. If confirmed KEEP it supersedes behavior-compact-active-set (pick the fuse, drop the compact filter). These are mutually exclusive — do not merge both.
+
+---
+
+## What to Hunt Next
+
+1. **Re-measure fuse-behavior-transition-into-steering** when baseline variance is low. Potential ~7.7 ms. Combined with native-par-iter (#58 HOLD, -7.258 ms) that would be ~15 ms in barrier-elimination wins alone, bringing 1M from ~35.5 ms toward the 20 Hz budget.
+
+2. **Land held KEEPs from prior runs** before the next hunt — the merge queue is accumulating against a stale baseline:
+   - `native-par-iter-kill-1m-collect` (#58, -7.258 ms, HUMAN HOLD)
+   - `fuse-steering-integrate-system` (#33, -2.7 ms, HUMAN HOLD)
+   - `behavior-compact-active-set` (this run, -4.882 ms, ready)
+   Running the perf-hunt off an un-landed baseline understates cumulative improvement and produces misleading SNR numbers.
+
+3. **Cohort-thin biological ideas** (hunger-gated, camouflage, avoidance-skip): all three failed because the target cohort is below ~5% of population at benchmark time. These may revive once the simulation runs long enough to drain energy and produce a realistic hungry/stopped/exhausted mix. Consider a warm-soak benchmark mode (run N ticks before measuring) to activate these cohorts.
+
+4. **L1 aggregation** has resisted every structural attack (sort, parallel, fold — all DITCH). The next viable angle is hardware counter measurement via `dev-tools` perf events to determine if the bottleneck is DRAM bandwidth or something else before theorizing further.

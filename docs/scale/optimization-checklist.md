@@ -239,4 +239,29 @@ bisect to find the pair fighting over the same resource (usually two changes bot
 
 ---
 
+## 🌙 Deferred — ship-time system-fusion pass (do NOT forget)
+
+System fusion (folding adjacent ECS systems into one pass to kill serial collects + fork-join
+barriers) is a **deliberate ship-time hardening pass, not a dev-time change** — during development
+we keep behavior / steering / movement / L1 **separate** because separate systems are independently
+observable, profilable, and debuggable. We pay the readability cost **once**, when the architecture
+is frozen before ship.
+
+Two fuse levers are **measured and parked** (see `perf-hunt/ledger.jsonl`). The saved patches are
+gitignored and already bit-rotted against HEAD — **they will be re-implemented and re-measured from
+scratch** on top of whatever the codebase has become by then. The ledger is the durable spec, not
+the diff:
+
+- **`fuse-behavior-transition-into-steering`** (~−5.7 ms wall @ 1M; behavior phase → 0). Fold
+  `behavior_transition_system` into the top of `update_steering_system`. **Mutually exclusive** with
+  the merged `behavior-compact-active-set` (same system) — re-deciding between them is part of the
+  ship-time pass.
+- **`fuse-steering-integrate-system`** (#33, ~−2.7 ms wall). Fold steering into integrate/movement.
+
+⚠️ **Not independently additive:** this fusion and the `native-par-iter` win (#58, −7.26 ms) attack
+the **same** serial-1M-collect + fork-join barrier — pick one per barrier; don't sum the wins.
+This is the structural payoff behind **T3.1** above.
+
+---
+
 **Document Owner:** Pillar 1 (Prove Scale) · **Created:** 2026-06-21 · update Status as items are tried.

@@ -1,9 +1,8 @@
+use super::step::{BehaviorStepCtx, step};
 use crate::simulation::core::components::{FreqConfig, PhysicsTick};
 use crate::simulation::core::FrequencyThrottle;
-use crate::simulation::creatures::components::{BehaviorMode, Brain, BrainMode, CreatureState};
-use crate::simulation::creatures::constants::{
-    AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING, TICK_INTERVAL_SECONDS,
-};
+use crate::simulation::creatures::components::{Brain, CreatureState};
+use crate::simulation::creatures::constants::TICK_INTERVAL_SECONDS;
 use bevy_ecs::prelude::*;
 use rayon::prelude::*;
 
@@ -18,44 +17,27 @@ pub fn behavior_transition_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "behavior_transition");
 
-    let current_time = physics_tick.get() as f64 * TICK_INTERVAL_SECONDS;
+    let ctx = BehaviorStepCtx {
+        current_time: physics_tick.get() as f64 * TICK_INTERVAL_SECONDS,
+    };
 
-    // Frequency throttling: entity-ID bucketing with power-of-2 optimization.
-    // Hoisted above the collect so the throttle gate runs once, serially, during the
-    // (already-serial) ECS scan rather than once per dispatched closure in parallel.
     let throttle = FrequencyThrottle::new(freq.behavior_divisor, physics_tick.get());
 
-    // Compact the active set BEFORE the parallel dispatch: keep only the entities in
-    // this tick's throttle bucket. This shrinks the dispatched Vec ~`behavior_divisor`×
-    // and removes the no-op Rayon work units (and their scheduler overhead) that
-    // throttled entities incur when collected unconditionally.
     let mut entities: Vec<_> = query
         .iter_mut()
         .filter(|(entity, _, _)| throttle.should_process(entity.index()))
         .collect();
 
-    // Transitions: Light workload - moderate chunks.
-    // Throttle check is omitted here — every entity in `entities` already passed the filter.
     entities.par_iter_mut().with_min_len(256).for_each(|(_, creature_state, brain)| {
-        creature_state.age += AGE_INCREMENT_PER_TICK;
-
-        if creature_state.behavior == BehaviorMode::Wandering {
-            creature_state.consume_energy(ENERGY_COST_WANDERING);
-        }
-
-        if brain.mode == BrainMode::Normal {
-            let age = creature_state.age;
-            let energy = creature_state.energy;
-            if brain.can_decide(current_time, age, energy) {
-                brain.record_decision(current_time);
-            }
-        }
+        step(creature_state, brain, &ctx);
     });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simulation::creatures::components::BehaviorMode;
+    use crate::simulation::creatures::constants::AGE_INCREMENT_PER_TICK;
 
     #[test]
     fn test_creature_aging() {

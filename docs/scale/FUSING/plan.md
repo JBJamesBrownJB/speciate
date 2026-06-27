@@ -84,6 +84,33 @@ Worklist — **one system per commit**, in dependency order:
    **no regression**. Record the number in the progress log below.
 5. Commit (small, reviewable). Move to the next system.
 
+#### Phase 0 close-out (added 2026-06-27 — must clear before Phase 1)
+
+Three items surfaced by the Phase 0 run + code review. These are now Phase 0 **exit gates**:
+
+1. **Cumulative branch-vs-main lab A/B (NEW required gate).** The run bench-tested each extraction
+   *independently* vs baseline — it never validated the **whole stack together** vs `main`. Live
+   snapshots then showed a *stable* ~+2.5 ms offset in the **steering** phase on the branch (source
+   byte-identical to main) across two captures — signal-shaped, not noise. Likely a **code-layout /
+   i-cache artifact** of adding the new `step` modules (only visible with all changes present). Run a
+   same-session, back-to-back, 5-seed `latency_lab` A/B of **branch HEAD vs main**, replicated, to
+   resolve real-vs-noise. This is the Phase 0 exit gate; nothing proceeds to Phase 1 until it's clean.
+2. **Inline convention.** "Extraction is free" only holds when `step()` is force-inlined — the
+   steering regression proved it. Make **`#[inline(always)]`** a uniform rule and apply it to the
+   committed `behavior::step` (currently none) and `integrate::step` (currently `#[inline]`). Re-bench
+   vs main; test whether inlining also closes the steering layout offset (fewer separate functions →
+   less layout perturbation).
+3. **DSL unification.** The two extractions diverged (`BehaviorStepCtx` vs `IntegrateCtx`; pure
+   scalars vs a `&NoiseTable` borrow). Pick ONE convention — `<Concept>Ctx` naming, and relax the
+   overstated "Ctx = Copy scalars only" rule to **"scalars + read-only borrows"** (integrate already
+   needs a borrow; that's fine). Behavior-preserving rename, tests stay green.
+
+Then the original outstanding item: **steering retry** — re-extract `steering::step` *with* the
+inline convention from the start; on the wide-borrow regression, fall back to a reduced/struct borrow
+signature. If it still regresses, document steering as a justified exception (stays a separate system,
+like perception) rather than forcing it. A GOOD Phase 0 outcome = the corridor decoupled **as far as
+it cleanly can be**, hardened, validated cumulatively vs main, and documented — not necessarily all 4.
+
 ### Phase 1 — Fused path behind a flag (later · pre-ship)
 
 - Add cargo feature **`fuse-act`**, **orthogonal to `dev-tools`** (so the fused build stays

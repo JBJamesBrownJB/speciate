@@ -20,18 +20,23 @@ pub fn behavior_transition_system(
 
     let current_time = physics_tick.get() as f64 * TICK_INTERVAL_SECONDS;
 
-    // Frequency throttling: entity-ID bucketing with power-of-2 optimization
+    // Frequency throttling: entity-ID bucketing with power-of-2 optimization.
+    // Hoisted above the collect so the throttle gate runs once, serially, during the
+    // (already-serial) ECS scan rather than once per dispatched closure in parallel.
     let throttle = FrequencyThrottle::new(freq.behavior_divisor, physics_tick.get());
 
-    let mut entities: Vec<_> = query.iter_mut().collect();
+    // Compact the active set BEFORE the parallel dispatch: keep only the entities in
+    // this tick's throttle bucket. This shrinks the dispatched Vec ~`behavior_divisor`×
+    // and removes the no-op Rayon work units (and their scheduler overhead) that
+    // throttled entities incur when collected unconditionally.
+    let mut entities: Vec<_> = query
+        .iter_mut()
+        .filter(|(entity, _, _)| throttle.should_process(entity.index()))
+        .collect();
 
-    // Transitions: Light workload - moderate chunks
-    entities.par_iter_mut().with_min_len(256).for_each(|(entity, creature_state, brain)| {
-        // Frequency throttling: skip if not in current bucket
-        if !throttle.should_process(entity.index()) {
-            return;
-        }
-
+    // Transitions: Light workload - moderate chunks.
+    // Throttle check is omitted here — every entity in `entities` already passed the filter.
+    entities.par_iter_mut().with_min_len(256).for_each(|(_, creature_state, brain)| {
         creature_state.age += AGE_INCREMENT_PER_TICK;
 
         if creature_state.behavior == BehaviorMode::Wandering {
@@ -69,6 +74,32 @@ mod tests {
         let final_age = world.get::<CreatureState>(entity).unwrap().age;
         assert!(final_age > initial_age);
         assert_eq!(final_age, initial_age + (AGE_INCREMENT_PER_TICK * 10.0));
+    }
+
+    #[test]
+    fn test_compact_active_set_cadence_preserved() {
+        // Verifies that the compact-active-set filter preserves the throttle cadence.
+        // With behavior_divisor=4, only 1-in-4 entities are processed per tick.
+        // Entity index 0 falls in bucket 0, so it is processed at ticks 0, 4, 8, ...
+        // Over 100 ticks that is 25 processing events → 25 × AGE_INCREMENT_PER_TICK.
+        let divisor = 4u8;
+        let mut age = 0.0f32;
+
+        for tick in 0u64..100 {
+            let throttle = FrequencyThrottle::new(divisor, tick);
+            // Simulate what the filter does: only proceed when should_process is true.
+            if throttle.should_process(0) {
+                age += AGE_INCREMENT_PER_TICK;
+            }
+        }
+
+        // 100 ticks / divisor-4 = 25 processing events.
+        // Use approximate equality: 25 float additions accumulate rounding error (~1e-7).
+        let expected = AGE_INCREMENT_PER_TICK * 25.0;
+        assert!(
+            (age - expected).abs() < 1e-6,
+            "age {age} differed from expected {expected} by more than 1e-6"
+        );
     }
 
     #[test]

@@ -247,20 +247,23 @@ we keep behavior / steering / movement / L1 **separate** because separate system
 observable, profilable, and debuggable. We pay the readability cost **once**, when the architecture
 is frozen before ship.
 
-Two fuse levers are **measured and parked** (see `perf-hunt/ledger.jsonl`). The saved patches are
-gitignored and already bit-rotted against HEAD — **they will be re-implemented and re-measured from
-scratch** on top of whatever the codebase has become by then. The ledger is the durable spec, not
-the diff:
+**Context — the biggest collect-killer is already merged:** `native-par-iter-kill-1m-collect`
+(#58, −7.26 ms, KEEP) was **merged 2026-06-26** (commits `eba30db`/`aaa664b`) and is baked into the
+current baseline — steering & movement already run native `par_iter_mut`, no serial 1M `collect`.
+That resolves the "pick one per barrier" choice in its favour, which changes what's left:
 
-- **`fuse-behavior-transition-into-steering`** (~−5.7 ms wall @ 1M; behavior phase → 0). Fold
-  `behavior_transition_system` into the top of `update_steering_system`. **Mutually exclusive** with
-  the merged `behavior-compact-active-set` (same system) — re-deciding between them is part of the
-  ship-time pass.
-- **`fuse-steering-integrate-system`** (#33, ~−2.7 ms wall). Fold steering into integrate/movement.
+- **`fuse-behavior-transition-into-steering`** (~−5.7 ms wall @ 1M; behavior phase → 0) — **the one
+  genuine remaining fuse lever.** Fold `behavior_transition_system` into the top of
+  `update_steering_system` (par-iter did *not* touch behavior). **Mutually exclusive** with the
+  merged `behavior-compact-active-set` (same system): the ship-time question is whether eliminating
+  the behavior phase entirely (~−5.7 ms raw) beats the already-merged compact-active-set (~−4.9 ms).
+- **`fuse-steering-integrate-system`** (#33, ~−2.7 ms wall) — **likely OBSOLETE.** It attacked the
+  same steering/movement collect + fork-join barrier that the merged native-par-iter already killed.
+  Re-measure before pursuing; assume most of its win is already banked.
 
-⚠️ **Not independently additive:** this fusion and the `native-par-iter` win (#58, −7.26 ms) attack
-the **same** serial-1M-collect + fork-join barrier — pick one per barrier; don't sum the wins.
-This is the structural payoff behind **T3.1** above.
+The saved patches for both are gitignored and already bit-rotted against HEAD — **re-implement and
+re-measure from scratch** at ship time. The ledger (`perf-hunt/ledger.jsonl`) is the durable spec,
+not the diff. This is the structural payoff behind **T3.1** above.
 
 ---
 

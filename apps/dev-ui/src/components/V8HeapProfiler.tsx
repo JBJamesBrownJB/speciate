@@ -51,13 +51,14 @@ const renderMiniSparkline = (
 
   const maxValue = Math.max(...history) * 1.1;
   const xStep = width / (maxHistory - 1);
+  const startX = (maxHistory - history.length) * xStep;
 
   ctx.beginPath();
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = color;
 
   history.forEach((value, i) => {
-    const x = i * xStep;
+    const x = startX + i * xStep;
     const normalizedValue = Math.min(value / maxValue, 1);
     const y = height - normalizedValue * height;
 
@@ -69,6 +70,17 @@ const renderMiniSparkline = (
   });
 
   ctx.stroke();
+
+  if (startX > 0) {
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.moveTo(startX, 0);
+    ctx.lineTo(startX, height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 };
 
 export const V8HeapProfiler: React.FC<Props> = ({ onTriggerGC, onTakeHeapSnapshot }) => {
@@ -85,7 +97,7 @@ export const V8HeapProfiler: React.FC<Props> = ({ onTriggerGC, onTakeHeapSnapsho
   const externalCanvasRef = useRef<HTMLCanvasElement>(null);
   const arrayBufferCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const MAX_HISTORY = 120;
+  const MAX_HISTORY = 40;
 
   useEffect(() => {
     const handleMemoryUpdate = (snapshot: MemorySnapshot) => {

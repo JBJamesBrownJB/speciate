@@ -13,6 +13,7 @@ interface HUDElements {
 export class HUDManager {
   private elements: HUDElements;
   private fpsSparkline: FPSSparkline;
+  private smoothedFps = 0;
 
   constructor(
     elementIds: {
@@ -39,8 +40,11 @@ export class HUDManager {
   }
 
   updateFPS(fps: number): void {
-    if (this.elements.fpsValue) {
-      this.elements.fpsValue.textContent = fps.toString();
+    // EMA with α=0.05 → ~1 s time constant at 90 FPS; seed from first real sample
+    this.smoothedFps = this.smoothedFps === 0 ? fps : 0.05 * fps + 0.95 * this.smoothedFps;
+    const display = Math.round(this.smoothedFps).toString();
+    if (this.elements.fpsValue && this.elements.fpsValue.textContent !== display) {
+      this.elements.fpsValue.textContent = display;
     }
     this.fpsSparkline.update(fps);
   }

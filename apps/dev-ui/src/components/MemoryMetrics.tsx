@@ -54,12 +54,14 @@ const renderSparkline = (
 
   const maxValue = Math.max(DANGER_THRESHOLD_MB, peakValue * 1.1);
   const xStep = width / (maxHistory - 1);
+  // Right-align: newest sample on right, empty space on left while window fills
+  const startX = (maxHistory - history.length) * xStep;
 
   ctx.beginPath();
   ctx.lineWidth = 1.5;
 
   history.forEach((valueMB, i) => {
-    const x = i * xStep;
+    const x = startX + i * xStep;
     const normalizedValue = Math.min(valueMB / maxValue, 1);
     const y = height - normalizedValue * height;
 
@@ -73,6 +75,19 @@ const renderSparkline = (
   const lastValue = history[history.length - 1];
   ctx.strokeStyle = getMemoryColor(lastValue);
   ctx.stroke();
+
+  // Window-start indicator: vertical dashed line at oldest data point.
+  // Moves left as the buffer fills; disappears when window is complete.
+  if (startX > 0) {
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.moveTo(startX, 0);
+    ctx.lineTo(startX, height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   ctx.beginPath();
   ctx.strokeStyle = 'rgba(217, 72, 72, 0.3)';
@@ -97,7 +112,7 @@ const renderSparkline = (
 
 export const MemoryMetrics: React.FC<Props> = ({ processMemoryBytes }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const historyRef = useRef<SparklineData>({ history: [], maxHistory: 120, peakValue: 0 });
+  const historyRef = useRef<SparklineData>({ history: [], maxHistory: 40, peakValue: 0 });
 
   useEffect(() => {
     const memoryMB = bytesToMB(processMemoryBytes);

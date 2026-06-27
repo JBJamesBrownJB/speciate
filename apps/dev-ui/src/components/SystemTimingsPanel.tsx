@@ -16,7 +16,8 @@ const DANGER_THRESHOLD_US = 50000;
 const renderSparkline = (
   canvas: HTMLCanvasElement,
   history: number[],
-  maxHistory: number
+  maxHistory: number,
+  windowFrames: number
 ): void => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -36,12 +37,13 @@ const renderSparkline = (
 
   const maxValue = Math.max(DANGER_THRESHOLD_US, ...history);
   const xStep = width / (maxHistory - 1);
+  const startX = (maxHistory - history.length) * xStep;
 
   ctx.beginPath();
   ctx.lineWidth = 1.5;
 
   history.forEach((value, i) => {
-    const x = i * xStep;
+    const x = startX + i * xStep;
     const normalizedValue = Math.min(value / maxValue, 1);
     const y = height - normalizedValue * height;
 
@@ -62,6 +64,20 @@ const renderSparkline = (
 
   ctx.strokeStyle = strokeColor;
   ctx.stroke();
+
+  // Permanent window-start line: fixed x position separating older history (left)
+  // from the rolling-average window (right) — "data right of here = the number you see".
+  if (history.length >= windowFrames) {
+    const windowLineX = (maxHistory - windowFrames) * xStep;
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.moveTo(windowLineX, 0);
+    ctx.lineTo(windowLineX, height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   ctx.beginPath();
   ctx.strokeStyle = 'rgba(217, 72, 72, 0.3)';
@@ -92,7 +108,8 @@ const formatCount = (value: number): string => {
 const renderCountSparkline = (
   canvas: HTMLCanvasElement,
   history: number[],
-  maxHistory: number
+  maxHistory: number,
+  windowFrames: number
 ): void => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -112,12 +129,13 @@ const renderCountSparkline = (
 
   const maxValue = Math.max(...history, 1);
   const xStep = width / (maxHistory - 1);
+  const startX = (maxHistory - history.length) * xStep;
 
   ctx.beginPath();
   ctx.lineWidth = 1.5;
 
   history.forEach((value, i) => {
-    const x = i * xStep;
+    const x = startX + i * xStep;
     const normalizedValue = Math.min(value / maxValue, 1);
     const y = height - normalizedValue * height;
 
@@ -128,8 +146,20 @@ const renderCountSparkline = (
     }
   });
 
-  ctx.strokeStyle = '#5c9fd4'; // Blue for count metrics
+  ctx.strokeStyle = '#5c9fd4';
   ctx.stroke();
+
+  if (history.length >= windowFrames) {
+    const windowLineX = (maxHistory - windowFrames) * xStep;
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.moveTo(windowLineX, 0);
+    ctx.lineTo(windowLineX, height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 };
 
 const getTimingClass = (valueUs: number): string => {
@@ -241,8 +271,8 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
     window.electron?.setSystemFrequency?.(systemName, divisor);
   };
 
-  // Rolling average window: 1 second at ~30Hz = ~30 frames
-  const ROLLING_WINDOW_FRAMES = 30;
+  // Rolling average window: 1 second at 20 Hz sim tick rate
+  const ROLLING_WINDOW_FRAMES = 20;
 
   useEffect(() => {
     if (!timings) return;
@@ -258,7 +288,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
         canvasRefs.current[key] = React.createRef<HTMLCanvasElement>();
       }
       if (!historyRefs.current[key]) {
-        historyRefs.current[key] = { history: [], maxHistory: 120 };
+        historyRefs.current[key] = { history: [], maxHistory: 40 };
       }
 
       // Update history (for sparkline)
@@ -277,7 +307,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
       // Render sparkline
       const canvas = canvasRefs.current[key]?.current;
       if (canvas) {
-        renderSparkline(canvas, history.history, history.maxHistory);
+        renderSparkline(canvas, history.history, history.maxHistory, ROLLING_WINDOW_FRAMES);
       }
     });
 
@@ -289,7 +319,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
         canvasRefs.current[key] = React.createRef<HTMLCanvasElement>();
       }
       if (!historyRefs.current[key]) {
-        historyRefs.current[key] = { history: [], maxHistory: 120 };
+        historyRefs.current[key] = { history: [], maxHistory: 40 };
       }
 
       const value = timings[key as keyof SystemTimingsSnapshot] as number;
@@ -305,7 +335,7 @@ export const SystemTimingsPanel: React.FC<Props> = ({ timings }) => {
 
       const canvas = canvasRefs.current[key]?.current;
       if (canvas) {
-        renderCountSparkline(canvas, history.history, history.maxHistory);
+        renderCountSparkline(canvas, history.history, history.maxHistory, ROLLING_WINDOW_FRAMES);
       }
     });
 

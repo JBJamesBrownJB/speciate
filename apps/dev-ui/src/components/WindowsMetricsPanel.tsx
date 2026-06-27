@@ -27,7 +27,7 @@ const formatBytes = (bytes: number): string => {
   return mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
 };
 
-const MAX_HISTORY = 120;
+const MAX_HISTORY = 40;
 
 const renderSparkline = (canvas: HTMLCanvasElement, history: number[]): void => {
   const ctx = canvas.getContext('2d');
@@ -45,17 +45,29 @@ const renderSparkline = (canvas: HTMLCanvasElement, history: number[]): void => 
 
   const maxValue = Math.max(...history, 1);
   const xStep = width / (MAX_HISTORY - 1);
+  const startX = (MAX_HISTORY - history.length) * xStep;
 
   ctx.beginPath();
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = COLORS.streaming;
   history.forEach((value, i) => {
-    const x = i * xStep;
+    const x = startX + i * xStep;
     const y = height - Math.min(value / maxValue, 1) * height;
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
+
+  if (startX > 0) {
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.moveTo(startX, 0);
+    ctx.lineTo(startX, height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 };
 
 export const WindowsMetricsPanel: React.FC<Props> = ({ metrics }) => {

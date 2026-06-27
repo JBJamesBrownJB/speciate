@@ -83,7 +83,7 @@ async function main(): Promise<void> {
       console.warn('[PixiJS] ⚠️ Running in Canvas2D mode (software rendering, expect 30-60 FPS)');
     }
 
-    app.ticker.maxFPS = 0;
+    app.ticker.maxFPS = RENDERING_CONFIG.TARGET_FPS;
 
     let rafSamples: number[] = [];
     let rafLastTime = performance.now();

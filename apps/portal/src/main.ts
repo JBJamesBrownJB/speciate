@@ -507,12 +507,9 @@ async function main(): Promise<void> {
       updateMinimapPosition();
     });
 
-    // Keyboard input for camera panning and tool shortcuts
+    // Keyboard input for camera panning
     window.addEventListener("keydown", (event: KeyboardEvent) => {
       inputManager.handleKeyDown(event.key);
-      if ((event.key === 'p' || event.key === 'P') && document.activeElement?.tagName !== 'INPUT') {
-        toolsPanel.toggleTool('plant');
-      }
     });
 
     window.addEventListener("keyup", (event: KeyboardEvent) => {

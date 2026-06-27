@@ -73,6 +73,8 @@ impl SimulationBuilder {
 
             type_registry.register::<WanderState>();
             type_registry.register::<FleeState>();
+
+            type_registry.register::<Dna>();
         }
 
         schedule.add_systems(process_spawn_events);

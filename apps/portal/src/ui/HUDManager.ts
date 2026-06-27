@@ -46,7 +46,7 @@ export class HUDManager {
     if (this.elements.fpsValue && this.elements.fpsValue.textContent !== display) {
       this.elements.fpsValue.textContent = display;
     }
-    this.fpsSparkline.update(fps);
+    this.fpsSparkline.update(this.smoothedFps);
   }
 
   updateTickRate(tickRateHz: number): void {

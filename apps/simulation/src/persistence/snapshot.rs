@@ -237,21 +237,23 @@ impl Simulation {
         scene.write_to_world(&mut simulation.world, &mut entity_map)?;
 
         // Perception and NeighborCache are not serialized (fixed-array optimization).
-        // Reconstruct from BodySize.
+        // Reconstruct from BodySize + Dna (Dna is now serialized, so fov_gene is available here).
         use crate::simulation::core::components::BodySize;
+        use crate::simulation::creatures::dna::Dna;
         use crate::simulation::perception::{NeighborCache, Perception};
-        let entities_needing_perception: Vec<(Entity, f32)> = simulation
+        let entities_needing_perception: Vec<(Entity, f32, Option<f32>)> = simulation
             .world
-            .query_filtered::<(Entity, &BodySize), Without<Perception>>()
+            .query_filtered::<(Entity, &BodySize, Option<&Dna>), Without<Perception>>()
             .iter(&simulation.world)
-            .map(|(e, size)| (e, size.length))
+            .map(|(e, size, dna)| (e, size.length, dna.map(|d| d.expressed_fov())))
             .collect();
 
-        for (entity, body_length) in entities_needing_perception {
-            simulation
-                .world
-                .entity_mut(entity)
-                .insert(Perception::from_body_size(body_length));
+        for (entity, body_length, fov_degrees) in entities_needing_perception {
+            let perception = match fov_degrees {
+                Some(fov) => Perception::from_body_size_with_fov(body_length, fov),
+                None => Perception::from_body_size(body_length),
+            };
+            simulation.world.entity_mut(entity).insert(perception);
         }
 
         // NeighborCache must also be reconstructed (contains Entity references + fixed arrays)
@@ -271,7 +273,6 @@ impl Simulation {
 
         // Dna: now serialized, but absent in saves made before registration.
         // Re-insert defaults so old saves still produce valid creatures.
-        use crate::simulation::creatures::dna::Dna;
         let entities_needing_dna: Vec<Entity> = simulation
             .world
             .query_filtered::<Entity, Without<Dna>>()
@@ -723,5 +724,39 @@ mod tests {
         let (size_gene, fov_gene) = result.expect("creature should exist after load");
         assert_eq!(size_gene, 0.3, "size_gene must survive save/load round-trip");
         assert_eq!(fov_gene, 0.7, "fov_gene must survive save/load round-trip");
+    }
+
+    #[test]
+    fn test_save_state_restores_perception_fov_from_dna() {
+        use crate::simulation::creatures::dna::Dna;
+        use crate::simulation::perception::Perception;
+        use bevy_ecs::query::QueryState;
+
+        let mut sim = SimulationBuilder::new()
+            .set_boundaries(200.0, 150.0)
+            .build();
+
+        // fov_gene=0.0 → MIN_FOV_DEGREES (narrowest possible); distinct from default
+        let dna = Dna::new(0.5, 0.0);
+        let expected_fov_rad = dna.expressed_fov().to_radians();
+        let builder = CritBuilder::new().at(10.0, 20.0).with_dna(dna);
+        let id = sim.spawn_crit(builder);
+
+        let save_state = sim.to_save_state().expect("save failed");
+        let mut restored = Simulation::from_save_state(save_state).expect("load failed");
+
+        let mut query: QueryState<(&CritId, &Perception)> = restored.world_mut().query();
+        let result = query
+            .iter(restored.world())
+            .find(|(crit_id, _)| crit_id.0 == id)
+            .map(|(_, p)| p.fov_angle);
+
+        let fov_angle = result.expect("creature should exist after load");
+        assert!(
+            (fov_angle - expected_fov_rad).abs() < 0.001,
+            "Perception.fov_angle must be restored from Dna.fov_gene after load: expected {:.4} rad, got {:.4} rad",
+            expected_fov_rad,
+            fov_angle
+        );
     }
 }

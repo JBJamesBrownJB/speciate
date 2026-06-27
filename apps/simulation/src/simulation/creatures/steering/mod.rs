@@ -12,6 +12,7 @@
 mod avoidance;
 mod flee;
 mod seek;
+pub mod step;
 mod system;
 mod wander;
 

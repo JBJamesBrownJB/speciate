@@ -111,3 +111,4 @@
 {"id":"019f08d5-7a4b-78c0-8fbb-2bd6c8823d7b","author":"JB","kind":"summary","text":"**Full suite: 518 passed, 0 failed.**","ts":"2026-06-27T11:27:16Z","turn":"db3cb0e8-9655-4ed3-8d65-6008c0ec1ebc"}
 {"id":"019f08d8-0e8b-7f41-9af8-058431c047c6","author":"JB","kind":"prompt","text":"so I can test?","ts":"2026-06-27T11:30:04Z","turn":"db3cb0e8-9655-4ed3-8d65-6008c0ec1ebc"}
 {"id":"019f08d8-3766-72b0-9023-54d1c599e421","author":"JB","kind":"summary","text":"To stress it, spawn a dense population and watch a group get cornered near a boundary.","ts":"2026-06-27T11:30:15Z","turn":"db3cb0e8-9655-4ed3-8d65-6008c0ec1ebc"}
+{"id":"019f08d9-bea0-70a1-91c7-f3e0c74c9bfe","author":"JB","kind":"prompt","text":"nope, same problem, they are still doing the whole 180 flip/flop, especially the largest crits... what went wrong? ultrathink","ts":"2026-06-27T11:31:55Z","turn":"db3cb0e8-9655-4ed3-8d65-6008c0ec1ebc"}

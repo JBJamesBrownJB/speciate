@@ -1,11 +1,12 @@
 use crate::simulation::creatures::components::{BehaviorMode, Brain, BrainMode, CreatureState};
 use crate::simulation::creatures::constants::{AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING};
 
-pub struct BehaviorStepCtx {
+pub struct BehaviorCtx {
     pub current_time: f64,
 }
 
-pub fn step(state: &mut CreatureState, brain: &mut Brain, ctx: &BehaviorStepCtx) {
+#[inline(always)]
+pub fn step(state: &mut CreatureState, brain: &mut Brain, ctx: &BehaviorCtx) {
     state.age += AGE_INCREMENT_PER_TICK;
 
     if state.behavior == BehaviorMode::Wandering {
@@ -27,8 +28,8 @@ mod tests {
     use crate::simulation::creatures::components::CreatureState;
     use crate::simulation::creatures::constants::{AGE_INCREMENT_PER_TICK, ENERGY_COST_WANDERING};
 
-    fn default_ctx(current_time: f64) -> BehaviorStepCtx {
-        BehaviorStepCtx { current_time }
+    fn default_ctx(current_time: f64) -> BehaviorCtx {
+        BehaviorCtx { current_time }
     }
 
     #[test]

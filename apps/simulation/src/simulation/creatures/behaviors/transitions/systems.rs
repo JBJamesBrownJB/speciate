@@ -1,4 +1,4 @@
-use super::step::{BehaviorStepCtx, step};
+use super::step::{BehaviorCtx, step};
 use crate::simulation::core::components::{FreqConfig, PhysicsTick};
 use crate::simulation::core::FrequencyThrottle;
 use crate::simulation::creatures::components::{Brain, CreatureState};
@@ -17,7 +17,7 @@ pub fn behavior_transition_system(
     #[cfg(feature = "dev-tools")]
     crate::time_system!(timings, "behavior_transition");
 
-    let ctx = BehaviorStepCtx {
+    let ctx = BehaviorCtx {
         current_time: physics_tick.get() as f64 * TICK_INTERVAL_SECONDS,
     };
 

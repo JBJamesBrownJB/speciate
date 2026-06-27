@@ -23,7 +23,7 @@ pub struct IntegrateCtx<'a> {
     pub stopped_threshold_sq: f32,
 }
 
-#[inline]
+#[inline(always)]
 pub fn step(
     entity_index: u32,
     size: &BodySize,

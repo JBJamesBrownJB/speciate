@@ -70,10 +70,10 @@ function as it's extracted (they're now testable in isolation — a direct win).
 
 Worklist — **one system per commit**, in dependency order:
 
-- [ ] **behavior_transition → `behavior::step`** — beachhead; sets the seam + test pattern
-- [ ] **steering → `steering::step`**
-- [ ] **integrate_motion → `integrate::step`**
-- [ ] **perception → `perception::step`** (if cleanly separable from the gather)
+- [x] **behavior_transition → `behavior::step`** — beachhead; sets the seam + test pattern
+- [ ] **steering → `steering::step`** (failed: wall-median regressed 4.3× noise at 500k triage; reverted)
+- [x] **integrate_motion → `integrate::step`**
+- [ ] **perception → `perception::step`** (if cleanly separable from the gather) (skipped: spatial-gather coupling — every line is a grid API call, no separable logical core)
 - [ ] incidental per-creature helpers (`update_body_size_cache`, etc.) as encountered
 
 **Per-step protocol (every system):**
@@ -115,6 +115,23 @@ Worklist — **one system per commit**, in dependency order:
 
 ## Progress log
 
-- **2026-06-27** — Branch `perf/system-fusion` + this plan created. Next action: capture a fresh
+- **2026-06-27 (init)** — Branch `perf/system-fusion` + this plan created. Next action: capture a fresh
   `latency_lab` baseline (post `behavior-compact-active-set` merge, which is on `main`) to anchor
   Phase 0, then start the `behavior_transition` beachhead extraction.
+
+- **2026-06-27 (Phase 0 run)** — Baseline wall p99 34.5 ms @ 1M. Phase 0 complete: 2 of 4 systems
+  committed; 1 failed bench gate; 1 skipped at extract.
+  - **behavior_transition** — extracted to `transitions/step.rs`; 11 tests added; dWall p99 +0.049 ms
+    (within 128 µs noise floor); dPhase −0.010 ms; **committed** 23e1bc8.
+  - **steering** — extracted to `steering/step.rs`; 6 tests added; dWall p99 +0.602 ms (wall-median
+    196 µs vs noise 46 µs = 4.3× threshold); dPhase +1.048 ms; **reverted**, step.rs removed. Root
+    cause unknown — likely function-call boundary cost across the wide borrow set (9 components).
+  - **integrate_motion** — extracted to `movement/step.rs`; 16 tests added; dWall p99 −0.247 ms;
+    dPhase −0.353 ms; **committed** e6c7115.
+  - **perception** — skipped at extract stage; no files modified. Blockers: Ctx would need &SpatialGrid
+    + &CoarseGrid (violates Copy-scalar convention), dev-tools capture is structurally embedded in
+    nested cell iteration, and thread-local CELL_SCRATCH / NEIGHBOR_CANDIDATES prevent true isolation.
+  - **Next:** (a) Investigate steering regression — profile call overhead vs inlining; consider
+    `#[inline(always)]` or collapsing the borrow list. (b) Phase 1 (`fuse-act` feature flag) is
+    unblocked for behavior + integrate; perception is excluded from the initial fused path. (c)
+    Perception attack vector remains smarter queries (FOV culling, range gating), not step() extraction.

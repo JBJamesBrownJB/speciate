@@ -281,7 +281,12 @@ Systems, not scripts. Sociality emerges from personal space + flocking + low agg
 
 ## License
 
-[TODO: Add license]
+**Proprietary — All Rights Reserved.** Copyright (c) 2026 James Brown.
+
+This source is published for evaluation and portfolio-demonstration purposes
+only. No license to use, copy, modify, or distribute is granted. See
+[LICENSE](LICENSE) for the full terms. Commercial licensing inquiries:
+jameskinnahbrown@gmail.com.
 
 ---
 

@@ -153,16 +153,53 @@ no entity gains/loses a step. Left uncommitted for human gate, then committed to
 - **One rare pre-existing flaky test** surfaced once in ~35 runs (a `thread_rng`-class test, same RNG in
   both paths; could not reproduce in 26 fused retries). Not fusion-introduced; track + harden separately.
 
-### Phase 2 — Prove it + guard it
+### Phase 2 — Prove it + guard it — ✅ DONE 2026-06-28
 
-- **Bit-identical test:** run N ticks separate vs fused from one seed; assert identical world state
-  (positions/velocities). The safety guard against the two paths silently diverging.
-- **Benchmark:** `latency_lab` A/B —
-  - `--release --features dev-tools` → separate path, wall p99
-  - `--release --features dev-tools,fuse-act` → fused path, wall p99
-  
-  The delta is the proof the prod build is faster. Reuses the perf-hunt A/B machinery.
-- If faster **and** bit-identical → ship build enables `fuse-act`; dev build does not.
+- **Bit-identical guard ✅.** `fused_and_separate_act_are_bit_identical`
+  (`core/simulation.rs`, `#[cfg(feature="fuse-act")]`): a seeker+dormant population run 30 ticks
+  through the fused schedule vs the **real** separate schedule, asserting exact
+  Position/Velocity/Rotation equality. To compare the two compile-time paths in one binary, the
+  schedule wiring was extracted into named `add_separate_act_systems` / `add_fused_act_systems`
+  fns (DRY; the guard uses the genuine separate wiring, not a copy that could drift) + a test-only
+  `with_separate_act_schedule()`. Determinism is engineered: noise off, rotation pinned via
+  `facing_direction` (spawn otherwise draws `thread_rng`), seeker-only population (the wander
+  branch is the one irreducible `thread_rng`, identical in both paths anyway). **Proven to bite** —
+  mutating the fused arrival→Catatonic turned it red precisely on the arriving seekers, green on
+  revert.
+  - *Bonus:* fixed a **pre-existing** dev-tools test bug surfaced while running the full matrix —
+    `update_plants_runs_without_panicking` never inserted `SystemTimings` (Phase 1 only ran the
+    non-dev-tools suites, 564/565). Confirmed pre-existing via `git stash`. Full matrix now green:
+    **default 564 / fuse-act 566 / dev-tools 673 / dev-tools,fuse-act 675.**
+
+- **Benchmark ✅ — fused is faster, replicated.** `latency_lab` A/B, two builds of the same bin
+  (`--release --features dev-tools` vs `…,fuse-act`), pop=1M, seeds 11/42/99/137/2025 (Phase 0's
+  set), two same-session back-to-back reps. (Raw `latency_lab` MultiSeedReport JSON kept locally —
+  perf blobs aren't committed; the durable numbers are the table below.)
+
+  | Rep | sep wall p99 | fused wall p99 | dWall p99 | sep wall mean | fused wall mean | dWall mean | verdict dWallMedian / wallNoise |
+  |-----|-----|-----|-----|-----|-----|-----|-----|
+  | R1 | 49.54 ms | 44.29 ms | **−5.25 ms** | 42.99 ms | 38.62 ms | **−4.36 ms** | −4.31 ms / 3.54 ms (~1.2σ) |
+  | R2 | 44.38 ms | 41.36 ms | **−3.02 ms** | 39.26 ms | 36.57 ms | **−2.68 ms** | −2.73 ms / 0.63 ms (**~4.4σ**) |
+
+  Fused faster on **all three** wall metrics in **both** reps. `cells_queried` identical
+  (~5.927 M both reps) ⇒ **identical work** — the drop is pure barrier + cache-re-sweep removal,
+  not less computation. Control phase (perception, untouched by fusion) flat (R1 +155 µs within
+  1474; R2 +829 µs drift — and wall *still* netted −2.7 ms, so the act saving is *larger* than the
+  raw wall delta). **Conservative headline: ~3–5 ms wall p99 saved at 1M (≈6–10% of tick), the
+  predicted magnitude from removing 2 fork-join barriers across the ~23.7 ms corridor.**
+  - **Caveat — the `classify()` VERDICT reads `Ditch`, which is a gate artifact, not a negative.**
+    `classify()` is *phase-targeted* (it asks "did the named phase improve?"). Fusion's target is the
+    `act` phase, which the lab's fixed phase-set doesn't track; run with `--phase perception` (the
+    control), perception correctly *doesn't* improve → `Ditch`. The honest signal is `dWallMedian`,
+    which is solidly negative both reps. **Follow-up:** teach the lab's per-phase tracker about `act`
+    so a future fused A/B can gate on the act-phase delta directly instead of leaning on wall.
+
+- **Result:** faster **and** bit-identical → the ship build *should* run `fuse-act` with no
+  `dev-tools` (`--release --features napi,fuse-act`); the dev build already runs fused via
+  `dev:release`. **Build wiring DEFERRED to ship time (JB, 2026-06-28):** the production `package`
+  path currently has no coherent ship config (ships un-fused *and* with dev-tools) — logged as a
+  standalone item in `docs/technical-debt.md` §"Production / Ship Build", to be sorted when we
+  actually package a release. `latency_lab` stays a dual-build A/B tool regardless.
 
 ---
 
@@ -215,3 +252,16 @@ no entity gains/loses a step. Left uncommitted for human gate, then committed to
   both configs (564 unfused / 565 fused, 26+8 runs); ecs-emma review = behavior-preserving. See Phase 1
   follow-ups above (dev-UI force overlay stale fused; `act` sparkline display; one rare pre-existing flake).
   **Phase 1 DONE. Next: Phase 2 — bit-identical guard test + `latency_lab` fused-vs-unfused A/B (the proof).**
+
+- **2026-06-28 (Phase 2)** — Both halves landed. (a) **Bit-identical guard**: schedule wiring
+  extracted to `add_separate_act_systems`/`add_fused_act_systems` + test-only
+  `with_separate_act_schedule()`; `fused_and_separate_act_are_bit_identical` proves fused ≡ separate
+  to the bit (exact Position/Velocity/Rotation over 30 ticks), and was mutation-tested to confirm it
+  bites. Fixed a pre-existing dev-tools-only flake (`update_plants` test missing `SystemTimings`).
+  Full matrix green: 564 / 566 / 673 / 675. (b) **A/B benchmark** (1M, 5 seeds, 2 reps): fused faster
+  on every wall metric both reps — dWall p99 −5.25 / −3.02 ms, dWall mean −4.36 / −2.68 ms; identical
+  `cells_queried` (same work); perception control flat. `classify()` `Ditch` is a phase-gate artifact
+  (perception=control didn't improve; the real proof is the negative `dWallMedian`).
+  **Phase 2 DONE.** Ship-build wiring (flip `package` to `napi,fuse-act`, no dev-tools)
+  **deferred to ship time** — logged in `docs/technical-debt.md` §"Production / Ship Build". Optional
+  later: track `act` as a lab phase so fused A/Bs gate on the act delta, not wall.

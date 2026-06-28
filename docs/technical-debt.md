@@ -224,6 +224,65 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ---
 
+## Category 6: Production / "Ship It" Build Is Absent / Inconsistent (P2)
+
+**Priority:** Medium — not blocking now (no release is scheduled), but **must be sorted before any
+real ship/package**. Logged 2026-06-28 (JB), deferred to ship time.
+
+### The problem
+
+There is **no coherent production build configuration**. The script that `package` /
+`package:win` / `package:mac` / `package:linux` actually invoke does **not** match what a shipped
+artifact should be. Two concrete defects in the production path
+(`apps/portal` `package` → `build` → `build:rust` → `apps/simulation` `build`):
+
+1. **Ships the slower (un-fused) corridor.** `apps/simulation` `build` is
+   `--release --features dev-tools,napi` — **no `fuse-act`**. So the packaged game runs the
+   *separate* act corridor even though fusion is proven faster (~3–5 ms/tick at 1M, replicated —
+   see `docs/scale/FUSING/plan.md` Phase 2). The ship build leaves the headline perf win on the
+   floor.
+2. **Ships *with* `dev-tools`.** That contradicts the project's own rule (AGENTS.md / this doc's
+   header on `constants.rs`… and `apps/simulation/Cargo.toml`: *"PRODUCTION-SAFE: dev-tools is NOT
+   in default features … Production builds: cargo build --release (no dev-tools)"*). dev-tools pulls
+   in `perf-event` / `git2` / `sysinfo` and the per-system timing instrumentation — overhead and
+   deps that have no business in a player build.
+
+Net: the intended ship build is **`--release --features napi,fuse-act`** (fused, no dev-tools), and
+nothing currently produces it.
+
+### Current build matrix (for reference)
+
+| Script (consumer) | Features today | Should be |
+|---|---|---|
+| `apps/simulation` `build` ← portal `build:rust` ← **`package`** (prod) | `dev-tools,napi` | **`napi,fuse-act`** (fused, no dev-tools) |
+| `apps/simulation` `build` ← `dev:release:unfused` (dev) | `dev-tools,napi` | unchanged — dev wants separate + instrumentation |
+| `apps/simulation` `build:fused` ← `dev:release` (dev) | `dev-tools,napi,fuse-act` | unchanged — dev wants fused + instrumentation |
+| `apps/simulation` `build:debug` ← `setup`/`dev:rust` | `dev-tools,napi` (debug) | unchanged |
+
+The conflict: `apps/simulation` `build` is **shared** by the production path *and* the dev
+`dev:release:unfused` path, which want opposite feature sets — so it can't simply be edited in
+place.
+
+### Intended fix (do at ship time)
+
+- [ ] Add `apps/simulation` `build:ship` = `napi build --platform --release --features napi,fuse-act`
+  (fused, **no** dev-tools).
+- [ ] Repoint `apps/portal` `build:rust` → `npm run build:ship` so `package*` ship the fused,
+  dev-tools-free addon. Leave `build` as-is for `dev:release:unfused`.
+- [ ] **Verify before shipping:** with dev-tools off, the per-system timing macro (`time_system!`,
+  `#[cfg(feature="dev-tools")]`) doesn't run, so `system_timings` telemetry is **zeros**. Confirm the
+  *player-facing* portal HUD doesn't depend on those (the dev-ui, which does, is **never shipped** —
+  so this is expected to be fine, but check). Also confirm `getTelemetry`'s stubbed
+  hardware/parallelization fields don't break any portal runtime path.
+- [ ] Confirm `cargo build --release --no-default-features --features napi,fuse-act` compiles clean
+  (the production combo) and the napi `.node` loads.
+- [ ] Once verified, update `docs/scale/FUSING/plan.md` (Phase 2 "Result") and remove this item.
+
+**Effort:** ~half a day incl. verification. **Risk:** Low-Medium (changes the shipped artifact;
+the dev-tools-off path is a supported compile gate but hasn't been exercised as a *packaged* run).
+
+---
+
 ## Tracking & Metadata
 
 ### Recently Completed

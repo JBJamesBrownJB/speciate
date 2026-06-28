@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { shouldApplyCsp, applyCspHeaders } = require('./csp.cjs');
 const { createFrameDelivery } = require('./frameDelivery.cjs');
 const { FLOATS_PER_CREATURE, MAX_CREATURES, creatureBufferFloats } = require('./bufferLayout.cjs');
 
@@ -701,6 +702,13 @@ app.commandLine.appendSwitch('log-level', '0');
  * App lifecycle: Ready event
  */
 app.whenReady().then(() => {
+  // Harden the packaged build with a strict Content-Security-Policy. No-op in dev
+  // (app.isPackaged === false) so Vite HMR — which needs 'unsafe-eval' — is untouched.
+  // See electron/csp.cjs; resolves the dev-only insecure-CSP warning for shipped apps.
+  if (shouldApplyCsp(app)) {
+    applyCspHeaders(session.defaultSession);
+  }
+
   createWindow();
   startSimulation();
 

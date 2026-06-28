@@ -15,6 +15,12 @@ const L1_VISION_LINE_COLOR = 0x888888;
 const L1_VISION_LINE_WIDTH = 0.15;
 const L1_VISION_LINE_ALPHA = 0.6;
 
+// Conspicuousness ring: how far away THIS creature can be detected by others
+// (amber, to read distinctly from the cyan "what I can see" FOV wedge).
+const CONSPICUOUSNESS_RING_COLOR = 0xffaa00;
+const CONSPICUOUSNESS_RING_WIDTH = 0.18;
+const CONSPICUOUSNESS_RING_ALPHA = 0.7;
+
 export class PerceptionOverlay implements IOverlay {
   readonly config: OverlayConfig = {
     name: 'perception',
@@ -25,19 +31,25 @@ export class PerceptionOverlay implements IOverlay {
   private graphics: Graphics;
   private visible: boolean = false;
   private hasData: boolean = false;
+  private conspicuousnessRadius: number = 0;
 
   constructor(container: Container) {
     this.graphics = new Graphics();
     container.addChild(this.graphics);
   }
 
-  update(debugData: PerceptionDebugData | undefined): void {
+  /**
+   * @param conspicuousnessRadius how far away the selected creature can be SEEN by
+   *   others (world units), drawn as an amber ring. 0/omitted draws no ring.
+   */
+  update(debugData: PerceptionDebugData | undefined, conspicuousnessRadius: number = 0): void {
     if (!debugData) {
       this.clear();
       return;
     }
 
     this.hasData = true;
+    this.conspicuousnessRadius = conspicuousnessRadius;
     if (this.visible) {
       this.render(debugData);
     }
@@ -45,6 +57,7 @@ export class PerceptionOverlay implements IOverlay {
 
   clear(): void {
     this.hasData = false;
+    this.conspicuousnessRadius = 0;
     this.graphics.clear();
   }
 
@@ -75,6 +88,18 @@ export class PerceptionOverlay implements IOverlay {
 
   private render(data: PerceptionDebugData): void {
     this.graphics.clear();
+
+    // Conspicuousness ring: the distance at which this creature is detectable by
+    // others (driven by its body size, not its FOV). Drawn first, beneath the wedge.
+    if (this.conspicuousnessRadius > 0) {
+      this.graphics.setStrokeStyle({
+        width: CONSPICUOUSNESS_RING_WIDTH,
+        color: CONSPICUOUSNESS_RING_COLOR,
+        alpha: CONSPICUOUSNESS_RING_ALPHA,
+      });
+      this.graphics.circle(data.x, data.y, this.conspicuousnessRadius);
+      this.graphics.stroke();
+    }
 
     const halfFov = data.fovAngle / 2;
     const startAngle = data.rotation - halfFov;

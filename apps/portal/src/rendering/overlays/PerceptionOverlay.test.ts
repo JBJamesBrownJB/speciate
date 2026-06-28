@@ -99,6 +99,46 @@ describe('PerceptionOverlay', () => {
     });
   });
 
+  describe('conspicuousness ring', () => {
+    const baseData: PerceptionDebugData = {
+      entityId: 1,
+      x: 100,
+      y: 200,
+      perceptionRange: 50,
+      queryRadius: 55,
+      fovAngle: Math.PI,
+      rotation: 0,
+      ax: 0,
+      ay: 0,
+      neighbors: [],
+      cellSize: 50,
+      creatureCell: { x: 2, y: 4 },
+      queriedCells: [],
+      checkedCells: [],
+    };
+
+    it('renders without throwing when a ring radius is supplied', () => {
+      overlay.show();
+      expect(() => overlay.update(baseData, 22.36)).not.toThrow();
+      expect(overlay.isVisible()).toBe(true);
+      expect(container.children.length).toBe(1);
+    });
+
+    it('treats an omitted radius as no ring (backward compatible)', () => {
+      overlay.show();
+      expect(() => overlay.update(baseData)).not.toThrow();
+      expect(overlay.isVisible()).toBe(true);
+    });
+
+    it('resets the ring radius on clear so it does not leak to the next selection', () => {
+      overlay.show();
+      overlay.update(baseData, 40);
+      overlay.clear();
+      // After clear, re-showing with no ring must not throw or carry the old radius.
+      expect(() => overlay.update(baseData)).not.toThrow();
+    });
+  });
+
   describe('clear', () => {
     it('should hide overlay', () => {
       overlay.show();

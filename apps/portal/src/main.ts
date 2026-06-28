@@ -4,6 +4,7 @@ import { Camera } from "@/domain/Camera";
 import { CameraController } from "@/domain/CameraController";
 import { Viewport } from "@/domain/Viewport";
 import { createWorldBounds } from "@/domain/WorldBounds";
+import { conspicuousness } from "@/domain/conspicuousness";
 import { InputManager } from "@/input";
 import { RENDERING_CONFIG, CAMERA_CONFIG, VIEWPORT_CULLING_CONFIG, WORLD_BOUNDS } from "@/core/constants";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
@@ -317,7 +318,11 @@ async function main(): Promise<void> {
       ipcClient.onPerceptionDebugUpdate((debugData) => {
         // Only update overlay if a creature is selected (prevents stale data race)
         if (debugData && selectionManager.hasSelection()) {
-          perceptionOverlay.update(debugData);
+          const selected = selectionManager.getSelected();
+          // Amber ring = how far away THIS creature can be detected by others; driven
+          // by its body size (conspicuousness), distinct from the cyan FOV "what it sees".
+          const conspicuousnessRadius = selected ? conspicuousness(selected.size) : 0;
+          perceptionOverlay.update(debugData, conspicuousnessRadius);
           creatureInfoPanel.updateDebugData(debugData);
           // Update spatial grid overlay with queried + checked cells
           if (debugData.queriedCells && debugData.checkedCells && debugData.creatureCell) {
@@ -330,7 +335,6 @@ async function main(): Promise<void> {
           // Update L1 vision cells for L1 grid highlighting
           spatialGridOverlay.updateL1VisionCells(debugData.l1Vision);
           // Update force overlay with acceleration from perception debug data
-          const selected = selectionManager.getSelected();
           if (selected) {
             forceOverlay.update({
               x: debugData.x,

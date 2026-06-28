@@ -154,7 +154,9 @@ describe('HUDManager', () => {
       expect(mockFpsSparkline.update).toHaveBeenCalledWith(60);
     });
 
-    it('should handle various FPS values', () => {
+    it('seeds from the first real sample, then EMA-smooths subsequent values', () => {
+      // The FPS readout is intentionally smoothed (EMA, α=0.05, ~1 s time constant)
+      // so the number doesn't jitter frame-to-frame. This test pins that contract.
       const hud = new HUDManager(
         {
           fpsValue: 'fps-value',
@@ -168,13 +170,21 @@ describe('HUDManager', () => {
         mockFpsSparkline
       );
 
+      // Leading zeros = "no real sample yet": shown as 0, and don't poison the seed.
       hud.updateFPS(0);
       expect(mockElements.fpsValue.textContent).toBe('0');
 
+      // First real sample seeds the display raw (no startup lag from climbing out of 0).
       hud.updateFPS(90);
       expect(mockElements.fpsValue.textContent).toBe('90');
 
+      // Subsequent samples ease toward the new value instead of jumping:
+      // 0.05*144 + 0.95*90 = 92.7 → 93.
       hud.updateFPS(144);
+      expect(mockElements.fpsValue.textContent).toBe('93');
+
+      // A steady input converges to that value.
+      for (let i = 0; i < 300; i++) hud.updateFPS(144);
       expect(mockElements.fpsValue.textContent).toBe('144');
     });
   });

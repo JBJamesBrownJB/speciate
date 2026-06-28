@@ -1,17 +1,11 @@
 use super::components::{ActualTickRate, BoundaryConfig, DeltaTime, FreqConfig, PhysicsTick};
 use super::world_bounds::WorldBounds;
 use crate::config::MovementConfig;
-#[cfg(not(feature = "fuse-act"))]
-use crate::simulation::creatures::behaviors::behavior_transition_system;
 use crate::simulation::plants::update_plants;
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::dna::Dna;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
-#[cfg(not(feature = "fuse-act"))]
-use crate::simulation::creatures::steering::update_steering_system;
 use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
-#[cfg(not(feature = "fuse-act"))]
-use crate::simulation::movement::integrate_motion_system;
 use crate::simulation::movement::update_body_size_cache;
 use crate::simulation::perception;
 use crate::simulation::spatial::{
@@ -19,6 +13,46 @@ use crate::simulation::spatial::{
     HierarchicalGrid,
 };
 use bevy_ecs::prelude::*;
+
+/// Register the **separate** act corridor: behavior → steering → integrate as three distinct
+/// Bevy systems (today's dev/observability path). Shared by `new()`'s non-fused build and the
+/// `fuse-act` bit-identical guard test, so the guard compares against the *real* separate schedule
+/// rather than a copy that could silently drift.
+#[cfg(any(not(feature = "fuse-act"), test))]
+fn add_separate_act_systems(schedule: &mut Schedule) {
+    use crate::simulation::creatures::behaviors::behavior_transition_system;
+    use crate::simulation::creatures::steering::update_steering_system;
+    use crate::simulation::movement::integrate_motion_system;
+    schedule.add_systems((
+        rebuild_spatial_grid_system,
+        aggregate_l1_system.after(rebuild_spatial_grid_system),
+        perception::update_perception_system.after(aggregate_l1_system),
+        behavior_transition_system.after(perception::update_perception_system),
+        update_steering_system.after(behavior_transition_system),
+        update_body_size_cache,
+        integrate_motion_system.after(update_steering_system),
+        swap_spatial_grid_buffers_system.after(integrate_motion_system),
+        update_plants.after(integrate_motion_system),
+    ));
+}
+
+/// Register the **fused** act corridor: one `act_system` that runs behavior+steering+integrate
+/// per creature inside a single `par_iter` (the ship path). Everything around the corridor —
+/// grid rebuild, perception, body-size cache, buffer swap, plants — is identical to the separate
+/// schedule; only the corridor collapses.
+#[cfg(feature = "fuse-act")]
+fn add_fused_act_systems(schedule: &mut Schedule) {
+    use crate::simulation::act::act_system;
+    schedule.add_systems((
+        rebuild_spatial_grid_system,
+        aggregate_l1_system.after(rebuild_spatial_grid_system),
+        perception::update_perception_system.after(aggregate_l1_system),
+        act_system.after(perception::update_perception_system),
+        update_body_size_cache,
+        swap_spatial_grid_buffers_system.after(act_system),
+        update_plants.after(act_system),
+    ));
+}
 
 /// Result of loading a trial
 pub struct LoadTrialResult {
@@ -84,37 +118,21 @@ impl SimulationBuilder {
         schedule.add_systems(process_spawn_events);
 
         #[cfg(not(feature = "fuse-act"))]
-        schedule.add_systems((
-            rebuild_spatial_grid_system,
-            aggregate_l1_system.after(rebuild_spatial_grid_system),
-            perception::update_perception_system.after(aggregate_l1_system),
-            behavior_transition_system.after(perception::update_perception_system),
-            update_steering_system.after(behavior_transition_system),
-            update_body_size_cache,
-            integrate_motion_system.after(update_steering_system),
-            swap_spatial_grid_buffers_system.after(integrate_motion_system),
-            update_plants.after(integrate_motion_system),
-        ));
+        add_separate_act_systems(&mut schedule);
 
         #[cfg(feature = "fuse-act")]
-        schedule.add_systems((
-            rebuild_spatial_grid_system,
-            aggregate_l1_system.after(rebuild_spatial_grid_system),
-            perception::update_perception_system.after(aggregate_l1_system),
-            crate::simulation::act::act_system
-                .after(perception::update_perception_system),
-            update_body_size_cache,
-            swap_spatial_grid_buffers_system
-                .after(crate::simulation::act::act_system),
-            update_plants.after(crate::simulation::act::act_system),
-        ));
+        add_fused_act_systems(&mut schedule);
 
         #[cfg(all(feature = "dev-tools", not(feature = "fuse-act")))]
-        schedule.add_systems(
-            perception::capture_debug_acceleration_system
-                .after(update_steering_system)
-                .before(integrate_motion_system),
-        );
+        {
+            use crate::simulation::creatures::steering::update_steering_system;
+            use crate::simulation::movement::integrate_motion_system;
+            schedule.add_systems(
+                perception::capture_debug_acceleration_system
+                    .after(update_steering_system)
+                    .before(integrate_motion_system),
+            );
+        }
 
         world.insert_resource(DeltaTime::default());
         world.insert_resource(BoundaryConfig::default());
@@ -163,6 +181,20 @@ impl SimulationBuilder {
             locomotion_noise_base: 0.0,
             ..Default::default()
         });
+        self
+    }
+
+    /// Test-only: rebuild the schedule with the **separate** act corridor even in a `fuse-act`
+    /// build. Lets the bit-identical guard instantiate the non-fused path alongside `new()`'s
+    /// fused one in a single binary. Mirrors `new()`'s non-fused branch (the dev-tools force
+    /// capture is intentionally omitted — it's a read-only debug snapshot that does not touch
+    /// Position/Velocity/Rotation, so it cannot affect the comparison).
+    #[cfg(all(test, feature = "fuse-act"))]
+    pub fn with_separate_act_schedule(mut self) -> Self {
+        let mut schedule = Schedule::default();
+        schedule.add_systems(process_spawn_events);
+        add_separate_act_systems(&mut schedule);
+        self.schedule = schedule;
         self
     }
 
@@ -733,6 +765,119 @@ mod tests {
         for (x, y) in &positions {
             assert!(x.is_finite(), "position.x is not finite: {x}");
             assert!(y.is_finite(), "position.y is not finite: {y}");
+        }
+    }
+
+    /// Phase 2 guard: the fused `act_system` must produce **bit-identical** world state to the
+    /// separate behavior→steering→integrate schedule. Both call the same pure `step()` functions;
+    /// this proves the fusion (per-entity b→s→i vs per-phase) introduces no divergence — the safety
+    /// net against the two ship/dev paths silently drifting. Only runs in `fuse-act` builds, where
+    /// both schedules are compiled in.
+    ///
+    /// Determinism is engineered, not assumed: locomotion noise off (`with_deterministic_movement`),
+    /// rotation pinned (`facing_direction`, else spawn draws `thread_rng`), and a **seeker-only**
+    /// population — the wander branch is the one irreducibly-random path (`thread_rng` in both
+    /// schedules identically), so excluding wanderers removes the only non-determinism. Dormant
+    /// crits cover the `makes_decisions()==false` integrate-only branch.
+    #[cfg(feature = "fuse-act")]
+    mod bit_identical {
+        use super::*;
+        use crate::simulation::core::components::{Position, Rotation, Velocity};
+        use crate::simulation::creatures::components::CritId;
+
+        fn populate(sim: &mut Simulation) {
+            // Seekers: Active brain (makes decisions), no wander RNG. Mix near + far targets so the
+            // arrival→Catatonic transition (set mid-loop in the fused path) fires for some.
+            for i in 0..24u32 {
+                let angle = i as f32 * 0.37;
+                let x = (i as f32 - 12.0) * 7.0;
+                let y = (i as f32 % 5.0) * 9.0 - 18.0;
+                let (tx, ty) = if i % 3 == 0 {
+                    (x + 1.0, y + 1.0) // close → arrives → Catatonic
+                } else {
+                    (x + 120.0, y - 80.0) // far → keeps seeking
+                };
+                sim.spawn_crit(
+                    CritBuilder::new()
+                        .at(x, y)
+                        .as_seeker(tx, ty)
+                        .facing_direction(angle.cos(), angle.sin()),
+                );
+            }
+            // Dormant crits: makes_decisions()==false → decision block skipped, integrate only.
+            for i in 0..6u32 {
+                let x = -40.0 + i as f32 * 13.0;
+                sim.spawn_crit(
+                    CritBuilder::new()
+                        .at(x, 60.0)
+                        .with_dormant_brain()
+                        .facing_direction(1.0, 0.0),
+                );
+            }
+        }
+
+        /// Deterministic nonzero starting velocity (keyed by CritId, identical across worlds) so
+        /// integrate does real drag/bounds work for dormant crits too, not a trivial no-op.
+        fn seed_velocities(sim: &mut Simulation) {
+            let world = sim.world_mut();
+            let mut q = world.query::<(&CritId, &mut Velocity)>();
+            for (id, mut v) in q.iter_mut(world) {
+                let n = id.0 as f32;
+                v.vx = (n % 7.0) - 3.0;
+                v.vy = (n % 5.0) - 2.0;
+            }
+        }
+
+        fn snapshot(sim: &mut Simulation) -> Vec<(u32, f32, f32, f32, f32, f32)> {
+            let world = sim.world_mut();
+            let mut q = world.query::<(&CritId, &Position, &Velocity, &Rotation)>();
+            let mut out: Vec<(u32, f32, f32, f32, f32, f32)> = q
+                .iter(world)
+                .map(|(id, p, v, r)| (id.0, p.x, p.y, v.vx, v.vy, r.radians))
+                .collect();
+            out.sort_by_key(|t| t.0);
+            out
+        }
+
+        #[test]
+        fn fused_and_separate_act_are_bit_identical() {
+            // Fused schedule — what `new()` builds under `fuse-act`.
+            let mut fused = SimulationBuilder::new()
+                .set_boundaries(500.0, 500.0)
+                .with_deterministic_movement()
+                .build();
+            // Separate schedule — same builder, real non-fused corridor swapped in.
+            let mut separate = SimulationBuilder::new()
+                .set_boundaries(500.0, 500.0)
+                .with_deterministic_movement()
+                .with_separate_act_schedule()
+                .build();
+
+            populate(&mut fused);
+            populate(&mut separate);
+            seed_velocities(&mut fused);
+            seed_velocities(&mut separate);
+
+            // Precondition: identical starting state (same spawn order ⇒ same CritIds/positions).
+            assert_eq!(
+                snapshot(&mut fused),
+                snapshot(&mut separate),
+                "precondition: both worlds must start identical"
+            );
+
+            for _ in 0..30 {
+                fused.update(0.05);
+                separate.update(0.05);
+            }
+
+            let a = snapshot(&mut fused);
+            let b = snapshot(&mut separate);
+            assert_eq!(a.len(), 30, "population preserved across the run");
+            assert_eq!(
+                a, b,
+                "fused act corridor diverged from separate behavior+steering+integrate \
+                 — the ship and dev paths are not equivalent"
+            );
         }
     }
 }

@@ -48,6 +48,8 @@ Cargo.lock
 **/dist
 **/build
 **/out
+# Electron-builder package output (installers + unpacked app; not matched by **/dist)
+**/dist-electron
 
 # State snapshot directories
 *.msgpack

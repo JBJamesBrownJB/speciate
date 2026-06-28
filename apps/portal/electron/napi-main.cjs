@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { shouldApplyCsp, applyCspHeaders } = require('./csp.cjs');
 const { createFrameDelivery } = require('./frameDelivery.cjs');
 const { FLOATS_PER_CREATURE, MAX_CREATURES, creatureBufferFloats } = require('./bufferLayout.cjs');
 
@@ -111,9 +112,17 @@ function startSimulation() {
     const creatureBufferMB = (creatureBuffer.byteLength / 1024 / 1024).toFixed(0);
     console.log(`[Electron NAPI] ✅ Persistent buffers created (creature: ${creatureBufferMB}MB for ${MAX_CREATURES.toLocaleString()} max, perception: ${perceptionBufferSize} floats)`);
 
-    // Find most recent save state (by timestamp in filename)
-    const assetsPath = path.join(__dirname, '../../simulation');
+    // Working/assets dir for the engine (Rust validates it exists, chdir's into it, and
+    // writes save-states there). Dev: the simulation source tree. Prod: the packaged app
+    // has no such tree, so use the writable per-user data dir (always exists; save-states
+    // persist across runs). Ensure it exists before the engine chdir's into it.
+    const assetsPath = isDev
+      ? path.join(__dirname, '../../simulation')
+      : app.getPath('userData');
     const saveStatesDir = path.join(assetsPath, 'save-states');
+    if (!isDev) {
+      try { fs.mkdirSync(saveStatesDir, { recursive: true }); } catch { /* best-effort */ }
+    }
 
     let mostRecentSaveState = null;
 
@@ -701,6 +710,13 @@ app.commandLine.appendSwitch('log-level', '0');
  * App lifecycle: Ready event
  */
 app.whenReady().then(() => {
+  // Harden the packaged build with a strict Content-Security-Policy. No-op in dev
+  // (app.isPackaged === false) so Vite HMR — which needs 'unsafe-eval' — is untouched.
+  // See electron/csp.cjs; resolves the dev-only insecure-CSP warning for shipped apps.
+  if (shouldApplyCsp(app)) {
+    applyCspHeaders(session.defaultSession);
+  }
+
   createWindow();
   startSimulation();
 

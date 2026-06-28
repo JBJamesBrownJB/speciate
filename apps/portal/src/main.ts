@@ -19,6 +19,7 @@ import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
 import { PlantRenderer } from "@/rendering/PlantRenderer";
 import { interpDiag } from "@/rendering/InterpolationDiagnostics";
+import { CameraSmoother } from "@/rendering/CameraSmoother";
 import { ChangeDetector } from "@/core/ChangeDetection";
 import { SelectionManager } from "@/systems/SelectionManager";
 import {
@@ -88,7 +89,9 @@ async function main(): Promise<void> {
       console.warn('[PixiJS] ⚠️ Running in Canvas2D mode (software rendering, expect 30-60 FPS)');
     }
 
-    app.ticker.maxFPS = RENDERING_CONFIG.TARGET_FPS;
+    // Render at the display's native refresh (0 = uncapped). A maxFPS below the monitor's
+    // refresh skips frames unevenly, producing beat-pattern stutter; vsync already bounds us.
+    app.ticker.maxFPS = 0;
 
     let rafSamples: number[] = [];
     let rafLastTime = performance.now();
@@ -417,6 +420,10 @@ async function main(): Promise<void> {
       }
     };
 
+    // Render the world through a time-eased camera so an occasional late frame glides
+    // instead of lurching the whole world (see CameraSmoother). Seeded at the current pose.
+    const cameraSmoother = new CameraSmoother(camera.x, camera.y, camera.zoom);
+
     // Render loop - only handles rendering, not simulation updates
     app.ticker.add(() => {
       const frameStart = performance.now();
@@ -428,7 +435,15 @@ async function main(): Promise<void> {
 
       // Update camera panning from keyboard/mouse input
       cameraController.update(deltaTime);
-      camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
+
+      // Ease the rendered camera toward the logic camera, then drive the world transform
+      // from the smoothed pose (worldContainer children — plants/overlays — ride this).
+      cameraSmoother.follow(camera.x, camera.y, camera.zoom, deltaTime);
+      worldContainer.scale.set(cameraSmoother.zoom);
+      worldContainer.position.set(
+        viewportWidth / 2 - cameraSmoother.x * cameraSmoother.zoom,
+        viewportHeight / 2 - cameraSmoother.y * cameraSmoother.zoom
+      );
       scaleBarManager.update(camera.zoom);
 
       // Cull plants to visible world area (+1 cell margin so edge cells never vanish)
@@ -451,12 +466,12 @@ async function main(): Promise<void> {
         hudManager.updateZoom(camera.zoom);
       }
 
-      // Render with interpolation every frame
+      // Render with interpolation every frame (smoothed camera pose)
       creatureRenderer.render(
         deltaMs,
-        camera.x,
-        camera.y,
-        camera.zoom,
+        cameraSmoother.x,
+        cameraSmoother.y,
+        cameraSmoother.zoom,
         viewportWidth,
         viewportHeight
       );

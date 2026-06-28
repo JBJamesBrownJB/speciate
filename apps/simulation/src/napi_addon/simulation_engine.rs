@@ -232,6 +232,25 @@ impl SimulationEngine {
         let handle = thread::spawn(move || {
             // Panic handling wrapper (prevents Electron crash)
             let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                // Size the simulation's parallel pools to leave headroom for the Electron
+                // renderer process. Without this, the per-tick compute burst pegs every core
+                // and starves the renderer's frame loop → visible pan/zoom stutter at high
+                // population. First get_or_init wins, so this MUST run before any Bevy system.
+                {
+                    let total = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(8);
+                    let reserved = crate::config::parse_reserved_cores(
+                        std::env::var("SPECIATE_RESERVED_CORES").ok().as_deref(),
+                    );
+                    let sim_threads = crate::config::sim_thread_count_with_reserved(total, reserved);
+                    let _ = rayon::ThreadPoolBuilder::new().num_threads(sim_threads).build_global();
+                    bevy_tasks::ComputeTaskPool::get_or_init(|| {
+                        bevy_tasks::TaskPoolBuilder::new().num_threads(sim_threads).build()
+                    });
+                    println!(
+                        "[Engine] Sim thread pools sized to {sim_threads} of {total} cores ({reserved} reserved for renderer; override via SPECIATE_RESERVED_CORES)"
+                    );
+                }
+
                 // Set working directory to assets path
                 if let Err(e) = std::env::set_current_dir(&assets_path_owned) {
                     eprintln!("❌ Failed to set working directory: {}", e);

@@ -263,6 +263,32 @@ The conflict: `apps/simulation` `build` is **shared** by the production path *an
 `dev:release:unfused` path, which want opposite feature sets — so it can't simply be edited in
 place.
 
+### How to build/run prod TODAY (works — but it's the inconsistent config above)
+
+```bash
+cd apps/portal && npm run package:win      # or package / package:mac / package:linux
+```
+
+Chain: `build:rust` (release NAPI addon → `apps/simulation/speciate.*.node`) → `build:frontend`
+(`tsc && vite build` → `apps/portal/dist/`) → `electron-builder --win`. Config:
+`apps/portal/electron-builder.json` (appId `com.simulation.alife`, NSIS target on Windows; the
+`.node` addon is bundled via `extraResources` → `resources/native/`, which matches the prod load
+path in `electron/napi-main.cjs:loadNAPIModule`).
+
+Output → **`apps/portal/dist-electron/`**:
+- `A-Life Simulation Setup ….exe` — the NSIS installer
+- **`win-unpacked/A-Life Simulation.exe`** — runs directly, no install needed (easiest prod launch)
+
+Caveats when running this today:
+- It's the **un-fused + dev-tools** artifact (the defects above) — a *working* prod app, not the
+  fast/clean one.
+- **The packaged CSP (PR #3 / `feat/portal-prod-csp`) only exists on that branch**, not `main`.
+  To smoke-test the CSP you must `git checkout feat/portal-prod-csp` **before** packaging; the CSP
+  applies because `app.isPackaged === true` in a packaged build (it's a no-op in `npm run dev`).
+- There is **no lightweight "run built app in prod mode" script**. `npm run dev:release` is
+  release-Rust (fused) but `NODE_ENV=development` → not true prod (CSP off, dev warning shows,
+  dev-tools window). True-prod = run the packaged `win-unpacked` exe.
+
 ### Intended fix (do at ship time)
 
 - [ ] Add `apps/simulation` `build:ship` = `napi build --platform --release --features napi,fuse-act`

@@ -95,6 +95,33 @@ Frontend sends camera viewport bounds each frame:
 - Simulation filters creatures to only export those in view
 - Reduces IPC payload by 90%+ when zoomed in
 
+### Payload tiering — keep the hot streaming set minimal (📋 Planned principle)
+
+The per-tick creature buffer is the **load-bearing streaming set**: it is copied/streamed
+to the renderer every simulation tick (20 Hz), so its per-creature width directly bounds
+how many creatures we can deliver before the delivery cost blows the frame budget. At 1M
+creatures, every extra `f32` per creature is **+4 MB/tick (~+80 MB/s)**.
+
+**Rule: the hot buffer carries only what changes every tick and is needed for every
+creature on screen** — i.e. *kinematics*: id, position, rotation, size. Nothing else earns
+a seat on the hot path.
+
+**Everything else rides a separate, low-frequency, viewport-scoped channel.** Visual/identity
+traits that change rarely (or never) — anything that tells the frontend *how to draw* a
+creature rather than *where it is* — are delivered on their own infrequent update, and only
+for creatures currently in view.
+
+> Example: a creature has horns. The renderer needs to know so it can attach the "horny"
+> shader/variant. That fact is static for the creature's life, so it must **not** sit in the
+> 20 Hz kinematics buffer. Instead it arrives once (and on change) via the low-freq
+> in-view trait channel; the renderer keys it to the creature id and applies the variant.
+> The hot buffer stays 5-wide no matter how rich creatures become.
+
+This keeps the streaming set's width constant as creatures gain biological/visual
+complexity, so scale (Pillar 1) and spectacle (Pillar 2) don't trade off against each other.
+Implementation of the low-freq trait channel is **not yet built** — this records the
+contract any such feature must follow.
+
 ## Key Files
 
 | Component | Location |

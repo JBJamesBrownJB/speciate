@@ -121,3 +121,28 @@ Implemented in the ABC Super Sprint (see `sprint_summaries/abc-super-sprint_summ
 **Golden Zone:** While `is_feeding`, skip long-range scan; run only short-range + same-tier threat filter. Full scan on vigilance interrupt only.
 
 **Full design:** `docs/biology/ideas/feeding-vigilance.md`
+
+---
+
+## Conspicuousness / Visibility Allometry (2026-06-28)
+
+**Topic:** How far away a creature can be DETECTED by others as a function of its body size. Fixes "giants seen too late" — today a target contributes only its physical radius (`length/2`) to detection distance, so a 10 m giant announces itself no more than its own skin while its *own* perception range is ~211 m. Asymmetry: observer range scales `~length^1.25` but target visibility was flat.
+
+**Consult:** zoologist-tom.
+
+**Key findings:**
+- **Biological driver = apparent angular size** (acuity-limited): a target of size L is detected when its subtended angle `θ ≈ L/D` exceeds the observer's minimum resolvable angle → `D ∝ L^1` (pure acuity). The dual of how observer perception range is already built.
+- **Area summation (Ricco's law)** pushes the exponent up toward `L^2` ("you can't hide an elephant"); **atmospheric extinction** (Koschmieder) trims the far tail sub-linear. Real animals live at **k ≈ 1.0–1.5**.
+- **Motion** is a separate strong multiplier (frog/deer vision) — reserved as a FUTURE lever, not first-order geometry.
+- Target visibility should scale **slightly faster** than observer reach (k=1.5 vs 1.25): acuity has diminishing returns with eye size, but silhouette grows ~L² — *being-seen outpaces seeing*. "A giant is a lighthouse before it is a telescope."
+
+**Recommended formula (drop-in):**
+`conspicuousness(length) = 0.71 * length^1.5`, clamped `[0.1, 60.0]` m, **replacing** the `target.radius` term in the detection-distance check (radius/mass untouched — no double-count). Coefficient pinned so `conspic(0.5) = 0.25` → the median (98% of pop) is **unchanged**, only rare giants gain. Magnitudes: 1 m→0.71, 2 m→2.0, 5 m→7.9, **10 m→22.4** (vs old 5.0 = +4.5×). Median crit spots a 10 m giant at ~27.6 m instead of ~10.25 m (~2.7× earlier); giant-spots-giant barely moves (+8%). Boost concentrates in the *small-observer → giant* channel.
+
+**Trophic implications + counterbalance:** suppresses giants on BOTH sides (prey evade apex earlier → apex feeding ↓; grazer-giants found earlier → predation ↑). Self-consistent with 1–2% giant frequency but apex-canary-sensitive. **Counterbalances reserved as future levers:** (1) motion-gated conspicuousness `conspic *= f(speed)` — strongest, a Golden-Zone (frozen ambush giant goes dark AND skips detection work); (2) `crypsis_gene` multiplier `[0.3,1.0]`; (3) size-domination de-weighting (small predators decline giant prey — "seen ≠ predated"); (4) herd detection.
+
+**Trophic-canary protocol:** baseline vs patched, same seed; **reject if apex OR grazer steady-state pop shifts >±20%.** First mitigation if apex breaches = motion-gate; gentler fallback curve `k=1.3, C=0.616` (tune **k not C** — C lifts the 98%, k lifts only giants).
+
+**DNA future slot:** pure function of `length` today (no gene). Natural extension is a `crypsis_gene` multiplier — keep signature `conspicuousness(length, crypsis=1.0)`-shaped so it drops in without re-plumb.
+
+**Implementation Status:** In Progress (branch `feat/conspicuousness-visibility`) — see `docs/biology/done/conspicuousness-visibility.md` when complete.

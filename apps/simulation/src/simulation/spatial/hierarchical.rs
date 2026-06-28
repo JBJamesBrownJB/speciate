@@ -144,7 +144,8 @@ mod tests {
         // Populate the L0 *back* buffer (write_grid) with one creature at world (1.0, 1.0).
         // rebuild_parallel requires fixed_bounds = true, which with_fixed_bounds guarantees.
         hgrid.l0.write_grid().rebuild_parallel(std::iter::once(
-            (Entity::from_raw(1), 1.0_f32, 1.0_f32, 0.0_f32, 0.0_f32, 2.0_f32),
+            // (entity, x, y, vx, vy, radius, conspicuousness) — conspicuousness unused by L1 aggregation
+            (Entity::from_raw(1), 1.0_f32, 1.0_f32, 0.0_f32, 0.0_f32, 2.0_f32, 2.0_f32),
         ));
 
         // aggregate_l1 reads the back buffer and maps L0 cells → L1 cells.

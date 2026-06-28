@@ -3,7 +3,8 @@ use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 use crate::simulation::creatures::constants::{
-    ACCEL_SIZE_EXPONENT, BASE_ACCELERATION, BASE_MAX_SPEED, DEFAULT_MASS, SPEED_SIZE_EXPONENT,
+    ACCEL_SIZE_EXPONENT, BASE_ACCELERATION, BASE_MAX_SPEED, CONSPICUOUSNESS_COEFFICIENT,
+    CONSPICUOUSNESS_MAX, CONSPICUOUSNESS_MIN, DEFAULT_MASS, SPEED_SIZE_EXPONENT,
 };
 use crate::simulation::math::fast_atan2;
 
@@ -78,6 +79,20 @@ impl BodySize {
 
     pub fn radius(&self) -> f32 {
         self.length / 2.0
+    }
+
+    /// Detection distance a creature's *size* grants observers (m).
+    /// Replaces the bare physical radius in the perception detection check so
+    /// large creatures are "spotted from a lighthouse distance" — see
+    /// `docs/biology/done/conspicuousness-visibility.md`.
+    ///
+    /// = `C · length^1.5`, clamped `[MIN, MAX]`. The `^1.5` is computed without a
+    /// `powf` (catastrophic in the per-candidate detection loop): since
+    /// `length^1.5 = length² · length^-0.5`, the cached `inv_sqrt_length` makes it
+    /// two multiplies. Per-creature, evaluated once at spatial-grid rebuild.
+    pub fn conspicuousness(&self) -> f32 {
+        let raw = CONSPICUOUSNESS_COEFFICIENT * self.length * self.length * self.inv_sqrt_length;
+        raw.clamp(CONSPICUOUSNESS_MIN, CONSPICUOUSNESS_MAX)
     }
 
     pub fn mass(&self) -> f32 {
@@ -281,6 +296,7 @@ impl Rotation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simulation::creatures::constants::CONSPICUOUSNESS_EXPONENT;
 
     #[test]
     fn test_position_creation() {
@@ -404,6 +420,67 @@ mod tests {
         let length_ratio = 2.0_f32 / 0.5; // = 4
         let expected_ratio = length_ratio.powf(2.5); // 4^2.5 = 32
         assert!((force_ratio - expected_ratio).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_conspicuousness_median_pinned_to_physical_radius() {
+        // The coefficient is pinned so the population median (0.5 m) is UNCHANGED:
+        // conspicuousness(0.5) must equal radius(0.5) = 0.25, so 98% of the pop
+        // sees no behaviour shift — only rare giants gain detection distance.
+        let median = BodySize::new(0.5);
+        assert!((median.conspicuousness() - 0.25).abs() < 1e-5);
+        assert!((median.conspicuousness() - median.radius()).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_conspicuousness_giant_far_exceeds_radius() {
+        // A 10 m giant should be a lighthouse: conspicuousness ≈ 22.36 m,
+        // ~4.5× its bare physical radius (5.0 m).
+        let giant = BodySize::new(10.0);
+        assert!((giant.conspicuousness() - 22.360_68).abs() < 1e-2);
+        assert!(giant.conspicuousness() > giant.radius() * 4.0);
+    }
+
+    #[test]
+    fn test_conspicuousness_matches_power_law_reference() {
+        // The cached-inv_sqrt fast path must equal the naive C * length^1.5.
+        for &len in &[0.5_f32, 1.0, 2.0, 3.7, 5.0, 8.0] {
+            let expected = CONSPICUOUSNESS_COEFFICIENT * len.powf(CONSPICUOUSNESS_EXPONENT);
+            let got = BodySize::new(len).conspicuousness();
+            assert!(
+                (got - expected).abs() < 1e-3,
+                "len={len}: got {got}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_conspicuousness_superlinear_vs_radius() {
+        // being-seen outpaces seeing: the conspicuousness/radius ratio must GROW
+        // with body size (flat below median, large above it).
+        let median_ratio = BodySize::new(0.5).conspicuousness() / BodySize::new(0.5).radius();
+        let giant_ratio = BodySize::new(10.0).conspicuousness() / BodySize::new(10.0).radius();
+        assert!((median_ratio - 1.0).abs() < 1e-4);
+        assert!(giant_ratio > median_ratio * 4.0);
+    }
+
+    #[test]
+    fn test_conspicuousness_monotonic_increasing() {
+        let a = BodySize::new(0.5).conspicuousness();
+        let b = BodySize::new(1.0).conspicuousness();
+        let c = BodySize::new(5.0).conspicuousness();
+        let d = BodySize::new(10.0).conspicuousness();
+        assert!(a < b && b < c && c < d);
+    }
+
+    #[test]
+    fn test_conspicuousness_clamped_to_bounds() {
+        // Floor: a tiny minnow never drops below the MIN visibility floor.
+        let minnow = BodySize::new(0.1);
+        assert!(minnow.conspicuousness() >= CONSPICUOUSNESS_MIN - 1e-6);
+        // Ceiling: an absurd size saturates at MAX (atmospheric extinction analogue).
+        let leviathan = BodySize::new(1000.0);
+        assert!((leviathan.conspicuousness() - CONSPICUOUSNESS_MAX).abs() < 1e-3);
     }
 
     #[test]

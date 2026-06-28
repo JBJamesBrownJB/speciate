@@ -1193,6 +1193,108 @@ fn test_inactive_creatures_are_gated_out_of_perception() {
     );
 }
 
+/// CONSPICUOUSNESS (zoologist-tom, 2026-06-28): a large creature must be detected
+/// from farther than its bare physical radius would allow — "a giant is a lighthouse."
+/// This is the consumer-boundary test for the feature: it drives the REAL perception
+/// system (grid rebuild → detection gate → NeighborCache) and asserts what the
+/// downstream reader (the observer's cache) actually receives.
+///
+/// Setup: a small (0.5 m) stationary observer at the origin with a giant (10 m) and
+/// a same-size (0.5 m) control BOTH 14–15 m away, in front, in the same L0 cell.
+/// - The giant sits BEYOND the old `range + self_radius + giant_radius` gate, so the
+///   pre-feature code would MISS it — yet it must now be perceived.
+/// - The control (same distance, small size) must NOT be perceived — proving the
+///   extra reach is driven by the target's SIZE, not a blanket gate widening.
+#[test]
+fn test_giant_detected_beyond_physical_radius_via_conspicuousness() {
+    use crate::simulation::core::SimulationBuilder;
+    use crate::simulation::creatures::builder::CritBuilder;
+    use crate::simulation::creatures::components::CritId;
+    use crate::simulation::core::components::BodySize;
+
+    let mut sim = SimulationBuilder::new()
+        .with_deterministic_movement() // no wander noise → observer stays put
+        .build();
+    sim.set_boundaries(400.0, 400.0);
+
+    // Small observer, perception-active but stationary: Wandering keeps it in the
+    // perception dispatch, a dormant brain makes no movement decisions so it stays put.
+    // `.facing` is pinned toward the targets (spawn otherwise picks a RANDOM rotation,
+    // which would flakily drop them out of the 180° FOV); a stationary creature keeps
+    // its facing, so both targets stay in view for the whole run.
+    let observer_id = sim.spawn_crit(
+        CritBuilder::new()
+            .at(60.0, 60.0)
+            .with_size(0.5)
+            .facing_direction(1.0, 0.0)
+            .in_behavior(BehaviorMode::Wandering)
+            .with_dormant_brain(),
+    );
+    // Targets are stationary Catatonic objects — they only need to exist in the grid as
+    // proxies to be perceived; Catatonic is the engine's "stay put / do nothing" state.
+    // Giant 15 m away, dead ahead — beyond the old radius gate (~10.25 m).
+    let giant_id =
+        sim.spawn_crit(CritBuilder::new().at(75.0, 60.0).with_size(10.0).in_behavior(BehaviorMode::Catatonic));
+    // Control: same 0.5 m size, ~14 m away, also ahead — should stay invisible.
+    let control_id =
+        sim.spawn_crit(CritBuilder::new().at(70.0, 70.0).with_size(0.5).in_behavior(BehaviorMode::Catatonic));
+
+    // 16 ticks = 2 full throttle cycles (perception_divisor default 8) → observer dispatched.
+    for _ in 0..16 {
+        sim.update(0.016);
+    }
+
+    let world = sim.world_mut();
+    let mut observer = None;
+    let mut giant = None;
+    let mut control = None;
+    for (e, id) in world.query::<(Entity, &CritId)>().iter(world) {
+        match id.0 {
+            x if x == observer_id => observer = Some(e),
+            x if x == giant_id => giant = Some(e),
+            x if x == control_id => control = Some(e),
+            _ => {}
+        }
+    }
+    let observer = observer.expect("observer exists");
+    let giant = giant.expect("giant exists");
+    let control = control.expect("control exists");
+
+    let obs_pos = *world.get::<Position>(observer).unwrap();
+    let obs_radius = world.get::<BodySize>(observer).unwrap().radius();
+    let obs_range = world.get::<Perception>(observer).unwrap().range;
+    let giant_pos = *world.get::<Position>(giant).unwrap();
+    let giant_radius = world.get::<BodySize>(giant).unwrap().radius();
+
+    // Sanity: observer barely moved, so the geometry below is meaningful.
+    assert!(
+        (obs_pos.x - 60.0).abs() < 1.0 && (obs_pos.y - 60.0).abs() < 1.0,
+        "observer should stay ~stationary (was {:?})",
+        (obs_pos.x, obs_pos.y)
+    );
+
+    // The realised center distance to the giant must exceed the OLD radius-only gate —
+    // i.e. the pre-feature code provably could NOT have reached it.
+    let dx = giant_pos.x - obs_pos.x;
+    let dy = giant_pos.y - obs_pos.y;
+    let center_dist = (dx * dx + dy * dy).sqrt();
+    let old_radius_gate = obs_range + obs_radius + giant_radius;
+    assert!(
+        center_dist > old_radius_gate,
+        "test invalid: giant at {center_dist:.2} m is within the old radius gate {old_radius_gate:.2} m"
+    );
+
+    let cache = world.get::<NeighborCache>(observer).unwrap();
+    assert!(
+        cache.contains(giant),
+        "giant ({center_dist:.2} m, beyond old gate {old_radius_gate:.2} m) must be perceived via conspicuousness"
+    );
+    assert!(
+        !cache.contains(control),
+        "same-distance SMALL control must stay invisible — extra reach is size-driven, not a blanket widening"
+    );
+}
+
 // ============================================================================
 // Category 4: Edge Cases
 // ============================================================================

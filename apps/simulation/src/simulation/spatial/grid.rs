@@ -32,6 +32,11 @@ pub struct PerceptionProxy {
     pub vx: f32,
     pub vy: f32,
     pub radius: f32,
+    /// Size-scaled detection distance (m) this creature grants observers.
+    /// Used ONLY in the detection-distance check; `radius` still feeds mass/physics.
+    /// Precomputed per-creature (`BodySize::conspicuousness`) to keep the hot
+    /// perception loop free of `powf`. See conspicuousness-visibility.md.
+    pub conspicuousness: f32,
     pub entity: Entity,
 }
 
@@ -43,6 +48,7 @@ impl Default for PerceptionProxy {
             vx: 0.0,
             vy: 0.0,
             radius: 0.0,
+            conspicuousness: 0.0,
             entity: Entity::PLACEHOLDER,
         }
     }
@@ -76,8 +82,8 @@ pub struct SpatialGrid {
     cells: Vec<(u32, u32)>,
 
     // Reusable scratch buffer for rebuild (avoids allocation each tick)
-    // Format: (entity, x, y, vx, vy, radius)
-    entity_scratch: Vec<(Entity, f32, f32, f32, f32, f32)>,
+    // Format: (entity, x, y, vx, vy, radius, conspicuousness)
+    entity_scratch: Vec<(Entity, f32, f32, f32, f32, f32, f32)>,
 
     // Pre-allocated atomic counters for scatter phase (reused each tick)
     atomic_counters: Vec<AtomicU32>,
@@ -244,8 +250,15 @@ impl SpatialGrid {
 
     /// Test-only convenience: dynamically computes bounds then delegates to rebuild_parallel().
     #[cfg(test)]
-    pub fn rebuild(&mut self, entities: impl Iterator<Item = (Entity, f32, f32, f32, f32, f32)>) {
-        let entities: Vec<_> = entities.collect();
+    pub fn rebuild(
+        &mut self,
+        entities: impl Iterator<Item = (Entity, f32, f32, f32, f32, f32)>,
+    ) {
+        // Test helper: grid binning ignores conspicuousness, so default it to the
+        // physical radius (the 6th element) to keep existing geometry tests untouched.
+        let entities: Vec<_> = entities
+            .map(|(e, x, y, vx, vy, r)| (e, x, y, vx, vy, r, r))
+            .collect();
 
         if entities.is_empty() {
             self.proxies.clear();
@@ -258,7 +271,7 @@ impl SpatialGrid {
         // Find bounds from entities
         let (min_x, max_x, min_y, max_y) = entities.iter().fold(
             (f32::MAX, f32::MIN, f32::MAX, f32::MIN),
-            |(min_x, max_x, min_y, max_y), (_, x, y, _, _, _)| {
+            |(min_x, max_x, min_y, max_y), (_, x, y, _, _, _, _)| {
                 (min_x.min(*x), max_x.max(*x), min_y.min(*y), max_y.max(*y))
             },
         );
@@ -279,7 +292,7 @@ impl SpatialGrid {
     /// Panics if `set_world_bounds()` has not been called.
     pub fn rebuild_parallel(
         &mut self,
-        entities: impl Iterator<Item = (Entity, f32, f32, f32, f32, f32)>,
+        entities: impl Iterator<Item = (Entity, f32, f32, f32, f32, f32, f32)>,
     ) {
         assert!(
             self.fixed_bounds,
@@ -335,7 +348,7 @@ impl SpatialGrid {
             .flat_map(|chunk| {
                 // Thread-local buffer for newly populated cell indices
                 let mut local_new: Vec<usize> = Vec::with_capacity(chunk.len() / 4);
-                for &(_, x, y, _, _, _) in chunk {
+                for &(_, x, y, _, _, _, _) in chunk {
                     let cx = (x * inv_cell_size).floor() as i32;
                     let cy = (y * inv_cell_size).floor() as i32;
                     let lx = ((cx - min_cell_x) as usize).min(width - 1);
@@ -381,7 +394,7 @@ impl SpatialGrid {
         // SAFETY: Each entity writes to a unique position via atomic increment
         self.entity_scratch
             .par_iter()
-            .for_each(|&(entity, x, y, vx, vy, radius)| {
+            .for_each(|&(entity, x, y, vx, vy, radius, conspicuousness)| {
                 let cx = (x * inv_cell_size).floor() as i32;
                 let cy = (y * inv_cell_size).floor() as i32;
                 let lx = (cx - min_cell_x) as usize;
@@ -406,6 +419,7 @@ impl SpatialGrid {
                             vx,
                             vy,
                             radius,
+                            conspicuousness,
                             entity,
                         },
                     );
@@ -921,6 +935,44 @@ mod tests {
         assert_eq!(grid.cell_to_world_min(1, 1), (50.0, 50.0));
         assert_eq!(grid.cell_to_world_min(-1, -1), (-50.0, -50.0));
         assert_eq!(grid.cell_to_world_min(2, -3), (100.0, -150.0));
+    }
+
+    #[test]
+    fn test_rebuild_threads_conspicuousness_independently_of_radius() {
+        // Grid seam (Rust→Rust consumer boundary): the proxy must carry the
+        // size-scaled conspicuousness AND the unchanged physical radius as two
+        // independent values — proving no swap and no double-count of size into
+        // the radius/mass channel. See conspicuousness-visibility.md.
+        use crate::simulation::core::components::BodySize;
+
+        let mut grid = SpatialGrid::new(50.0);
+        grid.set_world_bounds(-10.0, 400.0, -10.0, 400.0);
+
+        let giant_e = Entity::from_raw(1);
+        let median_e = Entity::from_raw(2);
+        let giant = BodySize::new(10.0);
+        let median = BodySize::new(0.5);
+
+        // Production-shaped tuple: (entity, x, y, vx, vy, radius, conspicuousness).
+        grid.rebuild_parallel(
+            vec![
+                (giant_e, 100.0, 100.0, 0.0, 0.0, giant.radius(), giant.conspicuousness()),
+                (median_e, 200.0, 200.0, 0.0, 0.0, median.radius(), median.conspicuousness()),
+            ]
+            .into_iter(),
+        );
+
+        let gp = grid.proxies.iter().find(|p| p.entity == giant_e).expect("giant proxy");
+        let mp = grid.proxies.iter().find(|p| p.entity == median_e).expect("median proxy");
+
+        // radius stays physical (length/2) — the mass/physics channel is untouched.
+        assert!((gp.radius - 5.0).abs() < 1e-4, "giant radius must stay physical");
+        assert!((mp.radius - 0.25).abs() < 1e-4, "median radius must stay physical");
+
+        // conspicuousness is the size-scaled value: giant ≫ radius, median == radius (pinned).
+        assert!((gp.conspicuousness - 22.360_68).abs() < 1e-2, "giant conspicuousness");
+        assert!(gp.conspicuousness > gp.radius * 4.0, "giant must be a lighthouse");
+        assert!((mp.conspicuousness - 0.25).abs() < 1e-4, "median conspicuousness == radius");
     }
 
     #[test]

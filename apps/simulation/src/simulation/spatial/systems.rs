@@ -19,12 +19,12 @@ pub fn rebuild_spatial_grid_system(
     crate::time_system!(timings, "spatial_grid_rebuild");
 
     // Write to L0 back buffer using parallel rebuild
-    // Format: (entity, x, y, vx, vy, radius)
-    grid.l0.write_grid().rebuild_parallel(
-        query
-            .iter()
-            .map(|(e, pos, vel, size)| (e, pos.x, pos.y, vel.vx, vel.vy, size.radius())),
-    );
+    // Format: (entity, x, y, vx, vy, radius, conspicuousness)
+    // conspicuousness is precomputed per-creature here (once) so the hot detection
+    // loop never calls powf — see BodySize::conspicuousness.
+    grid.l0.write_grid().rebuild_parallel(query.iter().map(|(e, pos, vel, size)| {
+        (e, pos.x, pos.y, vel.vx, vel.vy, size.radius(), size.conspicuousness())
+    }));
 }
 
 /// Aggregate L0 grid data into L1 coarse grid.

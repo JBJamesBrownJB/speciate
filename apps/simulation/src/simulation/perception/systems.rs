@@ -159,7 +159,6 @@ pub fn update_perception_system(
             // This handles creatures near L1 boundaries where adjacent L0 cells may have
             // different L1 parents with different classifications.
             let range = perception.range;
-            let range_sq = range * range;
             let threshold = perception.threshold;
             let cos_half_fov_sq = perception.cos_half_fov_sq;
             let cos_half_fov = perception.cos_half_fov;
@@ -362,8 +361,11 @@ pub fn update_perception_system(
                             let dy = proxy.y - y;
                             let center_dist_sq = dx * dx + dy * dy;
 
-                            // Use pre-computed base_dist for faster range check
-                            let max_dist = base_dist + proxy.radius;
+                            // Use pre-computed base_dist for faster range check.
+                            // Conspicuousness (size-scaled visibility), NOT bare radius, sets how
+                            // far a target's body lets it be detected — so giants are spotted from
+                            // a lighthouse distance. Mass/physics below still use proxy.radius.
+                            let max_dist = base_dist + proxy.conspicuousness;
                             if center_dist_sq > max_dist * max_dist {
                                 continue;
                             }
@@ -377,11 +379,17 @@ pub fn update_perception_system(
                                 // Large creatures ignore small entities below their perception threshold.
                                 // This creates asymmetric perception: mice see giants, giants ignore mice.
                                 let target_mass = BioSignature::mass_from_radius(proxy.radius);
+                                // Effective detection range = observer range + target conspicuousness:
+                                // a giant's size lets it be resolved from farther (binding range check,
+                                // not just the broad-phase cull above). conspicuousness is precomputed,
+                                // so this is one add + one mul per candidate — no powf/sqrt.
+                                let detect_range = range + proxy.conspicuousness;
+                                let effective_range_sq = detect_range * detect_range;
                                 if !should_perceive_entity(
                                     threshold,
                                     target_mass,
                                     center_dist_sq,
-                                    range_sq,
+                                    effective_range_sq,
                                     in_fov,
                                 ) {
                                     continue; // Target too small for this perceiver
@@ -460,8 +468,9 @@ pub fn update_perception_system(
                                 let dy = proxy.y - y;
                                 let center_dist_sq = dx * dx + dy * dy;
 
-                                // Range check
-                                let max_dist = base_dist + proxy.radius;
+                                // Range check (broad-phase): conspicuousness, not bare radius,
+                                // sets how far a target's size lets it be detected.
+                                let max_dist = base_dist + proxy.conspicuousness;
                                 if center_dist_sq > max_dist * max_dist {
                                     continue;
                                 }
@@ -478,11 +487,15 @@ pub fn update_perception_system(
                                 if in_fov {
                                     // Size domination filter
                                     let target_mass = BioSignature::mass_from_radius(proxy.radius);
+                                    // Effective detection range = observer range + target conspicuousness
+                                    // (see first detection site). Precomputed conspicuousness → no powf.
+                                    let detect_range = range + proxy.conspicuousness;
+                                    let effective_range_sq = detect_range * detect_range;
                                     if !should_perceive_entity(
                                         threshold,
                                         target_mass,
                                         center_dist_sq,
-                                        range_sq,
+                                        effective_range_sq,
                                         in_fov,
                                     ) {
                                         continue;

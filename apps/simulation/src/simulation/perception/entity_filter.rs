@@ -4,8 +4,13 @@
 ///
 /// An entity is perceived if ALL conditions are true:
 /// - Target mass >= my_threshold (size domination filter)
-/// - Distance squared <= perception_range squared (range check)
+/// - Distance squared <= effective detection range squared (range check)
 /// - Target is within FOV (already computed by caller)
+///
+/// `effective_range_sq` is `(observer_range + target_conspicuousness)²`: the caller
+/// folds the target's size-scaled visibility into the range so large creatures are
+/// detected from farther (see `BodySize::conspicuousness`). For a median creature
+/// conspicuousness ≈ its radius, so the effective range is essentially the observer's.
 ///
 /// The `target_mass` parameter should be computed from the entity's body size
 /// using the standard mass formula.
@@ -13,10 +18,10 @@ pub fn should_perceive_entity(
     my_threshold: f32,
     target_mass: f32,
     distance_sq: f32,
-    perception_range_sq: f32,
+    effective_range_sq: f32,
     in_fov: bool,
 ) -> bool {
-    target_mass >= my_threshold && distance_sq <= perception_range_sq && in_fov
+    target_mass >= my_threshold && distance_sq <= effective_range_sq && in_fov
 }
 
 #[cfg(test)]

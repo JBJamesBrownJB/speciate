@@ -66,6 +66,36 @@ pub const SIZE_ALLOMETRY_EXPONENT: f32 = 0.25;
 pub const SIZE_ALLOMETRY_REFERENCE: f32 = 0.5;
 
 // =============================================================================
+// CONSPICUOUSNESS / VISIBILITY ALLOMETRY (zoologist-tom, 2026-06-28)
+// =============================================================================
+// How far a creature can be DETECTED by others as a function of its body size.
+// Replaces the bare physical-radius term in the detection-distance check so a
+// 10 m giant announces itself like a lighthouse, not like a minnow. See
+// docs/biology/done/conspicuousness-visibility.md and biology-notes.md.
+
+/// [ACTIVE] Exponent for conspicuousness vs body length.
+/// BIOLOGICAL BASIS: apparent angular size gives pure acuity k=1; area summation
+/// (Ricco's law) pushes toward k=2; atmospheric extinction trims the far tail.
+/// Real animals live at k≈1.0–1.5. We pick 1.5 — being-seen (silhouette ~L²)
+/// outpaces seeing (observer reach ~L^1.25): "a giant is a lighthouse before it
+/// is a telescope." Tune THIS (not the coefficient) to lift only giants.
+pub const CONSPICUOUSNESS_EXPONENT: f32 = 1.5;
+
+/// [ACTIVE] Coefficient C in conspicuousness = C · length^1.5.
+/// PINNED so conspicuousness(0.5 m) = 0.25 m = radius(0.5 m): the population
+/// median (≈98% of creatures) is UNCHANGED; only rare giants gain. The pin value
+/// is 1/√2 because 0.5^1.5 = 0.5/√2, so C·0.5^1.5 = 0.25 ⇒ C = 1/√2.
+pub const CONSPICUOUSNESS_COEFFICIENT: f32 = std::f32::consts::FRAC_1_SQRT_2;
+
+/// [ACTIVE] Floor on conspicuousness (m) — keeps the smallest creatures from
+/// vanishing entirely from the detection term.
+pub const CONSPICUOUSNESS_MIN: f32 = 0.1;
+
+/// [ACTIVE] Ceiling on conspicuousness (m) — atmospheric/water extinction analogue;
+/// caps the additive detection bonus the largest creatures can ever grant.
+pub const CONSPICUOUSNESS_MAX: f32 = 60.0;
+
+// =============================================================================
 // L1 PERCEPTION THRESHOLD (Phase A - Dual Spatial Grid)
 // =============================================================================
 

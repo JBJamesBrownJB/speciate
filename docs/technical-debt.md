@@ -1,7 +1,7 @@
 # Technical Debt Inventory
 
 **Last Updated:** 2026-06-28
-**Total Items:** 53
+**Total Items:** 54
 
 This document tracks all TODO comments, architectural decisions, and technical debt across the codebase. Items are categorized by priority and sprint target.
 
@@ -157,7 +157,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ---
 
-## Category 3: Performance Optimization (P2) [1 item]
+## Category 3: Performance Optimization (P2) [2 items]
 
 **Priority:** Medium (Phase 3)
 **Effort:** Variable
@@ -182,6 +182,26 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 - **Effort:** ~20-30 min. **Risk:** Low (isolated, pure logic, behind the existing env override).
 - **Rationale:** correct cross-machine behavior; the current flat-2 over-reserves on non-HT CPUs. See memory `1m-pan-stutter-root-cause` for the full reservation story.
+
+#### 3.2 `export_positions` Spikes to ~9 ms After Loading a Saved World
+**Priority: P1 (Critical)** — exceeds this category's P2 banner. Logged 2026-06-28 (JB, observed).
+**File:** `apps/simulation/src/ipc/bridge/bevy_app.rs:364` (`export_positions`), specifically the `entities.par_sort_unstable_by_key(|(id, _, _, _)| id.0)` at line 391.
+
+**Symptom:** **Sometimes, after loading a saved world**, `export_positions` jumps to **~9 ms** (vs. its benchmarked ~1.35 ms @ 400K / a few ms @ 1M), pushing the **tick to ~40 ms** — eating most of the 50 ms budget and risking the pan/zoom stutter we just fixed. Intermittent ("sometimes"), correlated with **save-state load**.
+
+**Root cause: UNCONFIRMED — needs investigation, do not assume.** Candidate hypotheses to test:
+- **Adversarial sort input.** `par_sort_unstable_by_key` is pattern-defeating quicksort; its cost depends on input order. A freshly **deserialized** world (DynamicScene) may iterate entities into the Vec in an order that's pathological for the sort, whereas a long-running world is incidentally near-sorted. Fits the "sometimes / only after load" pattern.
+- **Archetype/table fragmentation post-load** changing query iteration order and cache behavior.
+- **Population mismatch** — loading a larger save than the running session inflates the O(n log n) sort.
+- **Interaction with the new core reservation** (rayon capped to `total-2`): `par_sort` runs on the capped rayon pool, so fewer threads amplify any per-load slowdown. (Would not by itself explain "sometimes," but could compound it.)
+
+**Investigation approach:**
+- [ ] Instrument `export_positions` per phase (collect vs. sort vs. filter) and log on the ticks that spike; correlate timestamps with load events and population.
+- [ ] Check entity iteration order / `CritId` distribution immediately after load vs. steady state.
+- [ ] Confirm whether it persists for many ticks or decays (cold-cache warmup vs. sustained).
+
+**Likely fix direction (TDD once root cause is known):** this strengthens the case for the long-deferred **candidate fix C** from the stutter investigation — replace the per-tick full `par_sort` with a cheaper stable-ordering scheme that doesn't reintroduce **ghost-crits** (`docs/testing/bugs/ghost-crits.md`). E.g. maintain stable order incrementally, or sort only the viewport-filtered subset, or use a radix/bucketed pass keyed on `CritId`.
+- **Effort:** investigation ~1-2 h; fix variable (depends on cause). **Risk:** Medium (the sort guards ghost-crits — any replacement must preserve stable ordering). See memory `1m-pan-stutter-root-cause`.
 
 **Note:** Spatial partitioning optimization has been promoted to Sprint 16. See `SPRINTS/spatial-grid/SPRINT_PLAN.md` for the implementation plan.
 

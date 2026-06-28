@@ -1,7 +1,7 @@
 # Technical Debt Inventory
 
-**Last Updated:** 2025-11-15
-**Total Items:** 52
+**Last Updated:** 2026-06-28
+**Total Items:** 53
 
 This document tracks all TODO comments, architectural decisions, and technical debt across the codebase. Items are categorized by priority and sprint target.
 
@@ -157,7 +157,7 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ---
 
-## Category 3: Performance Optimization (P2) [0 items]
+## Category 3: Performance Optimization (P2) [1 item]
 
 **Priority:** Medium (Phase 3)
 **Effort:** Variable
@@ -165,7 +165,23 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 
 ### Items
 
-*No items currently in this category.*
+#### 3.1 HT-Aware Renderer Core Reservation
+**File:** `apps/simulation/src/config.rs` (`sim_thread_count_with_reserved`, `parse_reserved_cores`, `DEFAULT_RESERVED_CORES`); applied in `apps/simulation/src/napi_addon/simulation_engine.rs`
+**Status:** Shipped with a **flat default of 2 reserved cores** (merged to `main` 2026-06-28). Validated sweet spot on JB's 16-logical / 8-physical HT rig (reserve 2 → 29 ms tick, super smooth). Overridable via `SPECIATE_RESERVED_CORES`.
+
+**The debt:** the default reserves **2 logical cores unconditionally**. On an HT/SMT CPU that's ~1 physical core of headroom (intended). On a **non-HT** CPU (logical == physical) it takes **2 whole physical cores** — double the intended hit, and severe on low-core machines (a non-HT 4-core loses 50% of compute for no benefit; the renderer only needs ~1 physical core). This undercuts the cross-OS scale claim on non-HT hardware.
+
+**Preferred solution (A) — true HT detection:**
+- [ ] Add `num_cpus` as a small, **always-on** dependency. (`std::thread::available_parallelism()` returns logical count only; `sysinfo` is already present but **`dev-tools`-gated**, so it can't be used in this always-on path without breaking the `--no-default-features` compile guardrail.)
+- [ ] Replace the flat `DEFAULT_RESERVED_CORES` const with `default_reserved_cores(logical, physical) = if logical > physical { 2 } else { 1 }` — "~1 physical core of headroom" on every machine.
+- [ ] Thread the computed default into `parse_reserved_cores(raw, default)`; the `SPECIATE_RESERVED_CORES` env override still wins.
+- [ ] TDD: pure fn — unit-test HT / non-HT / min-1 clamp; update the existing 6 config tests.
+- [ ] Rebuild release+`fuse-act`; confirm `cargo build --no-default-features --features napi` still compiles.
+
+**Rejected alternative (B) — dep-free proxy:** scale off logical count alone (e.g. `logical >= 12 → 2 else 1`). Avoids the dependency but can't actually distinguish HT from non-HT (an 8-logical HT machine would wrongly get 1), so it's least correct exactly where it matters.
+
+- **Effort:** ~20-30 min. **Risk:** Low (isolated, pure logic, behind the existing env override).
+- **Rationale:** correct cross-machine behavior; the current flat-2 over-reserves on non-HT CPUs. See memory `1m-pan-stutter-root-cause` for the full reservation story.
 
 **Note:** Spatial partitioning optimization has been promoted to Sprint 16. See `SPRINTS/spatial-grid/SPRINT_PLAN.md` for the implementation plan.
 

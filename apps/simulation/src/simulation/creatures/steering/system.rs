@@ -89,6 +89,10 @@ pub fn update_steering_system(
                 &ctx,
             );
 
+            debug_assert!(
+                acceleration.ax == 0.0 && acceleration.ay == 0.0,
+                "steering cap assumes zero Acceleration at entry"
+            );
             acceleration.ax += output.ax;
             acceleration.ay += output.ay;
             if output.arrived {

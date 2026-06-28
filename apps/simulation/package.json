@@ -20,6 +20,7 @@
     "check-freshness": "./scripts/check-napi-freshness.sh || echo 'Note: Freshness check failed or not applicable'",
     "prebuild": "npm run check-freshness",
     "build": "napi build --platform --release --features dev-tools,napi",
+    "build:fused": "napi build --platform --release --features dev-tools,napi,fuse-act",
     "build:debug": "napi build --platform --features dev-tools,napi",
     "artifacts": "napi artifacts",
     "version": "napi version"

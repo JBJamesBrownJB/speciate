@@ -241,6 +241,7 @@ mod tests {
             l2_aggregation_us: 25,
             behavior_transition_us: 100,
             steering_us: 230,
+            act_us: 0,
             capture_debug_accel_us: 5,
             export_positions_us: 135,
             plant_us: 0,

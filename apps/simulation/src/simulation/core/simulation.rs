@@ -1,14 +1,18 @@
 use super::components::{ActualTickRate, BoundaryConfig, DeltaTime, FreqConfig, PhysicsTick};
 use super::world_bounds::WorldBounds;
 use crate::config::MovementConfig;
+#[cfg(not(feature = "fuse-act"))]
 use crate::simulation::creatures::behaviors::behavior_transition_system;
 use crate::simulation::plants::update_plants;
 use crate::simulation::creatures::builder::CritBuilder;
 use crate::simulation::creatures::dna::Dna;
 use crate::simulation::creatures::events::SpawnCreatureEvent;
+#[cfg(not(feature = "fuse-act"))]
 use crate::simulation::creatures::steering::update_steering_system;
 use crate::simulation::creatures::systems::{process_spawn_events, NextCreatureId};
-use crate::simulation::movement::{integrate_motion_system, update_body_size_cache};
+#[cfg(not(feature = "fuse-act"))]
+use crate::simulation::movement::integrate_motion_system;
+use crate::simulation::movement::update_body_size_cache;
 use crate::simulation::perception;
 use crate::simulation::spatial::{
     aggregate_l1_system, rebuild_spatial_grid_system, swap_spatial_grid_buffers_system,
@@ -79,32 +83,33 @@ impl SimulationBuilder {
 
         schedule.add_systems(process_spawn_events);
 
+        #[cfg(not(feature = "fuse-act"))]
         schedule.add_systems((
             rebuild_spatial_grid_system,
-            // L1 aggregation runs after L0 rebuild
             aggregate_l1_system.after(rebuild_spatial_grid_system),
-            // Perception runs after L1 aggregation for hierarchical early-exit
             perception::update_perception_system.after(aggregate_l1_system),
-            // Behavior transition runs after perception (may use perception data in future)
             behavior_transition_system.after(perception::update_perception_system),
-            // FUSED STEERING: Single system replaces 4 separate systems (wander, seek, avoidance, flee)
-            // Sprint 20 optimization: 1 query + 1 iteration instead of 4
-            // Also includes steering cap (was separate system, now fused for performance)
             update_steering_system.after(behavior_transition_system),
             update_body_size_cache,
-            // integrate_motion MUST run AFTER steering (which now includes capping)
-            // Rotation is now fused into integrate_motion_system for parallelization
             integrate_motion_system.after(update_steering_system),
-            // Swap grid buffers at END of tick - next tick sees newly rebuilt grid
             swap_spatial_grid_buffers_system.after(integrate_motion_system),
-            // Plant lifecycle: runs after motion integration so positions are final.
-            // Owns growth, seed dispersal, and depletion from creature feeding.
             update_plants.after(integrate_motion_system),
         ));
 
-        // Debug acceleration capture runs AFTER steering (which includes capping) but BEFORE movement integration
-        // This ensures force visualization shows CAPPED acceleration values
-        #[cfg(feature = "dev-tools")]
+        #[cfg(feature = "fuse-act")]
+        schedule.add_systems((
+            rebuild_spatial_grid_system,
+            aggregate_l1_system.after(rebuild_spatial_grid_system),
+            perception::update_perception_system.after(aggregate_l1_system),
+            crate::simulation::act::act_system
+                .after(perception::update_perception_system),
+            update_body_size_cache,
+            swap_spatial_grid_buffers_system
+                .after(crate::simulation::act::act_system),
+            update_plants.after(crate::simulation::act::act_system),
+        ));
+
+        #[cfg(all(feature = "dev-tools", not(feature = "fuse-act")))]
         schedule.add_systems(
             perception::capture_debug_acceleration_system
                 .after(update_steering_system)

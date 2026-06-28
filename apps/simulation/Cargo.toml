@@ -72,6 +72,7 @@ test-helpers = []
 default = []
 dev-tools = ["dep:perf-event", "dep:git2", "dep:sysinfo"]
 napi = []
+fuse-act = []
 # dhat-heap profiling (disables MiMalloc so dhat can use its own allocator)
 dhat-heap = ["dep:dhat"]
 

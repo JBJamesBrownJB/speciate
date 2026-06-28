@@ -1,4 +1,6 @@
 // Domain modules
+#[cfg(feature = "fuse-act")]
+pub mod act;
 pub mod core;
 pub mod creatures;
 pub mod math;

@@ -120,13 +120,38 @@ it cleanly can be**, hardened, validated cumulatively vs main, and documented �
 **RESOLVED 2026-06-27:** Extracted and committed e19bc11 via `inline-always` approach. dWall −0.364
 ms, dSteer −0.196 ms; both reps passed all three gates.
 
-### Phase 1 — Fused path behind a flag (later · pre-ship)
+### Phase 1 — Fused path behind a flag — ✅ DONE 2026-06-28
 
 - Add cargo feature **`fuse-act`**, **orthogonal to `dev-tools`** (so the fused build stays
   measurable — this is what lets us benchmark prod).
 - `#[cfg(feature = "fuse-act")]` registers one `act_system` that `par_iter`s once and calls
   `behavior::step → steering::step → integrate::step` inline, under a single `time("act")` scope.
   `#[cfg(not(...))]` keeps today's separate systems.
+
+**Delivered** (`apps/simulation/src/simulation/act/mod.rs`): `fuse-act = []` feature (default off,
+no deps); fused `act_system` reproducing each step's per-entity gate EXACTLY — behavior throttle
+(`behavior_divisor` bucket), steering Dormant-skip + capability bools, unconditional integrate — so
+the (entity × step) execution set is identical to the unfused schedule. `act_us` timing metric added
+to `SystemTimings`/snapshot; loop wrapped in `time("act")` under dev-tools. Steering `debug_assert!(accel==0)`
+carry-in added (both paths). Schedule cfg-gated (exactly one path). Build wiring: `dev:release` → fused
+(`build:fused` = `--features dev-tools,napi,fuse-act`); new `dev:release:unfused` → separated;
+`package`/`build`/`build:debug`/`latency_lab` left UNFUSED.
+
+**Verified:** TDD `fused_act_corridor_moves_seeker`; full suite green both configs (unfused 564, fused 565)
+across 26 fused + 8 unfused runs; all build configs compile; ecs-emma adversarial review = behavior-preserving,
+no entity gains/loses a step. Left uncommitted for human gate, then committed to `perf/system-fusion`.
+
+**Known follow-ups (Phase 2 / hygiene), NOT blockers:**
+- **Dev-UI force-vector overlay goes stale in fused+dev-tools builds.** `capture_debug_acceleration_system`
+  ran *between* steering and integrate to snapshot the inspected creature's capped accel; there is no
+  observation point mid-fused-loop, so it's cfg'd out under `fuse-act`. Sim state identical (it was a
+  read-only debug capture); `capture_debug_accel_us` reads 0 fused. Use `dev:release:unfused` to inspect
+  forces. Accepted tradeoff for the fused (perf/ship) path.
+- **`act` sparkline not yet shown in dev-UI.** `act_us` is captured but the dev-UI reads a fixed phase
+  set; add `actUs` to its sparkline list so fused dev builds show the single `act` bar (today they'd show
+  behavior/steering/movement as 0). Small frontend follow-up.
+- **One rare pre-existing flaky test** surfaced once in ~35 runs (a `thread_rng`-class test, same RNG in
+  both paths; could not reproduce in 26 fused retries). Not fusion-introduced; track + harden separately.
 
 ### Phase 2 — Prove it + guard it
 
@@ -182,3 +207,11 @@ ms, dSteer −0.196 ms; both reps passed all three gates.
   sub-threshold but no regression in any run). Branch clean vs main. All three act-corridor systems
   have pure `step()` functions. Perception remains a justified exception (spatial-gather coupling).
   **Phase 0 DONE. Next: Phase 1 — `fuse-act` feature flag.**
+
+- **2026-06-28 (Phase 1)** — `fuse-act` feature + fused `act_system` landed (scout→implement→verify
+  workflow). Per-entity gating reproduced exactly (behavior throttle / steering Dormant-skip / uncond.
+  integrate); `act_us` metric + `time("act")`; steering `debug_assert` carry-in. Wiring flipped per JB:
+  **`dev:release` = fused**, `dev:release:unfused` = separated, package + lab stay unfused. Suite green
+  both configs (564 unfused / 565 fused, 26+8 runs); ecs-emma review = behavior-preserving. See Phase 1
+  follow-ups above (dev-UI force overlay stale fused; `act` sparkline display; one rare pre-existing flake).
+  **Phase 1 DONE. Next: Phase 2 — bit-identical guard test + `latency_lab` fused-vs-unfused A/B (the proof).**

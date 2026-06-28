@@ -125,6 +125,7 @@ pub struct SystemTimings {
     pub l2_aggregation_us: AtomicU64, // L2 strategic grid aggregation (Phase H)
     pub behavior_transition_us: AtomicU64,
     pub steering_us: AtomicU64, // Fused steering system (Sprint 20)
+    pub act_us: AtomicU64,
     pub capture_debug_accel_us: AtomicU64,
     pub export_positions_us: AtomicU64, // IPC buffer export with parallel sort (Sprint 16)
     pub plant_us: AtomicU64,
@@ -143,6 +144,7 @@ impl SystemTimings {
             l2_aggregation_us: AtomicU64::new(0),
             behavior_transition_us: AtomicU64::new(0),
             steering_us: AtomicU64::new(0),
+            act_us: AtomicU64::new(0),
             capture_debug_accel_us: AtomicU64::new(0),
             export_positions_us: AtomicU64::new(0),
             plant_us: AtomicU64::new(0),
@@ -160,6 +162,7 @@ impl SystemTimings {
             "l2_aggregation" => &self.l2_aggregation_us,
             "behavior_transition" => &self.behavior_transition_us,
             "steering" => &self.steering_us,
+            "act" => &self.act_us,
             "capture_debug_accel" => &self.capture_debug_accel_us,
             "export_positions" => &self.export_positions_us,
             "plants" => &self.plant_us,
@@ -178,6 +181,7 @@ impl SystemTimings {
             l2_aggregation_us: self.l2_aggregation_us.load(Ordering::Relaxed),
             behavior_transition_us: self.behavior_transition_us.load(Ordering::Relaxed),
             steering_us: self.steering_us.load(Ordering::Relaxed),
+            act_us: self.act_us.load(Ordering::Relaxed),
             capture_debug_accel_us: self.capture_debug_accel_us.load(Ordering::Relaxed),
             export_positions_us: self.export_positions_us.load(Ordering::Relaxed),
             plant_us: self.plant_us.load(Ordering::Relaxed),
@@ -226,6 +230,7 @@ pub struct SystemTimingsSnapshot {
     pub l2_aggregation_us: u64,
     pub behavior_transition_us: u64,
     pub steering_us: u64,
+    pub act_us: u64,
     pub capture_debug_accel_us: u64,
     pub export_positions_us: u64,
     pub plant_us: u64,

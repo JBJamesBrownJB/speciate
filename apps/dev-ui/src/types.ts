@@ -78,8 +78,12 @@ export interface SystemTimingsSnapshot {
   perceptionUs: number;
   spatialGridRebuildUs: number;
   l1AggregationUs: number;
+  l2AggregationUs: number;
   behaviorTransitionUs: number;
   steeringUs: number;
+  /** Fused act corridor (behavior+steering+integrate) — nonzero only in `fuse-act`
+   *  builds, where it replaces the separate behavior/steering/movement bars. */
+  actUs: number;
   captureDebugAccelUs: number;
   exportPositionsUs: number;
   plantUs: number;

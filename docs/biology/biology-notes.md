@@ -146,3 +146,22 @@ Implemented in the ABC Super Sprint (see `sprint_summaries/abc-super-sprint_summ
 **DNA future slot:** pure function of `length` today (no gene). Natural extension is a `crypsis_gene` multiplier — keep signature `conspicuousness(length, crypsis=1.0)`-shaped so it drops in without re-plumb.
 
 **Implementation Status:** ✅ Implemented on branch `feat/conspicuousness-visibility` (engine + perception wiring + selected-creature overlay ring, all TDD-covered). **NOT merged to main** — held behind the trophic-canary gate, which is **not yet runnable** (engine has no birth/death/reproduction, so steady-state apex/grazer populations cannot shift). Full writeup: `docs/biology/done/conspicuousness-visibility.md`.
+
+---
+
+## Motion-Gated Conspicuousness (2026-06-28)
+
+**Topic:** Upgrade v1 size-only conspicuousness so it **grows when moving fast and shrinks when freezing** — making freeze a real evasion tactic and sprint a real risk. Follow-up to the shipped size-only version above; **planned, not yet implemented** (queued after the system-fusion perf work).
+
+**Consult:** zoologist-tom.
+
+**Key findings:**
+- **Multiplicative, not additive:** `conspicuousness(length, speed) = base(length) · motion_factor(speed)` (and a future `· crypsis_factor` as a separate third multiplicand). Motion is the *dominant* detection cue (vertebrate motion-detection circuitry; frozen prey ≈ invisible). Multiplying lets any one channel collapsing toward zero make the creature nearly undetectable — matching reality.
+- **RELATIVE speed is the load-bearing call:** `s = clamp(speed / max_speed(length), 0, 1)`, **not** absolute m/s. `base(length)` already owns the size axis; absolute speed would double-count size (`max_speed ∝ length^0.25`) and kill the lever at both extremes. Relative gives every body plan the full range. **Relative-invariance** is a required test (0.5 m & 10 m at `s=0.5` → identical `motion_factor`).
+- **Formula:** `motion_factor = MOTION_FACTOR_MIN + (MOTION_FACTOR_MAX − MOTION_FACTOR_MIN)·s^MOTION_FACTOR_EXPONENT`, with **MIN=0.45** (frozen floor ≈ half visibility, not a cloak), **MAX=2.5** (sprint beacon), **EXPONENT=1.5** (convex — stalk/creep stays dark, sprint lights up; cruise `s≈0.45`→~1.07 ≈ neutral, preserving v1 tuning).
+- **Magnitudes:** median 0.5 m → frozen 0.11 / cruise 0.27 / sprint 0.63; 10 m apex → frozen 10.1 / cruise 24 / sprint 56 (<60 cap). ~5.5× radius swing ⇒ ~30× spot-chance (area) swing.
+- **Golden Zone (honest):** target-side (this) gives only a *modest* perf win (shrinks frozen AABB). The big compute saving is the **separate observer-side motion-detection-skip** (`docs/biology/todo/motion-detection.md`) — build the pair for "freeze = dark AND cheap."
+- **Trophic:** real predator-tilt risk (stalkers darken on approach + prey light up fleeing); **detection-RATE canary only, branch-only, no population result** (no birth/death — same constraint as v1). If predator detection-success >+20%, raise MIN toward 0.55–0.6, don't touch the cap.
+- **crypsis_gene:** keep separate (third multiplicand); lower the floor not the cap (motion defeats camouflage), optionally scale crypsis by `(1−s)`.
+
+**Implementation Status:** 📋 Planned — full design (formula, constants, magnitudes, tests-first list) in `docs/biology/todo/motion-gated-conspicuousness.md`. Do **after** the system-fusion perf work.

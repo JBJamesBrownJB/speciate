@@ -145,4 +145,4 @@ Implemented in the ABC Super Sprint (see `sprint_summaries/abc-super-sprint_summ
 
 **DNA future slot:** pure function of `length` today (no gene). Natural extension is a `crypsis_gene` multiplier — keep signature `conspicuousness(length, crypsis=1.0)`-shaped so it drops in without re-plumb.
 
-**Implementation Status:** In Progress (branch `feat/conspicuousness-visibility`) — see `docs/biology/done/conspicuousness-visibility.md` when complete.
+**Implementation Status:** ✅ Implemented on branch `feat/conspicuousness-visibility` (engine + perception wiring + selected-creature overlay ring, all TDD-covered). **NOT merged to main** — held behind the trophic-canary gate, which is **not yet runnable** (engine has no birth/death/reproduction, so steady-state apex/grazer populations cannot shift). Full writeup: `docs/biology/done/conspicuousness-visibility.md`.

@@ -187,13 +187,14 @@ The DNA system is the architectural foundation of our A-Life simulation. Current
 **Priority: P1 (Critical)** — exceeds this category's P2 banner. Logged 2026-06-28 (JB, observed).
 **File:** `apps/simulation/src/ipc/bridge/bevy_app.rs:364` (`export_positions`), specifically the `entities.par_sort_unstable_by_key(|(id, _, _, _)| id.0)` at line 391.
 
-**Symptom:** **Sometimes, after loading a saved world**, `export_positions` jumps to **~9 ms** (vs. its benchmarked ~1.35 ms @ 400K / a few ms @ 1M), pushing the **tick to ~40 ms** — eating most of the 50 ms budget and risking the pan/zoom stutter we just fixed. Intermittent ("sometimes"), correlated with **save-state load**.
+**Symptom:** after loading a saved world, `export_positions` jumps to **~9 ms** (vs. its benchmarked ~1.35 ms @ 400K / a few ms @ 1M), pushing the **tick to ~40 ms** — eating most of the 50 ms budget and risking the pan/zoom stutter we just fixed.
 
-**Root cause: UNCONFIRMED — needs investigation, do not assume.** Candidate hypotheses to test:
-- **Adversarial sort input.** `par_sort_unstable_by_key` is pattern-defeating quicksort; its cost depends on input order. A freshly **deserialized** world (DynamicScene) may iterate entities into the Vec in an order that's pathological for the sort, whereas a long-running world is incidentally near-sorted. Fits the "sometimes / only after load" pattern.
-- **Archetype/table fragmentation post-load** changing query iteration order and cache behavior.
-- **Population mismatch** — loading a larger save than the running session inflates the O(n log n) sort.
-- **Interaction with the new core reservation** (rayon capped to `total-2`): `par_sort` runs on the capped rayon pool, so fewer threads amplify any per-load slowdown. (Would not by itself explain "sometimes," but could compound it.)
+**Update 2026-06-28 (JB): REPRODUCIBLE — *every* save-state-hydrated session has inflated `export_positions` latency, not intermittent.** This reweights the diagnosis: a deterministic "always after load" cost points to a **persistent property of the deserialized world** (a stable difference in entity/archetype layout or `CritId` ordering vs. a fresh-spawned world), not random sort-input luck and not a one-tick cold-cache warmup.
+
+**Root cause: UNCONFIRMED — needs investigation, do not assume.** Candidate hypotheses, reordered by the reproducibility finding:
+- **Persistent post-deserialize entity/archetype layout (leading).** DynamicScene hydration lays entities into tables/archetypes in an order that consistently makes query iteration + the `CritId` sort slower (worse cache behavior, or `CritId` order that's persistently adversarial for pattern-defeating quicksort). A long-running world is incidentally near-sorted; a hydrated one isn't — every time.
+- **Population mismatch** — loading a larger save than the running session inflates the O(n log n) sort. (Only explains it if loads are consistently larger.)
+- **Interaction with the new core reservation** (rayon capped to `total-2`): `par_sort` runs on the capped rayon pool, so fewer threads amplify the slowdown. (Compounds, doesn't cause.)
 
 **Investigation approach:**
 - [ ] Instrument `export_positions` per phase (collect vs. sort vs. filter) and log on the ticks that spike; correlate timestamps with load events and population.

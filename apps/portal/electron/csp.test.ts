@@ -22,6 +22,10 @@ describe('production Content-Security-Policy', () => {
     expect(PROD_CSP).toMatch(/worker-src[^;]*blob:/);
     expect(PROD_CSP).toMatch(/img-src[^;]*blob:/);
     expect(PROD_CSP).toMatch(/img-src[^;]*data:/);
+    // Pixi fetches textures from data:/blob: URLs (a connect, not an img load) — a
+    // packaged-run CSP violation proved connect-src 'self' alone breaks rendering.
+    expect(PROD_CSP).toMatch(/connect-src[^;]*data:/);
+    expect(PROD_CSP).toMatch(/connect-src[^;]*blob:/);
   });
 
   it('applies ONLY in packaged builds — dev (Vite HMR needs eval) is untouched', () => {

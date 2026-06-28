@@ -20,7 +20,7 @@ const PROD_CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' data: blob:",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

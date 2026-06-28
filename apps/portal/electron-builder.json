@@ -12,9 +12,9 @@
   ],
   "extraResources": [
     {
-      "from": "../simulation/speciate.*.node",
+      "from": "../simulation",
       "to": "native",
-      "filter": ["**/*"]
+      "filter": ["speciate.*.node"]
     }
   ],
   "linux": {

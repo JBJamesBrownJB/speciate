@@ -1,3 +1,7 @@
+// Side-effect import: swaps Pixi's shader/uniform generation to eval-free polyfills.
+// Required so rendering works under a no-`unsafe-eval` environment — i.e. the packaged
+// (file://) build and any strict CSP. MUST run before `new Application().init()`.
+import "pixi.js/unsafe-eval";
 import { Application, Container } from "pixi.js";
 import { SpriteProvider } from "@/rendering/SpriteProvider";
 import { Camera } from "@/domain/Camera";

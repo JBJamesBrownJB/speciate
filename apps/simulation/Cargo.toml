@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Speciate Team"]
 description = "Server-authoritative AI life simulation with player-driven economy"
-license = "MIT"
-repository = "https://github.com/anthropics/speciate"
+license = "LicenseRef-Proprietary"
+publish = false
+repository = "https://github.com/JBJamesBrownJB/speciate"
 
 [dependencies]
 # Bevy ECS Framework

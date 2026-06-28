@@ -37,6 +37,11 @@ mod tests {
         let grid = PlantGrid::from_bounds(&bounds);
         world.insert_resource(grid);
 
+        // Under dev-tools, update_plants times itself via Res<SystemTimings> — provide it
+        // so the system's required resource exists (mirrors the steering system tests).
+        #[cfg(feature = "dev-tools")]
+        world.insert_resource(crate::instrumentation::SystemTimings::new());
+
         let mut schedule = Schedule::default();
         schedule.add_systems(update_plants);
         schedule.run(&mut world);

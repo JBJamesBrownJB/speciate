@@ -160,8 +160,12 @@ const brief = await agent(
   liveProfile + '\nTARGET the fattest LIVE phases above. ' +
   'READ, in this order:\n' +
   '1. ' + LEDGER + ' (JSONL: every idea already tried + its verdict; DO_NOT_REVISIT and DONE are HARD exclusions. ' +
-  'An entry with a "retest" field is RE-ELIGIBLE despite a DITCH verdict — it was ditched under the OLD noisier gate ' +
-  'and the "retest" note says why it may now pass; surface these as PRIORITY re-tests, with their prior result as context)\n' +
+  'An entry with a "retest" field is RE-ELIGIBLE despite its verdict — surface these as PRIORITY re-tests, with their prior ' +
+  'result as context: a DITCH+retest was ditched under the OLD noisier gate and may now pass; a CANDIDATE+retest is a ' +
+  'cloud-triage prime awaiting exactly this full-fidelity validation. A CLOUD_TRIED entry (origin cloud-triage, NO retest) is ' +
+  'NEUTRAL for this hunt: the cloud implemented + measured it at ≤10k on a shared VM and it came up short THERE — that is ' +
+  'weak evidence, not a verdict at 1M. Do NOT list it among the must-not-propose ideas and do NOT prioritize it; if a hunter ' +
+  'independently lands on the same idea, pass its cloud numbers along as context)\n' +
   '2. ' + REPO + '/docs/scale/optimization-checklist.md (the Pass bar, attack order, ditched list, next levers)\n' +
   '3. ' + REPO + '/docs/scale/path-to-one-million.md (attack order + context — but its phase figures are HISTORICAL and may be stale; the LIVE BASELINE above overrides them for "which phase is fattest")\n' +
   '4. Skim the hot systems: apps/simulation/src/simulation/{perception,steering,movement}/ and spatial/.\n\n' +
@@ -195,7 +199,9 @@ const synth = await agent(
   'PROPOSALS (JSON):\n' + JSON.stringify(proposals) + '\n\n' +
   'Cross-check every proposal against the ledger ' + LEDGER + ' — DROP anything that duplicates a DO_NOT_REVISIT/DONE/' +
   'already-DITCHED entry, EXCEPT entries carrying a "retest" field: those are explicitly re-eligible (ditched under the old ' +
-  'noisier gate) and should be PREFERRED, not dropped. Then select the ' + COUNT + ' STRONGEST and most DIVERSE ideas (spread across phases and scopes, ' +
+  'noisier gate, or cloud-triage primes awaiting 1M validation) and should be PREFERRED, not dropped. Do NOT drop a proposal ' +
+  'merely because it matches a CLOUD_TRIED entry — that is a ≤10k shared-VM soft exclusion, not a home-rig verdict; treat its ' +
+  'cloud numbers as mild evidence against when ranking. Then select the ' + COUNT + ' STRONGEST and most DIVERSE ideas (spread across phases and scopes, ' +
   'not all perception). Merge near-duplicates. Keep the best implementation sketch for each. Return exactly ' + COUNT +
   ' ideas (or fewer if not enough survive), each with a unique id.',
   { label: 'ideate:synthesize', phase: 'Ideate', schema: IDEAS_SCHEMA }
@@ -358,7 +364,8 @@ const report = await agent(
   'RESULTS (JSON):\n' + JSON.stringify(reportInput) + '\n\n' +
   'PART A — LEDGER: append one JSONL line per measured candidate AND the bundle to ' + LEDGER + '. Get today date via ' +
   '`date +%Y-%m-%d`. Fields: id, date, title, scope, target_phase, verdict, dwall_p99_ms, dphase_ms, notes. ' +
-  'Do not rewrite existing lines; append only.\n\n' +
+  'Do not rewrite existing lines; append only. Afterwards GATE the file: ' +
+  'node ' + REPO + '/.claude/workflows/lib/ledger-cli.mjs lint --ledger ' + LEDGER + ' MUST exit 0 — if it fails, fix ONLY the lines you appended.\n\n' +
   'PART B — REPORT: write a compelling, skimmable markdown report to ' + REPO + '/docs/scale/perf-hunt/last-run.md with:\n' +
   '- A headline summary table: each idea | scope | target phase | verdict | Δwall p99 (ms) | Δphase (ms).\n' +
   '- KEEPS first, then any winning BUNDLE (was it additive?), then DEFERS (parked), then DITCHED (with why).\n' +

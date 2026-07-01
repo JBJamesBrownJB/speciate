@@ -1,7 +1,8 @@
 // Canonical schema for the ledger rows the cloud triage hunt appends to
 // docs/scale/perf-hunt/ledger.jsonl. This module is the SOURCE OF TRUTH for the
-// row shape: the perf-hunt-cloud workflow's "Log candidates" phase instructs its
-// agent to append lines in exactly this format, and node --test guards it here.
+// row shape, and it is ON the execution path: the perf-hunt-cloud "Log" phase
+// appends rows by running ledger-cli.mjs (which calls these builders), then
+// gates the file with lintLedger — rows are never hand-written.
 //
 // WHY a cloud row is a `CANDIDATE` with `retest`: the existing full-fidelity
 // /perf-hunt (perf-hunt.mjs) surfaces any ledger entry carrying a `retest` field
@@ -52,6 +53,23 @@ function assertBaseFields(f, who) {
   if (!f.notes || typeof f.notes !== 'string') throw new Error(`${who}: notes (string) required`);
 }
 
+/** Single owner of the shared row shape and key order (fixed order keeps the
+ *  JSONL diff-friendly). Candidate rows add a trailing `retest` on top. */
+function baseRow(f, defaultVerdict) {
+  return {
+    id: f.id,
+    date: f.date,
+    title: f.title,
+    scope: f.scope,
+    target_phase: f.target_phase,
+    verdict: f.verdict || defaultVerdict,
+    dwall_p99_ms: f.dwall_p99_ms,
+    dphase_ms: f.dphase_ms,
+    notes: f.notes,
+    origin: f.origin || 'cloud-triage',
+  };
+}
+
 export function buildCandidateLine(f) {
   assertBaseFields(f, 'buildCandidateLine');
 
@@ -60,21 +78,7 @@ export function buildCandidateLine(f) {
     : '';
   const retest = f.retest || `cloud-triage ${f.date}: Δphase ${f.dphase_ms.toFixed(2)}ms / Δwall ${f.dwall_p99_ms.toFixed(2)}ms at cloud pop${growth}; needs full 1M validation on the home rig.`;
 
-  // Fixed key order keeps the JSONL diff-friendly and mirrors the full hunt's rows.
-  const row = {
-    id: f.id,
-    date: f.date,
-    title: f.title,
-    scope: f.scope,
-    target_phase: f.target_phase,
-    verdict: f.verdict || 'CANDIDATE',
-    dwall_p99_ms: f.dwall_p99_ms,
-    dphase_ms: f.dphase_ms,
-    notes: f.notes,
-    origin: f.origin || 'cloud-triage',
-    retest,
-  };
-  return JSON.stringify(row);
+  return JSON.stringify({ ...baseRow(f, 'CANDIDATE'), retest });
 }
 
 /**
@@ -95,19 +99,14 @@ export function buildCandidateLine(f) {
  */
 export function buildTriedLine(f) {
   assertBaseFields(f, 'buildTriedLine');
-  const row = {
-    id: f.id,
-    date: f.date,
-    title: f.title,
-    scope: f.scope,
-    target_phase: f.target_phase,
-    verdict: f.verdict || 'CLOUD_TRIED',
-    dwall_p99_ms: f.dwall_p99_ms,
-    dphase_ms: f.dphase_ms,
-    notes: f.notes,
-    origin: f.origin || 'cloud-triage',
-  };
-  return JSON.stringify(row);
+  return JSON.stringify(baseRow(f, 'CLOUD_TRIED'));
+}
+
+/** CLI dispatch: which guarded builder produces a row of the given kind. */
+export function buildRow(kind, fields) {
+  if (kind === 'candidate') return buildCandidateLine(fields);
+  if (kind === 'tried') return buildTriedLine(fields);
+  throw new Error(`buildRow: kind must be candidate|tried, got "${kind}"`);
 }
 
 /**
@@ -122,4 +121,39 @@ export function parseLedgerLine(line) {
     if (!(k in obj)) throw new Error(`parseLedgerLine: row missing required field "${k}"`);
   }
   return { origin: 'home-rig', retest: null, ...obj };
+}
+
+/**
+ * Mechanically validate a whole ledger file's text — the gate the cloud Log
+ * phase runs AFTER appending, so a malformed hand-off can never silently land
+ * in the append-only file. Beyond per-row parseability it pins the two
+ * invariants the verdicts encode:
+ *  - CLOUD_TRIED must NOT carry `retest` (a stray retest would turn a soft
+ *    exclusion into a home-rig PRIORITY re-test of a known loser);
+ *  - CANDIDATE must carry `retest` (that field is what makes the home-rig
+ *    /perf-hunt surface it at all).
+ *
+ * @param {string} text full ledger contents
+ * @returns {{ok: boolean, errors: Array<{line: number, message: string}>}}
+ */
+export function lintLedger(text) {
+  const errors = [];
+  text.split('\n').forEach((line, i) => {
+    if (!line.trim()) return; // blank/trailing lines are fine
+    const lineNo = i + 1;
+    let row;
+    try {
+      row = parseLedgerLine(line);
+    } catch (e) {
+      errors.push({ line: lineNo, message: e.message });
+      return;
+    }
+    if (row.verdict === 'CLOUD_TRIED' && row.retest !== null) {
+      errors.push({ line: lineNo, message: `CLOUD_TRIED row "${row.id}" must not carry retest (soft exclusion would become a priority re-test)` });
+    }
+    if (row.verdict === 'CANDIDATE' && !row.retest) {
+      errors.push({ line: lineNo, message: `CANDIDATE row "${row.id}" must carry retest (the home rig surfaces candidates via that field)` });
+    }
+  });
+  return { ok: errors.length === 0, errors };
 }

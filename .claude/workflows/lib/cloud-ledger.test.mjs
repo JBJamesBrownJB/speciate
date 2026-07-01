@@ -1,7 +1,14 @@
 // Run: node --test .claude/workflows/lib/cloud-ledger.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCandidateLine, buildTriedLine, parseLedgerLine, REQUIRED_FIELDS } from './cloud-ledger.mjs';
+import {
+  buildCandidateLine,
+  buildTriedLine,
+  buildRow,
+  parseLedgerLine,
+  lintLedger,
+  REQUIRED_FIELDS,
+} from './cloud-ledger.mjs';
 
 const valid = {
   id: 'perception-range-trim-cloud',
@@ -103,4 +110,67 @@ test('tried row: is a single JSONL line and parses back with retest=null', () =>
   assert.equal(parsed.verdict, 'CLOUD_TRIED');
   assert.equal(parsed.origin, 'cloud-triage');
   assert.equal(parsed.retest, null, 'parser defaults the absent retest to null');
+});
+
+// --- shared row shape: one owner for the key order ---------------------------
+
+test('candidate and tried rows share the exact same base key order (single owner)', () => {
+  const candKeys = Object.keys(JSON.parse(buildCandidateLine(valid)));
+  const triedKeys = Object.keys(JSON.parse(buildTriedLine(valid)));
+  assert.deepEqual(candKeys.slice(0, -1), triedKeys, 'candidate = tried keys + trailing retest');
+  assert.equal(candKeys.at(-1), 'retest');
+});
+
+// --- buildRow: the CLI dispatch the Log agent runs ---------------------------
+
+test('buildRow dispatches candidate/tried and rejects unknown kinds', () => {
+  assert.equal(buildRow('candidate', valid), buildCandidateLine(valid));
+  assert.equal(buildRow('tried', valid), buildTriedLine(valid));
+  assert.throws(() => buildRow('bogus', valid), /kind/);
+});
+
+// --- lintLedger: the mechanical gate on what actually landed in the file -----
+
+test('lintLedger passes a healthy mixed-era ledger', () => {
+  const text = [
+    // legacy home row (no origin/retest)
+    JSON.stringify({ id: 'a', date: '2026-06-20', title: 't', scope: 'engine', target_phase: 'movement', verdict: 'KEEP', dwall_p99_ms: -1, dphase_ms: -1, notes: 'n' }),
+    buildCandidateLine(valid),
+    buildTriedLine({ ...valid, id: 'b' }),
+    '', // trailing newline
+  ].join('\n');
+  const res = lintLedger(text);
+  assert.equal(res.ok, true, JSON.stringify(res.errors));
+});
+
+test('lintLedger rejects a CLOUD_TRIED row carrying retest (soft exclusion would become a priority re-test)', () => {
+  const bad = JSON.stringify({ ...JSON.parse(buildTriedLine(valid)), retest: 'oops' });
+  const res = lintLedger(bad);
+  assert.equal(res.ok, false);
+  assert.match(res.errors[0].message, /retest/);
+});
+
+test('lintLedger rejects a CANDIDATE row missing retest (home rig would never surface it)', () => {
+  const row = JSON.parse(buildCandidateLine(valid));
+  delete row.retest;
+  const res = lintLedger(JSON.stringify(row));
+  assert.equal(res.ok, false);
+  assert.match(res.errors[0].message, /retest/);
+});
+
+test('lintLedger reports unparseable/incomplete lines with their line number', () => {
+  const text = [buildCandidateLine(valid), 'not json', JSON.stringify({ id: 'x' })].join('\n');
+  const res = lintLedger(text);
+  assert.equal(res.ok, false);
+  assert.deepEqual(res.errors.map((e) => e.line), [2, 3]);
+});
+
+test('lintLedger passes the REAL repo ledger as it stands today', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, resolve } = await import('node:path');
+  const here = dirname(fileURLToPath(import.meta.url));
+  const text = readFileSync(resolve(here, '../../../docs/scale/perf-hunt/ledger.jsonl'), 'utf8');
+  const res = lintLedger(text);
+  assert.equal(res.ok, true, JSON.stringify(res.errors));
 });

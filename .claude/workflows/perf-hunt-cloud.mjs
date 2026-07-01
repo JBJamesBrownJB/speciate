@@ -8,7 +8,7 @@ export const meta = {
     { title: 'Ideate', detail: 'parallel hunter fleet proposes ideas tagged with a target_phase and (when apt) a criterion bench_target; synthesizer dedupes vs ledger' },
     { title: 'Implement', detail: 'each idea built in an isolated worktree, gated on cargo test -> unified diff' },
     { title: 'Micro-measure', detail: 'per candidate: function-bench delta + per-phase A/B at 10k (with wall absolutes) + growth-rate ramp (Δexponent) + growth-aware projected 1M wall savings. Triage signal only — no bank, no escalate' },
-    { title: 'Log', detail: 'append prime candidates to the ledger as CANDIDATE+retest for the home rig, and tried-but-not-prime ideas as CLOUD_TRIED (soft exclusion, no retest) so future hunts skip them; stash diffs; write cloud-last-run.md. Never merges' },
+    { title: 'Log', detail: 'append prime candidates as CANDIDATE+retest and tried-but-not-prime ideas as CLOUD_TRIED (soft exclusion, no retest) via the guarded ledger CLI, then lint-gate the ledger; stash diffs; write cloud-last-run.md. Never merges' },
   ],
 }
 
@@ -39,7 +39,9 @@ const BASELINE_BIN = './' + ART + '/latency_lab_baseline'          // stashed cl
 // ramp — not absolute wall time — is the durable signal, since a fitted slope is
 // far more robust to a noisy shared machine than a single-point delta.
 const MICRO_POP = cfg.microPop || 10000
-const TARGET_POP = cfg.targetPop || 1000000 // project cloud savings up to the 1M headline target
+// Fixed, not configurable: the projection field names (proj_*_1m_ms), the ledger
+// retest wording, and the report labels all assume the 1M headline target.
+const TARGET_POP = 1000000
 const MICRO_SEEDS = cfg.microSeeds || '11,42,99'
 const SWEEP_FROM = cfg.sweepFrom || 1000
 const SWEEP_TO = cfg.sweepTo || 10000
@@ -182,7 +184,9 @@ const synth = await agent(
   'You are the lead engineer triaging ' + proposals.length + ' proposed perf ideas for a CLOUD triage run.\n\n' +
   'PROPOSALS (JSON):\n' + JSON.stringify(proposals) + '\n\n' +
   'Cross-check every proposal against the ledger ' + LEDGER + ' — DROP anything duplicating a DO_NOT_REVISIT/DONE/already-' +
-  'DITCHED entry, EXCEPT entries carrying a "retest" field (prefer those). Then select the ' + COUNT + ' STRONGEST and most ' +
+  'DITCHED entry, EXCEPT entries carrying a "retest" field (prefer those). ALSO DROP any proposal duplicating a CLOUD_TRIED ' +
+  'entry (already implemented + measured on the cloud and came up short) unless the proposal brings a materially new ' +
+  'implementation angle — restating the same mechanism does not qualify. Then select the ' + COUNT + ' STRONGEST and most ' +
   'DIVERSE ideas (spread across phases/scopes), PREFERRING ideas measurable at small scale or as a growth-rate change. ' +
   'Merge near-duplicates; keep the best sketch. Return exactly ' + COUNT + ' ideas (or fewer), each with a unique id.',
   { label: 'ideate:synthesize', phase: 'Ideate', schema: IDEAS_SCHEMA }
@@ -252,10 +256,10 @@ for (const cand of ready) {
     '   ' + BASELINE_BIN + ' --seeds ' + MICRO_SEEDS + ' --pop ' + MICRO_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.base.json\n' +
     '   ' + RELEASE_BIN + ' --seeds ' + MICRO_SEEDS + ' --pop ' + MICRO_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.cand.json\n' +
     '   verdict: ' + RELEASE_BIN + ' --verdict --baseline ' + ART + '/' + cand.id + '.base.json --candidate ' + ART + '/' + cand.id + '.cand.json --phase ' + phaseName + '\n' +
-    '   Parse phase_verdict (Keep/Defer/Ditch) and dPhaseMedian/dWallMedian (µs → ms ÷1000).\n' +
-    '   ALSO read the ABSOLUTE wall p99 from each output file (' + cand.id + '.base.json and ' + cand.id + '.cand.json), convert µs→ms, and return them as wall_base_ms and wall_cand_ms. These feed the growth-aware 1M projection, so they must be the real back-to-back A/B absolutes at this pop (not deltas).\n' +
+    '   Parse phase_verdict (Keep/Defer/Ditch) and dPhaseMedian → dphase_ms (µs → ms ÷1000; it is a MEDIAN delta).\n' +
+    '   ALSO read the ABSOLUTE wall p99 from each output file (' + cand.id + '.base.json and ' + cand.id + '.cand.json), convert µs→ms, and return them as wall_base_ms and wall_cand_ms. These are REQUIRED for any non-Error result (the workflow downgrades a result without them to Error) — they must be the real back-to-back A/B absolutes at this pop, not deltas. Set dwall_p99_ms = wall_cand_ms − wall_base_ms (the workflow recomputes it from your absolutes anyway; never report the verdict\'s dWallMedian as dwall_p99_ms).\n' +
     '6. GROWTH RAMP for the candidate: ' + RELEASE_BIN + ' --sweep --sweep-from ' + SWEEP_FROM + ' --sweep-to ' + SWEEP_TO + ' --sweep-step ' + SWEEP_STEP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.cand.sweep.json\n' +
-    '   Read growthExponent from that JSON → growth_cand. growth_base=' + (typeof baseline.growth_exponent === 'number' ? baseline.growth_exponent.toFixed(3) : 'the baseline value') + '.\n' +
+    '   Read growthExponent from that JSON → growth_cand (REQUIRED for any non-Error result). growth_base=' + (typeof baseline.growth_exponent === 'number' ? baseline.growth_exponent.toFixed(3) : 'the baseline value') + '.\n' +
     '7. REVERT + GUARD: `git apply -R ' + ART + '/' + cand.id + '.patch`, then `git diff --quiet -- apps/simulation/src` MUST pass. If not, note "revert FAILED — tree dirty" so the next candidate aborts.\n\n' +
     'PRIME DECISION (is_prime=true) if ANY holds: phase_verdict is Keep or Defer; OR dphase_ms clearly negative beyond noise; ' +
     'OR bench_delta_pct clearly negative; OR growth_cand meaningfully below growth_base (a scaling-class win). Otherwise is_prime=false. ' +
@@ -265,21 +269,42 @@ for (const cand of ready) {
   if (m) measured.push({ ...m, scope: idea.scope, title: idea.title, target_phase: m.target_phase || phaseName })
 }
 
-// GROWTH-AWARE 1M PROJECTION (deterministic, computed here — NOT by an LLM).
-// Mirrors .claude/workflows/lib/perf-projection.mjs (the tested source of truth);
-// the sandbox has no module import, so keep this formula in sync with that lib.
-// proj(pop) = wall_at_cloud * (TARGET_POP/MICRO_POP)^b, per side, then subtract.
-// This is what makes a 10k-flat-but-scaling-class-changing idea legible; it is an
+// POST-MEASURE NORMALIZATION + GROWTH-AWARE 1M PROJECTION (deterministic,
+// computed here — NOT by an LLM). The sandbox cannot import modules, so this is
+// inline; lib/cloud-normalize.test.mjs EXTRACTS the block between the markers
+// below and executes it against the tested lib/perf-projection.mjs — edit only
+// between the markers, and run `node --test .claude/workflows/lib/` after.
+// The projection (proj = wall_at_cloud * (TARGET_POP/MICRO_POP)^b per side) is
+// what makes a 10k-flat-but-scaling-class-changing idea legible; it is an
 // ILLUSTRATIVE extrapolation (100^b is very sensitive to a noisy b), not a promise.
+// NORMALIZE-INLINE-START
 const PROJ_SCALE = TARGET_POP / MICRO_POP
 for (const m of measured) {
-  const bBase = typeof m.growth_base === 'number' ? m.growth_base : baseline.growth_exponent
-  const bCand = m.growth_cand
+  const bBase = Number.isFinite(m.growth_base) ? m.growth_base : baseline.growth_exponent
   m.growth_base = bBase
-  const ok = [m.wall_base_ms, m.wall_cand_ms, bBase, bCand].every((v) => typeof v === 'number' && Number.isFinite(v))
-  if (ok) {
-    const projBase = m.wall_base_ms * Math.pow(PROJ_SCALE, bBase)
-    const projCand = m.wall_cand_ms * Math.pow(PROJ_SCALE, bCand)
+
+  if (m.phase_verdict !== 'Error') {
+    const missing = ['wall_base_ms', 'wall_cand_ms', 'growth_cand'].filter((k) => !Number.isFinite(m[k]))
+    if (!Number.isFinite(bBase)) missing.push('growth_base')
+    if (missing.length) {
+      // Mechanical guard: a non-Error result without its numbers is an infra
+      // failure, not a measurement — downgrade so it is never logged as a
+      // CLOUD_TRIED "we measured this and it lost" row.
+      m.phase_verdict = 'Error'
+      m.is_prime = false
+      m.notes = 'MEASUREMENT INCOMPLETE (missing ' + missing.join(', ') + ') — treated as infra error; idea stays re-eligible. ' + (m.notes || '')
+    } else {
+      // True Δ wall p99 from the back-to-back A/B absolutes. The agent-parsed
+      // delta comes from the verdict's dWallMedian, so the ledger field
+      // dwall_p99_ms must be recomputed from the p99 absolutes, not trusted.
+      m.dwall_p99_ms = Math.round((m.wall_cand_ms - m.wall_base_ms) * 1000) / 1000
+    }
+  }
+
+  const complete = [m.wall_base_ms, m.wall_cand_ms, m.growth_base, m.growth_cand].every((v) => Number.isFinite(v))
+  if (complete) {
+    const projBase = m.wall_base_ms * Math.pow(PROJ_SCALE, m.growth_base)
+    const projCand = m.wall_cand_ms * Math.pow(PROJ_SCALE, m.growth_cand)
     m.proj_base_1m_ms = projBase
     m.proj_cand_1m_ms = projCand
     m.proj_savings_1m_ms = projBase - projCand // positive = candidate projected FASTER at TARGET_POP
@@ -287,8 +312,10 @@ for (const m of measured) {
     m.proj_base_1m_ms = null
     m.proj_cand_1m_ms = null
     m.proj_savings_1m_ms = null
+    log('projection n/a for ' + m.id + ' (incomplete measurement)')
   }
 }
+// NORMALIZE-INLINE-END
 const primes = measured.filter((m) => m.is_prime && m.phase_verdict !== 'Error')
 log('Micro-measure: ' + measured.length + ' measured -> ' + primes.length + ' PRIME candidates for the home rig')
 
@@ -305,23 +332,26 @@ const report = await agent(
   'Finalize a CLOUD perf-triage run: LOG prime candidates to the shared ledger for the home rig, and write a human report. ' +
   'This run NEVER merges engine changes and NEVER banks a win — it only hands prioritized candidates to the full /perf-hunt.\n\n' +
   'RESULTS (JSON):\n' + JSON.stringify(logInput) + '\n\n' +
-  'PART A — LEDGER (append-only): get today via ' + today + '. The row schema for BOTH kinds below is guarded by ' +
-  '.claude/workflows/lib/cloud-ledger.mjs.\n' +
-  'A1 — PRIME candidates: for EACH prime candidate, append ONE JSONL line to ' + LEDGER + ' with exactly this key order:\n' +
-  '  {"id","date","title","scope","target_phase","verdict","dwall_p99_ms","dphase_ms","notes","origin","retest"}\n' +
-  'Set verdict="CANDIDATE", origin="cloud-triage". notes = the cloud signal (pop=' + MICRO_POP + ', Δphase, Δwall, bench %, growth b base→cand, ' +
-  'and the growth-aware PROJECTED ' + TARGET_POP + ' wall savings proj_savings_1m_ms in ms — label it illustrative, not a prediction). ' +
-  'retest = "cloud-triage <date>: <one-line why it is promising incl. growth b base→cand and projected ' + TARGET_POP + ' wall savings ~<proj_savings_1m_ms>ms>; needs full 1M validation on the home rig." ' +
+  'PART A — LEDGER (append-only; NEVER hand-write JSONL): get today via ' + today + '. Every row is appended by RUNNING the ' +
+  'guarded CLI, so the tested schema in .claude/workflows/lib/cloud-ledger.mjs validates it BEFORE it lands:\n' +
+  '  1. Write the row fields as JSON to a scratch file, e.g. ' + ART + '/row.json — fields: id, date, title, scope, ' +
+  'target_phase, dwall_p99_ms, dphase_ms, notes (plus growth_base/growth_cand numbers when known; plus retest for A1 only).\n' +
+  '  2. node ' + REPO + '/.claude/workflows/lib/ledger-cli.mjs append --kind <candidate|tried> --ledger ' + LEDGER + ' --fields-file ' + ART + '/row.json\n' +
+  '  If the CLI rejects the row, FIX THE FIELDS and rerun — never bypass it by editing the ledger directly.\n' +
+  'A1 — PRIME candidates: --kind candidate, one row per prime (the CLI sets verdict=CANDIDATE, origin=cloud-triage). ' +
+  'notes = the cloud signal (pop=' + MICRO_POP + ', Δphase median, Δwall p99, bench %, growth b base→cand, and the growth-aware ' +
+  'PROJECTED 1M wall savings proj_savings_1m_ms in ms — label it illustrative, not a prediction). ' +
+  'retest = "cloud-triage <date>: <one-line why it is promising incl. growth b base→cand and projected 1M wall savings ~<proj_savings_1m_ms to 1 decimal>ms>; needs full 1M validation on the home rig." ' +
+  'If proj_savings_1m_ms is null in the RESULTS JSON, write "projection n/a (incomplete measurement)" in its place — NEVER invent a number. ' +
   'This retest field is what makes the full /perf-hunt surface it as a PRIORITY re-test.\n' +
-  'A2 — TRIED-but-NOT-prime (soft exclusion): for EACH measured idea that is NOT prime AND whose phase_verdict is NOT "Error", ' +
-  'append ONE JSONL line to ' + LEDGER + ' with exactly this key order — note there is NO "retest" key:\n' +
-  '  {"id","date","title","scope","target_phase","verdict","dwall_p99_ms","dphase_ms","notes","origin"}\n' +
-  'Set verdict="CLOUD_TRIED", origin="cloud-triage". notes = the cloud signal that shows why it did not clear the bar ' +
-  '(pop=' + MICRO_POP + ', Δphase, Δwall, bench %, growth b base→cand). This records that the idea was implemented + measured and came ' +
-  'up short at cloud scale, so future cloud hunts do NOT re-propose/re-measure it — but it is deliberately NOT a permanent kill ' +
-  '(no retest, no DO_NOT_REVISIT), because a ≤10k shared-VM measurement must never bury an idea that may only win at 1M. ' +
-  'SKIP phase_verdict="Error" rows entirely (infra failure, not a real measurement — leave them re-eligible).\n' +
-  'For BOTH A1 and A2: do NOT rewrite existing ledger lines; append only.\n\n' +
+  'A2 — TRIED-but-NOT-prime (soft exclusion): --kind tried, one row for EACH measured idea that is NOT prime AND whose ' +
+  'phase_verdict is NOT "Error" (the CLI sets verdict=CLOUD_TRIED and emits NO retest key). notes = the cloud signal that shows ' +
+  'why it did not clear the bar (pop=' + MICRO_POP + ', Δphase median, Δwall p99, bench %, growth b base→cand). This records that the ' +
+  'idea was implemented + measured and came up short at cloud scale, so future cloud hunts do NOT re-propose/re-measure it — but ' +
+  'it is deliberately NOT a permanent kill (no retest, no DO_NOT_REVISIT), because a ≤10k shared-VM measurement must never bury ' +
+  'an idea that may only win at 1M. SKIP phase_verdict="Error" rows entirely (infra failure, not a real measurement — leave them re-eligible).\n' +
+  'A3 — GATE: node ' + REPO + '/.claude/workflows/lib/ledger-cli.mjs lint --ledger ' + LEDGER + ' MUST exit 0. If it fails, remove ' +
+  'ONLY lines you appended this run and redo them via the CLI. NEVER rewrite or delete pre-existing ledger lines.\n\n' +
   'PART B — STASH DIFFS: for each prime candidate, ensure its patch is saved to ' + CAND_DIR + '/<id>.diff (copy from ' + ART + '/<id>.patch).\n\n' +
   'PART C — REPORT: write a skimmable markdown report to ' + REPORT + ' with a table: candidate | scope | target phase | ' +
   'phase_verdict | Δphase (ms) | Δwall (ms) | bench Δ% | growth b (base→cand) | proj ' + TARGET_POP + ' wall savings (ms) | PRIME? . ' +

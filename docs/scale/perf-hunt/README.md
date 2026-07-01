@@ -57,13 +57,23 @@ See `docs/scale/optimization-checklist.md` for the full Pass bar.
 | `title` | one-line description |
 | `scope` | `engine` \| `architectural` \| `biological` |
 | `target_phase` | `perception` \| `steering` \| `movement` \| `grid_rebuild` \| `l1_aggregation` \| `behavior` |
-| `verdict` | `KEEP` \| `DEFER` \| `DITCH` \| `KEEP_CORRECTNESS` \| `DONE` \| `DO_NOT_REVISIT` |
-| `dwall_p99_ms` | Δ wall p99 at the test population (negative = faster) |
-| `dphase_ms` | Δ targeted-phase p99 |
+| `verdict` | `KEEP` \| `DEFER` \| `DITCH` \| `KEEP_CORRECTNESS` \| `DONE` \| `DO_NOT_REVISIT` \| `CANDIDATE` \| `CLOUD_TRIED` |
+| `dwall_p99_ms` | Δ wall p99 at the test population (negative = faster). Cloud rows compute it from the back-to-back A/B p99 absolutes. ⚠️ The five `2026-07-01` cloud rows predate that fix — their value is a **median** delta (the p99 absolutes live in `notes`). |
+| `dphase_ms` | Δ targeted-phase p99 (home rows) / targeted-phase **median** (cloud rows — the verdict gate detects on medians) |
 | `notes` | rationale, commit refs, tradeoffs |
-| `retest` *(optional)* | if present, the entry is **re-eligible** despite a DITCH verdict — it was ditched under an older, noisier gate. The value says which gate change reopened it and why it may now pass. Hunters re-propose these as priority. |
+| `origin` *(optional)* | `home-rig` (default when absent) \| `cloud-triage` — which hunt wrote the row |
+| `retest` *(optional)* | if present, the entry is **re-eligible** despite its verdict and hunters re-propose it as **priority**: a `DITCH`+`retest` was ditched under an older, noisier gate (the value says what reopened it); a `CANDIDATE`+`retest` is a cloud-triage prime awaiting full 1M validation. |
 | `merge` *(optional)* | for a `KEEP`, whether the win is actually **in the engine**. `KEEP` is the gate's verdict (it's a real, tested win); `merge` is the *human's* call. Values: `merged` (landed), `held` (tested win deliberately not merged — the value records the tradeoff under deliberation), absent (not yet decided). Lets a proven win be parked on an architectural tradeoff without losing or faking the result. |
 
 `DO_NOT_REVISIT` / `DONE` entries are hard exclusions — the hunters are told to skip them.
 `DEFER` entries are candidates for a future accumulation round. A `retest`-marked `DITCH` keeps its
 original verdict and reason (history intact) but is surfaced for a fresh A/B under the improved gate.
+
+**Cloud-triage verdicts** (written by `/perf-hunt-cloud`, which measures at ~10k on a shared VM and
+never merges): `CANDIDATE` = prime — carries `retest`, so the home hunt re-tests it as priority.
+`CLOUD_TRIED` = implemented + measured on the cloud and came up short **there** — a *soft* exclusion:
+future **cloud** hunts don't re-propose it, but for the **home** hunt it is neutral (no `retest`, no
+`DO_NOT_REVISIT`), because a noisy ≤10k measurement must never bury an idea whose payoff only appears
+at 1M. Cloud rows are appended **only** via the guarded CLI —
+`node .claude/workflows/lib/ledger-cli.mjs append|lint` — so the tested schema in
+`cloud-ledger.mjs` validates every row before it lands, and `lint` gates the file after each run.

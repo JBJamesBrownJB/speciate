@@ -1,0 +1,187 @@
+diff --git a/apps/simulation/src/simulation/spatial/grid.rs b/apps/simulation/src/simulation/spatial/grid.rs
+index 01eaa0e..9d37672 100644
+--- a/apps/simulation/src/simulation/spatial/grid.rs
++++ b/apps/simulation/src/simulation/spatial/grid.rs
+@@ -85,6 +85,10 @@ pub struct SpatialGrid {
+     // Format: (entity, x, y, vx, vy, radius, conspicuousness)
+     entity_scratch: Vec<(Entity, f32, f32, f32, f32, f32, f32)>,
+
++    // Per-entity counting-sort key cache: the flat cell index is computed once
++    // in the count pass and read back in scatter, so the key is derived only once.
++    cell_idx_scratch: Vec<u32>,
++
+     // Pre-allocated atomic counters for scatter phase (reused each tick)
+     atomic_counters: Vec<AtomicU32>,
+
+@@ -114,6 +118,7 @@ impl SpatialGrid {
+             proxies: Vec::new(),
+             cells: Vec::new(),
+             entity_scratch: Vec::new(),
++            cell_idx_scratch: Vec::new(),
+             atomic_counters: Vec::new(),
+             prev_non_empty: Vec::new(),
+             min_cell_x: 0,
+@@ -328,6 +333,9 @@ impl SpatialGrid {
+         // Resize proxies buffer (no realloc if capacity sufficient)
+         self.proxies.resize(n, PerceptionProxy::default());
+
++        // Resize the per-entity cell-index cache alongside proxies (one slot per entity)
++        self.cell_idx_scratch.resize(n, 0);
++
+         // Clear cells that were non-empty last tick (parallel, O(N) instead of O(cells))
+         let cells_ptr = SyncPtr(self.cells.as_mut_ptr());
+         let atomic_counters = &self.atomic_counters;
+@@ -345,15 +353,18 @@ impl SpatialGrid {
+         let newly_populated: Vec<usize> = self
+             .entity_scratch
+             .par_chunks(4096)
+-            .flat_map(|chunk| {
++            .zip(self.cell_idx_scratch.par_chunks_mut(4096))
++            .flat_map(|(chunk, idx_chunk)| {
+                 // Thread-local buffer for newly populated cell indices
+                 let mut local_new: Vec<usize> = Vec::with_capacity(chunk.len() / 4);
+-                for &(_, x, y, _, _, _, _) in chunk {
++                for (&(_, x, y, _, _, _, _), idx_slot) in chunk.iter().zip(idx_chunk.iter_mut()) {
+                     let cx = (x * inv_cell_size).floor() as i32;
+                     let cy = (y * inv_cell_size).floor() as i32;
+                     let lx = ((cx - min_cell_x) as usize).min(width - 1);
+                     let ly = ((cy - min_cell_y) as usize).min(height - 1);
+                     let idx = ly * width + lx;
++                    // Cache the counting-sort key so scatter can reuse it (no recompute).
++                    *idx_slot = idx as u32;
+                     // fetch_add returns OLD value - if 0, this cell just became populated
+                     let old_count = atomic_counters[idx].fetch_add(1, Ordering::Relaxed);
+                     if old_count == 0 {
+@@ -389,21 +400,14 @@ impl SpatialGrid {
+         let proxies_ptr = SyncPtr(self.proxies.as_mut_ptr());
+         let cells_ref = &self.cells;
+         let atomic_counters = &self.atomic_counters;
+-        let height = self.height;
+
+-        // SAFETY: Each entity writes to a unique position via atomic increment
++        // SAFETY: Each entity writes to a unique position via atomic increment.
++        // Reuse the cell index cached during the count pass (no recompute).
+         self.entity_scratch
+             .par_iter()
+-            .for_each(|&(entity, x, y, vx, vy, radius, conspicuousness)| {
+-                let cx = (x * inv_cell_size).floor() as i32;
+-                let cy = (y * inv_cell_size).floor() as i32;
+-                let lx = (cx - min_cell_x) as usize;
+-                let ly = (cy - min_cell_y) as usize;
+-
+-                // Bounds check (entities outside world are clamped to edge cells)
+-                let lx = lx.min(width - 1);
+-                let ly = ly.min(height - 1);
+-                let idx = ly * width + lx;
++            .zip(self.cell_idx_scratch.par_iter())
++            .for_each(|(&(entity, x, y, vx, vy, radius, conspicuousness), &cached_idx)| {
++                let idx = cached_idx as usize;
+
+                 let start = cells_ref[idx].0;
+                 let local_offset = atomic_counters[idx].fetch_add(1, Ordering::Relaxed);
+@@ -778,6 +782,22 @@ impl SpatialGrid {
+         self.proxies.len()
+     }
+
++    /// Test-only: the (start, count) slice descriptor for the cell containing (x, y).
++    #[cfg(test)]
++    pub fn cell_slice_at(&self, x: f32, y: f32) -> (u32, u32) {
++        let (cx, cy) = self.world_to_cell(x, y);
++        let lx = ((cx - self.min_cell_x) as usize).min(self.width - 1);
++        let ly = ((cy - self.min_cell_y) as usize).min(self.height - 1);
++        self.cells[ly * self.width + lx]
++    }
++
++    /// Test-only: the proxies in the cell containing (x, y), in stored order.
++    #[cfg(test)]
++    pub fn cell_proxies_at(&self, x: f32, y: f32) -> &[PerceptionProxy] {
++        let (start, count) = self.cell_slice_at(x, y);
++        &self.proxies[start as usize..(start + count) as usize]
++    }
++
+     pub fn dimensions(&self) -> (usize, usize) {
+         (self.width, self.height)
+     }
+@@ -975,6 +995,82 @@ mod tests {
+         assert!((mp.conspicuousness - 0.25).abs() < 1e-4, "median conspicuousness == radius");
+     }
+
++    #[test]
++    fn test_cached_cell_index_produces_exact_counting_sort_layout() {
++        // Guards the count-once/reuse-in-scatter optimization: the flat cell index
++        // cached in the count pass and read back in scatter must yield exactly the
++        // same bucket layout a textbook counting sort produces — every entity in the
++        // correct cell's [start, start+count) slice, contiguous non-overlapping
++        // slices, and every proxy carrying the right (x, y).
++        let mut grid = SpatialGrid::new(50.0);
++        grid.set_world_bounds(-10.0, 400.0, -10.0, 400.0);
++
++        // Fixed seed: three cells, one over-populated to exercise intra-cell packing.
++        // Cell A (0,0): three entities. Cell B (1,0): one. Cell C (0,1): two.
++        let a1 = Entity::from_raw(1);
++        let a2 = Entity::from_raw(2);
++        let a3 = Entity::from_raw(3);
++        let b1 = Entity::from_raw(4);
++        let c1 = Entity::from_raw(5);
++        let c2 = Entity::from_raw(6);
++        let entities = vec![
++            (a1, 10.0, 10.0, 0.0, 0.0, 1.0, 1.0),
++            (b1, 60.0, 10.0, 0.0, 0.0, 1.0, 1.0),
++            (a2, 20.0, 30.0, 0.0, 0.0, 1.0, 1.0),
++            (c1, 10.0, 60.0, 0.0, 0.0, 1.0, 1.0),
++            (a3, 40.0, 40.0, 0.0, 0.0, 1.0, 1.0),
++            (c2, 30.0, 70.0, 0.0, 0.0, 1.0, 1.0),
++        ];
++        grid.rebuild_parallel(entities.into_iter());
++
++        // Exact per-cell counts.
++        assert_eq!(grid.cell_slice_at(10.0, 10.0).1, 3, "cell A count");
++        assert_eq!(grid.cell_slice_at(60.0, 10.0).1, 1, "cell B count");
++        assert_eq!(grid.cell_slice_at(10.0, 60.0).1, 2, "cell C count");
++        assert_eq!(grid.entity_count(), 6);
++
++        // Slices are contiguous, non-overlapping, and cover [0, 6).
++        let mut slices = [
++            grid.cell_slice_at(10.0, 10.0),
++            grid.cell_slice_at(60.0, 10.0),
++            grid.cell_slice_at(10.0, 60.0),
++        ];
++        slices.sort_by_key(|(start, _)| *start);
++        let mut expected_start = 0u32;
++        for (start, count) in slices {
++            assert_eq!(start, expected_start, "slices must be contiguous with no gaps");
++            expected_start += count;
++        }
++        assert_eq!(expected_start, 6, "slices must exactly cover all proxies");
++
++        // Every entity landed in the correct cell (regardless of intra-cell order,
++        // which the parallel atomic scatter does not fix).
++        let cell_members = |x: f32, y: f32| -> std::collections::HashSet<Entity> {
++            grid.cell_proxies_at(x, y).iter().map(|p| p.entity).collect()
++        };
++        assert_eq!(
++            cell_members(10.0, 10.0),
++            [a1, a2, a3].into_iter().collect(),
++            "cell A membership"
++        );
++        assert_eq!(cell_members(60.0, 10.0), [b1].into_iter().collect(), "cell B membership");
++        assert_eq!(cell_members(10.0, 60.0), [c1, c2].into_iter().collect(), "cell C membership");
++
++        // Data integrity: each proxy carries the coordinates it was inserted with.
++        for p in &grid.proxies {
++            let expected = match p.entity {
++                e if e == a1 => (10.0, 10.0),
++                e if e == a2 => (20.0, 30.0),
++                e if e == a3 => (40.0, 40.0),
++                e if e == b1 => (60.0, 10.0),
++                e if e == c1 => (10.0, 60.0),
++                e if e == c2 => (30.0, 70.0),
++                _ => unreachable!(),
++            };
++            assert_eq!((p.x, p.y), expected, "proxy coords must survive scatter");
++        }
++    }
++
+     #[test]
+     fn test_rebuild_and_query() {
+         let mut grid = SpatialGrid::new(50.0);

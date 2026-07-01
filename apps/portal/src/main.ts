@@ -12,7 +12,6 @@ import { conspicuousness } from "@/domain/conspicuousness";
 import { InputManager } from "@/input";
 import { RENDERING_CONFIG, CAMERA_CONFIG, VIEWPORT_CULLING_CONFIG, WORLD_BOUNDS } from "@/core/constants";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
-import { PerformanceMetrics } from "@/core/PerformanceMetrics";
 import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
@@ -233,8 +232,6 @@ async function main(): Promise<void> {
     let lastFrameTime = performance.now();
     let currentCreatureCount = 0;
 
-    const perfMetrics = new PerformanceMetrics(RENDERING_CONFIG.TARGET_FPS);
-
     let isFirstFrame = true;
     const changeDetector = new ChangeDetector();
 
@@ -285,8 +282,6 @@ async function main(): Promise<void> {
         }
 
         if (stateChanged) {
-
-          const spriteUpdateStart = performance.now();
           if (creatures.length > 0) {
             if (isFirstFrame) {
               creatureRenderer.initialize(creatures);
@@ -297,8 +292,6 @@ async function main(): Promise<void> {
           } else {
             creatureRenderer.onSimulationTick([]);
           }
-          const spriteUpdateEnd = performance.now();
-          perfMetrics.recordSpriteUpdateTime(spriteUpdateEnd - spriteUpdateStart);
         }
       });
 
@@ -418,8 +411,6 @@ async function main(): Promise<void> {
       const deltaMs = frameStart - lastFrameTime;
       const deltaTime = deltaMs / 1000;
       const fps = Math.round(1000 / deltaMs);
-
-      perfMetrics.recordFrameTime(deltaMs);
 
       // Update camera panning from keyboard/mouse input
       cameraController.update(deltaTime);

@@ -5,6 +5,7 @@ const { shouldApplyCsp, applyCspHeaders } = require('./csp.cjs');
 const { sandboxWorkaroundSwitches } = require('./startupFlags.cjs');
 const { createFrameDelivery } = require('./frameDelivery.cjs');
 const { FLOATS_PER_CREATURE, MAX_CREATURES, creatureBufferFloats } = require('./bufferLayout.cjs');
+const { validateCommand, validateSpawnCount } = require('./commandValidation.cjs');
 
 let mainWindow;
 let devToolsWindow = null;
@@ -393,6 +394,7 @@ ipcMain.on('spawn-creatures', (event, count) => {
   }
 
   try {
+    validateSpawnCount(count);
     simulationEngine.spawnCreatures(count);
     console.log(`[Electron NAPI] Spawned ${count} creatures`);
   } catch (error) {
@@ -427,6 +429,7 @@ ipcMain.on('send-command', (event, command) => {
   }
 
   try {
+    validateCommand(command); // whitelist + parameter checks (commandValidation.cjs)
     switch (command.type) {
       case 'dev_spawn_creature':
         // Spawn single creature at position (x, y) with optional DNA

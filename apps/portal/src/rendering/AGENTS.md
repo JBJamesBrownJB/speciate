@@ -6,7 +6,7 @@ This file holds only the non-inheritable footguns of the rendering layer.
 
 There are TWO unrelated constants with this name. Do not conflate them.
 
-- **Here (rendering): `FLOATS_PER_CREATURE = 7`** — `InterpolatedCreatureRenderer.ts:15` and `InterpolationBufferManager.ts:11`.
+- **Here (rendering): `FLOATS_PER_CREATURE = 7`** — `InterpolatedCreatureRenderer.ts` and `interleavedBuffer.ts`.
   Interleaved **AoS** GPU vertex layout, one record per creature:
   `[startX, startY, endX, endY, startRot, endRot, size]` with `STRIDE = 28` (7 × 4 bytes) at `InterpolatedCreatureRenderer.ts:80`.
   Attribute offsets confirm the order: `aStartPos`@0, `aEndPos`@8, `aStartRot`@16, `aEndRot`@20, `aSize`@24.

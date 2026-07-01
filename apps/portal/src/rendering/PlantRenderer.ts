@@ -78,9 +78,24 @@ export class PlantRenderer {
   /**
    * Set the world-space viewport bounds for culling.
    * Only cells whose centre falls within [minX, maxX] × [minY, maxY]
-   * (inclusive) will be drawn. Triggers an immediate re-filter and redraw.
+   * (inclusive) will be drawn.
+   *
+   * Called every frame by the render loop, so sub-unit bounds wobble (camera
+   * smoothing) is ignored — the caller pads bounds by a full P0 cell, so a
+   * ≤1-unit skip can never pop a visible cell. Re-filter + redraw only happen
+   * when the view actually moves.
    */
   setViewportBounds(minX: number, maxX: number, minY: number, maxY: number): void {
+    const b = this.viewportBounds;
+    if (
+      b !== null &&
+      Math.abs(minX - b.minX) <= 1 &&
+      Math.abs(maxX - b.maxX) <= 1 &&
+      Math.abs(minY - b.minY) <= 1 &&
+      Math.abs(maxY - b.maxY) <= 1
+    ) {
+      return;
+    }
     this.viewportBounds = { minX, maxX, minY, maxY };
     this.renderVisible();
   }
@@ -106,9 +121,7 @@ export class PlantRenderer {
     this.graphics.clear();
     for (const { x, y, density } of cells) {
       const alpha = Math.min(1, density * 0.7 + 0.3);
-      this.graphics.fill({ color: 0x2d8a4e, alpha });
-      this.graphics.circle(x, y, 2);
-      this.graphics.fill();
+      this.graphics.circle(x, y, 2).fill({ color: 0x2d8a4e, alpha });
     }
     this._visibleCount = cells.length;
   }

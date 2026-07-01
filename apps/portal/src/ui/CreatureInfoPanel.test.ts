@@ -17,6 +17,75 @@ describe('CreatureInfoPanel', () => {
     parentElement.remove();
   });
 
+  describe('per-frame rebuild guard', () => {
+    const creature: CreatureData = { id: 7, x: 10.0, y: 20.0, rotation: 0, size: 2.0 };
+
+    /** Wrap the live panel element's innerHTML with a write counter. */
+    function countHtmlWrites(): () => number {
+      const el = parentElement.querySelector('.creature-info-panel') as HTMLElement;
+      let writes = 0;
+      const proto = Object.getPrototypeOf(el);
+      const desc = Object.getOwnPropertyDescriptor(proto, 'innerHTML') ??
+        Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')!;
+      Object.defineProperty(el, 'innerHTML', {
+        get: desc.get,
+        set(v: string) {
+          writes++;
+          desc.set!.call(this, v);
+        },
+        configurable: true,
+      });
+      return () => writes;
+    }
+
+    it('update() skips the innerHTML rebuild when displayed values are unchanged', () => {
+      panel.show(creature);
+      const writes = countHtmlWrites();
+
+      panel.update({ ...creature });
+      panel.update({ ...creature });
+      panel.update({ ...creature });
+
+      expect(writes()).toBe(0);
+    });
+
+    it('update() rebuilds when a displayed value changes', () => {
+      panel.show(creature);
+      const writes = countHtmlWrites();
+
+      panel.update({ ...creature, x: 15.0 });
+
+      expect(writes()).toBe(1);
+    });
+
+    it('sub-precision moves that display identically do not rebuild', () => {
+      panel.show(creature);
+      const writes = countHtmlWrites();
+
+      // 10.0 and 10.04 both display as "10.0"
+      panel.update({ ...creature, x: 10.04 });
+
+      expect(writes()).toBe(0);
+    });
+
+    it('new debug accel data triggers a rebuild on the next update', () => {
+      panel.show(creature);
+      const writes = countHtmlWrites();
+
+      panel.updateDebugData({
+        entityId: 7, x: 10, y: 20, perceptionRange: 5, queryRadius: 5,
+        fovAngle: 1, rotation: 0, ax: 1.5, ay: -0.5,
+        neighbors: [], cellSize: 20, creatureCell: { x: 0, y: 0 },
+        queriedCells: [], checkedCells: [],
+      });
+      panel.update({ ...creature });
+
+      expect(writes()).toBe(1);
+      const el = parentElement.querySelector('.creature-info-panel') as HTMLElement;
+      expect(el.textContent).toContain('1.50');
+    });
+  });
+
   describe('construction', () => {
     it('should create panel element in parent', () => {
       const panelEl = parentElement.querySelector('.creature-info-panel');

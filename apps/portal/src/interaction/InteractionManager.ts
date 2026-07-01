@@ -1,4 +1,4 @@
-import { Container, Graphics, FederatedPointerEvent } from 'pixi.js';
+import { Container, Graphics, Rectangle, FederatedPointerEvent } from 'pixi.js';
 import type { SelectionManager } from '@/systems/SelectionManager';
 import type { SpatialGridOverlay } from '@/rendering/overlays/SpatialGridOverlay';
 import { GridMode, P0_CELL_SIZE } from '@/rendering/overlays/SpatialGridOverlay';
@@ -24,7 +24,10 @@ export class InteractionManager {
   private ipcClient: IPCClient | null;
   private getCreatures: () => CreatureData[];
 
-  private hitArea: Graphics;
+  private hitSurface: Graphics;
+  // One Rectangle, mutated in place every frame. Setting `hitArea` makes hit
+  // testing use it directly — no geometry, no per-frame clear/rect/fill draw.
+  private readonly hitBounds = new Rectangle(0, 0, 0, 0);
   private activeTool: ActiveTool = null;
   private isPainting = false;
   private paintedThisStroke = new Set<string>();
@@ -36,38 +39,40 @@ export class InteractionManager {
     this.ipcClient = config.ipcClient;
     this.getCreatures = config.getCreatures;
 
-    this.hitArea = new Graphics();
-    this.hitArea.eventMode = 'static';
-    this.hitArea.cursor = 'default';
+    this.hitSurface = new Graphics();
+    this.hitSurface.eventMode = 'static';
+    this.hitSurface.cursor = 'default';
+    this.hitSurface.hitArea = this.hitBounds;
 
-    this.hitArea.on('pointerdown', this.handlePointerDown);
-    this.hitArea.on('pointermove', this.handlePointerMove);
-    this.hitArea.on('pointerout', this.handlePointerOut);
-    this.hitArea.on('pointerup', () => this.endStroke());
-    this.hitArea.on('pointerupoutside', () => this.endStroke());
+    this.hitSurface.on('pointerdown', this.handlePointerDown);
+    this.hitSurface.on('pointermove', this.handlePointerMove);
+    this.hitSurface.on('pointerout', this.handlePointerOut);
+    this.hitSurface.on('pointerup', () => this.endStroke());
+    this.hitSurface.on('pointerupoutside', () => this.endStroke());
 
-    this.worldContainer.addChild(this.hitArea);
+    this.worldContainer.addChild(this.hitSurface);
   }
 
   updateViewport(viewportWidth: number, viewportHeight: number, cameraX: number, cameraY: number, zoom: number): void {
     const halfWidth = viewportWidth / 2 / zoom;
     const halfHeight = viewportHeight / 2 / zoom;
 
-    const worldLeft = cameraX - halfWidth;
-    const worldTop = cameraY - halfHeight;
-    const worldWidth = halfWidth * 2;
-    const worldHeight = halfHeight * 2;
-
-    this.hitArea.clear();
-    this.hitArea.rect(worldLeft, worldTop, worldWidth, worldHeight);
-    this.hitArea.fill({ color: 0x000000, alpha: 0.001 });
+    this.hitBounds.x = cameraX - halfWidth;
+    this.hitBounds.y = cameraY - halfHeight;
+    this.hitBounds.width = halfWidth * 2;
+    this.hitBounds.height = halfHeight * 2;
 
     const mode = this.gridOverlay.getMode();
     if (this.activeTool === 'plant' || mode === GridMode.L1 || mode === GridMode.P0) {
-      this.hitArea.cursor = 'crosshair';
+      this.hitSurface.cursor = 'crosshair';
     } else {
-      this.hitArea.cursor = 'default';
+      this.hitSurface.cursor = 'default';
     }
+  }
+
+  /** The world-space rectangle currently receiving pointer events. */
+  getHitBounds(): Rectangle {
+    return this.hitBounds;
   }
 
   private handlePointerDown = (event: FederatedPointerEvent): void => {
@@ -159,11 +164,11 @@ export class InteractionManager {
   }
 
   destroy(): void {
-    this.hitArea.off('pointerdown', this.handlePointerDown);
-    this.hitArea.off('pointermove', this.handlePointerMove);
-    this.hitArea.off('pointerout', this.handlePointerOut);
-    this.hitArea.removeAllListeners('pointerup');
-    this.hitArea.removeAllListeners('pointerupoutside');
-    this.hitArea.destroy();
+    this.hitSurface.off('pointerdown', this.handlePointerDown);
+    this.hitSurface.off('pointermove', this.handlePointerMove);
+    this.hitSurface.off('pointerout', this.handlePointerOut);
+    this.hitSurface.removeAllListeners('pointerup');
+    this.hitSurface.removeAllListeners('pointerupoutside');
+    this.hitSurface.destroy();
   }
 }

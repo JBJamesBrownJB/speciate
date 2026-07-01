@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { parsePlantBuffer, PlantRenderer } from './PlantRenderer';
-import { Container } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 
 // ---------------------------------------------------------------------------
 // Helper: build a Float32Array plant buffer from plain cell objects.
@@ -167,6 +167,44 @@ describe('PlantRenderer', () => {
   it('setViewportBounds before any buffer does not throw and visibleCount stays 0', () => {
     expect(() => renderer.setViewportBounds(0, 100, 0, 100)).not.toThrow();
     expect(renderer.visibleCount).toBe(0);
+  });
+
+  describe('per-frame redraw guard', () => {
+    const cells = [
+      { x: 10, y: 20, density: 0.8, plantType: 1 },
+      { x: 50, y: 60, density: 0.5, plantType: 2 },
+    ];
+
+    it('skips the re-filter/redraw when bounds are unchanged or wobble sub-unit', () => {
+      renderer.updateFromBuffer(makeBuffer(cells));
+      renderer.setViewportBounds(0, 100, 0, 100);
+
+      const draws = vi.spyOn(Graphics.prototype, 'circle');
+      renderer.setViewportBounds(0, 100, 0, 100); // identical
+      renderer.setViewportBounds(0.5, 100.5, 0.5, 100.5); // camera-smoother wobble
+      expect(draws).not.toHaveBeenCalled();
+      draws.mockRestore();
+    });
+
+    it('redraws when bounds move beyond the epsilon', () => {
+      renderer.updateFromBuffer(makeBuffer(cells));
+      renderer.setViewportBounds(0, 100, 0, 100);
+
+      const draws = vi.spyOn(Graphics.prototype, 'circle');
+      renderer.setViewportBounds(30, 130, 0, 100);
+      expect(draws).toHaveBeenCalled();
+      draws.mockRestore();
+    });
+
+    it('a fresh buffer always redraws, even with unchanged bounds', () => {
+      renderer.updateFromBuffer(makeBuffer(cells));
+      renderer.setViewportBounds(0, 100, 0, 100);
+
+      const draws = vi.spyOn(Graphics.prototype, 'circle');
+      renderer.updateFromBuffer(makeBuffer(cells));
+      expect(draws).toHaveBeenCalled();
+      draws.mockRestore();
+    });
   });
 
   it('removing bounds (null-reset via new buffer) restores all cells as visible', () => {

@@ -45,6 +45,104 @@ describe('HUDManager', () => {
     vi.restoreAllMocks();
   });
 
+  /** Wrap an element's textContent with a write counter (reads stay free). */
+  function countWrites(el: HTMLElement): () => number {
+    let writes = 0;
+    let value = el.textContent ?? '';
+    Object.defineProperty(el, 'textContent', {
+      get: () => value,
+      set: (next: string) => {
+        writes++;
+        value = String(next);
+      },
+      configurable: true,
+    });
+    return () => writes;
+  }
+
+  function makeHud(): HUDManager {
+    return new HUDManager(
+      {
+        fpsValue: 'fps-value',
+        tickRateValue: 'tick-rate-value',
+        creatureWorldCount: 'creature-world-count',
+        creatureScreenCount: 'creature-screen-count',
+        plantWorldCount: 'plant-world-count',
+        plantScreenCount: 'plant-screen-count',
+        zoomValue: 'zoom-value',
+      },
+      mockFpsSparkline
+    );
+  }
+
+  describe('per-frame DOM write guards', () => {
+    it('updateTickRate writes once for repeated identical values', () => {
+      const hud = makeHud();
+      const writes = countWrites(mockElements.tickRateValue);
+
+      hud.updateTickRate(20);
+      hud.updateTickRate(20);
+      hud.updateTickRate(20);
+      expect(writes()).toBe(1);
+
+      hud.updateTickRate(19.9);
+      expect(writes()).toBe(2);
+    });
+
+    it('updateZoom writes once for repeated identical values', () => {
+      const hud = makeHud();
+      const writes = countWrites(mockElements.zoomValue);
+
+      hud.updateZoom(10);
+      hud.updateZoom(10);
+      expect(writes()).toBe(1);
+    });
+
+    it('count updates write only on change', () => {
+      const hud = makeHud();
+      const worldWrites = countWrites(mockElements.creatureWorldCount);
+      const screenWrites = countWrites(mockElements.creatureScreenCount);
+      const plantWorldWrites = countWrites(mockElements.plantWorldCount);
+      const plantScreenWrites = countWrites(mockElements.plantScreenCount);
+
+      for (let i = 0; i < 5; i++) {
+        hud.updateCreatureWorldCount(1000);
+        hud.updateCreatureScreenCount(200);
+        hud.updatePlantWorldCount(50);
+        hud.updatePlantScreenCount(10);
+      }
+
+      expect(worldWrites()).toBe(1);
+      expect(screenWrites()).toBe(1);
+      expect(plantWorldWrites()).toBe(1);
+      expect(plantScreenWrites()).toBe(1);
+    });
+
+    it('sub-precision zoom changes that display identically do not rewrite', () => {
+      const hud = makeHud();
+      const writes = countWrites(mockElements.zoomValue);
+
+      hud.updateZoom(10.001); // both display as "10.00x"
+      hud.updateZoom(10.002);
+      expect(writes()).toBe(1);
+    });
+  });
+
+  describe('sparkline sampling throttle', () => {
+    it('samples the sparkline on the first updateFPS and every 6th thereafter', () => {
+      const hud = makeHud();
+
+      hud.updateFPS(60); // 1st → sample
+      expect(mockFpsSparkline.update).toHaveBeenCalledTimes(1);
+
+      for (let i = 0; i < 5; i++) hud.updateFPS(60); // 2nd..6th → quiet
+      expect(mockFpsSparkline.update).toHaveBeenCalledTimes(1);
+
+      hud.updateFPS(60); // 7th → sample
+      expect(mockFpsSparkline.update).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('constructor', () => {
     it('should get all DOM elements by ID', () => {
       new HUDManager(

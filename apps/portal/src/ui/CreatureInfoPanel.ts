@@ -9,6 +9,7 @@ export class CreatureInfoPanel {
   private container: HTMLDivElement;
   private visible: boolean = false;
   private lastDebugData: PerceptionDebugData | null = null;
+  private lastRenderKey = '';
 
   constructor(parentElement: HTMLElement) {
     this.container = document.createElement('div');
@@ -42,6 +43,7 @@ export class CreatureInfoPanel {
   hide(): void {
     this.visible = false;
     this.lastDebugData = null;
+    this.lastRenderKey = '';
     this.container.style.display = 'none';
   }
 
@@ -62,7 +64,22 @@ export class CreatureInfoPanel {
     this.container.remove();
   }
 
+  /** Key over every value the panel displays, at display precision. Called every
+   *  frame — rebuilding innerHTML for an unchanged display is pure DOM churn. */
+  private renderKey(creature: CreatureData, extended?: ExtendedCreatureData): string {
+    const debug = this.lastDebugData
+      ? `${this.lastDebugData.ax.toFixed(2)},${this.lastDebugData.ay.toFixed(2)}`
+      : '';
+    return `${creature.id}|${creature.x.toFixed(1)}|${creature.y.toFixed(1)}|` +
+      `${creature.size.toFixed(1)}|${extended?.energy?.toFixed(1) ?? ''}|` +
+      `${extended?.behavior ?? ''}|${debug}`;
+  }
+
   private render(creature: CreatureData, extended?: ExtendedCreatureData): void {
+    const key = this.renderKey(creature, extended);
+    if (key === this.lastRenderKey) return;
+    this.lastRenderKey = key;
+
     const lines: string[] = [
       `<div style="color: #ffff00; font-weight: bold; margin-bottom: 8px;">Creature #${creature.id}</div>`,
       `<div><span style="color: #888;">Position:</span> (${creature.x.toFixed(1)}, ${creature.y.toFixed(1)})</div>`,

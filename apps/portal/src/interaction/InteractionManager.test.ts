@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Container } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 import { InteractionManager } from './InteractionManager';
 import { SpatialGridOverlay, GridMode } from '@/rendering/overlays/SpatialGridOverlay';
 
@@ -143,6 +143,41 @@ describe('InteractionManager', () => {
       // Grid now has a plant there (from first stroke), so it won't spawn again
       // unless we reset p0Cells. This test just verifies no crash and paintedThisStroke cleared.
       expect((manager as any).paintedThisStroke.size).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('hit surface (per-frame cost)', () => {
+    it('updateViewport draws nothing — it mutates a Rectangle hitArea in place', () => {
+      const clears = vi.spyOn(Graphics.prototype, 'clear');
+      const rects = vi.spyOn(Graphics.prototype, 'rect');
+      const fills = vi.spyOn(Graphics.prototype, 'fill');
+
+      manager.updateViewport(800, 600, 0, 0, 10);
+      manager.updateViewport(800, 600, 5, 5, 10);
+
+      expect(clears).not.toHaveBeenCalled();
+      expect(rects).not.toHaveBeenCalled();
+      expect(fills).not.toHaveBeenCalled();
+      clears.mockRestore();
+      rects.mockRestore();
+      fills.mockRestore();
+    });
+
+    it('the hitArea rectangle covers the visible world region', () => {
+      manager.updateViewport(800, 600, 100, 200, 10);
+
+      const bounds = manager.getHitBounds();
+      expect(bounds.x).toBe(100 - 800 / 2 / 10);
+      expect(bounds.y).toBe(200 - 600 / 2 / 10);
+      expect(bounds.width).toBe(800 / 10);
+      expect(bounds.height).toBe(600 / 10);
+    });
+
+    it('the same Rectangle instance is reused across frames (no per-frame allocation)', () => {
+      manager.updateViewport(800, 600, 0, 0, 10);
+      const first = manager.getHitBounds();
+      manager.updateViewport(800, 600, 50, 50, 20);
+      expect(manager.getHitBounds()).toBe(first);
     });
   });
 

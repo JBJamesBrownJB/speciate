@@ -340,7 +340,8 @@ const report = await agent(
   '  If the CLI rejects the row, FIX THE FIELDS and rerun — never bypass it by editing the ledger directly.\n' +
   'A1 — PRIME candidates: --kind candidate, one row per prime (the CLI sets verdict=CANDIDATE, origin=cloud-triage). ' +
   'notes = the cloud signal (pop=' + MICRO_POP + ', Δphase median, Δwall p99, bench %, growth b base→cand, and the growth-aware ' +
-  'PROJECTED 1M wall savings proj_savings_1m_ms in ms — label it illustrative, not a prediction). ' +
+  'PROJECTED 1M wall savings proj_savings_1m_ms in ms — label it "sign-only extrapolation"; the 2026-07-01 home validation ' +
+  'measured ~10x LESS than the cloud projection, so the number is a direction, never a magnitude). ' +
   'retest = "cloud-triage <date>: <one-line why it is promising incl. growth b base→cand and projected 1M wall savings ~<proj_savings_1m_ms to 1 decimal>ms>; needs full 1M validation on the home rig." ' +
   'If proj_savings_1m_ms is null in the RESULTS JSON, write "projection n/a (incomplete measurement)" in its place — NEVER invent a number. ' +
   'This retest field is what makes the full /perf-hunt surface it as a PRIORITY re-test.\n' +
@@ -356,11 +357,14 @@ const report = await agent(
   'PART C — REPORT: write a skimmable markdown report to ' + REPORT + ' with a table: candidate | scope | target phase | ' +
   'phase_verdict | Δphase (ms) | Δwall (ms) | bench Δ% | growth b (base→cand) | proj ' + TARGET_POP + ' wall savings (ms) | PRIME? . ' +
   'The "proj ' + TARGET_POP + ' wall savings" column is proj_savings_1m_ms from the RESULTS JSON (already computed; positive = candidate projected ' +
-  'FASTER at ' + TARGET_POP + '; show "n/a" if null). List primes first with a one-line "why prime + what the home rig should confirm" for each. ' +
-  'Include a clear banner that these are CLOUD TRIAGE signals on a shared VM — not authoritative — and that the home-rig /perf-hunt will pick up ' +
-  'the logged candidates automatically via their retest field. Add a one-line caveat under the table that the projected ' + TARGET_POP + ' savings is a ' +
-  'GROWTH-AWARE EXTRAPOLATION (each side scaled by its fitted exponent b over a ' + (TARGET_POP / MICRO_POP) + '× population jump) — its SIGN and ORDER OF ' +
-  'MAGNITUDE are the signal, not the digits, because ' + (TARGET_POP / MICRO_POP) + '^b is very sensitive to a noisy b.\n\n' +
+  'FASTER at ' + TARGET_POP + '; show "n/a" if null). List primes first with a one-line "why prime + what the home rig should confirm" for each — ' +
+  'HEADLINE each prime with its MEASURED cloud signal (Δphase, growth b), NOT the projected number: the projection is a triage direction, ' +
+  'never a promised magnitude. Include a clear banner that these are CLOUD TRIAGE signals on a shared VM — not authoritative — and that the ' +
+  'home-rig /perf-hunt will pick up the logged candidates automatically via their retest field. Add a caveat under the table that the projected ' +
+  TARGET_POP + ' savings is a GROWTH-AWARE EXTRAPOLATION (each side scaled by its fitted exponent b over a ' + (TARGET_POP / MICRO_POP) + '× population ' +
+  'jump): only its SIGN is the signal, because (a) ' + (TARGET_POP / MICRO_POP) + '^b is very sensitive to a noisy b, and (b) the 1k→10k sweep is ' +
+  'cache-resident and cannot see the cache→DRAM regime shift at 1M — EMPIRICALLY CALIBRATED 2026-07-01, when the home rig measured the first prime ' +
+  'at ~10x less wall saving than projected (real phase win, wall-flat).\n\n' +
   'Return a tight plain-text executive summary (the table + the prime shortlist) as your final message.',
   { label: 'log+report', phase: 'Log' }
 )

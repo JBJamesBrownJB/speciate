@@ -41,6 +41,8 @@ import { TimeScaleControl } from "@/ui/TimeScaleControl";
 import { ToolsPanel } from "@/ui/ToolsPanel";
 import { InteractionManager } from "@/interaction";
 import { GridMode, P0_CELL_SIZE } from "@/rendering/overlays/SpatialGridOverlay";
+import { createStateUpdateHandler } from "@/bootstrap/simulationWiring";
+import { createZoomRateLimiter } from "@/input/zoomRateLimiter";
 
 function updateContainerSize(
   container: HTMLElement,
@@ -222,7 +224,6 @@ async function main(): Promise<void> {
     let lastFrameTime = performance.now();
     let currentCreatureCount = 0;
 
-    let isFirstFrame = true;
     const changeDetector = new ChangeDetector();
 
     // Pause control
@@ -247,42 +248,28 @@ async function main(): Promise<void> {
 
       // Handle simulation tick updates via IPC callback (fires when new data
       // arrives). Hot path: the SoA buffer flows straight to the renderer —
-      // state.creatures (the lazy object view) is never touched here.
-      ipcClient.onStateUpdate((state) => {
-        const { buffer, count } = state.soa;
-        currentCreatureCount = count;
-
-        // Update tick rate when telemetry provides it
-        if (state.tickRateHz && !isNaN(state.tickRateHz)) {
-          creatureRenderer.setTickRate(state.tickRateHz);
-        }
-
-        // Detect if this delivery carries new data (tick identity in push mode,
-        // exact compare in the poll fallback where tick is always 0)
-        const stateChanged = changeDetector.shouldUpdate(state.tick, buffer, count);
-
-        // DEV-only interpolation pipeline probe (stripped from prod builds).
-        if (import.meta.env.DEV) {
-          const now = performance.now();
-          interpDiag.recordDelivery(now);
-          interpDiag.recordSnapshot(now, stateChanged);
-          const renderMetrics = interpDiag.maybeReport(now);
-          if (renderMetrics) window.electron?.sendRenderMetrics?.(renderMetrics);
-        }
-
-        if (stateChanged) {
-          if (isFirstFrame && count > 0) {
-            creatureRenderer.initializeSoA(buffer, count);
-            isFirstFrame = false;
-          } else {
-            creatureRenderer.onSimulationTickSoA(buffer, count);
-          }
-        }
-
-        // Track the selection into the newest frame (moved or died) — O(1)
-        // via the frame's id index.
-        selectionManager.updateSelectedFromFrame(creatureRenderer.getLatestSlot());
-      });
+      // state.creatures (the lazy object view) is never touched here. Routing
+      // logic lives in bootstrap/simulationWiring.ts (unit-tested).
+      ipcClient.onStateUpdate(
+        createStateUpdateHandler({
+          renderer: creatureRenderer,
+          selectionManager,
+          changeDetector,
+          onCreatureCount: (count) => {
+            currentCreatureCount = count;
+          },
+          // DEV-only interpolation pipeline probe (stripped from prod builds).
+          onDelivery: import.meta.env.DEV
+            ? (stateChanged) => {
+                const now = performance.now();
+                interpDiag.recordDelivery(now);
+                interpDiag.recordSnapshot(now, stateChanged);
+                const renderMetrics = interpDiag.maybeReport(now);
+                if (renderMetrics) window.electron?.sendRenderMetrics?.(renderMetrics);
+              }
+            : undefined,
+        })
+      );
 
       // Handle perception debug buffer updates (every tick - smooth visualization)
       ipcClient.onPerceptionDebugUpdate((debugData) => {
@@ -354,8 +341,11 @@ async function main(): Promise<void> {
       });
     }
 
-    // Zoom rate limiting
-    let lastZoomTime = 0;
+    // Wheel-zoom rate limiting (log-space clamp — see input/zoomRateLimiter.ts)
+    const zoomStep = createZoomRateLimiter({
+      sensitivity: CAMERA_CONFIG.ZOOM_SENSITIVITY,
+      maxSpeed: CAMERA_CONFIG.MAX_ZOOM_SPEED,
+    });
 
     // Viewport culling: send bounds to backend to filter creatures.
     // One reused object — this runs every frame; only IPC allocates (on change).
@@ -532,26 +522,13 @@ async function main(): Promise<void> {
       (event: WheelEvent) => {
         event.preventDefault();
 
-        const now = performance.now();
-        const timeSinceLastZoom = now - lastZoomTime;
-
-        // Calculate max allowed zoom delta based on time elapsed
-        const maxDelta = (CAMERA_CONFIG.MAX_ZOOM_SPEED * timeSinceLastZoom) / 1000;
-
-        // Calculate requested zoom delta (in log space)
-        let zoomDelta = -event.deltaY * CAMERA_CONFIG.ZOOM_SENSITIVITY;
-
-        // Clamp to max speed (discard excess)
-        const sign = Math.sign(zoomDelta);
-        zoomDelta = sign * Math.min(Math.abs(zoomDelta), maxDelta);
-
-        if (zoomDelta !== 0) {
+        const factor = zoomStep(event.deltaY, performance.now());
+        if (factor !== null) {
           // Only adjust the logic camera — the ticker drives the world transform
           // through CameraSmoother. Applying the raw pose here caused a
           // one-frame pop that the next smoothed frame snapped back from.
-          camera.adjustZoom(Math.exp(zoomDelta));
+          camera.adjustZoom(factor);
           scaleBarManager.update(camera.zoom);
-          lastZoomTime = now;
         }
       },
       { passive: false }

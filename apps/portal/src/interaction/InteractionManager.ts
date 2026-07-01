@@ -2,7 +2,7 @@ import { Container, Graphics, Rectangle, FederatedPointerEvent } from 'pixi.js';
 import type { SelectionManager } from '@/systems/SelectionManager';
 import type { SpatialGridOverlay } from '@/rendering/overlays/SpatialGridOverlay';
 import { GridMode, P0_CELL_SIZE } from '@/rendering/overlays/SpatialGridOverlay';
-import type { CreatureData } from '@/types/GameState';
+import type { CreatureFrameView } from '@/types/GameState';
 import type { IPCClient } from '@/infrastructure/ipc';
 
 type ActiveTool = 'plant' | null;
@@ -14,7 +14,8 @@ interface InteractionManagerConfig {
   gridOverlay: SpatialGridOverlay;
   selectionManager: SelectionManager;
   ipcClient: IPCClient | null;
-  getCreatures: () => CreatureData[];
+  /** Newest decoded SoA frame (null before the first delivery). */
+  getFrame: () => CreatureFrameView | null;
 }
 
 export class InteractionManager {
@@ -22,7 +23,7 @@ export class InteractionManager {
   private gridOverlay: SpatialGridOverlay;
   private selectionManager: SelectionManager;
   private ipcClient: IPCClient | null;
-  private getCreatures: () => CreatureData[];
+  private getFrame: () => CreatureFrameView | null;
 
   private hitSurface: Graphics;
   // One Rectangle, mutated in place every frame. Setting `hitArea` makes hit
@@ -37,7 +38,7 @@ export class InteractionManager {
     this.gridOverlay = config.gridOverlay;
     this.selectionManager = config.selectionManager;
     this.ipcClient = config.ipcClient;
-    this.getCreatures = config.getCreatures;
+    this.getFrame = config.getFrame;
 
     this.hitSurface = new Graphics();
     this.hitSurface.eventMode = 'static';
@@ -142,9 +143,8 @@ export class InteractionManager {
   }
 
   private handleCreatureClick(worldX: number, worldY: number): void {
-    const creatures = this.getCreatures();
     const nearest = this.selectionManager.findNearestCreature(
-      creatures,
+      this.getFrame(),
       worldX,
       worldY,
       CLICK_RADIUS

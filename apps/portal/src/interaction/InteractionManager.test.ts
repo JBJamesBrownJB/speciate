@@ -13,11 +13,11 @@ function makeConfig(worldContainer: Container, gridOverlay: SpatialGridOverlay) 
       deselect: vi.fn(),
       hasSelection: vi.fn().mockReturnValue(false),
       getSelected: vi.fn().mockReturnValue(null),
-      updateSelectedFromBuffer: vi.fn(),
+      updateSelectedFromFrame: vi.fn(),
       on: vi.fn(),
     } as any,
     ipcClient: null,
-    getCreatures: () => [],
+    getFrame: () => null,
   };
 }
 

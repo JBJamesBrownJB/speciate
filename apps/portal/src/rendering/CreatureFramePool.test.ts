@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CreatureFramePool } from './CreatureFramePool';
 import type { CreatureData } from '@/types/GameState';
+import { FLOATS_PER_CREATURE, getBufferOffsets } from '@/types/BufferLayout';
 
 // The GC ring: instead of allocating a fresh object[] snapshot every tick (10M+
 // short-lived objects/sec at 500k creatures), the renderer fills a round-robin pool
@@ -76,5 +77,65 @@ describe('CreatureFramePool — SoA frame slots (GC ring)', () => {
     expect(slot.count).toBe(4);
     expect(Array.from(slot.ids.subarray(0, 4))).toEqual([1, 2, 3, 4]);
     expect(slot.xs.length).toBeGreaterThanOrEqual(4);
+  });
+
+  describe('SoA fast path (fill straight from the IPC buffer — no object hop)', () => {
+    /** Build the wire-format SoA buffer ([IDs..., Xs..., Ys..., Rots..., Sizes...]). */
+    function soaBuffer(creatures: CreatureData[]): Float32Array {
+      const n = creatures.length;
+      const buf = new Float32Array(n * FLOATS_PER_CREATURE);
+      const o = getBufferOffsets(n);
+      creatures.forEach((c, i) => {
+        buf[o.id + i] = c.id;
+        buf[o.x + i] = c.x;
+        buf[o.y + i] = c.y;
+        buf[o.rot + i] = c.rotation;
+        buf[o.size + i] = c.size;
+      });
+      return buf;
+    }
+
+    it('acquireFromSoA yields a slot identical to the object path (values, not just shape)', () => {
+      const creatures = make([
+        [7, 1.5, 2.5, 0.5, 10],
+        [9, 3.5, 4.5, 1.5, 12],
+        [11, -8, 6, -0.25, 3],
+      ]);
+      const objPool = new CreatureFramePool(1, 16);
+      const soaPool = new CreatureFramePool(1, 16);
+
+      const fromObjects = objPool.acquire(creatures);
+      const fromSoA = soaPool.acquireFromSoA(soaBuffer(creatures), creatures.length);
+
+      expect(fromSoA.count).toBe(fromObjects.count);
+      for (const field of ['ids', 'xs', 'ys', 'rots', 'sizes'] as const) {
+        expect(Array.from(fromSoA[field].subarray(0, 3))).toEqual(
+          Array.from(fromObjects[field].subarray(0, 3))
+        );
+      }
+      expect(fromSoA.idToIndex.get(11)).toBe(2);
+    });
+
+    it('handles a zero-count buffer (empty world)', () => {
+      const pool = new CreatureFramePool(1, 4);
+      pool.acquireFromSoA(soaBuffer(make([[1, 0, 0, 0, 1]])), 1);
+      const slot = pool.acquireFromSoA(new Float32Array(0), 0);
+      expect(slot.count).toBe(0);
+      expect(slot.idToIndex.size).toBe(0);
+    });
+
+    it('grows when the frame exceeds capacity, and reuses arrays within it', () => {
+      const pool = new CreatureFramePool(1, 2);
+      const big = pool.acquireFromSoA(
+        soaBuffer(make([[1, 0, 0, 0, 1], [2, 0, 0, 0, 1], [3, 5, 6, 0, 1]])), 3
+      );
+      expect(big.count).toBe(3);
+      expect(big.xs[2]).toBe(5);
+
+      const xs = big.xs;
+      const again = pool.acquireFromSoA(soaBuffer(make([[4, 9, 9, 0, 1]])), 1);
+      expect(again.xs).toBe(xs); // same backing array — no realloc within capacity
+      expect(again.idToIndex.has(1)).toBe(false);
+    });
   });
 });

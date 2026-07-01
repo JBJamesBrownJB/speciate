@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import type { GameState, SystemTimingsSnapshot, HardwareMetrics, EcsMetrics } from './GameState';
 
 describe('GameState Types', () => {
@@ -104,6 +104,7 @@ describe('GameState Types', () => {
         protocolVersion: 1,
         tick: 100,
         tickRateHz: 20,
+        soa: { buffer: new Float32Array(0), count: 0 },
         creatures: [],
         entityCount: 10000,
         systemTimingsUs: {
@@ -148,6 +149,7 @@ describe('GameState Types', () => {
         protocolVersion: 1,
         tick: 100,
         tickRateHz: 20,
+        soa: { buffer: new Float32Array(0), count: 0 },
         creatures: [],
       };
 

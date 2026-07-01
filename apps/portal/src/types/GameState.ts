@@ -92,10 +92,37 @@ export interface PerceptionDebugData {
   l1Vision?: L1VisionDebugEntry[];
 }
 
+/** One tick's creature data in wire format: the SoA Float32Array straight off
+ *  the NAPI seam ([IDs..., Xs..., Ys..., Rots..., Sizes...] — BufferLayout.ts). */
+export interface CreatureSoA {
+  buffer: Float32Array;
+  count: number;
+}
+
+/** Structural view of a decoded SoA frame (the renderer's CreatureFrameSlot
+ *  satisfies this). Consumers needing id/position lookups read these typed
+ *  arrays instead of materialized objects. */
+export interface CreatureFrameView {
+  ids: Int32Array;
+  xs: Float32Array;
+  ys: Float32Array;
+  rots: Float32Array;
+  sizes: Float32Array;
+  count: number;
+  idToIndex: ReadonlyMap<number, number>;
+}
+
 export interface GameState {
   protocolVersion: number;
   tick: number;
   tickRateHz: number;
+  /** Hot-path payload — zero-copy view of the IPC buffer. */
+  soa: CreatureSoA;
+  /**
+   * Materialized object view of `soa`. LAZY: built on first access and cached
+   * per state. The render path never touches it — reading it on every tick
+   * reintroduces the per-tick AoS fan-out this seam exists to avoid.
+   */
   creatures: CreatureData[];
   entityCount?: number;
   systemTimingsUs?: SystemTimingsSnapshot;

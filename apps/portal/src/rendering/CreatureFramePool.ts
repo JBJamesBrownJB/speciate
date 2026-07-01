@@ -1,3 +1,5 @@
+import { getBufferOffsets } from "@/types/BufferLayout";
+
 interface CreatureLike {
   id: number;
   x: number;
@@ -44,6 +46,30 @@ export class CreatureFrameSlot {
     this.sizes = new Float32Array(capacity);
   }
 
+  /**
+   * Fill straight from the wire-format SoA buffer ([IDs..., Xs..., Ys...,
+   * Rots..., Sizes...] — src/types/BufferLayout.ts). The buffer is already the
+   * layout we want, so each column is one typed-array copy; only ids take a
+   * loop (Int32 conversion + idToIndex rebuild). This is the production path —
+   * no per-creature object ever materializes between IPC and GPU.
+   */
+  fillFromSoA(buffer: Float32Array, count: number): this {
+    this.ensureCapacity(count);
+    const o = getBufferOffsets(count);
+    this.xs.set(buffer.subarray(o.x, o.x + count));
+    this.ys.set(buffer.subarray(o.y, o.y + count));
+    this.rots.set(buffer.subarray(o.rot, o.rot + count));
+    this.sizes.set(buffer.subarray(o.size, o.size + count));
+    this.idToIndex.clear();
+    for (let i = 0; i < count; i++) {
+      const id = buffer[o.id + i];
+      this.ids[i] = id;
+      this.idToIndex.set(id, i);
+    }
+    this.count = count;
+    return this;
+  }
+
   /** Copy a frame in via typed-array writes only (no per-creature allocation) and
    *  rebuild idToIndex. Returns itself for convenient chaining from the pool. */
   fill(creatures: CreatureLike[]): this {
@@ -85,6 +111,13 @@ export class CreatureFramePool {
     const slot = this.slots[this.next];
     this.next = (this.next + 1) % this.slots.length;
     return slot.fill(creatures);
+  }
+
+  /** Fill the next slot straight from the wire-format SoA buffer. */
+  acquireFromSoA(buffer: Float32Array, count: number): CreatureFrameSlot {
+    const slot = this.slots[this.next];
+    this.next = (this.next + 1) % this.slots.length;
+    return slot.fillFromSoA(buffer, count);
   }
 
   /** Pre-grow every slot so an upcoming large frame never reallocates mid-ring. */

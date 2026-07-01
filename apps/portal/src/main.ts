@@ -9,7 +9,13 @@ import { CameraController } from "@/domain/CameraController";
 import { createWorldBounds } from "@/domain/WorldBounds";
 import { conspicuousness } from "@/domain/conspicuousness";
 import { InputManager } from "@/input";
-import { RENDERING_CONFIG, CAMERA_CONFIG, VIEWPORT_CULLING_CONFIG, WORLD_BOUNDS } from "@/core/constants";
+import {
+  RENDERING_CONFIG,
+  CAMERA_CONFIG,
+  VIEWPORT_CULLING_CONFIG,
+  WORLD_BOUNDS,
+  CREATURE_CAPACITY,
+} from "@/core/constants";
 import { createIPCClient, type IPCClient } from "@/infrastructure/ipc";
 import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
@@ -35,7 +41,6 @@ import { TimeScaleControl } from "@/ui/TimeScaleControl";
 import { ToolsPanel } from "@/ui/ToolsPanel";
 import { InteractionManager } from "@/interaction";
 import { GridMode, P0_CELL_SIZE } from "@/rendering/overlays/SpatialGridOverlay";
-import type { CreatureData } from "@/types/GameState";
 
 function updateContainerSize(
   container: HTMLElement,
@@ -107,7 +112,6 @@ async function main(): Promise<void> {
     const creatureInfoPanel = new CreatureInfoPanel(document.body, {
       showDebugInfo: import.meta.env.DEV,
     });
-    let latestCreatures: CreatureData[] = [];
 
     // Overlay system
     const overlayManager = new OverlayManager();
@@ -163,13 +167,14 @@ async function main(): Promise<void> {
     // IPC client (created early for InteractionManager)
     const ipcClient: IPCClient | null = createIPCClient();
 
-    // Interaction manager (handles clicks and hover using PixiJS events)
+    // Interaction manager (handles clicks and hover using PixiJS events).
+    // Click hit-testing scans the renderer's newest SoA frame directly.
     const interactionManager = new InteractionManager({
       worldContainer,
       gridOverlay: spatialGridOverlay,
       selectionManager,
       ipcClient,
-      getCreatures: () => latestCreatures,
+      getFrame: () => creatureRenderer.getLatestSlot(),
     });
 
     // Tools panel — manages active tool state and auto-switches grid mode
@@ -194,7 +199,10 @@ async function main(): Promise<void> {
       spatialGridOverlay.updateP0Cells(buf);
     });
 
-    const creatureRenderer = new InterpolatedCreatureRenderer(texture, 200000);
+    const creatureRenderer = new InterpolatedCreatureRenderer(
+      texture,
+      CREATURE_CAPACITY.EXPECTED_VISIBLE
+    );
     worldContainer.addChild(creatureRenderer.getMesh());
 
     const fpsSparkline = new FPSSparkline("fps-sparkline");
@@ -237,23 +245,21 @@ async function main(): Promise<void> {
     if (ipcClient) {
       await ipcClient.connect();
 
-      // Handle simulation tick updates via IPC callback (fires when new data arrives)
+      // Handle simulation tick updates via IPC callback (fires when new data
+      // arrives). Hot path: the SoA buffer flows straight to the renderer —
+      // state.creatures (the lazy object view) is never touched here.
       ipcClient.onStateUpdate((state) => {
-        const creatures = state.creatures;
-        currentCreatureCount = creatures.length;
-        latestCreatures = creatures;
+        const { buffer, count } = state.soa;
+        currentCreatureCount = count;
 
         // Update tick rate when telemetry provides it
         if (state.tickRateHz && !isNaN(state.tickRateHz)) {
           creatureRenderer.setTickRate(state.tickRateHz);
         }
 
-        // Update selection tracking (creature may have moved or died)
-        selectionManager.updateSelectedFromBuffer(creatures);
-
         // Detect if this delivery carries new data (tick identity in push mode,
         // exact compare in the poll fallback where tick is always 0)
-        const stateChanged = changeDetector.shouldUpdate(creatures, state.tick);
+        const stateChanged = changeDetector.shouldUpdate(state.tick, buffer, count);
 
         // DEV-only interpolation pipeline probe (stripped from prod builds).
         if (import.meta.env.DEV) {
@@ -265,17 +271,17 @@ async function main(): Promise<void> {
         }
 
         if (stateChanged) {
-          if (creatures.length > 0) {
-            if (isFirstFrame) {
-              creatureRenderer.initialize(creatures);
-              isFirstFrame = false;
-            } else {
-              creatureRenderer.onSimulationTick(creatures);
-            }
+          if (isFirstFrame && count > 0) {
+            creatureRenderer.initializeSoA(buffer, count);
+            isFirstFrame = false;
           } else {
-            creatureRenderer.onSimulationTick([]);
+            creatureRenderer.onSimulationTickSoA(buffer, count);
           }
         }
+
+        // Track the selection into the newest frame (moved or died) — O(1)
+        // via the frame's id index.
+        selectionManager.updateSelectedFromFrame(creatureRenderer.getLatestSlot());
       });
 
       // Handle perception debug buffer updates (every tick - smooth visualization)

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 // @ts-ignore - plain CJS module under test; types not needed for this spec
 import { MAX_CREATURES, FLOATS_PER_CREATURE, creatureBufferFloats } from './bufferLayout.cjs';
+import { CREATURE_CAPACITY } from '../src/core/constants';
+import { FLOATS_PER_CREATURE as TS_FLOATS_PER_CREATURE } from '../src/types/BufferLayout';
 
 // The Electron-main receive buffer must be sized to match the Rust producer cap
 // (apps/simulation/src/ipc/bridge/double_buffer.rs MAX_CREATURES). If this buffer is
@@ -23,5 +25,13 @@ describe('bufferLayout — Electron-main receive buffer sizing', () => {
 
   it('accepts an explicit creature count for sizing', () => {
     expect(creatureBufferFloats(123)).toBe(123 * FLOATS_PER_CREATURE);
+  });
+
+  it('the renderer-side capacity constants mirror this seam contract', () => {
+    // One cap story across the pipeline: seam cap (here) = SEAM_MAX (src),
+    // and the per-creature float layout agrees on both sides of the bridge.
+    expect(CREATURE_CAPACITY.SEAM_MAX).toBe(MAX_CREATURES);
+    expect(TS_FLOATS_PER_CREATURE).toBe(FLOATS_PER_CREATURE);
+    expect(CREATURE_CAPACITY.EXPECTED_VISIBLE).toBeLessThanOrEqual(CREATURE_CAPACITY.SEAM_MAX);
   });
 });

@@ -255,20 +255,40 @@ export class InterpolatedCreatureRenderer {
   }
 
   initialize(creatures: CreatureData[]): void {
-    this.interpolator.reset();
-    this.latestSnapshot = null;
-    this.uploadedTo = null;
-    this.pushSnapshot(creatures);
+    this.resetPlayback();
+    this.bufferSnapshot(this.pool.acquire(creatures));
   }
 
   onSimulationTick(creatures: CreatureData[]): void {
-    this.pushSnapshot(creatures);
+    this.bufferSnapshot(this.pool.acquire(creatures));
   }
 
-  /** Copy a frame into a pooled SoA slot and buffer it. Never resets the tween, never
-   *  allocates per-creature objects (the slot pool recycles backing arrays). */
-  private pushSnapshot(creatures: CreatureData[]): void {
-    const snap = this.pool.acquire(creatures);
+  /** SoA fast path — production route. The IPC buffer is copied column-wise
+   *  into a pooled slot; no per-creature objects between IPC and GPU. */
+  initializeSoA(buffer: Float32Array, count: number): void {
+    this.resetPlayback();
+    this.bufferSnapshot(this.pool.acquireFromSoA(buffer, count));
+  }
+
+  onSimulationTickSoA(buffer: Float32Array, count: number): void {
+    this.bufferSnapshot(this.pool.acquireFromSoA(buffer, count));
+  }
+
+  /** The newest buffered frame — consumers needing id/position lookups
+   *  (selection, click hit-testing) read this instead of an object array. */
+  getLatestSlot(): CreatureFrameSlot | null {
+    return this.latestSnapshot;
+  }
+
+  private resetPlayback(): void {
+    this.interpolator.reset();
+    this.latestSnapshot = null;
+    this.uploadedTo = null;
+  }
+
+  /** Buffer a filled slot. Never resets the tween, never allocates per-creature
+   *  objects (the slot pool recycles backing arrays). */
+  private bufferSnapshot(snap: Snapshot): void {
     this.interpolator.push(snap);
     this.latestSnapshot = snap;
     this.dirty = true;

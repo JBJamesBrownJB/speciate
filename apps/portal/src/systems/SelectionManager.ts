@@ -1,4 +1,4 @@
-import type { CreatureData } from '../types/GameState';
+import type { CreatureData, CreatureFrameView } from '../types/GameState';
 
 type SelectionEventType = 'creature-selected' | 'creature-deselected';
 type SelectionEventHandler = (creature?: CreatureData) => void;
@@ -33,44 +33,58 @@ export class SelectionManager {
     this.emit('creature-deselected');
   }
 
+  /** Scan the SoA frame directly (no object array); materializes ONE
+   *  CreatureData for the winner. Event-driven (clicks), so O(n) is fine. */
   findNearestCreature(
-    creatures: CreatureData[],
+    frame: CreatureFrameView | null,
     worldX: number,
     worldY: number,
     clickRadius: number
   ): CreatureData | null {
-    if (creatures.length === 0) {
+    if (!frame || frame.count === 0) {
       return null;
     }
 
-    let nearest: CreatureData | null = null;
+    let nearestIdx = -1;
     let minDistSq = Infinity;
 
-    for (const creature of creatures) {
-      const dx = worldX - creature.x;
-      const dy = worldY - creature.y;
+    for (let i = 0; i < frame.count; i++) {
+      const dx = worldX - frame.xs[i];
+      const dy = worldY - frame.ys[i];
       const distSq = dx * dx + dy * dy;
 
-      const hitRadius = clickRadius + creature.size / 2;
-      const hitRadiusSq = hitRadius * hitRadius;
+      const hitRadius = clickRadius + frame.sizes[i] / 2;
 
-      if (distSq <= hitRadiusSq && distSq < minDistSq) {
+      if (distSq <= hitRadius * hitRadius && distSq < minDistSq) {
         minDistSq = distSq;
-        nearest = creature;
+        nearestIdx = i;
       }
     }
 
-    return nearest;
+    if (nearestIdx < 0) return null;
+    return {
+      id: frame.ids[nearestIdx],
+      x: frame.xs[nearestIdx],
+      y: frame.ys[nearestIdx],
+      rotation: frame.rots[nearestIdx],
+      size: frame.sizes[nearestIdx],
+    };
   }
 
-  updateSelectedFromBuffer(creatures: CreatureData[]): void {
-    if (!this.selectedCreature) {
+  /** Track the selected creature into the newest frame: O(1) via the frame's
+   *  idToIndex, mutating the owned copy in place (no per-tick allocation). */
+  updateSelectedFromFrame(frame: CreatureFrameView | null): void {
+    const selected = this.selectedCreature;
+    if (!selected) {
       return;
     }
 
-    const updated = creatures.find(c => c.id === this.selectedCreature!.id);
-    if (updated) {
-      this.selectedCreature = { ...updated };
+    const idx = frame?.idToIndex.get(selected.id);
+    if (frame && idx !== undefined) {
+      selected.x = frame.xs[idx];
+      selected.y = frame.ys[idx];
+      selected.rotation = frame.rots[idx];
+      selected.size = frame.sizes[idx];
     } else {
       this.deselect();
     }

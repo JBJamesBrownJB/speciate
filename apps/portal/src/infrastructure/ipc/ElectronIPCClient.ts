@@ -16,28 +16,30 @@ const L1_VISION_HEADER_SIZE = 1;
 const MAX_L1_VISION_ENTRIES = 48;
 const L1_VISION_ENTRY_SIZE = 6;
 
-export class ElectronIPCClient implements IPCClient {
-  private static readonly MAX_CREATURES = 250_000;
+/** Materialize CreatureData objects from the wire SoA buffer. Costs one object
+ *  per creature — only ever run lazily, on first access of GameState.creatures. */
+function materializeCreatures(buffer: Float32Array, count: number): CreatureData[] {
+  const offsets = getBufferOffsets(count);
+  const out: CreatureData[] = new Array(count);
+  for (let i = 0; i < count; i++) {
+    out[i] = {
+      id: buffer[offsets.id + i],
+      x: buffer[offsets.x + i],
+      y: buffer[offsets.y + i],
+      rotation: buffer[offsets.rot + i],
+      size: buffer[offsets.size + i],
+    };
+  }
+  return out;
+}
 
+export class ElectronIPCClient implements IPCClient {
   private latestState: GameState | null = null;
   private stateCallbacks: Set<(state: GameState) => void> = new Set();
   private telemetryCallbacks: Set<(telemetry: TelemetryFrame) => void> = new Set();
   private perceptionDebugCallbacks: Set<(data: PerceptionDebugData | null) => void> = new Set();
   private _cachedTickRateHz = NaN;
   private unsubscribers: Array<() => void> = [];
-
-  private creatures: CreatureData[] = [];
-  private creaturesInitialized = false;
-
-  private ensureCreatureCapacity(count: number): void {
-    if (this.creaturesInitialized && this.creatures.length >= count) return;
-
-    const targetSize = Math.max(count, ElectronIPCClient.MAX_CREATURES);
-    for (let i = this.creatures.length; i < targetSize; i++) {
-      this.creatures.push({ id: 0, x: 0, y: 0, rotation: 0, size: 1.0 });
-    }
-    this.creaturesInitialized = true;
-  }
 
   async connect(): Promise<void> {
     if (!window.electron) {
@@ -60,35 +62,23 @@ export class ElectronIPCClient implements IPCClient {
     });
     this.unsubscribers.push(unsubTelemetry);
 
-    // Use new NAPI buffer updates
+    // NAPI buffer updates. The SoA Float32Array is handed straight through as
+    // GameState.soa — no per-tick object fan-out. The object view
+    // (GameState.creatures) is a lazy getter, materialized only if something
+    // actually reads it (tests, tooling); the render path never does.
     const unsubBuffer = window.electron.onNAPIBufferUpdate((data: { buffer: Float32Array, creatureCount: number, tick?: number }) => {
       try {
         const { buffer, creatureCount, tick } = data;
 
-        // Ensure pre-allocated array has capacity (one-time allocation)
-        this.ensureCreatureCapacity(creatureCount);
-
-        // Parse SoA layout: [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ, Size₁...Sizeₙ]
-        // Update objects IN-PLACE (zero allocations per tick)
-        const offsets = getBufferOffsets(creatureCount);
-
-        for (let i = 0; i < creatureCount; i++) {
-          const creature = this.creatures[i];
-          creature.id = buffer[offsets.id + i];
-          creature.x = buffer[offsets.x + i];
-          creature.y = buffer[offsets.y + i];
-          creature.rotation = buffer[offsets.rot + i];
-          creature.size = buffer[offsets.size + i];
-        }
-
-        // Return view of active creatures (slice creates new array ref, but objects are reused)
-        const creatures = this.creatures.slice(0, creatureCount);
-
+        let materialized: CreatureData[] | null = null;
         const state: GameState = {
           protocolVersion: 2, // NAPI protocol version
           tick: tick ?? 0, // sim tick from the push-on-swap doorbell (0 in poll fallback)
           tickRateHz: this._cachedTickRateHz, // Updated from telemetry
-          creatures,
+          soa: { buffer, count: creatureCount },
+          get creatures(): CreatureData[] {
+            return (materialized ??= materializeCreatures(buffer, creatureCount));
+          },
           entityCount: creatureCount,
         };
 

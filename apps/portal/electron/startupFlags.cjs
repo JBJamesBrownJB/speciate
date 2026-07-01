@@ -12,4 +12,12 @@ function sandboxWorkaroundSwitches(platform) {
   ];
 }
 
-module.exports = { sandboxWorkaroundSwitches };
+/**
+ * The dev-tools window is opt-in: dev mode AND an explicit --dev-tools flag
+ * (`npm run dev:tools`). Plain `npm run dev` is just the game window.
+ */
+function shouldOpenDevTools(isDev, argv) {
+  return Boolean(isDev) && argv.includes('--dev-tools');
+}
+
+module.exports = { sandboxWorkaroundSwitches, shouldOpenDevTools };

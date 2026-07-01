@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { shouldApplyCsp, applyCspHeaders } = require('./csp.cjs');
-const { sandboxWorkaroundSwitches } = require('./startupFlags.cjs');
+const { sandboxWorkaroundSwitches, shouldOpenDevTools } = require('./startupFlags.cjs');
 const { createFrameDelivery } = require('./frameDelivery.cjs');
 const { FLOATS_PER_CREATURE, MAX_CREATURES, creatureBufferFloats } = require('./bufferLayout.cjs');
 const { validateCommand, validateSpawnCount } = require('./commandValidation.cjs');
@@ -723,8 +723,9 @@ app.whenReady().then(() => {
   createWindow();
   startSimulation();
 
-  if (isDev) {
-    console.log('[Electron NAPI] Development mode: launching dev tools window');
+  // Opt-in via `npm run dev:tools` (electron . --dev-tools) — see startupFlags.cjs.
+  if (shouldOpenDevTools(isDev, process.argv)) {
+    console.log('[Electron NAPI] --dev-tools: launching dev tools window');
     createDevToolsWindow();
   }
 

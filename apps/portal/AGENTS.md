@@ -11,9 +11,9 @@ This file holds area-specific rules. **See `/AGENTS.md` for global guardrails** 
 | Command | What it does |
 |---|---|
 | `npm run setup` | Full bootstrap: install deps + build debug NAPI addon + build frontend |
-| `npm run dev` | Parallel Vite + Electron (debug Rust, hot reload) — Vite on port **5173** |
+| `npm run dev` | Parallel Vite + Electron, game window only (debug Rust, hot reload) — Vite on port **5173** |
 | `npm run dev:release` | Build release NAPI addon, then Vite + Electron |
-| `npm run dev:tools` | `electron . --dev-tools` (opens dev-tools window) |
+| `npm run dev:tools` | Like `dev`, but Electron gets `--dev-tools` so the dev-ui window opens too |
 | `npm run dev:rust` | Rebuild debug NAPI addon (`cd ../simulation && npm run build:debug`) |
 | `npm run dev:rust-release` | Rebuild release NAPI addon |
 | `npm test` | `vitest` (frontend unit tests, co-located `*.test.ts`) |

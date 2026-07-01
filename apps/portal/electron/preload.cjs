@@ -93,16 +93,6 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   /**
-   * Get latest cached state (synchronous, non-blocking)
-   * Returns null if no state received yet
-   *
-   * @returns {Promise<Object|null>} Latest game state or null
-   */
-  getLatestState: async () => {
-    return await ipcRenderer.invoke('get-latest-state');
-  },
-
-  /**
    * Send command to simulation (dev tools only)
    * Commands are validated and forwarded to simulation via stdin
    *

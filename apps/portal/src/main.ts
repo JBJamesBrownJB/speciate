@@ -16,6 +16,7 @@ import { FPSSparkline } from "@/ui/FPSSparkline";
 import { ScaleBarManager } from "@/ui/ScaleBarManager";
 import { HUDManager } from "@/ui/HUDManager";
 import { InterpolatedCreatureRenderer } from "@/rendering/InterpolatedCreatureRenderer";
+import { initRendererWithFallback } from "@/rendering/rendererFallback";
 import { PlantRenderer } from "@/rendering/PlantRenderer";
 import { interpDiag } from "@/rendering/InterpolationDiagnostics";
 import { CameraSmoother } from "@/rendering/CameraSmoother";
@@ -58,35 +59,14 @@ async function main(): Promise<void> {
       window.innerHeight * RENDERING_CONFIG.VIEWPORT_SIZE_RATIO
     );
 
-    const app = new Application();
-
-    try {
-      await app.init({
-        width: viewportWidth,
-        height: viewportHeight,
-        backgroundColor: 0x000000,
-        resolution: window.devicePixelRatio || 1,
-        autoDensity: true,
-        preference: 'webgl',
-        powerPreference: 'low-power',
-        failIfMajorPerformanceCaveat: false,
-        antialias: false,
-      });
-    } catch (error) {
-      console.error('[PixiJS] WebGL initialization failed:', error);
-
-      await app.init({
-        width: viewportWidth,
-        height: viewportHeight,
-        backgroundColor: 0x000000,
-        resolution: window.devicePixelRatio || 1,
-        autoDensity: true,
-        preference: 'webgpu',
-        antialias: false,
-      });
-
-      console.warn('[PixiJS] ⚠️ Running in Canvas2D mode (software rendering, expect 30-60 FPS)');
-    }
+    const { app } = await initRendererWithFallback(() => new Application(), {
+      width: viewportWidth,
+      height: viewportHeight,
+      backgroundColor: 0x000000,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+      antialias: false,
+    });
 
     // Render at the display's native refresh (0 = uncapped). A maxFPS below the monitor's
     // refresh skips frames unevenly, producing beat-pattern stutter; vsync already bounds us.
@@ -269,8 +249,9 @@ async function main(): Promise<void> {
         // Update selection tracking (creature may have moved or died)
         selectionManager.updateSelectedFromBuffer(creatures);
 
-        // Detect if state changed (count or positions changed)
-        const stateChanged = changeDetector.shouldUpdate(creatures);
+        // Detect if this delivery carries new data (tick identity in push mode,
+        // exact compare in the poll fallback where tick is always 0)
+        const stateChanged = changeDetector.shouldUpdate(creatures, state.tick);
 
         // DEV-only interpolation pipeline probe (stripped from prod builds).
         if (import.meta.env.DEV) {

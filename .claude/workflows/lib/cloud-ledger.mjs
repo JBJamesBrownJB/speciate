@@ -40,16 +40,20 @@ const PHASES = ['perception', 'steering', 'movement', 'grid_rebuild', 'l1_aggreg
  * @param {string} [f.retest]      overrides the synthesized re-eligibility note
  * @returns {string} a single-line JSON string
  */
+function assertBaseFields(f, who) {
+  if (!f || typeof f !== 'object') throw new Error(`${who}: fields object required`);
+  if (!f.id || typeof f.id !== 'string') throw new Error(`${who}: id (string) required`);
+  if (!f.title || typeof f.title !== 'string') throw new Error(`${who}: title (string) required`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) throw new Error(`${who}: date must be YYYY-MM-DD`);
+  if (!SCOPES.includes(f.scope)) throw new Error(`${who}: scope must be one of ${SCOPES.join('|')}`);
+  if (!PHASES.includes(f.target_phase)) throw new Error(`${who}: target_phase must be one of ${PHASES.join('|')}`);
+  if (typeof f.dwall_p99_ms !== 'number' || Number.isNaN(f.dwall_p99_ms)) throw new Error(`${who}: dwall_p99_ms (number) required`);
+  if (typeof f.dphase_ms !== 'number' || Number.isNaN(f.dphase_ms)) throw new Error(`${who}: dphase_ms (number) required`);
+  if (!f.notes || typeof f.notes !== 'string') throw new Error(`${who}: notes (string) required`);
+}
+
 export function buildCandidateLine(f) {
-  if (!f || typeof f !== 'object') throw new Error('buildCandidateLine: fields object required');
-  if (!f.id || typeof f.id !== 'string') throw new Error('buildCandidateLine: id (string) required');
-  if (!f.title || typeof f.title !== 'string') throw new Error('buildCandidateLine: title (string) required');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) throw new Error('buildCandidateLine: date must be YYYY-MM-DD');
-  if (!SCOPES.includes(f.scope)) throw new Error(`buildCandidateLine: scope must be one of ${SCOPES.join('|')}`);
-  if (!PHASES.includes(f.target_phase)) throw new Error(`buildCandidateLine: target_phase must be one of ${PHASES.join('|')}`);
-  if (typeof f.dwall_p99_ms !== 'number' || Number.isNaN(f.dwall_p99_ms)) throw new Error('buildCandidateLine: dwall_p99_ms (number) required');
-  if (typeof f.dphase_ms !== 'number' || Number.isNaN(f.dphase_ms)) throw new Error('buildCandidateLine: dphase_ms (number) required');
-  if (!f.notes || typeof f.notes !== 'string') throw new Error('buildCandidateLine: notes (string) required');
+  assertBaseFields(f, 'buildCandidateLine');
 
   const growth = (typeof f.growth_base === 'number' && typeof f.growth_cand === 'number')
     ? `, growth b ${f.growth_base.toFixed(2)}→${f.growth_cand.toFixed(2)}`
@@ -69,6 +73,39 @@ export function buildCandidateLine(f) {
     notes: f.notes,
     origin: f.origin || 'cloud-triage',
     retest,
+  };
+  return JSON.stringify(row);
+}
+
+/**
+ * Build one JSONL ledger line for a cloud-triage idea that was TRIED but judged
+ * NOT prime. This is a SOFT exclusion so future cloud hunts don't waste cycles
+ * re-implementing and re-measuring the same losing idea — but deliberately NOT a
+ * home-rig kill: the row carries verdict `CLOUD_TRIED` and, crucially, NO `retest`
+ * field, so the full /perf-hunt neither prioritizes it nor treats it as
+ * DO_NOT_REVISIT. A noisy ≤10k shared-VM measurement must never permanently bury
+ * an idea whose payoff only appears at 1M. Same validation and key order as
+ * {@link buildCandidateLine}, minus `retest`.
+ *
+ * @param {object} f same base fields as buildCandidateLine (id, date, title,
+ *   scope, target_phase, dwall_p99_ms, dphase_ms, notes)
+ * @param {string} [f.verdict] defaults to 'CLOUD_TRIED'
+ * @param {string} [f.origin]  defaults to 'cloud-triage'
+ * @returns {string} a single-line JSON string with no `retest` key
+ */
+export function buildTriedLine(f) {
+  assertBaseFields(f, 'buildTriedLine');
+  const row = {
+    id: f.id,
+    date: f.date,
+    title: f.title,
+    scope: f.scope,
+    target_phase: f.target_phase,
+    verdict: f.verdict || 'CLOUD_TRIED',
+    dwall_p99_ms: f.dwall_p99_ms,
+    dphase_ms: f.dphase_ms,
+    notes: f.notes,
+    origin: f.origin || 'cloud-triage',
   };
   return JSON.stringify(row);
 }

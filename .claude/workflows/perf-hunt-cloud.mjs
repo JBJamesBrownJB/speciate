@@ -7,8 +7,8 @@ export const meta = {
     { title: 'Recall', detail: 'read the ledger (skip DO_NOT_REVISIT/DONE, surface retest) + checklist; brief hunters on the fattest live phase' },
     { title: 'Ideate', detail: 'parallel hunter fleet proposes ideas tagged with a target_phase and (when apt) a criterion bench_target; synthesizer dedupes vs ledger' },
     { title: 'Implement', detail: 'each idea built in an isolated worktree, gated on cargo test -> unified diff' },
-    { title: 'Micro-measure', detail: 'per candidate: function-bench delta + per-phase A/B at 10k + growth-rate ramp (Δexponent). Triage signal only — no bank, no escalate' },
-    { title: 'Log', detail: 'append promising candidates to the ledger as CANDIDATE+retest for the home rig; stash diffs; write cloud-last-run.md. Never merges' },
+    { title: 'Micro-measure', detail: 'per candidate: function-bench delta + per-phase A/B at 10k (with wall absolutes) + growth-rate ramp (Δexponent) + growth-aware projected 1M wall savings. Triage signal only — no bank, no escalate' },
+    { title: 'Log', detail: 'append prime candidates to the ledger as CANDIDATE+retest for the home rig, and tried-but-not-prime ideas as CLOUD_TRIED (soft exclusion, no retest) so future hunts skip them; stash diffs; write cloud-last-run.md. Never merges' },
   ],
 }
 
@@ -39,6 +39,7 @@ const BASELINE_BIN = './' + ART + '/latency_lab_baseline'          // stashed cl
 // ramp — not absolute wall time — is the durable signal, since a fitted slope is
 // far more robust to a noisy shared machine than a single-point delta.
 const MICRO_POP = cfg.microPop || 10000
+const TARGET_POP = cfg.targetPop || 1000000 // project cloud savings up to the 1M headline target
 const MICRO_SEEDS = cfg.microSeeds || '11,42,99'
 const SWEEP_FROM = cfg.sweepFrom || 1000
 const SWEEP_TO = cfg.sweepTo || 10000
@@ -93,6 +94,8 @@ const MEASURE_SCHEMA = {
     target_phase: { type: 'string' },
     phase_verdict: { type: 'string', enum: ['Keep', 'Defer', 'Ditch', 'Error'], description: 'the latency_lab --verdict result at cloud pop (triage only, NOT a bank)' },
     dwall_p99_ms: { type: 'number', description: 'Δ wall p99 at cloud pop, ms (negative = faster)' },
+    wall_base_ms: { type: 'number', description: 'baseline wall p99 at cloud pop, ms (absolute, from the back-to-back A/B) — feeds the growth-aware 1M projection' },
+    wall_cand_ms: { type: 'number', description: 'candidate wall p99 at cloud pop, ms (absolute, from the back-to-back A/B) — feeds the growth-aware 1M projection' },
     dphase_ms: { type: 'number', description: 'Δ targeted-phase median at cloud pop, ms (negative = faster)' },
     bench_delta_pct: { type: 'number', description: 'criterion delta % if a bench_target was measured, else 0' },
     growth_base: { type: 'number', description: 'fitted growth exponent b of the BASELINE sweep' },
@@ -145,7 +148,10 @@ const brief = await agent(
   'You are briefing a fleet of performance-optimization hunters for the Speciate Rust/Bevy ECS engine, for a CLOUD ' +
   'TRIAGE run.\n\n' + liveProfile + '\n' + TRIAGE_NOTE + '\n\nTARGET the fattest LIVE phases above. READ, in order:\n' +
   '1. ' + LEDGER + ' (JSONL: every idea already tried + verdict. DO_NOT_REVISIT and DONE are HARD exclusions. An entry ' +
-  'with a "retest" field is RE-ELIGIBLE — surface those as priority.)\n' +
+  'with a "retest" field is RE-ELIGIBLE — surface those as priority. A "CLOUD_TRIED" entry (origin cloud-triage, no retest) ' +
+  'was already implemented + measured on the cloud and came up short — treat it as a SOFT exclusion: the hunters must NOT ' +
+  're-propose the same idea unless they bring a materially new angle or implementation. It is NOT permanently killed — the ' +
+  'home rig may still validate it — so do not add it to any hard-exclusion list; just steer fresh ideation away from repeats.)\n' +
   '2. ' + REPO + '/docs/scale/optimization-checklist.md (Pass bar, attack order, ditched list, next levers)\n' +
   '3. Skim the hot systems: apps/simulation/src/simulation/{perception,steering,movement}/ and spatial/.\n\n' +
   'Produce a concise BRIEF (~300 words) covering: (a) the fattest phases RIGHT NOW, (b) ideas already tried they MUST NOT ' +
@@ -247,6 +253,7 @@ for (const cand of ready) {
     '   ' + RELEASE_BIN + ' --seeds ' + MICRO_SEEDS + ' --pop ' + MICRO_POP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.cand.json\n' +
     '   verdict: ' + RELEASE_BIN + ' --verdict --baseline ' + ART + '/' + cand.id + '.base.json --candidate ' + ART + '/' + cand.id + '.cand.json --phase ' + phaseName + '\n' +
     '   Parse phase_verdict (Keep/Defer/Ditch) and dPhaseMedian/dWallMedian (µs → ms ÷1000).\n' +
+    '   ALSO read the ABSOLUTE wall p99 from each output file (' + cand.id + '.base.json and ' + cand.id + '.cand.json), convert µs→ms, and return them as wall_base_ms and wall_cand_ms. These feed the growth-aware 1M projection, so they must be the real back-to-back A/B absolutes at this pop (not deltas).\n' +
     '6. GROWTH RAMP for the candidate: ' + RELEASE_BIN + ' --sweep --sweep-from ' + SWEEP_FROM + ' --sweep-to ' + SWEEP_TO + ' --sweep-step ' + SWEEP_STEP + ' ' + WORLD + ' --out ' + ART + '/' + cand.id + '.cand.sweep.json\n' +
     '   Read growthExponent from that JSON → growth_cand. growth_base=' + (typeof baseline.growth_exponent === 'number' ? baseline.growth_exponent.toFixed(3) : 'the baseline value') + '.\n' +
     '7. REVERT + GUARD: `git apply -R ' + ART + '/' + cand.id + '.patch`, then `git diff --quiet -- apps/simulation/src` MUST pass. If not, note "revert FAILED — tree dirty" so the next candidate aborts.\n\n' +
@@ -256,6 +263,31 @@ for (const cand of ready) {
     { label: 'measure:' + cand.id, phase: 'Micro-measure', schema: MEASURE_SCHEMA }
   )
   if (m) measured.push({ ...m, scope: idea.scope, title: idea.title, target_phase: m.target_phase || phaseName })
+}
+
+// GROWTH-AWARE 1M PROJECTION (deterministic, computed here — NOT by an LLM).
+// Mirrors .claude/workflows/lib/perf-projection.mjs (the tested source of truth);
+// the sandbox has no module import, so keep this formula in sync with that lib.
+// proj(pop) = wall_at_cloud * (TARGET_POP/MICRO_POP)^b, per side, then subtract.
+// This is what makes a 10k-flat-but-scaling-class-changing idea legible; it is an
+// ILLUSTRATIVE extrapolation (100^b is very sensitive to a noisy b), not a promise.
+const PROJ_SCALE = TARGET_POP / MICRO_POP
+for (const m of measured) {
+  const bBase = typeof m.growth_base === 'number' ? m.growth_base : baseline.growth_exponent
+  const bCand = m.growth_cand
+  m.growth_base = bBase
+  const ok = [m.wall_base_ms, m.wall_cand_ms, bBase, bCand].every((v) => typeof v === 'number' && Number.isFinite(v))
+  if (ok) {
+    const projBase = m.wall_base_ms * Math.pow(PROJ_SCALE, bBase)
+    const projCand = m.wall_cand_ms * Math.pow(PROJ_SCALE, bCand)
+    m.proj_base_1m_ms = projBase
+    m.proj_cand_1m_ms = projCand
+    m.proj_savings_1m_ms = projBase - projCand // positive = candidate projected FASTER at TARGET_POP
+  } else {
+    m.proj_base_1m_ms = null
+    m.proj_cand_1m_ms = null
+    m.proj_savings_1m_ms = null
+  }
 }
 const primes = measured.filter((m) => m.is_prime && m.phase_verdict !== 'Error')
 log('Micro-measure: ' + measured.length + ' measured -> ' + primes.length + ' PRIME candidates for the home rig')
@@ -273,18 +305,32 @@ const report = await agent(
   'Finalize a CLOUD perf-triage run: LOG prime candidates to the shared ledger for the home rig, and write a human report. ' +
   'This run NEVER merges engine changes and NEVER banks a win — it only hands prioritized candidates to the full /perf-hunt.\n\n' +
   'RESULTS (JSON):\n' + JSON.stringify(logInput) + '\n\n' +
-  'PART A — LEDGER (append-only): get today via ' + today + '. For EACH prime candidate, append ONE JSONL line to ' + LEDGER + '. ' +
-  'Use exactly these fields and this key order (this schema is guarded by .claude/workflows/lib/cloud-ledger.mjs):\n' +
+  'PART A — LEDGER (append-only): get today via ' + today + '. The row schema for BOTH kinds below is guarded by ' +
+  '.claude/workflows/lib/cloud-ledger.mjs.\n' +
+  'A1 — PRIME candidates: for EACH prime candidate, append ONE JSONL line to ' + LEDGER + ' with exactly this key order:\n' +
   '  {"id","date","title","scope","target_phase","verdict","dwall_p99_ms","dphase_ms","notes","origin","retest"}\n' +
-  'Set verdict="CANDIDATE", origin="cloud-triage". notes = the cloud signal (pop=' + MICRO_POP + ', Δphase, Δwall, bench %, growth b base→cand). ' +
-  'retest = "cloud-triage <date>: <one-line why it is promising incl. growth b base→cand>; needs full 1M validation on the home rig." ' +
-  'This retest field is what makes the full /perf-hunt surface it as a PRIORITY re-test. Do NOT rewrite existing ledger lines; append only. ' +
-  'Do NOT log non-prime candidates to the ledger.\n\n' +
+  'Set verdict="CANDIDATE", origin="cloud-triage". notes = the cloud signal (pop=' + MICRO_POP + ', Δphase, Δwall, bench %, growth b base→cand, ' +
+  'and the growth-aware PROJECTED ' + TARGET_POP + ' wall savings proj_savings_1m_ms in ms — label it illustrative, not a prediction). ' +
+  'retest = "cloud-triage <date>: <one-line why it is promising incl. growth b base→cand and projected ' + TARGET_POP + ' wall savings ~<proj_savings_1m_ms>ms>; needs full 1M validation on the home rig." ' +
+  'This retest field is what makes the full /perf-hunt surface it as a PRIORITY re-test.\n' +
+  'A2 — TRIED-but-NOT-prime (soft exclusion): for EACH measured idea that is NOT prime AND whose phase_verdict is NOT "Error", ' +
+  'append ONE JSONL line to ' + LEDGER + ' with exactly this key order — note there is NO "retest" key:\n' +
+  '  {"id","date","title","scope","target_phase","verdict","dwall_p99_ms","dphase_ms","notes","origin"}\n' +
+  'Set verdict="CLOUD_TRIED", origin="cloud-triage". notes = the cloud signal that shows why it did not clear the bar ' +
+  '(pop=' + MICRO_POP + ', Δphase, Δwall, bench %, growth b base→cand). This records that the idea was implemented + measured and came ' +
+  'up short at cloud scale, so future cloud hunts do NOT re-propose/re-measure it — but it is deliberately NOT a permanent kill ' +
+  '(no retest, no DO_NOT_REVISIT), because a ≤10k shared-VM measurement must never bury an idea that may only win at 1M. ' +
+  'SKIP phase_verdict="Error" rows entirely (infra failure, not a real measurement — leave them re-eligible).\n' +
+  'For BOTH A1 and A2: do NOT rewrite existing ledger lines; append only.\n\n' +
   'PART B — STASH DIFFS: for each prime candidate, ensure its patch is saved to ' + CAND_DIR + '/<id>.diff (copy from ' + ART + '/<id>.patch).\n\n' +
   'PART C — REPORT: write a skimmable markdown report to ' + REPORT + ' with a table: candidate | scope | target phase | ' +
-  'phase_verdict | Δphase (ms) | Δwall (ms) | bench Δ% | growth b (base→cand) | PRIME? . List primes first with a one-line ' +
-  '"why prime + what the home rig should confirm" for each. Include a clear banner that these are CLOUD TRIAGE signals on a ' +
-  'shared VM — not authoritative — and that the home-rig /perf-hunt will pick up the logged candidates automatically via their retest field.\n\n' +
+  'phase_verdict | Δphase (ms) | Δwall (ms) | bench Δ% | growth b (base→cand) | proj ' + TARGET_POP + ' wall savings (ms) | PRIME? . ' +
+  'The "proj ' + TARGET_POP + ' wall savings" column is proj_savings_1m_ms from the RESULTS JSON (already computed; positive = candidate projected ' +
+  'FASTER at ' + TARGET_POP + '; show "n/a" if null). List primes first with a one-line "why prime + what the home rig should confirm" for each. ' +
+  'Include a clear banner that these are CLOUD TRIAGE signals on a shared VM — not authoritative — and that the home-rig /perf-hunt will pick up ' +
+  'the logged candidates automatically via their retest field. Add a one-line caveat under the table that the projected ' + TARGET_POP + ' savings is a ' +
+  'GROWTH-AWARE EXTRAPOLATION (each side scaled by its fitted exponent b over a ' + (TARGET_POP / MICRO_POP) + '× population jump) — its SIGN and ORDER OF ' +
+  'MAGNITUDE are the signal, not the digits, because ' + (TARGET_POP / MICRO_POP) + '^b is very sensitive to a noisy b.\n\n' +
   'Return a tight plain-text executive summary (the table + the prime shortlist) as your final message.',
   { label: 'log+report', phase: 'Log' }
 )
@@ -293,7 +339,7 @@ return {
   ideasConsidered: ideas.length,
   implemented: ready.length,
   measured: measured.length,
-  primes: primes.map((p) => ({ id: p.id, phase_verdict: p.phase_verdict, dphase_ms: p.dphase_ms, growth_base: p.growth_base, growth_cand: p.growth_cand })),
+  primes: primes.map((p) => ({ id: p.id, phase_verdict: p.phase_verdict, dphase_ms: p.dphase_ms, growth_base: p.growth_base, growth_cand: p.growth_cand, proj_savings_1m_ms: p.proj_savings_1m_ms })),
   reportPath: REPORT,
   note: 'Cloud triage only — no wins banked, nothing merged. Prime candidates logged to the ledger for the home-rig /perf-hunt.',
   summary: report,

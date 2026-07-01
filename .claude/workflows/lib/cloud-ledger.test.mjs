@@ -1,7 +1,7 @@
 // Run: node --test .claude/workflows/lib/cloud-ledger.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCandidateLine, parseLedgerLine, REQUIRED_FIELDS } from './cloud-ledger.mjs';
+import { buildCandidateLine, buildTriedLine, parseLedgerLine, REQUIRED_FIELDS } from './cloud-ledger.mjs';
 
 const valid = {
   id: 'perception-range-trim-cloud',
@@ -64,4 +64,43 @@ test('round-trips a freshly built candidate line through the parser', () => {
   const parsed = parseLedgerLine(buildCandidateLine(valid));
   assert.equal(parsed.id, valid.id);
   assert.equal(parsed.origin, 'cloud-triage');
+});
+
+// --- buildTriedLine: soft-exclusion rows for tried-but-not-prime ideas -------
+// A cloud "tried, not prime" idea is recorded so future hunts don't re-propose
+// and re-measure it — but it is a SOFT exclusion, NOT a home-rig kill: it carries
+// verdict CLOUD_TRIED and, crucially, NO `retest` field, so the full /perf-hunt
+// neither prioritizes nor permanently buries it (a noisy ≤10k cloud measurement
+// must never suppress an idea that only wins at 1M).
+
+test('tried row: verdict CLOUD_TRIED, origin cloud-triage, and NO retest field', () => {
+  const row = JSON.parse(buildTriedLine(valid));
+  for (const k of REQUIRED_FIELDS) assert.ok(k in row, `missing ${k}`);
+  assert.equal(row.verdict, 'CLOUD_TRIED');
+  assert.equal(row.origin, 'cloud-triage');
+  assert.ok(!('retest' in row), 'tried rows must NOT carry a retest field');
+});
+
+test('tried row: caller can override verdict/origin', () => {
+  const row = JSON.parse(buildTriedLine({ ...valid, verdict: 'CLOUD_DITCH', origin: 'x' }));
+  assert.equal(row.verdict, 'CLOUD_DITCH');
+  assert.equal(row.origin, 'x');
+  assert.ok(!('retest' in row), 'still no retest even with overrides');
+});
+
+test('tried row: rejects malformed input rather than emitting a bad row', () => {
+  assert.throws(() => buildTriedLine({ ...valid, id: '' }), /id/);
+  assert.throws(() => buildTriedLine({ ...valid, date: '7/1/26' }), /YYYY-MM-DD/);
+  assert.throws(() => buildTriedLine({ ...valid, scope: 'bogus' }), /scope/);
+  assert.throws(() => buildTriedLine({ ...valid, target_phase: 'nope' }), /target_phase/);
+  assert.throws(() => buildTriedLine({ ...valid, dwall_p99_ms: 'x' }), /dwall_p99_ms/);
+});
+
+test('tried row: is a single JSONL line and parses back with retest=null', () => {
+  const line = buildTriedLine(valid);
+  assert.ok(!line.includes('\n'), 'must be one line');
+  const parsed = parseLedgerLine(line);
+  assert.equal(parsed.verdict, 'CLOUD_TRIED');
+  assert.equal(parsed.origin, 'cloud-triage');
+  assert.equal(parsed.retest, null, 'parser defaults the absent retest to null');
 });

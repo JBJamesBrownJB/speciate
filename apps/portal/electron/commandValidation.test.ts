@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 // @ts-ignore - plain CJS module under test; types not needed for this spec
-import { validateCommand, validateSpawnCount } from './commandValidation.cjs';
+import { validateCommand } from './commandValidation.cjs';
 
 /**
  * Renderer → main command validation (salvaged from the retired stdio path's
@@ -103,24 +103,5 @@ describe('validateCommand', () => {
       expect(() => validateCommand(null)).toThrow();
       expect(() => validateCommand('dev_spawn_creature')).toThrow();
     });
-  });
-});
-
-describe('validateSpawnCount', () => {
-  it('accepts a positive integer within the buffer cap', () => {
-    expect(() => validateSpawnCount(100)).not.toThrow();
-    expect(() => validateSpawnCount(1_000_000)).not.toThrow();
-  });
-
-  it('rejects zero, negatives, fractions, NaN, and non-numbers', () => {
-    expect(() => validateSpawnCount(0)).toThrow();
-    expect(() => validateSpawnCount(-5)).toThrow();
-    expect(() => validateSpawnCount(1.5)).toThrow();
-    expect(() => validateSpawnCount(NaN)).toThrow();
-    expect(() => validateSpawnCount('100')).toThrow();
-  });
-
-  it('rejects counts above the 1M buffer cap (would truncate at the seam)', () => {
-    expect(() => validateSpawnCount(1_000_001)).toThrow();
   });
 });

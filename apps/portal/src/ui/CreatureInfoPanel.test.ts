@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+﻿import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CreatureInfoPanel } from './CreatureInfoPanel';
 import type { CreatureData, PerceptionDebugData } from '../types/GameState';
 
@@ -68,21 +68,34 @@ describe('CreatureInfoPanel', () => {
       expect(writes()).toBe(0);
     });
 
-    it('new debug accel data triggers a rebuild on the next update', () => {
-      panel.show(creature);
-      const writes = countHtmlWrites();
+    it('new debug accel data triggers a rebuild on the next update (dev panel)', () => {
+      const devParent = document.createElement('div');
+      document.body.appendChild(devParent);
+      const devPanel = new CreatureInfoPanel(devParent, { showDebugInfo: true });
+      devPanel.show(creature);
 
-      panel.updateDebugData({
+      const el = devParent.querySelector('.creature-info-panel') as HTMLElement;
+      let writes = 0;
+      const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')!;
+      Object.defineProperty(el, 'innerHTML', {
+        get: desc.get,
+        set(v: string) { writes++; desc.set!.call(this, v); },
+        configurable: true,
+      });
+
+      devPanel.updateDebugData({
         entityId: 7, x: 10, y: 20, perceptionRange: 5, queryRadius: 5,
         fovAngle: 1, rotation: 0, ax: 1.5, ay: -0.5,
         neighbors: [], cellSize: 20, creatureCell: { x: 0, y: 0 },
         queriedCells: [], checkedCells: [],
       });
-      panel.update({ ...creature });
+      devPanel.update({ ...creature });
 
-      expect(writes()).toBe(1);
-      const el = parentElement.querySelector('.creature-info-panel') as HTMLElement;
+      expect(writes).toBe(1);
       expect(el.textContent).toContain('1.50');
+
+      devPanel.destroy();
+      devParent.remove();
     });
   });
 
@@ -186,6 +199,36 @@ describe('CreatureInfoPanel', () => {
   });
 
   describe('updateDebugData', () => {
+    let devPanel: CreatureInfoPanel;
+    let devParent: HTMLElement;
+
+    beforeEach(() => {
+      devParent = document.createElement('div');
+      document.body.appendChild(devParent);
+      devPanel = new CreatureInfoPanel(devParent, { showDebugInfo: true });
+    });
+
+    afterEach(() => {
+      devPanel.destroy();
+      devParent.remove();
+    });
+
+    it('does NOT display debug acceleration on the default (player) panel', () => {
+      const creature: CreatureData = { id: 1, x: 0, y: 0, rotation: 0, size: 1 };
+
+      panel.show(creature);
+      panel.updateDebugData({
+        entityId: 1, x: 0, y: 0, perceptionRange: 50, queryRadius: 55,
+        fovAngle: Math.PI, rotation: 0, ax: 1.5, ay: 2.5,
+        neighbors: [], cellSize: 50, creatureCell: { x: 0, y: 0 },
+        queriedCells: [], checkedCells: [],
+      });
+      panel.update({ ...creature, x: 1 });
+
+      const panelEl = parentElement.querySelector('.creature-info-panel');
+      expect(panelEl?.textContent).not.toContain('Accel');
+    });
+
     it('should display acceleration from debug data', () => {
       const creature: CreatureData = {
         id: 12345,
@@ -212,11 +255,11 @@ describe('CreatureInfoPanel', () => {
         checkedCells: [],
       };
 
-      panel.show(creature);
-      panel.updateDebugData(debugData);
-      panel.update(creature);
+      devPanel.show(creature);
+      devPanel.updateDebugData(debugData);
+      devPanel.update({ ...creature, x: creature.x + 1 });
 
-      const panelEl = parentElement.querySelector('.creature-info-panel');
+      const panelEl = devParent.querySelector('.creature-info-panel');
       expect(panelEl?.textContent).toContain('Accel');
       expect(panelEl?.textContent).toContain('1.50');
       expect(panelEl?.textContent).toContain('2.50');
@@ -248,38 +291,47 @@ describe('CreatureInfoPanel', () => {
         checkedCells: [],
       };
 
-      panel.show(creature);
-      panel.updateDebugData(debugData);
-      panel.update(creature);
+      devPanel.show(creature);
+      devPanel.updateDebugData(debugData);
+      devPanel.update({ ...creature, x: creature.x + 1 });
 
       // Now clear the debug data
-      panel.updateDebugData(null);
-      panel.update(creature);
+      devPanel.updateDebugData(null);
+      devPanel.update({ ...creature, x: creature.x + 2 });
 
-      const panelEl = parentElement.querySelector('.creature-info-panel');
+      const panelEl = devParent.querySelector('.creature-info-panel');
       expect(panelEl?.textContent).not.toContain('1.50');
     });
   });
 
-  describe('keyboard legend', () => {
-    it('should display keyboard shortcuts', () => {
-      const creature: CreatureData = {
-        id: 12345,
-        x: 100,
-        y: 200,
-        rotation: 0,
-        size: 2.5,
-      };
+  describe('keyboard legend (dev-only — overlay shortcuts are gated in the player build)', () => {
+    const creature: CreatureData = { id: 12345, x: 100, y: 200, rotation: 0, size: 2.5 };
 
+    it('does not display the debug-overlay legend on the default (player) panel', () => {
       panel.show(creature);
 
       const panelEl = parentElement.querySelector('.creature-info-panel');
+      expect(panelEl?.textContent).not.toContain('[G]');
+      expect(panelEl?.textContent).not.toContain('Overlays');
+    });
+
+    it('displays keyboard shortcuts when debug info is enabled', () => {
+      const devParent = document.createElement('div');
+      document.body.appendChild(devParent);
+      const devPanel = new CreatureInfoPanel(devParent, { showDebugInfo: true });
+
+      devPanel.show(creature);
+
+      const panelEl = devParent.querySelector('.creature-info-panel');
       expect(panelEl?.textContent).toContain('[G]');
       expect(panelEl?.textContent).toContain('Grid');
       expect(panelEl?.textContent).toContain('[F]');
       expect(panelEl?.textContent).toContain('Force');
       expect(panelEl?.textContent).toContain('[P]');
       expect(panelEl?.textContent).toContain('Perception');
+
+      devPanel.destroy();
+      devParent.remove();
     });
   });
 });

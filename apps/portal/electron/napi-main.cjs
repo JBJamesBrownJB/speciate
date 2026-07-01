@@ -5,7 +5,8 @@ const { shouldApplyCsp, applyCspHeaders } = require('./csp.cjs');
 const { sandboxWorkaroundSwitches, shouldOpenDevTools } = require('./startupFlags.cjs');
 const { createFrameDelivery } = require('./frameDelivery.cjs');
 const { FLOATS_PER_CREATURE, MAX_CREATURES, creatureBufferFloats } = require('./bufferLayout.cjs');
-const { validateCommand, validateSpawnCount } = require('./commandValidation.cjs');
+const { validateCommand } = require('./commandValidation.cjs');
+const { createPlantDelivery } = require('./plantDelivery.cjs');
 
 let mainWindow;
 let devToolsWindow = null;
@@ -14,6 +15,14 @@ let pollingInterval = null; // legacy fallback poll (only when push-on-swap unav
 let telemetryInterval = null; // status heartbeat (decoupled from the position doorbell)
 let plantInterval = null; // plant buffer push every 2s
 let shuttingDown = false;
+
+// Plant snapshot push — shared by the 2s interval and spawn-plant's immediate
+// push (see plantDelivery.cjs).
+const deliverPlants = createPlantDelivery({
+  getEngine: () => simulationEngine,
+  getMainWindow: () => mainWindow,
+  isShuttingDown: () => shuttingDown,
+});
 
 // Buffer layout (FLOATS_PER_CREATURE, MAX_CREATURES) is sourced from bufferLayout.cjs
 // (the JS twin of the Rust producer cap). See that file for the seam contract.
@@ -189,17 +198,6 @@ function startSimulation() {
 
     // Plant buffer: push sparse snapshot to renderer on startup and every 2s.
     // Plants update slowly (CA ticks every 1-2s), so per-frame delivery is wasteful.
-    const deliverPlants = () => {
-      if (!simulationEngine || shuttingDown) return;
-      try {
-        const plantBuf = simulationEngine.getPlantBuffer();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('plant-buffer-update', plantBuf);
-        }
-      } catch (error) {
-        console.error('[Electron NAPI] Plant buffer error:', error);
-      }
-    };
     // Deliver once at startup (allow sim a moment to initialize), then every 2s.
     setTimeout(deliverPlants, 500);
     plantInterval = setInterval(deliverPlants, 2000);
@@ -387,40 +385,11 @@ ipcMain.on('render-metrics', (event, metrics) => {
   }
 });
 
-ipcMain.on('spawn-creatures', (event, count) => {
-  if (!simulationEngine) {
-    console.error('[Electron NAPI] Cannot spawn: simulation not running');
-    return;
-  }
-
-  try {
-    validateSpawnCount(count);
-    simulationEngine.spawnCreatures(count);
-    console.log(`[Electron NAPI] Spawned ${count} creatures`);
-  } catch (error) {
-    console.error('[Electron NAPI] Failed to spawn creatures:', error);
-  }
-});
-
 /**
- * IPC handler: Kill all creatures (dev tools command)
- */
-ipcMain.on('kill-all', () => {
-  if (!simulationEngine) {
-    console.error('[Electron NAPI] Cannot kill all: simulation not running');
-    return;
-  }
-
-  try {
-    simulationEngine.killAll();
-    console.log('[Electron NAPI] Killed all creatures');
-  } catch (error) {
-    console.error('[Electron NAPI] Failed to kill all:', error);
-  }
-});
-
-/**
- * IPC handler: Generic command dispatcher (dev-ui uses this)
+ * IPC handler: Generic command dispatcher (dev-ui uses this).
+ * The old standalone 'spawn-creatures' / 'kill-all' channels had no sender
+ * anywhere (preload never exposed them) — bulk operations go through
+ * dev_load_trial / dev_clear_creatures here instead.
  */
 ipcMain.on('send-command', (event, command) => {
   if (!simulationEngine) {
@@ -569,12 +538,7 @@ ipcMain.on('spawn-plant', (event, { worldX, worldY }) => {
   if (!simulationEngine) return;
   try {
     simulationEngine.spawnPlant(worldX, worldY);
-    // Push updated buffer immediately (deliverPlants is scoped to start-simulation callback,
-    // so inline the push here to avoid a ReferenceError)
-    const plantBuf = simulationEngine.getPlantBuffer();
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('plant-buffer-update', plantBuf);
-    }
+    deliverPlants(); // push the updated buffer immediately, don't wait for the 2s tick
   } catch (error) {
     console.error('[Electron NAPI] Failed to spawn plant:', error);
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+﻿import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OverlayManager } from './OverlayManager';
 import type { IOverlay, OverlayConfig } from './IOverlay';
 
@@ -35,6 +35,36 @@ describe('OverlayManager', () => {
 
   afterEach(() => {
     manager.destroy();
+  });
+
+  describe('devToolsOnly shortcut gating', () => {
+    function press(key: string): void {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    }
+
+    it('does not wire dev-only overlay shortcuts by default (players never get debug overlays)', () => {
+      const devOverlay = new MockOverlay({ name: 'grid', devToolsOnly: true, keyboardShortcut: 'g' });
+      const gameOverlay = new MockOverlay({ name: 'minimap', devToolsOnly: false, keyboardShortcut: 'm' });
+      manager.register(devOverlay);
+      manager.register(gameOverlay);
+
+      manager.enableKeyboardShortcuts();
+
+      press('g');
+      expect(devOverlay.isVisible()).toBe(false);
+      press('m');
+      expect(gameOverlay.isVisible()).toBe(true);
+    });
+
+    it('wires dev-only shortcuts when dev tooling is explicitly included', () => {
+      const devOverlay = new MockOverlay({ name: 'grid', devToolsOnly: true, keyboardShortcut: 'g' });
+      manager.register(devOverlay);
+
+      manager.enableKeyboardShortcuts({ includeDevToolsOverlays: true });
+
+      press('g');
+      expect(devOverlay.isVisible()).toBe(true);
+    });
   });
 
   describe('registration', () => {
@@ -90,7 +120,7 @@ describe('OverlayManager', () => {
         keyboardShortcut: 'g',
       });
       manager.register(overlay);
-      manager.enableKeyboardShortcuts();
+      manager.enableKeyboardShortcuts({ includeDevToolsOverlays: true }); // these specs exercise shortcut mechanics on dev overlays
 
       expect(overlay.visible).toBe(false);
 
@@ -108,7 +138,7 @@ describe('OverlayManager', () => {
         keyboardShortcut: 'g',
       });
       manager.register(overlay);
-      manager.enableKeyboardShortcuts();
+      manager.enableKeyboardShortcuts({ includeDevToolsOverlays: true }); // these specs exercise shortcut mechanics on dev overlays
 
       expect(overlay.visible).toBe(false);
 
@@ -153,7 +183,7 @@ describe('OverlayManager', () => {
       manager.register(overlay1);
       manager.register(overlay2);
       manager.register(overlay3);
-      manager.enableKeyboardShortcuts();
+      manager.enableKeyboardShortcuts({ includeDevToolsOverlays: true });
 
       // Press 'g'
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g' }));

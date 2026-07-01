@@ -6,7 +6,6 @@ import { Application, Container } from "pixi.js";
 import { SpriteProvider } from "@/rendering/SpriteProvider";
 import { Camera } from "@/domain/Camera";
 import { CameraController } from "@/domain/CameraController";
-import { Viewport } from "@/domain/Viewport";
 import { createWorldBounds } from "@/domain/WorldBounds";
 import { conspicuousness } from "@/domain/conspicuousness";
 import { InputManager } from "@/input";
@@ -87,7 +86,6 @@ async function main(): Promise<void> {
       WORLD_BOUNDS.MAX_Y
     ));
     camera.setViewportSize(viewportWidth, viewportHeight);
-    const viewport = new Viewport(viewportWidth, viewportHeight);
     const inputManager = new InputManager();
     const cameraController = new CameraController(camera, inputManager);
 
@@ -106,7 +104,9 @@ async function main(): Promise<void> {
 
     // Selection system
     const selectionManager = new SelectionManager();
-    const creatureInfoPanel = new CreatureInfoPanel(document.body);
+    const creatureInfoPanel = new CreatureInfoPanel(document.body, {
+      showDebugInfo: import.meta.env.DEV,
+    });
     let latestCreatures: CreatureData[] = [];
 
     // Overlay system
@@ -120,7 +120,9 @@ async function main(): Promise<void> {
     overlayManager.register(perceptionOverlay);
     overlayManager.register(spatialGridOverlay);
     overlayManager.register(forceOverlay);
-    overlayManager.enableKeyboardShortcuts();
+    // Debug-overlay shortcuts (G/P/F) only exist in dev builds; the minimap's
+    // 'm' (a game overlay) is always available.
+    overlayManager.enableKeyboardShortcuts({ includeDevToolsOverlays: import.meta.env.DEV });
 
     // Minimap
     const minimap = new Minimap(
@@ -483,7 +485,6 @@ async function main(): Promise<void> {
 
       updateContainerSize(container, viewportWidth, viewportHeight);
       app.renderer.resize(viewportWidth, viewportHeight);
-      viewport.resize(viewportWidth, viewportHeight);
       camera.setViewportSize(viewportWidth, viewportHeight);
       camera.applyTransform(worldContainer, viewportWidth, viewportHeight);
       scaleBarManager.update(camera.zoom);

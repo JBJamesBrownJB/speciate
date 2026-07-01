@@ -73,8 +73,14 @@ export class OverlayManager {
     return this.getAllOverlays().filter((o) => !o.config.devToolsOnly);
   }
 
-  enableKeyboardShortcuts(): void {
+  /**
+   * Wire the registered shortcuts. Overlays marked `devToolsOnly` are skipped
+   * unless explicitly included — debug visualizations must be opt-in (dev
+   * builds), never reachable in the player-facing portal by default.
+   */
+  enableKeyboardShortcuts(opts?: { includeDevToolsOverlays?: boolean }): void {
     if (this.keydownHandler) return;
+    const includeDevTools = opts?.includeDevToolsOverlays ?? false;
 
     this.keydownHandler = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
@@ -83,10 +89,12 @@ export class OverlayManager {
 
       const key = event.key.toLowerCase();
       const overlayName = this.keyboardShortcuts.get(key);
+      if (!overlayName) return;
 
-      if (overlayName) {
-        this.toggleOverlay(overlayName);
-      }
+      const overlay = this.overlays.get(overlayName);
+      if (overlay?.config.devToolsOnly && !includeDevTools) return;
+
+      this.toggleOverlay(overlayName);
     };
 
     window.addEventListener('keydown', this.keydownHandler);

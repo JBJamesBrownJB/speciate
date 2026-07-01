@@ -10,8 +10,12 @@ export class CreatureInfoPanel {
   private visible: boolean = false;
   private lastDebugData: PerceptionDebugData | null = null;
   private lastRenderKey = '';
+  // Debug rows (acceleration, overlay-shortcut legend) are dev tooling — the
+  // player build never shows them (portal vs dev-ui separation).
+  private readonly showDebugInfo: boolean;
 
-  constructor(parentElement: HTMLElement) {
+  constructor(parentElement: HTMLElement, opts?: { showDebugInfo?: boolean }) {
+    this.showDebugInfo = opts?.showDebugInfo ?? false;
     this.container = document.createElement('div');
     this.container.className = 'creature-info-panel';
     this.container.style.cssText = `
@@ -67,7 +71,7 @@ export class CreatureInfoPanel {
   /** Key over every value the panel displays, at display precision. Called every
    *  frame — rebuilding innerHTML for an unchanged display is pure DOM churn. */
   private renderKey(creature: CreatureData, extended?: ExtendedCreatureData): string {
-    const debug = this.lastDebugData
+    const debug = this.showDebugInfo && this.lastDebugData
       ? `${this.lastDebugData.ax.toFixed(2)},${this.lastDebugData.ay.toFixed(2)}`
       : '';
     return `${creature.id}|${creature.x.toFixed(1)}|${creature.y.toFixed(1)}|` +
@@ -94,19 +98,21 @@ export class CreatureInfoPanel {
       lines.push(`<div><span style="color: #888;">Behavior:</span> ${extended.behavior}</div>`);
     }
 
-    // Show acceleration from debug data
-    if (this.lastDebugData) {
-      const ax = this.lastDebugData.ax;
-      const ay = this.lastDebugData.ay;
-      const magnitude = Math.sqrt(ax * ax + ay * ay);
-      lines.push(`<div><span style="color: #888;">Accel:</span> (${ax.toFixed(2)}, ${ay.toFixed(2)}) |${magnitude.toFixed(2)}|</div>`);
-    }
+    if (this.showDebugInfo) {
+      // Acceleration from perception debug data
+      if (this.lastDebugData) {
+        const ax = this.lastDebugData.ax;
+        const ay = this.lastDebugData.ay;
+        const magnitude = Math.sqrt(ax * ax + ay * ay);
+        lines.push(`<div><span style="color: #888;">Accel:</span> (${ax.toFixed(2)}, ${ay.toFixed(2)}) |${magnitude.toFixed(2)}|</div>`);
+      }
 
-    // Keyboard legend
-    lines.push(`<div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2);">`);
-    lines.push(`<div style="color: #666; font-size: 11px; margin-bottom: 4px;">Overlays:</div>`);
-    lines.push(`<div style="color: #888; font-size: 11px;"><span style="color: #4a9eff;">[G]</span> Grid &nbsp; <span style="color: #4a9eff;">[F]</span> Force &nbsp; <span style="color: #4a9eff;">[P]</span> Perception</div>`);
-    lines.push(`</div>`);
+      // Debug-overlay keyboard legend (shortcuts only exist in dev builds)
+      lines.push(`<div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2);">`);
+      lines.push(`<div style="color: #666; font-size: 11px; margin-bottom: 4px;">Overlays:</div>`);
+      lines.push(`<div style="color: #888; font-size: 11px;"><span style="color: #4a9eff;">[G]</span> Grid &nbsp; <span style="color: #4a9eff;">[F]</span> Force &nbsp; <span style="color: #4a9eff;">[P]</span> Perception</div>`);
+      lines.push(`</div>`);
+    }
 
     this.container.innerHTML = lines.join('');
   }

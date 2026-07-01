@@ -8,8 +8,6 @@
  * callers catch and drop the command.
  */
 
-const { MAX_CREATURES } = require('./bufferLayout.cjs');
-
 // Generous world-coordinate bound (engine world is smaller; this only guards
 // against garbage like 1e300 or NaN reaching Rust).
 const COORD_LIMIT = 1_000_000;
@@ -68,14 +66,4 @@ function validateCommand(command) {
   validator(command);
 }
 
-/** Validate a bulk spawn count: positive integer within the seam's buffer cap. */
-function validateSpawnCount(count) {
-  if (typeof count !== 'number' || !Number.isInteger(count) || count <= 0) {
-    throw new Error('spawn count must be a positive integer');
-  }
-  if (count > MAX_CREATURES) {
-    throw new Error(`spawn count exceeds the ${MAX_CREATURES} buffer cap`);
-  }
-}
-
-module.exports = { validateCommand, validateSpawnCount };
+module.exports = { validateCommand };

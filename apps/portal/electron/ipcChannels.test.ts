@@ -17,6 +17,7 @@ const preloadSrc = readFileSync(resolve(__dirname, 'preload.cjs'), 'utf8');
 const mainSrc = [
   readFileSync(resolve(__dirname, 'napi-main.cjs'), 'utf8'),
   readFileSync(resolve(__dirname, 'frameDelivery.cjs'), 'utf8'),
+  readFileSync(resolve(__dirname, 'plantDelivery.cjs'), 'utf8'),
 ].join('\n');
 
 const matchAll = (src: string, re: RegExp): string[] =>

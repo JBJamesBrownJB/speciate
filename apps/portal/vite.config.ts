@@ -1,12 +1,10 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   root: '.',
   publicDir: 'public',
   base: './', // Use relative paths for Electron (file:// protocol)
-  plugins: [react()],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
@@ -33,7 +31,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['pixi.js', 'react', 'react-dom'],
+    include: ['pixi.js'],
   },
   test: {
     globals: true,

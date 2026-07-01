@@ -23,6 +23,10 @@ function createFrameDelivery(deps) {
   } = deps;
 
   let frameCount = 0;
+  // Perception delivery gate: while nothing is selected the buffer is all-empty,
+  // so shipping it every swap is pure structured-clone waste. Send while selected,
+  // send ONE trailing empty buffer on deselect (so the renderer clears), then stop.
+  let lastPerceptionHadData = true;
 
   return function deliverFrame(tick) {
     const engine = getEngine();
@@ -50,9 +54,11 @@ function createFrameDelivery(deps) {
       // Perception debug buffer (dev-tools only; frontend tracks selection state).
       if (engine.fillPerceptionDebug) {
         engine.fillPerceptionDebug(perceptionBuffer);
-        if (alive) {
+        const hasData = perceptionBuffer[0] >= 0.5;
+        if (alive && (hasData || lastPerceptionHadData)) {
           win.webContents.send('perception-debug-update', perceptionBuffer);
         }
+        lastPerceptionHadData = hasData;
       }
     } catch (error) {
       console.error('[Electron NAPI] deliverFrame error:', error);

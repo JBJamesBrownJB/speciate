@@ -34,3 +34,12 @@ export const SCALE_BAR_CONFIG = {
 export const VIEWPORT_CULLING_CONFIG = {
   MARGIN: 40.0, // World units buffer to prevent edge flickering
 } as const;
+
+// Display defaults for the two-level spatial grid, matching the engine's
+// authoritative values (apps/simulation/src/simulation/spatial/constants.rs:
+// CELL_SIZE = 20, L1 = 3x). Telemetry overrides these at runtime; the defaults
+// only matter for the frames before the first telemetry arrives.
+export const SPATIAL_GRID_CONFIG = {
+  L0_CELL_SIZE: 20,
+  L1_CELL_SIZE: 60,
+} as const;

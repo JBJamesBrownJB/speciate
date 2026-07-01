@@ -7,10 +7,7 @@ declare global {
       /** DEV-only: send render-pipeline metrics to the dev-tools window. */
       sendRenderMetrics?: (metrics: RenderPipelineMetrics) => void;
 
-      /** @deprecated Use onNAPIBufferUpdate instead */
-      onStateUpdateBinary: (callback: (binaryData: Uint8Array) => void) => () => void;
-
-      onNAPIBufferUpdate: (callback: (data: { buffer: number[], creatureCount: number, tick?: number }) => void) => () => void;
+      onNAPIBufferUpdate: (callback: (data: { buffer: Float32Array, creatureCount: number, tick?: number }) => void) => () => void;
 
       onTelemetryUpdate: (callback: (telemetry: TelemetryFrame) => void) => () => void;
 

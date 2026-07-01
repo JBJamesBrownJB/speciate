@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SelectionHighlight } from './SelectionHighlight';
-import { Container } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 
 describe('SelectionHighlight', () => {
   let highlight: SelectionHighlight;
@@ -83,6 +83,41 @@ describe('SelectionHighlight', () => {
     it('should not throw', () => {
       highlight.showAt(100, 200, 15);
       expect(() => highlight.destroy()).not.toThrow();
+    });
+  });
+
+  describe('render deduplication (one draw per change, not per call)', () => {
+    it('updatePosition defers drawing to update() — no double render per frame', () => {
+      highlight.showAt(100, 200, 15);
+      const draws = vi.spyOn(Graphics.prototype, 'circle');
+
+      // The per-frame pair the render loop makes:
+      highlight.updatePosition(150, 250);
+      highlight.update(16);
+
+      expect(draws).toHaveBeenCalledTimes(1);
+      draws.mockRestore();
+    });
+
+    it('update() skips redraw entirely when position is unchanged', () => {
+      highlight.showAt(100, 200, 15);
+      highlight.updatePosition(150, 250);
+      highlight.update(16);
+
+      const draws = vi.spyOn(Graphics.prototype, 'circle');
+      highlight.updatePosition(150, 250); // same position
+      highlight.update(16);
+      highlight.update(16);
+
+      expect(draws).not.toHaveBeenCalled();
+      draws.mockRestore();
+    });
+
+    it('still draws immediately on showAt (selection feels instant)', () => {
+      const draws = vi.spyOn(Graphics.prototype, 'circle');
+      highlight.showAt(100, 200, 15);
+      expect(draws).toHaveBeenCalledTimes(1);
+      draws.mockRestore();
     });
   });
 });

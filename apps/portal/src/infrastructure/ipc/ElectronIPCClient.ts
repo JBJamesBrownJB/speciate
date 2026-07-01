@@ -61,7 +61,7 @@ export class ElectronIPCClient implements IPCClient {
     this.unsubscribers.push(unsubTelemetry);
 
     // Use new NAPI buffer updates
-    const unsubBuffer = window.electron.onNAPIBufferUpdate((data: { buffer: number[], creatureCount: number, tick?: number }) => {
+    const unsubBuffer = window.electron.onNAPIBufferUpdate((data: { buffer: Float32Array, creatureCount: number, tick?: number }) => {
       try {
         const { buffer, creatureCount, tick } = data;
 

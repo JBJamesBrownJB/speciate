@@ -47,28 +47,11 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   /**
-   * Subscribe to state updates from simulation (BINARY - OLD stdio IPC)
-   * Callback receives Uint8Array of raw MessagePack data
-   *
-   * @param {Function} callback - Function to call with binary state updates
-   * @returns {Function} Unsubscribe function
-   * @deprecated Use onNAPIBufferUpdate instead
-   */
-  onStateUpdateBinary: (callback) => {
-    if (typeof callback !== 'function') {
-      throw new Error('onStateUpdateBinary: callback must be a function');
-    }
-
-    const handler = (_event, binaryData) => callback(binaryData);
-    ipcRenderer.on('state-update-binary', handler);
-    return () => ipcRenderer.removeListener('state-update-binary', handler);
-  },
-
-  /**
    * Subscribe to NAPI buffer updates
-   * Callback receives { buffer: number[], creatureCount: number }
+   * Callback receives { buffer: Float32Array, creatureCount: number, tick: number }
    *
-   * Buffer layout (SoA): [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ]
+   * Buffer layout (SoA, 5 floats/creature — see src/types/BufferLayout.ts):
+   *   [ID₁...IDₙ, X₁...Xₙ, Y₁...Yₙ, Rot₁...Rotₙ, Size₁...Sizeₙ]
    *
    * @param {Function} callback - Function to call with NAPI buffer updates
    * @returns {Function} Unsubscribe function
@@ -104,7 +87,6 @@ contextBridge.exposeInMainWorld('electron', {
    * Remove all state update listeners (cleanup)
    */
   removeStateUpdateListener: () => {
-    ipcRenderer.removeAllListeners('state-update-binary');
     ipcRenderer.removeAllListeners('telemetry-update');
     ipcRenderer.removeAllListeners('napi-buffer-update');
     ipcRenderer.removeAllListeners('perception-debug-update');
@@ -207,22 +189,11 @@ contextBridge.exposeInMainWorld('electron', {
 
   /**
    * Subscribe to perception debug buffer updates
-   * Callback receives Float32Array with perception debug data
+   * Callback receives Float32Array with perception debug data.
    *
-   * Buffer layout:
-   * - [0]: has_data (1.0 = valid)
-   * - [1]: target_id
-   * - [2]: target_x
-   * - [3]: target_y
-   * - [4]: perception_range
-   * - [5]: fov_angle (radians)
-   * - [6]: rotation (radians)
-   * - [7]: ax (acceleration x)
-   * - [8]: ay (acceleration y)
-   * - [9]: neighbor_count
-   * - [10..74]: neighbor_ids (max 64)
-   * - [74..138]: neighbor_xs
-   * - [138..202]: neighbor_ys
+   * Layout: [0] is the has_data flag (1.0 = valid); the full section map lives
+   * with its parser in src/infrastructure/ipc/ElectronIPCClient.ts (single
+   * source of truth on the JS side — do not duplicate it here).
    *
    * @param {Function} callback - Function to call with perception debug buffer
    * @returns {Function} Unsubscribe function

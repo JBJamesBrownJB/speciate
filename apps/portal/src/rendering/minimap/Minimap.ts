@@ -56,7 +56,7 @@ export class Minimap extends BaseOverlay {
     this.boundPointerDown = this.onPointerDown.bind(this);
 
     this.minimapContainer = new Container();
-    this.minimapContainer.interactive = true;
+    this.minimapContainer.eventMode = "static";
     this.minimapContainer.on("pointerdown", this.boundPointerDown);
 
     this.background = new Graphics();
@@ -143,6 +143,17 @@ export class Minimap extends BaseOverlay {
 
     const rectX = cameraMinimapX - rectWidth / 2;
     const rectY = cameraMinimapY - rectHeight / 2;
+
+    // Skip the clear+stroke when the rect is identical to last frame (static camera).
+    const last = this.lastViewportRect;
+    if (
+      rectX === last.x &&
+      rectY === last.y &&
+      rectWidth === last.width &&
+      rectHeight === last.height
+    ) {
+      return;
+    }
 
     this.lastViewportRect = { x: rectX, y: rectY, width: rectWidth, height: rectHeight };
 

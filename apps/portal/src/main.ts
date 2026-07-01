@@ -93,25 +93,6 @@ async function main(): Promise<void> {
     // refresh skips frames unevenly, producing beat-pattern stutter; vsync already bounds us.
     app.ticker.maxFPS = 0;
 
-    let rafSamples: number[] = [];
-    let rafLastTime = performance.now();
-    let rafCount = 0;
-
-    const measureRefreshRate = () => {
-      const now = performance.now();
-      const delta = now - rafLastTime;
-      if (delta > 0) {
-        rafSamples.push(1000 / delta);
-      }
-      rafLastTime = now;
-      rafCount++;
-
-      if (rafCount < 20) {
-        requestAnimationFrame(measureRefreshRate);
-      }
-    };
-    requestAnimationFrame(measureRefreshRate);
-
     const container = document.getElementById("canvas-container");
     if (!container) throw new Error("canvas-container not found");
     container.classList.add('glow-active');
@@ -394,29 +375,36 @@ async function main(): Promise<void> {
     // Zoom rate limiting
     let lastZoomTime = 0;
 
-    // Viewport culling: send bounds to backend to filter creatures
-    let lastViewportBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+    // Viewport culling: send bounds to backend to filter creatures.
+    // One reused object — this runs every frame; only IPC allocates (on change).
+    const viewportBounds = {
+      minX: Infinity, // forces the first send
+      minY: 0,
+      maxX: 0,
+      maxY: 0,
+      margin: VIEWPORT_CULLING_CONFIG.MARGIN,
+    };
 
     const sendViewportBounds = () => {
       const halfWidth = (viewportWidth / 2) / camera.zoom;
       const halfHeight = (viewportHeight / 2) / camera.zoom;
-      const bounds = {
-        minX: camera.x - halfWidth,
-        minY: camera.y - halfHeight,
-        maxX: camera.x + halfWidth,
-        maxY: camera.y + halfHeight,
-        margin: VIEWPORT_CULLING_CONFIG.MARGIN,
-      };
+      const minX = camera.x - halfWidth;
+      const minY = camera.y - halfHeight;
+      const maxX = camera.x + halfWidth;
+      const maxY = camera.y + halfHeight;
 
       // Only send if bounds changed significantly (>1 unit)
       if (
-        Math.abs(bounds.minX - lastViewportBounds.minX) > 1 ||
-        Math.abs(bounds.minY - lastViewportBounds.minY) > 1 ||
-        Math.abs(bounds.maxX - lastViewportBounds.maxX) > 1 ||
-        Math.abs(bounds.maxY - lastViewportBounds.maxY) > 1
+        Math.abs(minX - viewportBounds.minX) > 1 ||
+        Math.abs(minY - viewportBounds.minY) > 1 ||
+        Math.abs(maxX - viewportBounds.maxX) > 1 ||
+        Math.abs(maxY - viewportBounds.maxY) > 1
       ) {
-        window.electron?.setViewportBounds?.(bounds);
-        lastViewportBounds = bounds;
+        viewportBounds.minX = minX;
+        viewportBounds.minY = minY;
+        viewportBounds.maxX = maxX;
+        viewportBounds.maxY = maxY;
+        window.electron?.setViewportBounds?.(viewportBounds);
       }
     };
 
@@ -579,8 +567,10 @@ async function main(): Promise<void> {
         zoomDelta = sign * Math.min(Math.abs(zoomDelta), maxDelta);
 
         if (zoomDelta !== 0) {
+          // Only adjust the logic camera — the ticker drives the world transform
+          // through CameraSmoother. Applying the raw pose here caused a
+          // one-frame pop that the next smoothed frame snapped back from.
           camera.adjustZoom(Math.exp(zoomDelta));
-          camera.applyTransform(worldContainer, viewport.width, viewport.height);
           scaleBarManager.update(camera.zoom);
           lastZoomTime = now;
         }

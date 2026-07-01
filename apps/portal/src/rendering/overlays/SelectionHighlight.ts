@@ -17,6 +17,7 @@ export class SelectionHighlight implements IOverlay {
   private positionX: number = 0;
   private positionY: number = 0;
   private baseRadius: number = 15;
+  private needsRedraw: boolean = false;
 
   constructor(container: Container) {
     this.graphics = new Graphics();
@@ -53,15 +54,18 @@ export class SelectionHighlight implements IOverlay {
     return this.visible;
   }
 
+  /** Record a new position; drawing is deferred to update() so the per-frame
+   *  updatePosition+update pair costs one redraw, and zero when nothing moved. */
   updatePosition(worldX: number, worldY: number): void {
     if (!this.visible) return;
+    if (worldX === this.positionX && worldY === this.positionY) return;
     this.positionX = worldX;
     this.positionY = worldY;
-    this.render();
+    this.needsRedraw = true;
   }
 
   update(_deltaMs: number): void {
-    if (!this.visible) return;
+    if (!this.visible || !this.needsRedraw) return;
     this.render();
   }
 
@@ -70,6 +74,7 @@ export class SelectionHighlight implements IOverlay {
   }
 
   private render(): void {
+    this.needsRedraw = false;
     const radius = this.baseRadius + RADIUS_PADDING;
 
     this.graphics.clear();

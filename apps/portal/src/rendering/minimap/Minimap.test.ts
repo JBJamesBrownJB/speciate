@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { Container } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import { Minimap } from "./Minimap";
 import { createWorldBounds } from "@/domain/WorldBounds";
 
@@ -56,6 +56,41 @@ describe("Minimap", () => {
       expect(() => new Minimap(new Container(), invalidBounds, 180)).toThrow(
         "WorldBounds must have positive dimensions"
       );
+    });
+  });
+
+  describe("redraw guard (skip when viewport rect unchanged)", () => {
+    const camera = { x: 100, y: 200, zoom: 10 };
+
+    it("does not redraw when camera and viewport are unchanged", () => {
+      minimap.update(camera, 800, 600); // establish the rect
+      const draws = vi.spyOn(Graphics.prototype, "rect");
+
+      minimap.update({ ...camera }, 800, 600);
+      minimap.update({ ...camera }, 800, 600);
+
+      expect(draws).not.toHaveBeenCalled();
+      draws.mockRestore();
+    });
+
+    it("redraws when the camera moves", () => {
+      minimap.update(camera, 800, 600);
+      const draws = vi.spyOn(Graphics.prototype, "rect");
+
+      minimap.update({ ...camera, x: 101 }, 800, 600);
+
+      expect(draws).toHaveBeenCalled();
+      draws.mockRestore();
+    });
+
+    it("redraws when the viewport resizes", () => {
+      minimap.update(camera, 800, 600);
+      const draws = vi.spyOn(Graphics.prototype, "rect");
+
+      minimap.update(camera, 1024, 768);
+
+      expect(draws).toHaveBeenCalled();
+      draws.mockRestore();
     });
   });
 

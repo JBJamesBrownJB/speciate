@@ -55,7 +55,7 @@ Per-tick creature data arrives as a zero-copy `Float32Array` over NAPI/Electron 
 
 End-to-end path:
 1. Rust `export_positions()` fills a JS-owned `Float32Array` and returns the count.
-2. `electron/napi-main.cjs` pre-allocates the buffer (500K capacity), calls `simulationEngine.fillBuffer(...)`, slices the active range, and sends `'napi-buffer-update'`.
+2. `electron/napi-main.cjs` pre-allocates the buffer (1M-creature capacity — see `electron/bufferLayout.cjs`), calls `simulationEngine.fillBuffer(...)`, slices the active range, and sends `'napi-buffer-update'`.
    - **Gotcha (`napi-main.cjs:170–173`):** copy out with `.slice(0, usedSize)`, **never** `.subarray()`. `.subarray()` returns a view into the full backing `ArrayBuffer`, so Electron's structured clone serializes the entire 10MB buffer every tick.
 3. `electron/preload.cjs` exposes a `contextBridge` surface (`onNAPIBufferUpdate`, `onTelemetryUpdate`, `onPerceptionDebugUpdate`, command senders) — raw `ipcRenderer` is never exposed. `onStateUpdateBinary` is `@deprecated` (dead stdio/MessagePack path).
 4. `src/infrastructure/ipc/ElectronIPCClient.ts` (implements the `IPCClient` interface) parses the **SoA layout** `[IDs, Xs, Ys, Rots, Sizes]` via `getBufferOffsets(count)`, mutating a pre-allocated creature object pool **in place** each tick (zero-allocation-per-tick discipline).

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Container } from 'pixi.js';
 import { SpatialGridOverlay, GridMode } from './SpatialGridOverlay';
+import { SPATIAL_GRID_CONFIG } from '@/core/constants';
 
 describe('SpatialGridOverlay', () => {
   let container: Container;
@@ -13,6 +14,25 @@ describe('SpatialGridOverlay', () => {
 
   afterEach(() => {
     overlay.destroy();
+  });
+
+  describe('default cell sizes (before first telemetry frame)', () => {
+    it('defaults to the real engine grid: L0 = 20 m, L1 = 60 m (not the stale 10/30)', () => {
+      expect(overlay.getL0CellSize()).toBe(20);
+      expect(overlay.getL1CellSize()).toBe(60);
+    });
+
+    it('sources the defaults from the shared constant', () => {
+      expect(overlay.getL0CellSize()).toBe(SPATIAL_GRID_CONFIG.L0_CELL_SIZE);
+      expect(overlay.getL1CellSize()).toBe(SPATIAL_GRID_CONFIG.L1_CELL_SIZE);
+    });
+
+    it('telemetry still overrides the defaults', () => {
+      overlay.setCellSize(25);
+      overlay.setL1CellSize(75);
+      expect(overlay.getL0CellSize()).toBe(25);
+      expect(overlay.getL1CellSize()).toBe(75);
+    });
   });
 
   describe('G-key cycle (MODE_ORDER)', () => {

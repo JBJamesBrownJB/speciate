@@ -2,6 +2,7 @@ import { Graphics, Container } from 'pixi.js';
 import type { QueriedCell, L1VisionDebugEntry } from '@/types/GameState';
 import type { IOverlay, OverlayConfig } from './IOverlay';
 import { parsePlantBuffer, type PlantCellData } from '@/rendering/PlantRenderer';
+import { SPATIAL_GRID_CONFIG } from '@/core/constants';
 
 const L0_GRID_LINE_COLOR = 0x444444;
 const L1_GRID_LINE_COLOR = 0x00aaff;
@@ -52,8 +53,8 @@ export class SpatialGridOverlay implements IOverlay {
   private graphics: Graphics;
   private cellGraphics: Graphics;
   private currentMode: GridMode = GridMode.Off;
-  private l0CellSize: number = 10;
-  private l1CellSize: number = 30;
+  private l0CellSize: number = SPATIAL_GRID_CONFIG.L0_CELL_SIZE;
+  private l1CellSize: number = SPATIAL_GRID_CONFIG.L1_CELL_SIZE;
   private gridMinX: number = -5000;
   private gridMaxX: number = 5000;
   private gridMinY: number = -5000;
@@ -251,6 +252,14 @@ export class SpatialGridOverlay implements IOverlay {
 
   setL1CellSize(cellSize: number): void {
     this.l1CellSize = cellSize;
+  }
+
+  getL0CellSize(): number {
+    return this.l0CellSize;
+  }
+
+  getL1CellSize(): number {
+    return this.l1CellSize;
   }
 
   setBounds(minX: number, maxX: number, minY: number, maxY: number): void {

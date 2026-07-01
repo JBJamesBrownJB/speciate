@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { shouldApplyCsp, applyCspHeaders } = require('./csp.cjs');
+const { sandboxWorkaroundSwitches } = require('./startupFlags.cjs');
 const { createFrameDelivery } = require('./frameDelivery.cjs');
 const { FLOATS_PER_CREATURE, MAX_CREATURES, creatureBufferFloats } = require('./bufferLayout.cjs');
 
@@ -697,12 +698,11 @@ ipcMain.handle('resize-window', async (event, width) => {
   }
 });
 
-/**
- * Linux Sandbox Workaround
- */
-app.commandLine.appendSwitch('no-sandbox');
-app.commandLine.appendSwitch('disable-gpu-sandbox');
-app.commandLine.appendSwitch('disable-dev-shm-usage');
+// Linux-only sandbox workaround (SUID/ESRCH crashes) — see startupFlags.cjs.
+// Never applied on Windows/macOS, where it would just weaken process isolation.
+for (const [name, value] of sandboxWorkaroundSwitches(process.platform)) {
+  app.commandLine.appendSwitch(name, value);
+}
 app.commandLine.appendSwitch('enable-logging');
 app.commandLine.appendSwitch('log-level', '0');
 

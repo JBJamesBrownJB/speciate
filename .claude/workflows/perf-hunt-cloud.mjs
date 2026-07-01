@@ -8,7 +8,7 @@ export const meta = {
     { title: 'Ideate', detail: 'parallel hunter fleet proposes ideas tagged with a target_phase and (when apt) a criterion bench_target; synthesizer dedupes vs ledger' },
     { title: 'Implement', detail: 'each idea built in an isolated worktree, gated on cargo test -> unified diff' },
     { title: 'Micro-measure', detail: 'per candidate: function-bench delta + per-phase A/B at 10k + growth-rate ramp (Δexponent). Triage signal only — no bank, no escalate' },
-    { title: 'Log', detail: 'append promising candidates to the ledger as CANDIDATE+retest for the home rig; stash diffs; write cloud-last-run.md. Never merges' },
+    { title: 'Log', detail: 'append prime candidates to the ledger as CANDIDATE+retest for the home rig, and tried-but-not-prime ideas as CLOUD_TRIED (soft exclusion, no retest) so future hunts skip them; stash diffs; write cloud-last-run.md. Never merges' },
   ],
 }
 
@@ -145,7 +145,10 @@ const brief = await agent(
   'You are briefing a fleet of performance-optimization hunters for the Speciate Rust/Bevy ECS engine, for a CLOUD ' +
   'TRIAGE run.\n\n' + liveProfile + '\n' + TRIAGE_NOTE + '\n\nTARGET the fattest LIVE phases above. READ, in order:\n' +
   '1. ' + LEDGER + ' (JSONL: every idea already tried + verdict. DO_NOT_REVISIT and DONE are HARD exclusions. An entry ' +
-  'with a "retest" field is RE-ELIGIBLE — surface those as priority.)\n' +
+  'with a "retest" field is RE-ELIGIBLE — surface those as priority. A "CLOUD_TRIED" entry (origin cloud-triage, no retest) ' +
+  'was already implemented + measured on the cloud and came up short — treat it as a SOFT exclusion: the hunters must NOT ' +
+  're-propose the same idea unless they bring a materially new angle or implementation. It is NOT permanently killed — the ' +
+  'home rig may still validate it — so do not add it to any hard-exclusion list; just steer fresh ideation away from repeats.)\n' +
   '2. ' + REPO + '/docs/scale/optimization-checklist.md (Pass bar, attack order, ditched list, next levers)\n' +
   '3. Skim the hot systems: apps/simulation/src/simulation/{perception,steering,movement}/ and spatial/.\n\n' +
   'Produce a concise BRIEF (~300 words) covering: (a) the fattest phases RIGHT NOW, (b) ideas already tried they MUST NOT ' +
@@ -273,13 +276,22 @@ const report = await agent(
   'Finalize a CLOUD perf-triage run: LOG prime candidates to the shared ledger for the home rig, and write a human report. ' +
   'This run NEVER merges engine changes and NEVER banks a win — it only hands prioritized candidates to the full /perf-hunt.\n\n' +
   'RESULTS (JSON):\n' + JSON.stringify(logInput) + '\n\n' +
-  'PART A — LEDGER (append-only): get today via ' + today + '. For EACH prime candidate, append ONE JSONL line to ' + LEDGER + '. ' +
-  'Use exactly these fields and this key order (this schema is guarded by .claude/workflows/lib/cloud-ledger.mjs):\n' +
+  'PART A — LEDGER (append-only): get today via ' + today + '. The row schema for BOTH kinds below is guarded by ' +
+  '.claude/workflows/lib/cloud-ledger.mjs.\n' +
+  'A1 — PRIME candidates: for EACH prime candidate, append ONE JSONL line to ' + LEDGER + ' with exactly this key order:\n' +
   '  {"id","date","title","scope","target_phase","verdict","dwall_p99_ms","dphase_ms","notes","origin","retest"}\n' +
   'Set verdict="CANDIDATE", origin="cloud-triage". notes = the cloud signal (pop=' + MICRO_POP + ', Δphase, Δwall, bench %, growth b base→cand). ' +
   'retest = "cloud-triage <date>: <one-line why it is promising incl. growth b base→cand>; needs full 1M validation on the home rig." ' +
-  'This retest field is what makes the full /perf-hunt surface it as a PRIORITY re-test. Do NOT rewrite existing ledger lines; append only. ' +
-  'Do NOT log non-prime candidates to the ledger.\n\n' +
+  'This retest field is what makes the full /perf-hunt surface it as a PRIORITY re-test.\n' +
+  'A2 — TRIED-but-NOT-prime (soft exclusion): for EACH measured idea that is NOT prime AND whose phase_verdict is NOT "Error", ' +
+  'append ONE JSONL line to ' + LEDGER + ' with exactly this key order — note there is NO "retest" key:\n' +
+  '  {"id","date","title","scope","target_phase","verdict","dwall_p99_ms","dphase_ms","notes","origin"}\n' +
+  'Set verdict="CLOUD_TRIED", origin="cloud-triage". notes = the cloud signal that shows why it did not clear the bar ' +
+  '(pop=' + MICRO_POP + ', Δphase, Δwall, bench %, growth b base→cand). This records that the idea was implemented + measured and came ' +
+  'up short at cloud scale, so future cloud hunts do NOT re-propose/re-measure it — but it is deliberately NOT a permanent kill ' +
+  '(no retest, no DO_NOT_REVISIT), because a ≤10k shared-VM measurement must never bury an idea that may only win at 1M. ' +
+  'SKIP phase_verdict="Error" rows entirely (infra failure, not a real measurement — leave them re-eligible).\n' +
+  'For BOTH A1 and A2: do NOT rewrite existing ledger lines; append only.\n\n' +
   'PART B — STASH DIFFS: for each prime candidate, ensure its patch is saved to ' + CAND_DIR + '/<id>.diff (copy from ' + ART + '/<id>.patch).\n\n' +
   'PART C — REPORT: write a skimmable markdown report to ' + REPORT + ' with a table: candidate | scope | target phase | ' +
   'phase_verdict | Δphase (ms) | Δwall (ms) | bench Δ% | growth b (base→cand) | PRIME? . List primes first with a one-line ' +

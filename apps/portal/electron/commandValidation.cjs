@@ -41,8 +41,12 @@ const COMMAND_VALIDATORS = {
     if (typeof command.template !== 'string' || command.template.length === 0) {
       throw new Error('dev_load_trial: template must be a non-empty string');
     }
-    // Path traversal prevention — the template name reaches Rust file loading.
-    if (/[/\\]|\.\./.test(command.template)) {
+    // The template reaches Rust file loading as specs/<template>.toml (or
+    // trials/). Spec names use the "category/name" form, so forward slashes
+    // are legitimate — the guard is against ESCAPING those directories:
+    // only word/dash segments, single slashes, no ./.. segments, no
+    // backslashes, no absolute paths or drive letters.
+    if (!/^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/.test(command.template)) {
       throw new Error('dev_load_trial: template name contains invalid characters');
     }
     assertOptionalGene(command.dna, 'size_gene');

@@ -68,21 +68,43 @@ describe('validateCommand', () => {
       ).not.toThrow();
     });
 
+    it('accepts the category/name spec format the loader supports (e.g. behavior/opposing-seekers)', () => {
+      // Real names from apps/simulation/specs/ — see dev-ui trial-templates.ts
+      expect(() =>
+        validateCommand({ type: 'dev_load_trial', template: 'behavior/opposing-seekers' })
+      ).not.toThrow();
+      expect(() =>
+        validateCommand({ type: 'dev_load_trial', template: 'performance/100k_medium_sparse' })
+      ).not.toThrow();
+    });
+
     it('rejects empty or non-string templates', () => {
       expect(() => validateCommand({ type: 'dev_load_trial', template: '' })).toThrow();
       expect(() => validateCommand({ type: 'dev_load_trial', template: 42 })).toThrow();
       expect(() => validateCommand({ type: 'dev_load_trial' })).toThrow();
     });
 
-    it('rejects path traversal in the template name', () => {
+    it('rejects anything that could escape the specs/trials directories', () => {
       expect(() =>
         validateCommand({ type: 'dev_load_trial', template: '../secrets' })
       ).toThrow();
       expect(() =>
-        validateCommand({ type: 'dev_load_trial', template: 'a/b' })
+        validateCommand({ type: 'dev_load_trial', template: 'behavior/../../secrets' })
       ).toThrow();
       expect(() =>
         validateCommand({ type: 'dev_load_trial', template: 'a\\b' })
+      ).toThrow();
+      expect(() =>
+        validateCommand({ type: 'dev_load_trial', template: '/etc/passwd' })
+      ).toThrow();
+      expect(() =>
+        validateCommand({ type: 'dev_load_trial', template: 'C:/windows' })
+      ).toThrow();
+      expect(() =>
+        validateCommand({ type: 'dev_load_trial', template: 'a//b' })
+      ).toThrow();
+      expect(() =>
+        validateCommand({ type: 'dev_load_trial', template: 'a/./b' })
       ).toThrow();
     });
   });

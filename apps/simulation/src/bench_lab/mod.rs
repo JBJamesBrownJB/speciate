@@ -1,4 +1,5 @@
 pub mod budget;
+pub mod growth;
 pub mod ramp;
 pub mod report;
 pub mod sampler;
@@ -8,9 +9,10 @@ pub mod verdict;
 pub mod world;
 
 pub use budget::{within_budget, BudgetMetric, TICK_BUDGET_US};
+pub use growth::fit_growth_exponent;
 pub use ramp::{find_max_pop, MaxPopResult, RampConfig};
 pub use report::{diff_reports, LabReport, PhaseDelta};
-pub use sweep::{sweep_populations, SweepPoint};
+pub use sweep::{sweep_populations, SweepPoint, SweepReport};
 pub use sampler::{sample_ticks, PhaseSamples};
 pub use stats::{summarize, TickStats};
 pub use verdict::{classify, ChangeEvidence, Verdict};

@@ -15,7 +15,7 @@
     "dev:vite": "vite --host 0.0.0.0",
     "dev:dev-ui": "npm --prefix ../dev-ui run dev",
     "dev:electron": "cross-env NODE_ENV=development ELECTRON_DISABLE_SANDBOX=1 electron .",
-    "dev:electron-release": "cross-env NODE_ENV=development RUST_BUILD_TYPE=release ELECTRON_DISABLE_SANDBOX=1 electron .",
+    "dev:electron-release": "cross-env NODE_ENV=development RUST_BUILD_TYPE=release ELECTRON_DISABLE_SANDBOX=1 electron . --dev-tools",
     "dev:tools": "npm-run-all --parallel --race dev:dev-ui dev:vite dev:electron-tools",
     "dev:electron-tools": "cross-env NODE_ENV=development ELECTRON_DISABLE_SANDBOX=1 electron . --dev-tools",
     "dev:napi": "cross-env NODE_ENV=development ELECTRON_DISABLE_SANDBOX=1 electron electron/napi-main.cjs",

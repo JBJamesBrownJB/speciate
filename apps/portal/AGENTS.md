@@ -12,7 +12,7 @@ This file holds area-specific rules. **See `/AGENTS.md` for global guardrails** 
 |---|---|
 | `npm run setup` | Full bootstrap: install deps + build debug NAPI addon + build frontend |
 | `npm run dev` | Parallel Vite + Electron, game window only (debug Rust, hot reload) — Vite on port **5173** |
-| `npm run dev:release` | Build release NAPI addon, then Vite + Electron |
+| `npm run dev:release` | Build release NAPI addon, then Vite + Electron — includes the dev-ui window (`--dev-tools`), since this is the benchmarking entry point |
 | `npm run dev:tools` | Like `dev`, but Electron gets `--dev-tools` so the dev-ui window opens too |
 | `npm run dev:rust` | Rebuild debug NAPI addon (`cd ../simulation && npm run build:debug`) |
 | `npm run dev:rust-release` | Rebuild release NAPI addon |

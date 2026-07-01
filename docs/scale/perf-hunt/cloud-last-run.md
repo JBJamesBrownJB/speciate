@@ -16,13 +16,15 @@
 
 Δ values in ms; **negative = faster**. `growth b` is the fitted sweep exponent (lower = scales better). Primes listed first.
 
-| candidate | scope | target phase | phase_verdict | Δphase (ms) | Δwall (ms) | bench Δ% | growth b (base→cand) | PRIME? |
-|---|---|---|---|---|---|---|---|---|
-| cache-cell-index-scatter | engine | grid_rebuild | **Keep** | -0.053 | -0.077 | 0 (n/a) | 0.361→0.331 | ✅ **YES** |
-| grid-rebuild-thread-local-histogram-buckets | architectural | grid_rebuild | Ditch | -0.648† | -0.078 | 0 (n/a) | 0.361→0.559 | no |
-| l1-aggregate-per-cell-reduce-not-per-proxy | engine | l1_aggregation | Ditch | +0.004 | +0.074 | 0 (n/a) | 0.361→0.433 | no |
-| grid-prefix-sum-scratch-counts-no-atomic-loads | engine | grid_rebuild | Ditch | -0.706† | +0.164 | 0 (n/a) | 0.361→0.345 | no |
-| l1-lod-skip-aggregation-of-tiny-only-cells | biological | l1_aggregation | Ditch | -0.255† | +0.474 | 0 (n/a) | 0.361→0.425 | no |
+| candidate | scope | target phase | phase_verdict | Δphase (ms) | Δwall (ms) | bench Δ% | growth b (base→cand) | proj 1M wall savings (ms) | PRIME? |
+|---|---|---|---|---|---|---|---|---|---|
+| cache-cell-index-scatter | engine | grid_rebuild | **Keep** | -0.053 | -0.077 | 0 (n/a) | 0.361→0.331 | **+3.30** | ✅ **YES** |
+| grid-rebuild-thread-local-histogram-buckets | architectural | grid_rebuild | Ditch | -0.648† | -0.078 | 0 (n/a) | 0.361→0.559 | -31‡ | no |
+| l1-aggregate-per-cell-reduce-not-per-proxy | engine | l1_aggregation | Ditch | +0.004 | +0.074 | 0 (n/a) | 0.361→0.433 | -9.0‡ | no |
+| grid-prefix-sum-scratch-counts-no-atomic-loads | engine | grid_rebuild | Ditch | -0.706† | +0.164 | 0 (n/a) | 0.361→0.345 | +0.73‡ (noise) | no |
+| l1-lod-skip-aggregation-of-tiny-only-cells | biological | l1_aggregation | Ditch | -0.255† | +0.474 | 0 (n/a) | 0.361→0.425 | -10.7‡ | no |
+
+**proj 1M wall savings** = growth-aware extrapolation `wall·100^b` per side, then baseline − candidate (positive = candidate faster at 1M). Sign/magnitude are the signal, not the digits — `100^b` is very sensitive to a noisy `b`. ‡ These four are **approximate**: the run predated the `wall_base_ms`/`wall_cand_ms` capture, so absolutes were reconstructed from the global baseline (4.082 ms); every future run measures them directly.
 
 † **Δphase is a BROKEN-COUNTER ARTIFACT, not a win.** In these candidate builds every per-phase timer reported 0.0 (contaminated shared `target-dir` after an interleaved `cargo bench` compile), so the "negative" Δphase is just baseline's real median differenced against a spurious 0. The trustworthy wall-clock and growth signals all point the **wrong** way for these three — see the ledger / RESULTS notes.
 

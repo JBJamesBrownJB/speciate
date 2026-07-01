@@ -1,6 +1,6 @@
 use speciate::bench_lab::budget::TICK_BUDGET_US;
 use speciate::bench_lab::ramp::RampConfig;
-use speciate::bench_lab::sweep::sweep_populations;
+use speciate::bench_lab::sweep::{sweep_populations, SweepReport};
 use speciate::bench_lab::world::{Distribution, WorldSpec};
 use speciate::bench_lab::{
     classify, evidence_from_reports, run_lab, run_lab_multi_seed, BudgetMetric, LabConfig,
@@ -139,9 +139,17 @@ fn main() {
         for p in &points {
             eprintln!("{},{:.0},{:.0},{}", p.population, p.wall_mean_us, p.wall_p99_us, p.within_budget);
         }
+        // Fitted big-O exponent b (wall_p99 ≈ a·nᵇ): the growth-rate signal the
+        // cloud triage hunt keys on. A change that lowers b beat the scaling class,
+        // not just the constant. "n/a" when the fit is undefined (< 2 points).
+        let report = SweepReport::from_points(points);
+        eprintln!(
+            "growth_exponent={}",
+            report.growth_exponent.map(|b| format!("{b:.3}")).unwrap_or_else(|| "n/a".into())
+        );
         if let Some(i) = args.iter().position(|a| a == "--out") {
             if let Some(path) = args.get(i + 1) {
-                let json = serde_json::to_string_pretty(&points).expect("serialize sweep");
+                let json = serde_json::to_string_pretty(&report).expect("serialize sweep");
                 std::fs::write(path, json).expect("write sweep");
                 eprintln!("wrote {path}");
             }

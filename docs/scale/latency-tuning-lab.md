@@ -72,19 +72,19 @@ can be optimistic. Run `--clustered` as the adversarial case for any headline cl
 cd apps/simulation
 
 # Fixed-pop diagnostic (per-phase attribution; A/B a change by diffing two --out reports)
-cargo run --release --features dev-tools --bin latency_lab -- \
+cargo run --release --features dev-tools --example latency_lab -- \
   --pop 200000 --seed 1 --samples 60 --warmup 20 --out /tmp/before.json
 
 # Growth curve (the shape of tick-time vs population)
-cargo run --release --features dev-tools --bin latency_lab -- \
+cargo run --release --features dev-tools --example latency_lab -- \
   --sweep --sweep-from 100000 --sweep-to 1200000 --sweep-step 100000 --seed 1 --out /tmp/curve.json
 
 # Headline: find the max sustainable population
-cargo run --release --features dev-tools --bin latency_lab -- \
+cargo run --release --features dev-tools --example latency_lab -- \
   --find-max --low 700000 --high 1100000 --coarse-step 100000 --tolerance 25000
 
 # Adversarial clustered workload
-cargo run --release --features dev-tools --bin latency_lab -- \
+cargo run --release --features dev-tools --example latency_lab -- \
   --pop 200000 --clustered --clusters 32 --spread 150
 ```
 

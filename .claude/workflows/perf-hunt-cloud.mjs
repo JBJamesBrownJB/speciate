@@ -31,8 +31,8 @@ const CAND_DIR = REPO + '/docs/scale/perf-hunt/candidates'
 const REPORT = REPO + '/docs/scale/perf-hunt/cloud-last-run.md'
 const SHARED_TARGET = SIM + '/target'
 const ART = SHARED_TARGET + '/perf-hunt' // inside target/ => gitignored
-const BUILD = 'cargo build --release --features dev-tools --bin latency_lab --target-dir ' + SHARED_TARGET
-const RELEASE_BIN = './' + SHARED_TARGET + '/release/latency_lab' // freshly-built candidate
+const BUILD = 'cargo build --release --features dev-tools --example latency_lab --target-dir ' + SHARED_TARGET
+const RELEASE_BIN = './' + SHARED_TARGET + '/release/examples/latency_lab' // freshly-built candidate
 const BASELINE_BIN = './' + ART + '/latency_lab_baseline'          // stashed clean baseline
 
 // Cloud fidelity: tiny pops that fit a 4-core VM. The growth EXPONENT across the
@@ -214,7 +214,7 @@ const built = (await parallel(ideas.map((idea) => () =>
     'Steps:\n' +
     '1. Read the files in the sketch and implement the MINIMAL change that realizes the hypothesis. Behavior-preserving ' +
     'unless scope is biological (then the behavior change must match the stated design).\n' +
-    '2. Do NOT touch apps/simulation/src/bench_lab/ or src/bin/latency_lab.rs (the harness must stay constant).\n' +
+    '2. Do NOT touch apps/simulation/src/bench_lab/ or examples/latency_lab.rs (the harness must stay constant).\n' +
     '3. From ' + SIM + ', run `cargo test --target-dir ' + SHARED_TARGET + '` (default features). It MUST pass — fix your ' +
     'change until it does. A "Blocking waiting for file lock on build directory" message is NORMAL — just wait.\n' +
     '4. Capture the change as a unified diff: from the repo root run `git diff` and put the FULL output in the diff field.\n' +

@@ -44,12 +44,12 @@ const WORLD = '--realistic-dna --half-x 5000 --half-y 5000'
 const JOBS = cfg.jobs // undefined => uncapped (all cores)
 const JOBS_FLAG = JOBS ? (' -j ' + JOBS) : ''
 const SHARED_TARGET = SIM + '/target'
-const BUILD = 'cargo build' + JOBS_FLAG + ' --release --features dev-tools --bin latency_lab --target-dir ' + SHARED_TARGET
-const RUN = 'cargo run --quiet' + JOBS_FLAG + ' --release --features dev-tools --target-dir ' + SHARED_TARGET + ' --bin latency_lab --'
+const BUILD = 'cargo build' + JOBS_FLAG + ' --release --features dev-tools --example latency_lab --target-dir ' + SHARED_TARGET
+const RUN = 'cargo run --quiet' + JOBS_FLAG + ' --release --features dev-tools --target-dir ' + SHARED_TARGET + ' --example latency_lab --'
 // Back-to-back A/B (RCA 2026-06-24): the candidate is judged against a freshly-run
 // CLEAN baseline binary stashed once, NOT a stale pinned baseline — kills drift, and
 // a clean-tree guard kills cross-candidate patch contamination.
-const RELEASE_BIN = SHARED_TARGET + '/release/latency_lab.exe' // freshly-built candidate
+const RELEASE_BIN = SHARED_TARGET + '/release/examples/latency_lab.exe' // freshly-built candidate
 const BASELINE_BIN = ART + '/latency_lab_baseline.exe' // stashed clean baseline
 
 const SCOPE_NOTE =
@@ -236,7 +236,7 @@ const built = (await parallel(ideas.map((idea) => () =>
     'Steps:\n' +
     '1. Read the files in the sketch and implement the MINIMAL change that realizes the hypothesis. Behavior-preserving ' +
     'unless scope is biological (then the behavior change must match the stated design).\n' +
-    '2. Do NOT touch apps/simulation/src/bench_lab/ or src/bin/latency_lab.rs (the harness must stay constant).\n' +
+    '2. Do NOT touch apps/simulation/src/bench_lab/ or examples/latency_lab.rs (the harness must stay constant).\n' +
     '3. From ' + SIM + ', run `cargo test' + JOBS_FLAG + ' --target-dir ' + SHARED_TARGET + '` (default features). It MUST ' +
     'pass — fix your change until it does. A "Blocking waiting for file lock on build directory" message is NORMAL — another ' +
     'agent is compiling into the shared target; just wait for it.\n' +
